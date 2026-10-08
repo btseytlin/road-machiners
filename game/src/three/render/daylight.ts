@@ -11,6 +11,7 @@ import { PAL } from "../../render/palette";
 import { bodyOf } from "../../sim/body";
 import type { Vehicle, World } from "../../sim/types";
 import { DEG, type Vec } from "../../sim/vec";
+export { enableSunShadows } from "./shadowFilter";
 
 const MIN_LIGHT_ELEVATION = 6; // degrees; a lower light would stretch every shadow across the whole view
 const TWILIGHT = 10; // degrees below the horizon where the handover to moonlight ends
@@ -18,7 +19,7 @@ const MOON_ELEVATION = 25; // degrees
 const MOON_DIR = TERRAIN.light;
 const WHITE = new THREE.Color(0xffffff);
 const GLASS_SATURATION = 0.9; // share of the glow color's saturation kept, so windows read softer than the light
-const SHADOW_SOFTNESS = 3; // shadow-map texels of PCF blur, soft edges without losing the truck's contact shadow
+const SHADOW_SOFTNESS = 1; // shadow-map texels between the 3x3 filter taps, a clear edge about three texels wide
 
 // Keyed by the sun's height in degrees, highest first. Negative is below the horizon.
 // By day the ground color is warm sand, so faces turned down catch light bounced off the desert. The day sky is a
@@ -185,11 +186,39 @@ export function daylightAt(turn: number): Daylight {
 
 const SUN_RADIUS = 150; // meters from the focus to the sun light
 
+// Moves focus along the shadow camera's right and up axes to the nearest whole texel, so the shadow map's
+// sampling grid stays fixed on the ground while the focus travels. The light axis is untouched.
+const snapZ = new THREE.Vector3();
+const snapX = new THREE.Vector3();
+const snapY = new THREE.Vector3();
+const snapF = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0);
+
+export function snapToShadowTexels(focus: V3, toLight: V3, texel: number): V3 {
+  if (!(texel > 0) || !Number.isFinite(texel)) throw new Error(`Shadow texel must be positive, got ${texel}`);
+  if (!Number.isFinite(focus.x + focus.y + focus.z + toLight.x + toLight.y + toLight.z))
+    throw new Error("Shadow snap needs finite vectors");
+  snapZ.set(toLight.x, toLight.y, toLight.z).normalize();
+  // Same basis as Matrix4.lookAt() with up = (0, 1, 0).
+  snapX.crossVectors(UP, snapZ).normalize();
+  snapY.crossVectors(snapZ, snapX);
+  snapF.set(focus.x, focus.y, focus.z);
+  const fx = snapF.dot(snapX);
+  const fy = snapF.dot(snapY);
+  snapF.addScaledVector(snapX, Math.round(fx / texel) * texel - fx).addScaledVector(snapY, Math.round(fy / texel) * texel - fy);
+  return { x: snapF.x, y: snapF.y, z: snapF.z };
+}
+
 // Puts the sun above focus in the light's direction and colors both lights.
-export function lightScene(sun: THREE.DirectionalLight, sky: THREE.HemisphereLight, focus: V3, light: Daylight): void {
-  const horiz = Math.cos(light.elevation) * SUN_RADIUS;
+export function lightScene(sun: THREE.DirectionalLight, sky: THREE.HemisphereLight, drawn: V3, light: Daylight): void {
+  const flat = Math.cos(light.elevation);
+  const horiz = flat * SUN_RADIUS;
+  const lift = Math.sin(light.elevation);
+  const { camera, mapSize } = sun.shadow;
+  const texel = (camera.right - camera.left) / mapSize.x;
+  const focus = snapToShadowTexels(drawn, { x: light.dir.x * flat, y: lift, z: light.dir.y * flat }, texel);
   sun.target.position.set(focus.x, focus.y, focus.z);
-  sun.position.set(focus.x + light.dir.x * horiz, focus.y + Math.sin(light.elevation) * SUN_RADIUS, focus.z + light.dir.y * horiz);
+  sun.position.set(focus.x + light.dir.x * horiz, focus.y + lift * SUN_RADIUS, focus.z + light.dir.y * horiz);
   sun.color.copy(light.sun);
   sun.intensity = light.sunIntensity;
   sky.color.copy(light.sky);
@@ -197,7 +226,7 @@ export function lightScene(sun: THREE.DirectionalLight, sky: THREE.HemisphereLig
   sky.intensity = light.skyIntensity;
 }
 
-// The sun light with its shadow box. The box follows the player, so shadows draw near the truck.
+// The sun light with its shadow box. The box follows the player, snapped to whole texels so static shadows hold still.
 export function sunLight(): THREE.DirectionalLight {
   const sun = new THREE.DirectionalLight();
   sun.castShadow = true;
@@ -286,7 +315,7 @@ export class VehicleLights {
   constructor(private readonly scene: THREE.Scene) {}
 
   // Lights the vehicles within gray vision. truck: the drawn player truck position.
-  sync(world: World, frames: Record<string, VehicleFrame>, lightTurn: number, reaches: (pos: V3) => boolean, truck: V3, beam: number): void {
+  sync(world: World, frames: Record<string, VehicleFrame>, lightTurn: number, reaches: (pos: V3) => boolean, truck: V3): void {
     const lit = world.vehicles
       .filter((v) => frames[v.id] && reaches(frames[v.id].pos))
       .map((v) => ({
@@ -295,7 +324,7 @@ export class VehicleLights {
         on: vehicleLampsOn(world, v, lightTurn),
         player: v.id === world.player.vehicleId,
       }));
-    this.update(nightLightsWanted(world.turn, lit), beam, truck, lit);
+    this.update(nightLightsWanted(world.turn, lit), daylightAt(lightTurn).beam, truck, lit);
   }
 
   // night: nightLightsWanted. beam: Daylight.beam. truck: the drawn player truck position. lit: vehicles within gray vision.

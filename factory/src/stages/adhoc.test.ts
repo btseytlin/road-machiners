@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { existsSync, mkdirSync, readFileSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { readState, updateState } from '../state';
 import { fillPrompt } from './common';
@@ -27,13 +27,14 @@ describe('adhoc', () => {
     expect(existsSync(`${cfg.home}/work/adhoc-7`)).toBe(false);
   });
 
-  it('gives the agent the state and logs read only', async () => {
+  it('gives the agent the state, logs, ledger and transcripts read only, made first on a fresh host', async () => {
     const f = fake();
     queueReply(f.ctx.statePath);
     f.agentWrites = { 'report.md': 'x' };
     await adhoc(f.ctx, 7);
-    const readOnly = { [dirname(f.ctx.statePath)]: '/factory/state', [`${cfg.home}/logs`]: '/factory/logs' };
+    const readOnly = { [dirname(f.ctx.statePath)]: '/factory/state', [`${cfg.home}/logs`]: '/factory/logs', [`${cfg.home}/ledger.jsonl`]: '/factory/ledger.jsonl', [`${cfg.home}/transcripts`]: '/factory/transcripts' };
     expect(f.calls).toContain(`agent ro ${JSON.stringify(readOnly)}`);
+    expect([statSync(`${cfg.home}/ledger.jsonl`).isFile(), statSync(`${cfg.home}/transcripts`).isDirectory()]).toEqual([true, true]);
   });
 
   it('sends each file the agent made under the report message', async () => {
@@ -79,6 +80,7 @@ describe('adhoc', () => {
         await agent(run);
         mkdirSync(filesDir, { recursive: true });
         extra(filesDir);
+        return '';
       };
     }
 
@@ -152,6 +154,7 @@ describe('adhoc', () => {
       f.ctx.container.agent = async (run) => {
         await agent(run);
         symlinkSync('/etc', `${cfg.home}/work/adhoc-7/game/.factory/files`);
+        return '';
       };
       await expect(adhoc(f.ctx, 7)).rejects.toThrow('not a plain folder');
       expect(documents(f)).toEqual([]);
@@ -203,7 +206,7 @@ describe('adhoc', () => {
     });
 
     it('tells the agent to refuse publication and to send files only as documents', () => {
-      const prompt = fillPrompt('adhoc', { issue: '7', state: '/s', logs: '/l', files: '.factory/files', playtest: 'npm run playtest' });
+      const prompt = fillPrompt('adhoc', { issue: '7', state: '/s', logs: '/l', ledger: '/g', transcripts: '/t', transcriptDays: '10', files: '.factory/files', playtest: 'npm run playtest' });
       expect(prompt).toMatch(/never publish an artifact/i);
       expect(prompt).toMatch(/refuse that part/);
       expect(prompt).toContain('/opt/factory/www');

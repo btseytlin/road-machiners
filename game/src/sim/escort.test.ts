@@ -104,7 +104,7 @@ describe('the follow goal', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const convoy = convoyAt(w, { x: 60, y: 60 });
     const guard = guardAt(w, { x: 50, y: 60 });
-    guard.brain!.goals = [{ kind: 'fight', targetId: 'gone', destination: null, phase: 'act', reason: 'test fight' }];
+    guard.brain!.goals = [{ kind: 'fight', targetId: 'gone', destination: null, phase: 'act', reason: 'test fight', worn: { turn: w.turn, condition: 1 } }];
     startEscort(w, guard, convoy, null, 0);
     expect(guard.brain!.goals.map((g) => g.kind)).toEqual(['follow', 'fight']);
     forceOption('resume', 'new');

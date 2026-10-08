@@ -5,10 +5,17 @@ import { TERRAIN } from './terrain';
 import { TIME } from './time';
 import type { MemoryFact } from '../sim/types';
 
+// When an NPC uses its utility parts; see src/sim/npc-utility.ts.
+export const NPC_UTILITY = {
+  dropReach: 10, // tiles behind a fleeing driver within which a seen hostile makes it drop caltrops or oil
+  sproutCab: 0.5, // share of its cab's max HP below which a driver with an attacker in sight smokes up
+};
+const LAW_GATE_REACH = 12;
+
 export const NPC_BEHAVIOR = {
   // Turns a driver may go without progress before it gives up its top goal. Progress is a new tile, a job turn or a
   // new top goal. A crawling truck changes tile every turn, and every timed deal lapses in 60 turns or less, so 100
-  // turns without progress is always a bug. See watchStalls() in src/sim/npc-activities.ts.
+  // turns without progress is always a bug. See watchStalls() in src/sim/npc-watchdog.ts.
   stallTurns: 100,
   // Tiles a stalled driver out of the player's sight may jump to get clear of whatever holds it. 20 tiles is about
   // six turns of driving, enough to leave a pad, a pocket between props or a jam of trucks, and well inside the
@@ -23,9 +30,12 @@ export const NPC_BEHAVIOR = {
   // A leader waits while an escort lags farther than this many tiles behind. A truck cruises about 3.4 tiles a
   // turn on a road, so 12 tiles is three to four turns of driving, still well inside sight.
   escortWaitGap: 12,
-  // Tiles from a town gate a patrol drives out to: the gate guns' range plus four sight radii, about 90 tiles. A
-  // patrol covers the roads well past the guns, about a sixth of the way to the other town.
-  patrolRadius: RULES.guards.range + TERRAIN.vision.radius * 4,
+  // Tiles of a lawman town's gate where drivers seldom start a robbery or a fight, since that town's lawmen live,
+  // spawn and patrol there. See robNearGuards and fightNearGuards.
+  lawGateReach: LAW_GATE_REACH,
+  // Tiles from a town gate a patrol drives out to: the lawmen's gate reach plus four sight radii, about 90 tiles. A
+  // patrol covers the roads well past the gate, about a sixth of the way to the other town.
+  patrolRadius: LAW_GATE_REACH + TERRAIN.vision.radius * 4,
   // Tiles along a road between two patrol stops. Close enough that stops spread over every approach.
   patrolSpacing: 4,
   // Tiles a follower keeps to the side of its leader past both radii: the yield distance plus one, so it rides
@@ -33,27 +43,32 @@ export const NPC_BEHAVIOR = {
   followGap: RULES.yieldDistance + 1,
   // A driver whose cab, whole truck or own health is at 30% is weak. Recovery to half prevents fight/flee oscillation.
   fleeCondition: 0.3,
-  // Fight driving; see src/sim/ai.ts. A fighter scores `angles` points around its target's next spot. Each
-  // point gets arcWeight × the share of its gun damage that bears from there, minus threatWeight × the share of the
-  // target's gun damage that bears on it and gets past the armor on the side it shows each gun, minus rangeWeight × how far off its range the point is as a share of it,
-  // minus travelWeight × the drive past one turn at top speed as a share of that speed. A circling fighter adds
+  // Fight driving; see src/sim/ai.ts. A fighter scores `angles` points on each ring around its target's next spot,
+  // the rings at `rings` shares of its longest gun's range. Each point gets arcWeight × the share of its gun damage
+  // expected to land from there, by each gun's hit chance at that distance, and get past the armor on the side the
+  // target shows it, so it closes in or works round to a bare side, minus threatWeight × the same share of the
+  // target's gun damage on it, minus travelWeight × the drive past one turn at top speed as a share of that speed. A circling fighter adds
   // circleWeight × how far ahead around the target the point lies, as a share of a quarter turn, and never drives
   // slower than circlePace tiles a turn. Every fighter subtracts rammedWeight × the ram value of the target's ram at
   // that point, and one that rams readily adds ramWeight × the ram value of its own ram from there. A fighter rolls
   // fightWhim every whimTurns turns.
-  fight: { angles: 16, arcWeight: 2, threatWeight: 2, rangeWeight: 1, travelWeight: 1, circleWeight: 1, rammedWeight: 2, ramWeight: 2, circlePace: 3, whimTurns: 4 },
+  fight: { angles: 16, rings: [0.25, 0.5, 0.75, 1], arcWeight: 2, threatWeight: 2, travelWeight: 1, circleWeight: 1, rammedWeight: 2, ramWeight: 2, circlePace: 3, whimTurns: 4 },
   // One driver in three the player knocks out holds a grudge. See the revenge state.
   revengeChance: 0.33,
   recoverCondition: 0.5,
-  // An enemy is a threat when its perceived danger beats the driver's own times this and its boldness.
+  // An enemy is a threat when its group looks stronger than the driver's by more than this times its boldness.
+  // Strength is the odds to lose a fight over the odds to win it, see strengthRatio() in src/sim/npc-decisions.ts.
   threatRatio: 1,
   // A sighting misjudges a truck's danger by up to a quarter either way, rolled once per sighting. Damage shows,
   // but only roughly.
   dangerSpread: 0.25,
   // Flee weight times this against a threat, and again when the cab or driver is at the flee condition.
-  // 20 makes an outgunned raider run about two times in three, and an outgunned scavenger nearly always.
+  // 20 makes an outgunned raider run about two times in three, and an outgunned scavenger nearly always. A driver
+  // whose odds to get away from a threat are below its odds to win gets trappedFlee instead of threatFlee: it mostly
+  // stays to fight or gives in, since running would only show the threat its rear.
   threatFlee: 20,
   weakFlee: 20,
+  trappedFlee: 0.2,
   // Damage taken last turn, as a share of cab max HP, that adds the base weight to flee when attacked.
   hurtFullFlee: 0.1,
   // A shot that did no damage gives flee this much of its base weight when attacked.
@@ -68,10 +83,21 @@ export const NPC_BEHAVIOR = {
   // Turns a noticed subject stays remembered after it was last perceived. A heard engine drops out for a turn or
   // two when the truck slows or crosses behind the listener, and 3 turns bridges that without a fresh roll.
   noticeMemory: 3,
+  // Turns a driver remembers a truck it ran from, after it last saw or heard it. Raiders came back to look at a truck
+  // they had run from 1 to 15 turns after the run ended. 30 turns cover that, and are about an hour and a half of the
+  // day. A truck met again after that is judged fresh.
+  fleeMemory: 30,
   // Turns a fighter hunts a target it lost from sight, counted from the last turn it saw it or picked up its sound
   // or dust. A truck cruises about 3.4 tiles a turn on a road, so 6 turns carry the hunter about 20 tiles, one sight
   // radius past the last point. A player who goes quiet behind a hill gets away, and a noisy one stays hunted.
   fightSearchTurns: 6,
+  // Turns a runner keeps on after it last saw, heard or took a hit from anything hostile. A long gun out of sight
+  // fires every 3 or 4 turns, and 6 turns of running carry the truck about 20 tiles farther away.
+  fleeCalmTurns: 6,
+  // A fighter gives up a fight that has not worn its target's body condition down by fightWearShare in
+  // fightStallTurns turns. At that pace a knockout would take over 400 turns, so only a fight it cannot win stops.
+  fightStallTurns: 20,
+  fightWearShare: 0.05,
   // Investigate weight times this when the cab or a driving part is at or below the recover condition. A raider's
   // investigate weight of 12 drops to 0.12, so a crippled raider closes in on a contact 1 to 4 times in 100.
   crippledInvestigate: 0.01,
@@ -89,7 +115,7 @@ export const NPC_BEHAVIOR = {
   ram: {
     // Value of one hit point lost, by the part that loses it. The cab, wheels, engine and guns decide a fight. Armor
     // and ram bars exist to be hit.
-    partWeight: { cab: 4, wheel: 2, transmission: 2, tank: 1, engine: 3, weapon: 3, armor: 0.25, scanner: 1, store: 1, cargo: 1 },
+    partWeight: { cab: 4, wheel: 2, transmission: 2, tank: 1, engine: 3, weapon: 3, armor: 0.25, scanner: 1, store: 1, cargo: 1, utility: 1 },
     gunWeight: 1,
     // Ram weight is the ram value times this, so a ram worth as much as the guns, a value of 0.5, weighs 0.15 times the
     // base weight and is chosen about 1 time in 2. Against an equal truck this gives a ram in about 1 fight in 8 without
@@ -106,11 +132,11 @@ export const NPC_BEHAVIOR = {
   },
   // Salvage in sight weighs 10 times a known site out of sight.
   visibleSalvage: 10,
-  // A robber mostly picks targets weaker than itself, away from town guards. Rob weight times this when the
+  // A robber mostly picks targets weaker than itself, away from lawman town gates. Rob weight times this when the
   // target looks as strong as the robber times its boldness or stronger. A scumbag's rob weight of 0.5 drops to
   // 0.0075, so it robs at about 2%, not 34%.
   robStronger: 0.015,
-  // Rob weight times this when the robber or target is within guard range of a town gate. Same drop as above.
+  // Rob weight times this when the robber or target is within lawGateReach of a lawman town's gate. Same drop as above.
   robNearGuards: 0.015,
   // What the target's cargo is worth to a robber or raider: goods and spare parts, not mounted gear. At or below
   // `poor` the weight is times `poorMul`, at or above `rich` it is unchanged, and between them it rises
@@ -122,8 +148,8 @@ export const NPC_BEHAVIOR = {
     rob: { poor: 150, rich: 500, poorMul: 0.02 },
     raid: { poor: 0, rich: 400, poorMul: 0.002 },
   },
-  // Fight weight at a new hostile times this near town guards. A raider's fight weight of 50 against manageable
-  // prey drops to 0.05, about 3%. Guards never lower fight back.
+  // Fight weight at a new hostile times this within lawGateReach of a lawman town's gate. A raider's fight weight of
+  // 50 against manageable prey drops to 0.05, about 3%. A lawman gate never lowers fight back.
   fightNearGuards: 0.001,
   // Tow weight falls when the stranded truck can crawl to a town gate. At limp speed, about 1 tile a turn, 15
   // tiles is a crawl of 15 turns, under two hours of the day. Within it, a tow weight of 9 drops to 0.18 against
@@ -199,11 +225,7 @@ export const HUNT = {
   siteDistance: 40,
   // Tiles from any lawman town gate within which a raider never hunts: the farthest lawman patrol stop plus its sight.
   lawReach: NPC_BEHAVIOR.patrolRadius + TERRAIN.vision.radius,
-  // A hunting raider's route cost per road tile; open ground costs 1 / terrain speed, without the off-road cost. So
-  // hardpan 1.11, gravel 1.18, scrub and field 1.25 beat the road, sand 1.43 nearly ties it, and crossing a road
-  // costs only its width. It stays at 1 or more, so the A* estimate stays as tight as for a plain route.
-  roadShun: 1.5,
-  // A raider whose top goal is one of these routes off the road; see src/sim/hunt-style.ts.
+  // A raider whose top goal is one of these routes off the road; see src/sim/hunt-style.ts, read by keepsOffRoads() in src/sim/off-road.ts.
   offRoadGoals: ['raid', 'patrol', 'investigate'] as const,
   // Watch posts; see src/sim/watch-posts.ts. A post lies at least postRoadGap tiles from a road's edge, where a
   // parked raider is out of the way of traffic but a road in sight. A ground that is no post itself tries points

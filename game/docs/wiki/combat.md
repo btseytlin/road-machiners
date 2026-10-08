@@ -1,6 +1,6 @@
 # Combat
 
-Weapons and armor are in [items.md](items.md). This page says how they work together. The owner code is `src/sim/combat.ts` for fire and hostility, `src/sim/armor.ts` for rounds through the part grid, `src/sim/crash-contact.ts` for crashes, `src/sim/guards.ts` for town guns and `src/sim/defeat.ts` for knockouts.
+Weapons and armor are in [items.md](items.md). This page says how they work together. The owner code is `src/sim/combat.ts` for fire and hostility, `src/sim/armor.ts` for rounds through the part grid, `src/sim/crash-contact.ts` for crashes and `src/sim/defeat.ts` for knockouts.
 
 ## The turn
 
@@ -21,10 +21,6 @@ A weapon with a splash radius hurts the lanes near a miss with its splash damage
 ## Crashes
 
 A crash gives each truck `RULES.ramDamage` times the impact squared, scaled by the other body's share of both masses, spread over the lanes of the struck side. Bumps slower than `RULES.collisionMinImpact` deal nothing. A crash into an obstacle faster than `RULES.hardCrashSpeed` hits harder by the square of the speed ratio. Crash damage has penetration `RULES.crashPen` per lane. Falls and landings use `RULES.groundCrash` and `RULES.landingDamage`. Rams multiply the damage a truck deals from their side.
-
-## Town guns
-
-Each town gate has one gun. It fires `RULES.guards.rounds` rounds each turn at the nearest vehicle in range that fired this turn at anyone but a raider. Guards judge by action, not faction.
 
 ## Knockouts and death
 
@@ -58,7 +54,6 @@ Patrols of the Bowl Farmers and the Nose Army are hostile to raiders. `callLawme
 | `RULES.crashPen` | 4 |
 | `RULES.groundCrash` | 3 |
 | `RULES.landingDamage` | 0.25 |
-| `RULES.guards.rounds` | 4 |
 | `RULES.knockoutMaxTurns` | 30 |
 | `RULES.npcDeathChance` | 0.05 |
 | `RULES.cabKnock` | {"below":0.5,"hazard":0.75,"playerHealth":75} |

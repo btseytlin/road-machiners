@@ -102,7 +102,7 @@ describe('watch posts on the map', () => {
     for (const camp of CAMPS) {
       for (const post of [...raiderGrounds(w, camp), ...raiderPatrolPosts(w, camp)]) {
         const pad = nearestOf(sitePads(camp), post);
-        const driver = raidingDriver(pad, post);
+        const driver = raidingDriver(w, pad, post);
         const there = route(w, pad, post, RAIDER_RADIUS, [], driver).at(-1)!;
         expect(dist(there, post), `${camp.id} to ${post.x},${post.y}`).toBeLessThanOrEqual(RULES.arriveRadius);
         const back = route(w, post, pad, RAIDER_RADIUS, [], driver).at(-1)!;
@@ -116,10 +116,12 @@ function nearestOf(points: readonly Vec[], to: Vec): Vec {
   return points.reduce((a, b) => (dist(a, to) <= dist(b, to) ? a : b));
 }
 
-function raidingDriver(home: Vec, post: Vec): Pick<Vehicle, 'id' | 'brain'> {
-  const brain = npcBrain('buggy', home, ['raider']);
-  brain.goals = [raidGoal(post)];
-  return { id: 'raider-route', brain };
+function raidingDriver(w: World, home: Vec, post: Vec): Vehicle {
+  const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], home);
+  v.id = 'raider-route';
+  v.brain = npcBrain('buggy', home, ['raider']);
+  v.brain.goals = [raidGoal(post)];
+  return v;
 }
 
 function raidGoal(post: Vec): NpcActivity {

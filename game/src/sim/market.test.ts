@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ECONOMY, GOODS } from '../data/goods';
+import { partDef } from '../data/parts';
 import { DISTANCE_PREMIUM, EFFORT, GOOD_SOURCES, PRICE_FACTOR, PRESSURE_MAX, SHOPS } from '../data/market';
 import { dist } from './vec';
 import { emptyWorld, addVehicle, npcBrain } from './testkit';
@@ -95,6 +96,19 @@ describe('market', () => {
     advanceShop(w1, 'salvage-yard', s1);
     advanceShop(w2, 'salvage-yard', s2);
     expect(s1.stock.map((p) => [p.defId, p.wear])).toEqual(s2.stock.map((p) => [p.defId, p.wear]));
+  });
+
+  it.each(Object.values(SHOPS).filter((shop) => shop.kind === 'garage').map((shop) => shop.id))('shows a utility on at least 80%% of %s shelves across 50 restocks', (shopId) => {
+    const w = emptyWorld();
+    const state = initShop(w, shopId);
+    let withUtility = 0;
+    for (let restock = 0; restock < 50; restock++) {
+      state.restockAt = w.turn;
+      advanceShop(w, shopId, state);
+      if (state.stock.some((p) => partDef(p.defId).kind === 'utility')) withUtility++;
+    }
+
+    expect(withUtility / 50).toBeGreaterThanOrEqual(0.8);
   });
 
   it('takeStockPart removes a part and addStockPart inserts one', () => {
@@ -212,7 +226,7 @@ describe('market', () => {
 });
 
 describe('creditBounty', () => {
-  const bounty = (id: string, template: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template, targetName: 'Target', reward: 300, deadline: 900, window: 900, tier: 2 });
+  const bounty = (id: string, template: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template, targetName: 'Target', reward: 300, deadline: 900, window: 900, tier: 2, fulfilled: false });
 
   function withTarget(): { w: World; npc: Vehicle } {
     const w = emptyWorld();
@@ -222,12 +236,20 @@ describe('creditBounty', () => {
     return { w, npc };
   }
 
-  it('finishes one held bounty on the template, as a knockout does', () => {
+  const fulfilled = (w: World) => w.player.contracts.map((c) => c.kind === 'bounty' && c.fulfilled);
+
+  it('fulfils one held bounty on the template, as a knockout does, and pays nothing', () => {
     const { w, npc } = withTarget();
     w.player.contracts = [bounty('a', 'buggy'), bounty('b', 'buggy'), bounty('c', 'truck')];
     creditBounty(w, npc);
-    expect(w.player.contracts.map((c) => c.id)).toEqual(['b', 'c']);
-    expect(w.player.money).toBe(300);
+    expect(w.player.contracts.map((c) => c.id)).toEqual(['a', 'b', 'c']);
+    expect(fulfilled(w)).toEqual([true, false, false]);
+    expect(w.player.money).toBe(0);
+    creditBounty(w, npc);
+    expect(fulfilled(w)).toEqual([true, true, false]);
+    creditBounty(w, npc);
+    expect(fulfilled(w)).toEqual([true, true, false]);
+    expect(w.events.filter((e) => e.t === 'contract' && e.outcome === 'fulfilled')).toHaveLength(2);
   });
 
   it('does nothing without a bounty on the template', () => {

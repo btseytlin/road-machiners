@@ -1,6 +1,6 @@
 // The route style of hunting raiders. A raider out on a raid, a patrol or an investigation keeps off the road, so it
-// travels unseen by road traffic. src/sim/nav/layer.ts reads it where a driver's taste is made, so near and far
-// driving, previews and traffic checks agree. It imports only types and data, so the nav layer imports it with no cycle.
+// travels unseen by road traffic. keepsOffRoads() in src/sim/off-road.ts reads it, so near and far
+// driving, previews and traffic checks agree. It imports only types and data.
 
 import { HUNT } from '../data/npc-behavior';
 import type { NpcActivity, NpcBrain } from './types';

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { RULES } from '../../data/rules';
 import { tileAt } from '../terrain';
 import { addVehicle, editableTerrain, emptyWorld } from '../testkit';
 import type { World } from '../types';
@@ -31,16 +30,5 @@ describe('world log snapshot', () => {
 
     expect(snapOf(w, onRoad.id).onRoad).toBe(true);
     expect(snapOf(w, offRoad.id).onRoad).toBe(false);
-  });
-
-  it('marks a truck moving only above the parked speed', () => {
-    const w = sandWithOneRoadTile();
-    const parked = addVehicle(w, 'raiders', 'buggy', [], { x: 50.5, y: 40.5 });
-    const moving = addVehicle(w, 'raiders', 'buggy', [], { x: 60.5, y: 40.5 });
-    parked.speed = RULES.parkedSpeed;
-    moving.speed = RULES.parkedSpeed + 1;
-
-    expect(snapOf(w, parked.id).moving).toBe(false);
-    expect(snapOf(w, moving.id).moving).toBe(true);
   });
 });

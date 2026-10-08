@@ -58,6 +58,7 @@ const KIND_TONES: Record<PartKind, ItemTone> = {
   core: 'other',
   scanner: 'other',
   store: 'other',
+  utility: 'other',
 };
 
 // A part takes its kind's tone, and every good is cargo.
@@ -99,6 +100,7 @@ export const PART_MODELS: Record<string, ModelName> = {
   steelPlate: 'arm_plate',
   scrapSheet: 'arm_scrap_sheet',
   ceramicTile: 'arm_ceramic_tile',
+  claymoreRam: 'arm_claymore_ram',
 
   rack: 'cargo_rack',
   trailerBox: 'cargo_trailer_box',
@@ -112,6 +114,15 @@ export const PART_MODELS: Record<string, ModelName> = {
 
   jerrycans: 'store_jerrycans',
   supplyLocker: 'store_locker',
+
+  sprout: 'util_sprout',
+  caltrops: 'util_caltrops',
+  oilSpiller: 'util_oil',
+  patcherCrane: 'util_crane',
+  smokeMortar: 'util_mortar',
+  flareCannon: 'util_flare',
+  scrapersKnife: 'util_scraper',
+  emitter: 'util_emitter',
 
   scrap: 'good_scrap',
   salt: 'good_salt',
@@ -238,6 +249,12 @@ export const WEAPON_POOLS: Record<string, WeaponPool> = {
     barrel: ['wbar_mg_long'],
     extra: ['wext_scope'],
   },
+  harpoon: {
+    mount: ['wmount_pintle', 'wmount_ring_small'],
+    receiver: ['wrec_harpoon'],
+    barrel: ['wbar_harpoon'],
+    extra: [],
+  },
 };
 
 export type WeaponLook = { mount: ModelName; receiver: ModelName; barrel: ModelName; extra: ModelName | null };
@@ -322,6 +339,8 @@ export function jagOffset(
 
 const CORE_BREAKS: Partial<Record<string, BreakSignature>> = { wheel: 'air', tank: 'fire' };
 
+// Utilities and the claymore ram break with plain scrap. A broken claymore only disarms, and the oil spiller's
+// fuel stays in the truck's tanks, so neither blasts nor burns.
 export function breakSignature(def: PartDef): BreakSignature | null {
   if (def.kind === 'weapon') return 'ammo';
   if (def.kind === 'core') return CORE_BREAKS[def.role] ?? null;
@@ -371,6 +390,7 @@ export const ICON_WEAPON_PICKS: Record<string, WeaponLook> = {
   grenadeLauncher: { mount: 'wmount_ring_wide', receiver: 'wrec_shotgun', barrel: 'wbar_autocannon', extra: 'wext_drum' },
   tankGun: { mount: 'wmount_cradle', receiver: 'wrec_tank', barrel: 'wbar_tank', extra: 'wext_shield' },
   flechette: { mount: 'wmount_ring_small', receiver: 'wrec_mg_a', barrel: 'wbar_mg_long', extra: 'wext_scope' },
+  harpoon: { mount: 'wmount_pintle', receiver: 'wrec_harpoon', barrel: 'wbar_harpoon', extra: null },
 };
 
 const PART_SECTION: Record<PartDef['kind'], IconSection> = {
@@ -380,6 +400,7 @@ const PART_SECTION: Record<PartDef['kind'], IconSection> = {
   cargo: 'cargo',
   store: 'store',
   scanner: 'store',
+  utility: 'store',
   core: 'core',
 };
 

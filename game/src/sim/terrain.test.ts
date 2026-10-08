@@ -16,6 +16,8 @@ import {
   type Terrain,
 } from "./terrain";
 import { emptyWorld } from "./testkit";
+import { FORTRESS_SITES } from "../data/fortress";
+import { pitDepth } from "./fortress";
 import { ROAD_INDEX } from "./road-index";
 import { dist, polylineDist, type Vec } from "./vec";
 import { newWorld } from "./world";
@@ -63,10 +65,15 @@ describe('terrain variety', () => {
     const ruled = Object.keys(TERRAIN_TYPES).filter((id) => !unruled.includes(id));
     const t = TEST_MAP.terrain;
     expect(new Set(t.types)).toEqual(new Set(ruled));
+    // A fortress pit types its own tiles: its terraces and floor are field and its risers scree.
+    const pits = [...REGION.towns, ...REGION.locations].filter((s) => FORTRESS_SITES[s.id]?.pit !== undefined);
+    expect(pits.length).toBeGreaterThan(0);
     for (let y = 0; y < t.size; y++) for (let x = 0; x < t.size; x++) {
       const point = { x: x + 0.5, y: y + 0.5 };
       const kind = t.types[y * t.size + x];
-      if (ROAD_INDEX.nearestWithin(point.x, point.y, REGION.roadWidth / 2) < REGION.roadWidth / 2) expect(kind).toBe('road');
+      const depths = pits.flatMap((s) => [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]].map(([i, j]) => pitDepth(s, { x: i, y: j })));
+      if (depths.some((d) => d > 0)) expect(kind).toBe(depths.every((d) => d === depths[0]) ? 'field' : 'scree');
+      else if (ROAD_INDEX.nearestWithin(point.x, point.y, REGION.roadWidth / 2) < REGION.roadWidth / 2) expect(kind).toBe('road');
       else if ([...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')].some((s) => dist(point, s.pos) < s.radius + TERRAIN.types.siteMargin)) expect(kind).toBe('hardpan');
     }
   });
@@ -172,6 +179,33 @@ describe("terrain grid", () => {
     }
   });
 
+  it('enters Glass Flats by a spur from the south road and an approach from the Salvage Yard road, with no road through it', () => {
+    const flats = REGION.locations.find((site) => site.id === 'glass-flats')!;
+    const entering = REGION.roads.filter((road) => road.some((p) => siteGap(flats, p) < 0));
+    expect(entering).toHaveLength(2);
+    const [s1, s2] = entering;
+    // S1 is one straight piece from the south road's junction, which keeps the links through it.
+    expect(s1).toHaveLength(2);
+    expect(dist(s1[0], { x: 440, y: 420 })).toBeLessThan(0.01);
+    expect(dist(s2[0], { x: 485, y: 310 })).toBeLessThan(0.01);
+    for (const road of entering) {
+      expect(REGION.roads.some((other) => other !== road && other.some((p) => dist(p, road[0]) < 0.01))).toBe(true);
+      const firstInside = road.findIndex((p) => siteGap(flats, p) < 0);
+      expect(firstInside).toBe(road.length - 1);
+      for (let i = 1; i < firstInside; i++) expect(siteEdgeCrossings(flats, road[i - 1], road[i])).toEqual([]);
+    }
+    // Every other road stays outside: no point along it, a quarter tile apart, lies inside.
+    for (const road of REGION.roads.filter((r) => !entering.includes(r))) {
+      for (let i = 1; i < road.length; i++) {
+        const steps = Math.ceil(dist(road[i - 1], road[i]) * 4);
+        for (let k = 0; k <= steps; k++) {
+          const p = { x: road[i - 1].x + ((road[i].x - road[i - 1].x) * k) / steps, y: road[i - 1].y + ((road[i].y - road[i - 1].y) * k) / steps };
+          expect(siteGap(flats, p)).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
   it('paints the Old Orchard dirt roads and tracks as dirt track, which drives like hardpan but shows apart from it', () => {
     const orchard = REGION.locations.find((site) => site.id === 'orchard')!;
     for (const road of TERRITORIES.orchard.farm!.roads.filter((r) => r.surface === 'track')) {
@@ -241,7 +275,9 @@ describe("terrain grid", () => {
     const t = w.terrain;
     for (const road of REGION.roads)
       for (const p of road) expect(isCliff(t, tileAt(t, p))).toBe(false);
-    expect(t.types[tileAt(t, REGION.roads[0][1])]).toBe("road");
+    // The first road starts at Bowl's center, in its pit, so its first point outside every fortress is checked.
+    const open = REGION.roads[0].find((p) => [...REGION.towns, ...REGION.locations].every((s) => !(s.id in FORTRESS_SITES) || dist(p, s.pos) > s.radius))!;
+    expect(t.types[tileAt(t, open)]).toBe("road");
     expect(isCliff(t, tileAt(t, w.vehicles[0].pos))).toBe(false);
   });
 

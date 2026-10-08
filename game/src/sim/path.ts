@@ -8,7 +8,8 @@ import { crossesRail } from './bridge';
 import { count, timed } from '../perf';
 import { canStepOut, findCellsToward, nearestFreeCell, stampOverlay, startComponent, type Overlay } from './nav/astar';
 import type { Blocker } from './nav/buckets';
-import { CELL, CLEARANCE, blockerKey, componentOf, dynamicBlockers, navLayer, nearCliff, staticSet, tasted, tasteKey, tasteOf, terrainNav, tileIndex, type NavLayer, type StaticSet, type Taste, type TerrainNav } from './nav/layer';
+import { CELL, CLEARANCE, blockerKey, componentOf, dynamicBlockers, navLayer, nearCliff, offRoadTaste, staticSet, tasted, tasteKey, tasteOf, terrainNav, tileIndex, type NavLayer, type StaticSet, type Taste, type TerrainNav } from './nav/layer';
+import { keepsOffRoads } from './off-road';
 import type { Vehicle, World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 
@@ -19,18 +20,19 @@ export type { Blocker };
 const ROUTE_CACHE_MAX = 64;
 const routeCache = new Map<string, { goal: number; cells: Int32Array }>();
 
-// `driver` plans with its taste; without one the route is the plain cheapest. A goal beyond the map edge moves
-// in to the nearest point a truck of this radius fits, since no truck may leave the map.
-export function route(world: World, from: Vec, dest: Vec, radius: number, extra: Blocker[], driver?: Pick<Vehicle, "id" | "brain">): Vec[] {
+// `driver` plans with its taste, kept off roads when keepsOffRoads says so; without one the route is the plain
+// cheapest. A goal beyond the map edge moves in to the nearest point a truck of this radius fits, since no truck
+// may leave the map.
+export function route(world: World, from: Vec, dest: Vec, radius: number, extra: Blocker[], driver?: Vehicle): Vec[] {
   return timed('route', () => {
     const to = insideMap(world, dest, radius);
-    const taste = tasteOf(world, driver);
     const nav = terrainNav(world.terrain);
+    const taste = routeTaste(world, nav, driver);
     const statics = staticSet(world.obstacles, world.terrain);
     const dynamic = dynamicBlockers(world.obstacles, world.terrain, extra);
     const reach = radius + CLEARANCE;
-    // An unobstructed line all on road is already the shortest, cheapest route, except for a driver that shuns roads.
-    if (!taste?.offRoad && lineCost(nav, statics, dynamic, from, to, reach, 1, nav.tileCost, null) < Infinity) return [to];
+    // An unobstructed line all on road is already the shortest, cheapest route, unless the driver keeps off roads.
+    if (!taste?.roads && lineCost(nav, statics, dynamic, from, to, reach, 1, nav.tileCost, null) < Infinity) return [to];
     const layer = navLayer(world.terrain, world.obstacles, radius);
     const start = cellOf(layer, from);
     const target = cellOf(layer, to);
@@ -41,6 +43,12 @@ export function route(world: World, from: Vec, dest: Vec, radius: number, extra:
     points.push(end);
     return shortcut(nav, statics, dynamic, from, points, reach, taste);
   });
+}
+
+// The driver's taste, with roads priced up for a driver who keeps off them.
+function routeTaste(world: World, nav: TerrainNav, driver: Vehicle | undefined): Taste | null {
+  const taste = tasteOf(world, driver);
+  return taste && driver && keepsOffRoads(world, driver) ? offRoadTaste(taste, nav) : taste;
 }
 
 function insideMap(world: World, p: Vec, radius: number): Vec {
@@ -102,12 +110,17 @@ export function straightClear(world: World, a: Vec, b: Vec, radius: number, extr
   return lineCost(nav, statics, dynamicBlockers(world.obstacles, world.terrain, extra), a, b, radius + CLEARANCE, Infinity, nav.tileCost, null) < Infinity;
 }
 
-// A route kept from an earlier turn: its point, its waypoints, and the keys of the blockers that
-// change during play which it was planned around.
-export type KeptRoute = { dest: Vec; points: Vec[]; blockers: string[] };
+// A route kept from an earlier turn: its point, its waypoints, the keys of the blockers that
+// change during play which it was planned around, and whether it was planned off roads.
+export type KeptRoute = { dest: Vec; points: Vec[]; blockers: string[]; offRoad: boolean };
 
-export function keepRoute(world: World, dest: Vec, points: Vec[], extra: Blocker[]): KeptRoute {
-  return { dest: { ...dest }, points, blockers: dynamicBlockers(world.obstacles, world.terrain, extra).map((o) => blockerKey([o])) };
+export function keepRoute(world: World, dest: Vec, points: Vec[], extra: Blocker[], driver?: Vehicle): KeptRoute {
+  return { dest: { ...dest }, points, blockers: dynamicBlockers(world.obstacles, world.terrain, extra).map((o) => blockerKey([o])), offRoad: plansOffRoad(world, driver) };
+}
+
+// Whether route() plans this driver's routes off roads now.
+function plansOffRoad(world: World, driver: Vehicle | undefined): boolean {
+  return driver !== undefined && keepsOffRoads(world, driver);
 }
 
 // The rest of a kept route toward nearly the same point, or null when it no longer holds. Points the
@@ -116,18 +129,20 @@ export function keepRoute(world: World, dest: Vec, points: Vec[], extra: Blocker
 // be clear lines over ground no costlier than either end, as for a shortcut. The vehicle may already
 // drive inside the CLEARANCE margin, which only absorbs steering bulge, so these legs must just not
 // touch. A road or kill wreck or parked vehicle the route was not planned around must keep full clearance
-// from every leg. Static obstacles, cliffs and the known blockers are as the planner checked them.
-export function continueRoute(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[], driver?: Pick<Vehicle, "id" | "brain">): Vec[] | null {
+// from every leg. Static obstacles, cliffs and the known blockers are as the planner checked them. A route
+// planned on or off roads no longer holds once the driver's style has changed.
+export function continueRoute(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[], driver?: Vehicle): Vec[] | null {
   return timed('route-continue', () => continueKept(world, from, kept, to, radius, extra, driver));
 }
 
-function continueKept(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[], driver: Pick<Vehicle, "id" | "brain"> | undefined): Vec[] | null {
+function continueKept(world: World, from: Vec, kept: KeptRoute, to: Vec, radius: number, extra: Blocker[], driver: Vehicle | undefined): Vec[] | null {
+  if (kept.offRoad !== plansOffRoad(world, driver)) return null;
   const c = legCheck(world, kept, radius, extra);
   const { rest, moved } = remainingPoints(from, kept, to);
   if (lastBrokenLeg(c, from, rest, moved) >= 0) return null;
   // Shortcuts from the new position, as a fresh plan takes them, so the truck does not hold to a corner
   // chosen from where it was a turn ago.
-  return straightenAhead(c.nav, c.statics, c.dynamic, from, rest, c.reach, tasteOf(world, driver));
+  return straightenAhead(c.nav, c.statics, c.dynamic, from, rest, c.reach, routeTaste(world, c.nav, driver));
 }
 
 // What the legs of a kept route are checked against. `fresh` holds the dynamic blockers the route was

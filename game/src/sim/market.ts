@@ -168,11 +168,12 @@ export function addStockPart(state: ShopState, part: PartInstance): void {
 // Contracts. Shops post them; rewards follow the effort model.
 
 // `window` is the turns a contract allows from acceptance. `deadline` is the withdrawal turn while
-// the offer is posted and the due turn once it is held.
+// the offer is posted and the due turn once it is held. A bounty's `fulfilled` is true once the
+// player beat a truck of its template; a fulfilled bounty ignores its deadline until it is claimed.
 export type Contract =
   | { id: string; shop: string; kind: 'haul'; good: string; units: number; to: string; reward: number; deadline: number; window: number; rush: boolean; tier: Tier }
   | { id: string; shop: string; kind: 'fetch'; defId: string; reward: number; deadline: number; window: number; tier: Tier }
-  | { id: string; shop: string; kind: 'bounty'; template: string; targetName: string; reward: number; deadline: number; window: number; tier: Tier };
+  | { id: string; shop: string; kind: 'bounty'; template: string; targetName: string; reward: number; deadline: number; window: number; tier: Tier; fulfilled: boolean };
 
 // Estimated turns to travel between two points: straight distance stretched to a road-like route,
 // at cruise speed, plus the turns spent handling the stop.
@@ -207,10 +208,12 @@ export function cargoValue(v: Vehicle): number {
   return goods + spareParts(v).reduce((a, p) => a + partValue(p), 0);
 }
 
-// A bounty's reward: a share of the target's own total worth, so a tougher, better-equipped truck
-// pays more to put down. The deadline window is random and does not change the pay.
-export function bountyReward(target: Vehicle): number {
-  return Math.round(vehicleValue(target) * CONTRACTS.bounty.valueShare);
+// A bounty's reward: a fixed sum for the target's raider template, whatever it carries. The deadline window is
+// random and does not change the pay.
+export function bountyReward(templateId: string): number {
+  const turns = CONTRACTS.bounty.rewardTurns[templateId];
+  if (turns === undefined) throw new Error(`No bounty reward for template ${templateId}`);
+  return Math.round(turns * EFFORT.wage[1]);
 }
 
 // The pristine buy price of a part def: its base value plus the shop spread, ignoring wear. A fetch
@@ -281,8 +284,8 @@ function rollBounty(world: World, input: RollInput, id: string): Contract {
   if (!target.brain) throw new Error(`Raider ${target.id} has no brain`);
   const tier = highestPartTier(target);
   const turns = randInt(world.marketRng, CONTRACTS.bounty.durationTurns[0], CONTRACTS.bounty.durationTurns[1]);
-  const reward = bountyReward(target);
-  return { id, shop: input.shop.id, kind: 'bounty', template: target.brain.templateId, targetName: target.name, reward, deadline: world.turn + turns, window: turns, tier };
+  const reward = bountyReward(target.brain.templateId);
+  return { id, shop: input.shop.id, kind: 'bounty', template: target.brain.templateId, targetName: target.name, reward, deadline: world.turn + turns, window: turns, tier, fulfilled: false };
 }
 
 const ROLLS = { haul: rollHaul, fetch: rollFetch, bounty: rollBounty };
@@ -338,17 +341,24 @@ function beatenTruck(world: World, id: string): Vehicle {
   return v;
 }
 
-// A truck that gives up to the player counts as beaten: it finishes one held bounty on its template, as a knockout
+// Marks the first held bounty on the template that is not yet fulfilled. It pays nothing: the player claims the
+// reward at the shop that posted the bounty. The only writer of `fulfilled = true`.
+export function fulfilBounty(world: World, template: string): void {
+  const c = world.player.contracts.find((x): x is Extract<Contract, { kind: 'bounty' }> => x.kind === 'bounty' && x.template === template && !x.fulfilled);
+  if (!c) return;
+  c.fulfilled = true;
+  world.events.push({ t: 'contract', contract: { ...c }, outcome: 'fulfilled' });
+}
+
+// A truck that gives up to the player counts as beaten: it fulfils one held bounty on its template, as a knockout
 // does. Called outside the turn's event scan, since a dialogue command clears the events.
 export function creditBounty(world: World, npc: Vehicle): void {
   if (!npc.brain) throw new Error(`${npc.id} has no driver to name in a bounty`);
-  const template = npc.brain.templateId;
-  const c = world.player.contracts.find((x) => x.kind === 'bounty' && x.template === template);
-  if (c) finishContract(world, c, 'done');
+  fulfilBounty(world, npc.brain.templateId);
 }
 
-// True once no truck of the bounty's template is left in the world. Check playerDefeats for the
-// same turn first: once a bounty is fulfilled, the completed contract is removed, so this never runs on it.
+// True once no truck of the bounty's template is left in the world. The caller skips fulfilled bounties, and
+// fulfils this turn's defeats first, so a kill of the last truck of a template still counts.
 export function bountyLapsed(world: World, c: Contract): boolean {
   if (c.kind !== 'bounty') throw new Error(`${c.kind} contract has no bounty target`);
   return !world.vehicles.some((v) => v.brain?.templateId === c.template);
@@ -489,16 +499,21 @@ function loadHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void {
   world.player.costBasis[c.good] = (paid * held + goodValue(c.good) * c.units) / (held + c.units);
 }
 
-// Hands in a haul at its destination or a fetch at the shop that posted it. Bounties pay on the kill.
+// Hands in a haul at its destination, and a fetch or a met bounty at the shop that posted it.
 export function deliverContract(world: World, contractId: string): World {
   return playerCommand(world, (w) => {
     const contract = w.player.contracts.find((c) => c.id === contractId);
     if (!contract) throw new Error(`No active contract ${contractId}`);
-    if (contract.kind === 'bounty') throw new Error('A bounty pays when you knock out or wreck the target');
     if (contract.kind === 'haul') handInHaul(w, contract);
-    else handInFetch(w, contract);
+    else if (contract.kind === 'fetch') handInFetch(w, contract);
+    else handInBounty(w, contract);
     finishContract(w, contract, 'done');
   });
+}
+
+function handInBounty(world: World, c: Extract<Contract, { kind: 'bounty' }>): void {
+  requireParkedAt(world, c.shop);
+  if (!c.fulfilled) throw new Error('The bounty is not met yet');
 }
 
 function handInHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void {
@@ -536,42 +551,44 @@ export function contractXp(c: Contract): number {
 
 // Ends an active contract. Done pays the reward and the contract's XP to Social; failed charges the haul penalty, debt allowed.
 function finishContract(world: World, c: Contract, outcome: 'done' | 'failed' | 'lapsed'): void {
+  if (outcome !== 'done' && isMetBounty(c)) throw new Error(`A fulfilled bounty cannot be ${outcome}`);
   world.player.contracts = world.player.contracts.filter((x) => x.id !== c.id);
   world.events.push({ t: 'contract', contract: { ...c }, outcome });
-  if (outcome === 'done') {
-    world.player.money += c.reward;
-    world.events.push({ t: 'money', amount: c.reward, reason: 'contract' });
-    practice(world, 'contract', contractXp(c), null, c.shop);
-  }
-  if (outcome === 'failed' && c.kind === 'haul') {
-    const penalty = haulPenalty(c, goodValue(c.good));
-    world.player.money -= penalty;
-    world.events.push({ t: 'money', amount: -penalty, reason: 'failed haul contract' });
-  }
+  if (outcome === 'done') payContract(world, c);
+  if (outcome === 'failed' && c.kind === 'haul') chargeHaulPenalty(world, c);
 }
 
-// Settles bounties from this turn's defeats and ends contracts past their deadline or target. Each qualifying
-// defeat finishes one held bounty on its template, in held order.
+function payContract(world: World, c: Contract): void {
+  world.player.money += c.reward;
+  world.events.push({ t: 'money', amount: c.reward, reason: 'contract' });
+  practice(world, 'contract', contractXp(c), null, c.shop);
+}
+
+function chargeHaulPenalty(world: World, c: Extract<Contract, { kind: 'haul' }>): void {
+  const penalty = haulPenalty(c, goodValue(c.good));
+  world.player.money -= penalty;
+  world.events.push({ t: 'money', amount: -penalty, reason: 'failed haul contract' });
+}
+
+function isMetBounty(c: Contract): boolean {
+  return c.kind === 'bounty' && c.fulfilled;
+}
+
+// Fulfils bounties from this turn's defeats, then ends contracts past their deadline or target. Each qualifying
+// defeat fulfils at most one held bounty on its template, so one kill never meets several bounties.
+// A fulfilled bounty is settled: it waits for its claim and never fails, lapses or warns.
 export function advanceContracts(world: World): void {
-  const defeats = playerDefeats(world);
-  for (const c of [...world.player.contracts]) {
-    const outcome = contractOutcome(world, c, defeats);
-    if (outcome) finishContract(world, c, outcome);
-    else if (c.deadline - world.turn === CONTRACTS.warnTurns) world.events.push({ t: 'contract', contract: { ...c }, outcome: 'expiring' });
-  }
+  for (const [template, count] of playerDefeats(world)) for (let i = 0; i < count; i++) fulfilBounty(world, template);
+  for (const c of world.player.contracts.filter((x) => !isMetBounty(x))) settleContract(world, c);
 }
 
-// Takes one of this turn's defeats on the bounty's template when any is left.
-function bountyOutcome(world: World, c: Extract<Contract, { kind: 'bounty' }>, defeats: Map<string, number>): 'done' | 'lapsed' | null {
-  const left = defeats.get(c.template) ?? 0;
-  if (left > 0) {
-    defeats.set(c.template, left - 1);
-    return 'done';
-  }
-  return bountyLapsed(world, c) ? 'lapsed' : null;
+function settleContract(world: World, c: Contract): void {
+  const outcome = contractOutcome(world, c);
+  if (outcome) finishContract(world, c, outcome);
+  else if (c.deadline - world.turn === CONTRACTS.warnTurns) world.events.push({ t: 'contract', contract: { ...c }, outcome: 'expiring' });
 }
 
-function contractOutcome(world: World, c: Contract, defeats: Map<string, number>): 'done' | 'failed' | 'lapsed' | null {
-  if (c.kind === 'bounty') return bountyOutcome(world, c, defeats) ?? (isExpired(world, c) ? 'failed' : null);
+function contractOutcome(world: World, c: Contract): 'failed' | 'lapsed' | null {
+  if (c.kind === 'bounty' && bountyLapsed(world, c)) return 'lapsed';
   return isExpired(world, c) ? 'failed' : null;
 }
