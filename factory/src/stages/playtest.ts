@@ -49,6 +49,7 @@ export async function playtest(ctx: Ctx, issue: number): Promise<void> {
   const baseline = await baselineOf(ctx, release);
   await takeMain(ctx, release);
   const start = await ctx.repo.headHash(release.branch);
+  if (await carryPass(ctx, release, start)) return;
   const dir = join(ctx.cfg.home, 'work', 'release-playtest');
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone(release.branch, release.branch, dir);
@@ -65,6 +66,36 @@ export async function playtest(ctx: Ctx, issue: number): Promise<void> {
 // It runs before the first play, so a failing suite fails the job for Hermes and spends no play.
 async function fullSuite(ctx: Ctx, dir: string): Promise<void> {
   await ctx.container.shell(dir, stepScript('Release full suite', [['npm ci', 'npm ci'], ['tests', 'npm test']]), releaseLog(ctx, 'playtest'));
+}
+
+// A release head that only moved forward from a commit this release passed, with no file under game/ changed since, plays the same
+// game. It passes with no suite and no play. Factory and docs commits from main move the release, and each replay cost hours.
+// Any game change plays in full. The candidate and the committee's Ship still act on the new head. Returns whether the job ends here.
+async function carryPass(ctx: Ctx, release: ReleaseState, start: string): Promise<boolean> {
+  const passed = release.playtest.passed;
+  if (passed === null) return false;
+  const changed = await sameGame(ctx, passed, start);
+  if (changed === null) return false;
+  await ctx.repo.fetch();
+  const now = await ctx.repo.headHash(release.branch);
+  if (now !== start) {
+    ctx.log('playtest', release.issue, `the release moved to ${now} while the factory compared ${start} with ${passed}. Nothing played, the new head is next.`);
+    return true;
+  }
+  setPlaytest(ctx, (playtest) => ({ ...playtest, passed: start }));
+  const files = changed.length ? `It changed ${changed.length} other files, like ${changed[0]}.` : 'It changed no files.';
+  const note = `Release playtest: carried the pass of ${passed} to ${start} with no play. ${start} only adds commits to ${passed} and changes no file under ${GAME_DIR}/, so it plays the same game. ${files} The candidate builds from ${start}.`;
+  ctx.log('playtest', release.issue, note);
+  await ctx.github.comment(release.issue, note);
+  return true;
+}
+
+// The files `start` changed since `passed`, when `passed` is its ancestor and none of them is a game file. Null when the game may differ.
+async function sameGame(ctx: Ctx, passed: string, start: string): Promise<string[] | null> {
+  if (passed === start) return [];
+  if (!(await ctx.repo.isMerged(passed, start))) return null;
+  const changed = await ctx.repo.changedFiles(passed, start);
+  return changed.some((file) => file.startsWith(`${GAME_DIR}/`)) ? null : changed;
 }
 
 // The release holds all of main before it plays, so a later Ship never brings unplayed game changes in.
