@@ -12,11 +12,10 @@ import type { Vehicle, World } from "../sim/types";
 import type { Vec } from "../sim/vec";
 import { cloneWorld } from "../sim/world";
 
-const PLAN_TURNS = 3; // turns of path preview
+const PLAN_TURNS = 3;
 
 export type PlanPreview = { turns: VehicleFrame[][]; first: number; course: Vec[] | null; waypoint: boolean };
 
-// Simulates up to PLAN_TURNS turns of me on a clone of the world. The live drive is never freed or stepped.
 export function previewPlan(drive: Drive, world: World, me: Vehicle): PlanPreview {
   const w = cloneWorld(world);
   const { turns, v } = simulate(drive, w, me);
@@ -42,7 +41,6 @@ function simulate(drive: Drive, w: World, me: Vehicle): { turns: VehicleFrame[][
   return { turns, v };
 }
 
-// A course longer than the simulated turns continues as the route the driver will take.
 function courseAfter(w: World, v: Vehicle): Vec[] | null {
   const order = v.order?.kind === "brake" ? null : v.order;
   if (!order) return null;
@@ -50,7 +48,6 @@ function courseAfter(w: World, v: Vehicle): Vec[] | null {
   return [v.pos, ...route(w, v.pos, order.dest, vehicleStats(w, v).radius, routeBlockers(w, v), v)];
 }
 
-// The throttle color for driving me toward p.
 export function throttleColor(me: Vehicle, p: Vec): number {
   return PAL.throttle[throttleFor(Math.hypot(p.x - me.pos.x, p.y - me.pos.y), me.speed)];
 }

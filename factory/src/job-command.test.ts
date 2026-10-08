@@ -3,7 +3,6 @@ import { readFileSync } from 'node:fs';
 import { expect, it } from 'vitest';
 import { outputsNote } from './container';
 
-// The running job needs Linux setsid and GNU timeout, so only the argument checks run on any host.
 it('ships factory-job in the agent image and tells every agent to use it', () => {
   expect(readFileSync('docker/Dockerfile', 'utf8')).toContain('COPY --chmod=755 factory-job /usr/local/bin/factory-job');
   expect(outputsNote('game', 30)).toContain('factory-job start <name> <activity> <minutes>');

@@ -15,7 +15,6 @@ const STYLE: UpgradeStyle = { skip: [], chassis: 'value', job: 'courier' };
 const FIGHTER: UpgradeStyle = { ...STYLE, job: 'fighter' };
 const capital = startKit('standard').money;
 
-// The player parked on a pad of Bowl, which has a garage, with plenty of money.
 function atBowl(): World {
   const bowl = REGION.towns.find((t) => t.id === 'bowl');
   if (!bowl) throw new Error('No town bowl');
@@ -113,7 +112,6 @@ describe('upgradeGear', () => {
 
   it('as a trader, takes no gun that would fill cargo cells, where a fighter would', () => {
     const roomOf = (world: World) => freeCells({ ...playerVehicle(world), items: playerVehicle(world).items.filter((it) => it.kind === 'part') });
-    // The gun is the only offer, so no cargo part bought beside it adds room.
     const offer = (world: World) => { shopState(world, 'bowl').stock = [makePart(world, 'heavyMg', 0)]; };
     const trader = atBowl();
     offer(trader);
@@ -141,7 +139,6 @@ describe('upgradeGear', () => {
 });
 
 describe('upgradeGear for a fighter', () => {
-  // The heavy machine gun is the only part on offer, so no cargo part adds room.
   const offer = (world: World) => { shopState(world, 'bowl').stock = [makePart(world, 'heavyMg', 0)]; };
   const roomOf = (world: World) => freeCells(playerVehicle(world));
   const speedOf = (world: World) => vehicleStats(world, playerVehicle(world)).maxSpeed;

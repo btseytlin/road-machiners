@@ -6,7 +6,6 @@ import { clearSessions, roundSession, sessionsDir } from './sessions';
 const HOME = resolve('tmp/factory-sessions-test');
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-// Claude Code's file of a conversation run in /work/game.
 function save(dir: string, id: string): void {
   mkdirSync(`${dir}/-work-game`, { recursive: true });
   writeFileSync(`${dir}/-work-game/${id}.jsonl`, '{}\n');

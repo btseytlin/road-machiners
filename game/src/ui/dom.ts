@@ -21,7 +21,6 @@ export function uiRoot(): HTMLElement {
   return root;
 }
 
-// Panels in the top left corner sit side by side in one row.
 export function topLeft(): HTMLElement {
   const root = uiRoot();
   const found = root.querySelector<HTMLElement>(':scope > .top-left');
@@ -31,7 +30,6 @@ export function topLeft(): HTMLElement {
   return row;
 }
 
-// The instruments and weapons in the bottom left corner flow in one wrapping row.
 export function bottomLeft(): HTMLElement {
   const root = uiRoot();
   const found = root.querySelector<HTMLElement>(':scope > .bottom-left');
@@ -41,7 +39,6 @@ export function bottomLeft(): HTMLElement {
   return row;
 }
 
-// Panels in the top right corner sit side by side in one row.
 export function topRight(): HTMLElement {
   const root = uiRoot();
   const found = root.querySelector<HTMLElement>(':scope > .top-right');
@@ -51,7 +48,6 @@ export function topRight(): HTMLElement {
   return row;
 }
 
-// Panels in the right column above the log stack upward in one column. See .right-dock in style.css.
 export function rightDock(): HTMLElement {
   const root = uiRoot();
   const found = root.querySelector<HTMLElement>(':scope > .right-dock');
@@ -61,12 +57,10 @@ export function rightDock(): HTMLElement {
   return dock;
 }
 
-// A screen box, as getBoundingClientRect() gives.
 export type Box = { left: number; top: number; right: number; bottom: number };
 
 const isEmpty = (b: Box): boolean => b.right <= b.left || b.bottom <= b.top;
 
-// Whether two boxes share area. Boxes that only touch do not, and an empty box, as a hidden panel measures, never does.
 export function overlaps(a: Box, b: Box): boolean {
   if (isEmpty(a) || isEmpty(b)) return false;
   return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
@@ -74,14 +68,19 @@ export function overlaps(a: Box, b: Box): boolean {
 
 export function panel(cls: string, parent: HTMLElement = uiRoot()): HTMLElement {
   const p = el('div', { class: `panel ${cls}` });
-  // Keep clicks on panels from reaching the game canvas.
   p.addEventListener('pointerdown', (e) => e.stopPropagation());
   p.addEventListener('wheel', (e) => e.stopPropagation());
   parent.append(p);
   return p;
 }
 
-// Game keys are bare keys. A keydown with Ctrl, Cmd or Alt held belongs to the browser and the OS.
+export function download(name: string, text: string, type: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type }));
+  const link = el('a', { href: url, download: name });
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url));
+}
+
 export function isBrowserChord(e: Pick<KeyboardEvent, "ctrlKey" | "metaKey" | "altKey">): boolean {
   return e.ctrlKey || e.metaKey || e.altKey;
 }

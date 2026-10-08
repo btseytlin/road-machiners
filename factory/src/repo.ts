@@ -1,16 +1,13 @@
-import { appendFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { GUARD_HOOK } from './container';
 import { must } from './exec';
 import { withLock } from './lock';
 import { createLockWaitReporter } from './observability';
 import { MEDIA_DIR, MergeConflictError, OUT_DIR, RevertConflictError, TASK_DIR, type FactoryConfig, type HostRepo, type MergeStep, type Resolution, type Run } from './types';
 
-// Hooks are switched off on every call, so no git command here runs code from a repository.
-// The identity names the factory on its merge commits, the same one the agent image uses.
 const NO_HOOKS = ['-c', 'core.hooksPath=/dev/null', '-c', 'user.name=ROAM Factory', '-c', 'user.email=factory@roam.invalid'];
 
-// The log runs newest first, so the first entry that names the issue decides.
-// A revert means the branch is clean already, and a merge that came back after a removal reverts its latest merge.
 function mergeToRevert(log: string, issue: number): string | null {
   const merge = `Merge issue #${issue}:`;
   const reverted = `Revert "Merge issue #${issue}:`;
@@ -25,8 +22,8 @@ function mergeToRevert(log: string, issue: number): string | null {
 
 const lines = (text: string): string[] => text.split('\n').filter(Boolean);
 
-// GitHub holds every branch. The host clone is a cache of it: it keeps GitHub's branches as origin/* refs and no local branch.
-// A write merges in a throwaway worktree and pushes the result. A failed merge or push leaves nothing behind, so a retry starts from GitHub.
+const mergeFlags = (message: string | undefined): string[] => (message === undefined ? ['--no-edit'] : ['--no-ff', '-m', message]);
+
 export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = null): HostRepo {
   const path = `${cfg.home}/repo`;
   const landDir = join(cfg.home, 'work', 'land');
@@ -34,7 +31,6 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
   const git = (args: string[]): Promise<string> => gitIn(path, args);
   const hasRef = async (cwd: string, ref: string): Promise<boolean> => (await run('git', [...NO_HOOKS, 'rev-parse', '--verify', '--quiet', ref], { cwd })).code === 0;
 
-  // A branch name reads GitHub's copy. Anything else, like a commit hash, passes as it is.
   async function ref(name: string): Promise<string> {
     return (await hasRef(path, `refs/remotes/origin/${name}`)) ? `origin/${name}` : name;
   }
@@ -43,7 +39,6 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     return (await git(['rev-parse', `${await ref(name)}^{commit}`])).trim();
   }
 
-  // Runs `work` in a fresh worktree detached at `commit`, and removes it afterwards, also after a failure or a crash before.
   async function inWorktree<T>(commit: string, work: (dir: string) => Promise<T>): Promise<T> {
     rmSync(landDir, { recursive: true, force: true });
     await git(['worktree', 'prune']);
@@ -60,8 +55,6 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     return lines(await gitIn(dir, ['diff', '--name-only', '--diff-filter=U']));
   }
 
-  // Merges `source` into `base` and returns the merge commit, which no ref names yet.
-  // An agent's resolution of this very merge stands in for it.
   function mergeCommit(source: string, base: string, step: MergeStep, resolutions: Resolution[], done: Resolution[]): Promise<string> {
     const resolved = resolutions.find((item) => item.base === base && item.source === source);
     if (resolved) return Promise.resolve(resolved.head);
@@ -77,7 +70,6 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     });
   }
 
-  // Reverts the merge `hash` on `tip` and returns the revert commit, which no ref names yet. An agent's resolution of this very revert stands in for it.
   async function revertCommit(issue: number, branch: string, at: { tip: string; hash: string }, resolutions: Resolution[]): Promise<string> {
     const resolved = resolutions.find((item) => item.base === at.tip && item.source === at.hash);
     if (resolved) return resolved.head;
@@ -91,7 +83,6 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     });
   }
 
-  // Pushes every head in one atomic push. False when GitHub rejected it because a target moved since `started`, which the caller redoes. Any other rejection throws.
   async function pushUnlessMoved(heads: Map<string, string>, started: Map<string, string>): Promise<boolean> {
     const pushed = await run('git', [...NO_HOOKS, 'push', '--atomic', 'origin', ...[...heads].map(([branch, commit]) => `${commit}:refs/heads/${branch}`)], { cwd: path });
     if (pushed.code === 0) return true;
@@ -101,7 +92,6 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     return false;
   }
 
-  // Each step merges into the result of the steps before it. `heads` holds the new commit of each target and `started` its tip on GitHub before the first step.
   async function mergeSteps(steps: MergeStep[], resolutions: Resolution[]): Promise<{ heads: Map<string, string>; started: Map<string, string> }> {
     const heads = new Map<string, string>();
     const started = new Map<string, string>();
@@ -117,50 +107,51 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     return { heads, started };
   }
 
-  // One push moves every branch or none. A branch that moved on GitHub meanwhile makes it fail, since the push never forces.
   async function pushAll(heads: Map<string, string>): Promise<void> {
     await git(['push', '--atomic', 'origin', ...[...heads].map(([branch, commit]) => `${commit}:refs/heads/${branch}`)]);
   }
 
-  // Brings a work clone's branch head into the host clone, without pushing it, and returns its full hash.
   async function headFromWork(dir: string, branch: string): Promise<string> {
     const head = (await gitIn(dir, ['rev-parse', `refs/heads/${branch}`])).trim();
     await git(['fetch', dir, `refs/heads/${branch}`]);
     return head;
   }
 
-  // Clones into `dir` unless a working clone is there.
   async function prepareClone(branch: string, base: string, dir: string): Promise<void> {
-    // A clone cut short, like by a full disk, has no commit checked out. It holds no work, so it is cloned again.
-    // The note goes to the job log, so the replacement is on record.
     if (existsSync(dir)) {
-      if (existsSync(join(dir, '.git')) && (await hasRef(dir, 'HEAD'))) return;
+      if (existsSync(join(dir, '.git')) && (await hasRef(dir, 'HEAD'))) return installGuardHook(dir);
       console.error(`${dir} has no commit checked out, so it is cloned again`);
       rmSync(dir, { recursive: true, force: true });
     }
+    await initClone(dir);
+    await checkoutBranch(dir, branch, base);
+    installGuardHook(dir);
+  }
+
+  function installGuardHook(dir: string): void {
+    mkdirSync(join(dir, '.git', 'hooks'), { recursive: true });
+    writeFileSync(join(dir, '.git', 'hooks', 'pre-commit'), GUARD_HOOK, { mode: 0o755 });
+  }
+
+  async function initClone(dir: string): Promise<void> {
     mkdirSync(dir, { recursive: true });
     await gitIn(dir, ['init', '--quiet']);
     await gitIn(dir, ['remote', 'add', 'origin', path]);
     await gitIn(dir, ['config', 'remote.origin.fetch', '+refs/remotes/origin/*:refs/remotes/origin/*']);
     await gitIn(dir, ['fetch', '--quiet', 'origin']);
-    // The clone ignores the factory's own files, whatever the branch's .gitignore says.
     appendFileSync(join(dir, '.git', 'info', 'exclude'), `\n${OUT_DIR}/\n${TASK_DIR}/\n${MEDIA_DIR}/\n`);
-    await checkoutBranch(dir, branch, base);
   }
 
-  // A conflict, a merge in progress or a revert in progress means the agent did not commit.
   async function requireFinished(dir: string, into: string, source: string): Promise<void> {
     const open = (await conflictedFiles(dir)).length > 0 || (await hasRef(dir, 'MERGE_HEAD')) || (await hasRef(dir, 'REVERT_HEAD'));
     if (open) throw new Error(`The agent left the conflict of ${source} on ${into} unfinished`);
   }
 
-  // The agent's commit must hold `ancestor`, and must be a new commit, so a reset or an aborted merge fails here.
   async function requireDescends(head: string, ancestor: string, what: string): Promise<void> {
     const result = await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', ancestor, head], { cwd: path });
     if (result.code !== 0 || head === ancestor) throw new Error(`The agent's commit ${head.slice(0, 7)} does not hold ${ancestor.slice(0, 7)}, ${what}`);
   }
 
-  // A file that differs from both sides is the agent's own work. A file that equals one side came in with a clean merge.
   async function agentAdded(base: string, source: string, head: string): Promise<string> {
     const names = async (side: string): Promise<string[]> => (await git(['diff', '--name-only', '-z', side, head])).split('\0').filter(Boolean);
     const fromSource = new Set(await names(source));
@@ -168,7 +159,6 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     return added.length === 0 ? '' : git(['diff', base, head, '--', ...added]);
   }
 
-  // The work clone sees the host's origin/* refs as its own origin/*.
   async function checkoutBranch(dir: string, branch: string, base: string): Promise<void> {
     const start = (await hasRef(dir, `refs/remotes/origin/${branch}`)) ? branch : base;
     await gitIn(dir, ['checkout', '-B', branch, `origin/${start}`]);
@@ -182,7 +172,6 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
         await gitIn(dirname(path), ['clone', `https://github.com/${cfg.repo}.git`, path]);
       }
       await git(['fetch', '--prune', 'origin']);
-      // A local branch could only be a stale copy of GitHub, like a merge whose push failed, so none is kept.
       const local = lines(await git(['for-each-ref', '--format=%(refname:short)', 'refs/heads']));
       if (local.length === 0) return;
       await git(['checkout', '--detach']);
@@ -207,7 +196,6 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       const [source, command] = conflict instanceof MergeConflictError
         ? [conflict.source, ['merge', '--no-ff', '-m', conflict.step.message, conflict.source]]
         : [conflict.merge, ['revert', '--no-edit', '-m', '1', conflict.merge]];
-      // A commit that an earlier step made has no ref, so the clone asks the host clone for it by hash.
       await gitIn(dir, ['fetch', '--quiet', 'origin', conflict.base, source]);
       await gitIn(dir, ['checkout', '-B', conflict.into, conflict.base]);
       const result = await run('git', [...NO_HOOKS, ...command], { cwd: dir });
@@ -228,11 +216,17 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       if (lines(await git(['ls-remote', '--heads', 'origin', branch])).length > 0) await git(['push', 'origin', '--delete', branch]);
     },
     prepareWorkClone: prepareClone,
+    async cloneBranch(branch, dir) {
+      if (!(await hasRef(path, `refs/remotes/origin/${branch}`))) throw new Error(`branch ${branch} is not in the host clone, so GitHub has no such branch as of the last fetch`);
+      if (existsSync(dir)) throw new Error(`${dir} exists already`);
+      await initClone(dir);
+      await gitIn(dir, ['checkout', '--quiet', '-B', branch, `origin/${branch}`]);
+      return (await gitIn(dir, ['rev-parse', 'HEAD'])).trim();
+    },
     async untrackFactoryFiles(dir) {
       const tracked = lines(await gitIn(dir, ['ls-files', '--', `:(glob)**/${TASK_DIR}/**`, `:(glob)**/${OUT_DIR}/**`, `:(glob)**/${MEDIA_DIR}/**`]));
       if (tracked.length === 0) return [];
       await gitIn(dir, ['rm', '-r', '-q', '--cached', '--', ...tracked]);
-      // A path list would commit the file from disk again, so the commit takes the index.
       await gitIn(dir, ['commit', '-q', '-m', 'Keep factory task files out of the branch']);
       return tracked;
     },
@@ -249,12 +243,12 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       if (conflicts.length === 0) throw new Error(`merge of ${base} into ${dir} failed without a conflict: ${(result.stderr || result.stdout).trim()}`);
       return { commit, conflicts };
     },
-    async mergeBranchIntoWork(dir, branch) {
+    async mergeBranchIntoWork(dir, branch, message) {
       await gitIn(dir, ['fetch', 'origin']);
       if (!(await hasRef(dir, `refs/remotes/origin/${branch}`))) return { commit: null, conflicts: [] };
       const commit = (await gitIn(dir, ['rev-parse', `origin/${branch}`])).trim();
       if ((await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', commit, 'HEAD'], { cwd: dir })).code === 0) return { commit: null, conflicts: [] };
-      const result = await run('git', [...NO_HOOKS, 'merge', '--no-edit', commit], { cwd: dir });
+      const result = await run('git', [...NO_HOOKS, 'merge', ...mergeFlags(message), commit], { cwd: dir });
       if (result.code === 0) return { commit, conflicts: [] };
       const conflicts = await conflictedFiles(dir);
       if (conflicts.length === 0) throw new Error(`merge of ${branch} into ${dir} failed without a conflict: ${(result.stderr || result.stdout).trim()}`);
@@ -273,13 +267,11 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       return git(['show', `${await ref(branch)}:${path}`]);
     },
     async changedFiles(base, branch) {
-      return lines(await git(['diff', '--name-only', `${await ref(base)}...${await ref(branch)}`]));
+      return lines(await git(['diff', '--name-only', '--no-renames', `${await ref(base)}...${await ref(branch)}`]));
     },
     async hasNewCommits(base, branch) {
       return Number((await git(['rev-list', '--count', `${await ref(base)}..${await ref(branch)}`])).trim()) > 0;
     },
-    // Each step merges into the result of the steps before it, so "main into dev" after "issue into main" takes the new main.
-    // Other jobs and members push all the time. A push that GitHub rejects because a target moved merges again from the new tips.
     async merge(steps, resolutions = []) {
       for (;;) {
         const { heads, started } = await mergeSteps(steps, resolutions);
@@ -292,11 +284,8 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
   });
 }
 
-// The longest single step is a clone of the repo. A job that waits this long found a stuck lock.
 const REPO_LOCK_MS = 15 * 60_000;
 
-// Parallel jobs share the host clone and its one merge worktree, so each method runs whole under one lock.
-// A job's steps may interleave with another job's, which is safe: no method leaves state behind except GitHub's refs.
 function lockEach(cfg: FactoryConfig, jobId: string | null, repo: HostRepo): HostRepo {
   const dir = join(cfg.home, 'locks', 'repo');
   const entries = Object.entries(repo).map(([key, value]) => {

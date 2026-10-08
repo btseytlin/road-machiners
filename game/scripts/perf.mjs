@@ -1,8 +1,9 @@
 // Measures boot, turn, move preview and frame time in Chromium on the real GPU, and fails on any
-// budget miss from scripts/perf-budgets.json, a page error or the crash screen.
+// budget miss from scripts/perf-budgets.json, a page error, the crash screen or software drawing.
 // Usage: npm run perf -- --url http://localhost:5173
 import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
+import { gpuArgs, isSoftware, rendererOf } from './gpu.mjs';
 
 const arg = (name) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -14,14 +15,21 @@ const budgets = JSON.parse(readFileSync(new URL('./perf-budgets.json', import.me
 
 const TURNS = 5;
 const TRAVEL_TURNS = 6;
-const TURN_WAIT_MS = 2600; // movement plus combat playback, with margin
-const ORDER_OFFSETS = [[12, 4], [40, 25], [-30, 60], [150, 150]]; // short to long routes, in tiles
-const VIEW_ZOOM = 0.35; // widest zoom
-const SETTLE_MS = 800; // camera move and first frames after it
+const TURN_WAIT_MS = 2600;
+const ORDER_OFFSETS = [[12, 4], [40, 25], [-30, 60], [150, 150]];
+const VIEW_ZOOM = 0.35;
+const SETTLE_MS = 800;
 const SAMPLE_MS = 2000;
 
-const browser = await chromium.launch({ args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ args: gpuArgs() });
 const page = await browser.newPage({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 2 });
+const renderer = await rendererOf(page);
+console.log(`renderer ${renderer}`);
+if (isSoftware(renderer)) {
+  await browser.close();
+  console.error(`FAIL\nPerf got the software renderer ${renderer}. It needs a GPU.`);
+  process.exit(1);
+}
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.stack ?? e.message));
 page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
@@ -76,7 +84,6 @@ for (const offset of ORDER_OFFSETS) {
 results.previewMs = Math.max(...previewMs);
 
 const travel = await page.evaluate(async () => {
-  // A far drive-through order, then a Space press starts automatic travel through several turns.
   const g = window.__ROAM__;
   const w = { ...g.state, vehicles: g.state.vehicles.map((v) => ({ ...v })) };
   const me = w.vehicles.find((v) => v.id === w.player.vehicleId);
@@ -114,12 +121,10 @@ const towns = await page.evaluate(async () => {
   const { sitePads } = await import('/src/sim/sites.ts');
   return REGION.towns.map((t) => ({ name: t.name, x: t.pos.x, y: t.pos.y, pad: sitePads(t)[0] }));
 });
-// night: the world moves to 23:00 first, so the lamps are on and the nearest beams cast shadows.
 async function townFrameP95(night) {
   const out = [];
   for (const t of towns) {
     out.push(await page.evaluate(async ({ x, y, pad, zoom, settle, sample, night }) => {
-      // The camera cannot pan past gray vision, so the truck moves to the town's pad first. Trucks never enter a site.
       const g = window.__ROAM__;
       let w = { ...g.state, vehicles: g.state.vehicles.map((v) => (v.id === g.state.player.vehicleId ? { ...v, pos: pad, order: null } : v)) };
       if (night) w = (await import('/src/sim/cheats.ts')).skipToHour(w, 23);

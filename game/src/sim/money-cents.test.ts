@@ -3,8 +3,7 @@ import type { World } from './types';
 import { recordTurns } from './progression/record';
 import type { Archetype } from './progression/bot';
 
-// Money is integer cents. Every price, fee and payout rounds to a cent, so no balance ever holds a fraction.
-const RUN_TIMEOUT = 600_000; // a world turn takes about 40 ms, more on a loaded machine
+const RUN_TIMEOUT = 600_000;
 
 function fractionalMoney(world: World): string[] {
   const wallets = [
@@ -24,7 +23,6 @@ describe('money in cents', () => {
     for (const step of recordTurns(7, archetype, turns)) {
       bad.push(...fractionalMoney(step.world));
       played++;
-      // A minute of turns without a yield would starve the worker's status messages to the runner.
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     expect(played).toBe(turns);

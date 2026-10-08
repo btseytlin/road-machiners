@@ -479,7 +479,11 @@ body {
   font: 10px var(--font-mono);
   color: #e5c47c;
 }
+/* The weapon panel shows the gun drawing alone on the button, with no tone tile. */
 .weapon-pick .item-icon {
+  background: none;
+  padding: 0;
+  border-radius: 0;
   grid-column: 1 / 3;
   width: var(--weapon-icon-w);
   height: var(--weapon-icon-h);
@@ -1072,6 +1076,30 @@ body {
   overflow: auto;
   font-size: 12px;
 }
+.info .aim-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0;
+  white-space: nowrap;
+}
+.info .aim-body {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  padding: 0 6px;
+  height: 18px;
+  line-height: 1;
+  font-size: 11px;
+  cursor: crosshair;
+}
+.info .aim-body[aria-pressed="true"] {
+  border-color: #fa3934;
+}
+.info .aim-body .condition-aim {
+  position: static;
+  margin-left: 4px;
+}
 /* The radio steps away while the hover panel overlaps it. Hud.keepRadioClear decides. */
 #ui .radio.away {
   visibility: hidden;
@@ -1593,7 +1621,8 @@ body {
   background: #f0a080;
 }
 /* Item boxes, chips and standalone item icons sit on their category tone, set inline as --tone by toneStyle() in
-   cards.ts from ITEM_TONES in src/render/palette.ts. A grid icon inherits its box's tone, so nothing doubles. */
+   cards.ts from ITEM_TONES in src/render/palette.ts. A grid icon inherits its box's tone, so nothing doubles.
+   The weapon panel is the one exception: its gun icons draw without the tile. */
 .inv-item,
 .inv-chip,
 .item-icon {
@@ -2712,6 +2741,14 @@ canvas.view {
   justify-content: space-between;
   gap: 24px;
   padding: 8px 12px;
+}
+.save-panel .save-exports {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.save-panel .save-exports button {
+  flex: 1;
 }
 
 /* The New game screen sits over the game, the menus and the death screen. */

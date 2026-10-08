@@ -5,8 +5,6 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { capBoxes, fnv1a, formatShapes, loadTriangles, mergeCells, rasterize, roundBox, shapeOf } from './shape-lib.mjs';
 
-// Every model a static prop view draws: landmark looks, fortress pieces, buildings, wrecks, rocks and junk piles.
-// Site decor keeps its circle, so its models are not here.
 const PROP_MODELS = [
   'army_truck',
   'barn',
@@ -88,25 +86,20 @@ const PROP_MODELS = [
 
 const OUT = 'src/data/prop-shapes.json';
 const CFG = {
-  cell: 0.5, // m, fine enough for a post or a fence rail, coarse enough to keep few boxes
-  ground: 0.15, // m, geometry wholly below this, like a concrete apron or a ground skirt, never blocks a wheel
-  gap: 0.5, // m, a vertical gap narrower than this is filled, since nothing passes through it
-  band: 0.5, // m, cells merge into one box when their slabs start and end in the same bands
-  costHeight: 2, // m, about a truck's height, see capBoxes()
-  maxBoxes: 32, // keeps the ruin walls and the gas station posts apart, and still few colliders per prop (PC1)
-  rays: 4, // rays per cell side, 12.5 cm apart, so no post or wall slips between them
+  cell: 0.5,
+  ground: 0.15,
+  gap: 0.5,
+  band: 0.5,
+  costHeight: 2,
+  maxBoxes: 32,
+  rays: 4,
   rayShift: { x: 0.0137, y: 0.0291 },
 };
 
-// Models whose boxes must keep the line at truck clearance: a box that starts at or above it blocks neither driving
-// nor nav, so a dead tree's crown must not merge down into its trunk, and the Glass Flats engine nozzle's roof and
-// engine frame's arches must not merge down into their walls and feet. CLEARANCE is PHYSICS.truckClearance in
-// src/data/physics.ts, and src/data/prop-shapes.test.ts checks the low boxes of all three against it.
 const SPLIT_AT_CLEARANCE = new Set(['dead_tree', 'engine_frame', 'engine_nozzle']);
-const CLEARANCE = 2.8; // m
-const LOW_BOXES = 8; // of CFG.maxBoxes, for the boxes that start below clearance
+const CLEARANCE = 2.8;
+const LOW_BOXES = 8;
 
-// Boxes below and above clearance merge apart, so each low box keeps the footprint of what stands below clearance.
 function splitShapeOf(triangles) {
   const boxes = mergeCells(rasterize(triangles, CFG), CFG);
   const low = boxes.filter((b) => b.z0 < CLEARANCE);
@@ -115,13 +108,11 @@ function splitShapeOf(triangles) {
   return [...capBoxes(low, { ...CFG, maxBoxes: lowCap }), ...capBoxes(high, { ...CFG, maxBoxes: CFG.maxBoxes - lowCap })].map(roundBox);
 }
 
-// Nose's rock masses are a few hundred meters across. At CFG's grid they give tens of thousands of cells, too many to
-// merge pair by pair. Their boxes only need to follow the footprint, so cells take a coarser grid and one height band.
 const MASS_CFG = {
   ...CFG,
-  cell: 2, // m, the grid the footprint is traced on
-  band: 64, // m, over the 56 m mountain top, so every cell merges by footprint alone
-  maxBoxes: 96, // enough boxes to follow the curved foot and the gorge
+  cell: 2,
+  band: 64,
+  maxBoxes: 96,
 };
 const MASSES = new Set(['nose_rise', 'nose_crag']);
 

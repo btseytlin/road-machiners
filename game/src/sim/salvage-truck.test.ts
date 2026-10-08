@@ -16,10 +16,8 @@ import type { GridItem, Vehicle, World } from './types';
 import { refreshVision } from './vision';
 import { WORK } from '../data/utilities';
 
-// One part off or on a mount, in the field, with no crane and no Machining.
 const FIELD_TURNS = Math.ceil(RULES.refitTurnsPerPart * WORK.noCraneTime);
 
-// The player's parked scout at 30,30 beside a knocked-out raider buggy with a gun, an engine and two scrap.
 function downed(): { w: World; me: Vehicle; buggy: Vehicle } {
   const w = emptyWorld();
   const me = w.vehicles[0];
@@ -43,7 +41,6 @@ const gunOn = (v: Vehicle) => itemOf(v, (it) => it.kind === 'part' && it.part.de
 const scrapOn = (v: Vehicle) => itemOf(v, (it) => it.kind === 'good' && it.good === 'scrap');
 const cabOn = (v: Vehicle) => itemOf(v, (it) => it.kind === 'part' && partDef(it.part.defId).kind === 'core' && it.part.id === corePart(v, 'cab').id);
 
-// A free spot off the mounts on the player's grid.
 function spareSpot(me: Vehicle, item: GridItem): Spot {
   const avoid = item.kind === 'part' ? MOUNT_CELLS[partDef(item.part.defId).kind] : null;
   const spot = findSpot(gridOf(me), me.items, { ...item, id: 'probe' }, null, avoid);

@@ -33,7 +33,6 @@ function createNpc(w: World, templateId: string, traits: TraitId[], chassis: str
   return npc;
 }
 
-// The first goal the driver's idle roll picks in a copy of the world, for each of `seeds` RNG states.
 function idleGoals(w: World, npcId: string, seeds: number): NpcActivity[] {
   const goals: NpcActivity[] = [];
   for (let seed = 0; seed < seeds; seed++) {
@@ -312,7 +311,6 @@ describe('vultures', () => {
         seen++;
         const defs = mountedParts(v).map((p) => partDef(p.defId));
         expect(defs.some((d) => d.kind === 'cargo')).toBe(true);
-        // A vulture may mount a short side gun beside its main one, so the longest weapon is the main gun.
         expect(Math.max(...defs.filter((d) => d.kind === 'weapon').map((d) => d.range))).toBeGreaterThanOrEqual(15);
       }
     }

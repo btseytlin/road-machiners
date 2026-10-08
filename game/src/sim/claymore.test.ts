@@ -15,7 +15,6 @@ import { endTurn } from './world';
 
 const SIDE: Record<string, Side> = { F: 'front', B: 'rear', L: 'left', R: 'right' };
 
-// A trader truck with a claymore ram, and a second trader truck it can crash into. Neither is hostile to the other.
 function setup(): { w: World; user: Vehicle; other: Vehicle; claymore: PartInstance; side: Side } {
   const w = emptyWorld();
   const user = addVehicle(w, 'traders', 'hauler', ['stockEngine', 'claymoreRam'], { x: 40, y: 30 });
@@ -32,7 +31,6 @@ function arm(w: World, user: Vehicle, claymore: PartInstance): void {
   activateUtilities(w);
 }
 
-// The user's side touches the other truck's left side.
 function hit(side: Side): CrashGeometry {
   return { a: { side, lanes: [0, 1] }, b: { side: 'left', lanes: [0, 1] } };
 }

@@ -20,7 +20,6 @@ type SettingId = keyof WorldSettings;
 const SETTING_IDS = Object.keys(WORLD_SETTINGS) as SettingId[];
 const MODE_IDS = Object.keys(GAME_MODES) as GameModeId[];
 
-// The actions in the browser: the request goes to session storage under the save key, and the page reloads.
 export function browserNewGame(requestBoot: (request: BootRequest) => void): NewGameActions {
   return { requestBoot, reload: () => window.location.reload(), confirm: (text) => window.confirm(text) };
 }
@@ -31,7 +30,6 @@ export function isNewGameOpen(): boolean {
   return shown !== null;
 }
 
-// Opens the screen over whatever is up. `onClose` runs when Back or Escape closes it.
 export function openNewGame(actions: NewGameActions, onClose: () => void): void {
   if (shown) return;
   shown = new NewGameScreen(actions, onClose);
@@ -40,7 +38,6 @@ export function openNewGame(actions: NewGameActions, onClose: () => void): void 
 class NewGameScreen {
   private draft: WorldSetup = defaultSetup("roaming");
   private readonly opener = document.activeElement as HTMLElement | null;
-  // The shade is a box-shadow, which does not take clicks. This layer keeps the Menu and death buttons from being clicked.
   private readonly block = panel("new-game-block");
   private readonly root = panel("new-game");
   private readonly modes = el("div", { class: "mode-list", role: "radiogroup", "aria-label": "Game mode" });
@@ -57,7 +54,6 @@ class NewGameScreen {
     this.root.setAttribute("role", "dialog");
     this.root.setAttribute("aria-modal", "true");
     this.root.setAttribute("aria-label", "New game");
-    // Keys typed in the screen stay out of the game, and Tab stays in the screen.
     this.root.addEventListener("keydown", (e) => {
       e.stopPropagation();
       if ((e as KeyboardEvent).code === "Tab") this.wrapFocus(e as KeyboardEvent);
@@ -116,7 +112,6 @@ class NewGameScreen {
     );
   }
 
-  // Tab past the last control goes to the first, and Shift-Tab before the first goes to the last.
   private wrapFocus(e: KeyboardEvent): void {
     const controls = [...this.root.querySelectorAll<HTMLElement>("button, input")].filter((c) => c.offsetParent !== null);
     const edge = e.shiftKey ? controls[0] : controls[controls.length - 1];
@@ -142,7 +137,6 @@ class NewGameScreen {
     this.render();
   }
 
-  // A no keeps the screen up with the picked setup.
   private start(): void {
     if (!this.actions.confirm(CONFIRM_NEW_GAME)) return;
     this.actions.requestBoot({ new: parseSetup(this.draft) });

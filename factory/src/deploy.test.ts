@@ -1,3 +1,4 @@
+import { stepScript } from './activity';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -33,7 +34,7 @@ describe('buildAndDeploy', () => {
     writeFileSync(join(webRoot, 'dev', 'old.html'), 'old');
     const url = await buildAndDeploy(ctx, clone, 'dev', '/l');
     expect(url).toBe('http://x/play/dev/');
-    expect(shells[0]).toEqual([clone, 'npm ci && npm run build', '/l', '{"SAVE_SCOPE":"dev"}']);
+    expect(shells[0]).toEqual([clone, stepScript('Building the game', [['npm ci', 'npm ci'], ['build', 'npm run build']]), '/l', '{"SAVE_SCOPE":"dev"}']);
     expect(readFileSync(join(webRoot, 'dev', 'index.html'), 'utf8')).toBe('new');
     expect(existsSync(join(webRoot, 'dev', 'old.html'))).toBe(false);
     expect(existsSync(join(webRoot, '.dev.new'))).toBe(false);

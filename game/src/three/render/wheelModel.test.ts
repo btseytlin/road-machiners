@@ -11,7 +11,6 @@ await loadModels(async (name) => {
   return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0)).buffer;
 });
 
-// The axle is Three Z.
 function worldVertices(root: THREE.Object3D): THREE.Vector3[] {
   root.updateMatrixWorld(true);
   const out: THREE.Vector3[] = [];

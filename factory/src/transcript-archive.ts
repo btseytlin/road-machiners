@@ -1,12 +1,8 @@
 import { cpSync, existsSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
-// Every agent session's transcript is kept here for analysis, as `<id>/<id>.jsonl` with its subagents in `<id>/<id>/`.
-// This is a Claude Code projects folder with one working folder per session, so transcriptUsage reads it.
 export const transcriptsDir = (home: string): string => join(home, 'transcripts');
 
-// Copies every session in a Claude Code projects folder to the archive, before the factory deletes the folder.
-// A resumed session keeps one growing file, so a later copy replaces the earlier one.
 export function archiveTranscripts(home: string, projects: string): void {
   if (!existsSync(projects)) return;
   const folders = readdirSync(projects, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => join(projects, entry.name));
@@ -20,7 +16,6 @@ export function archiveTranscripts(home: string, projects: string): void {
   }
 }
 
-// Deletes archived sessions last copied more than `days` ago. Returns their ids.
 export function sweepTranscripts(home: string, now: Date, days: number): string[] {
   const root = transcriptsDir(home);
   if (!existsSync(root)) return [];

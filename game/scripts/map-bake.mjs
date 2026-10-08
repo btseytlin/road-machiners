@@ -10,7 +10,7 @@ import { paintMap } from './map-preview.mjs';
 import { encodePng } from './png.mjs';
 
 const PICTURES = 'tmp/map';
-const KIND_SIDE = 60; // tiles across a per-kind close-up, room for a settlement and its fields
+const KIND_SIDE = 60;
 
 const start = performance.now();
 const draft = bakeMap(MAPGEN.seed);
@@ -29,7 +29,6 @@ for (const spot of MAPGEN.closeUps) {
   const area = { x: spot.center.x - spot.side / 2, y: spot.center.y - spot.side / 2, w: spot.side, h: spot.side };
   writePicture(spot.name, area, MAPGEN.closeUpPxPerTile);
 }
-// One close-up around the first prop of each built kind, to judge each old-world rule in place.
 const firsts = [...new Map(draft.props.filter((p) => p.kind !== 'rock' && p.kind !== 'crag').map((p) => [p.kind, p])).values()].reverse();
 for (const p of firsts) writePicture(`prop-${p.kind}`, { x: p.pos.x - KIND_SIDE / 2, y: p.pos.y - KIND_SIDE / 2, w: KIND_SIDE, h: KIND_SIDE }, MAPGEN.closeUpPxPerTile);
 console.log(`${PICTURES}: ${MAPGEN.closeUps.length + firsts.length + 1} pictures, ${Math.round(performance.now() - start)} ms in all`);

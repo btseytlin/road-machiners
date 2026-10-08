@@ -104,7 +104,6 @@ describe('store overflow', () => {
 });
 
 describe('base drain rates', () => {
-  // Old drains at heat 1, before the 40% cut: 1.875 fuel per 100 tiles and 0.015 supplies per turn.
   function trucks() {
     const w = emptyWorld();
     const npc = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 10, y: 10 });

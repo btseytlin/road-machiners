@@ -19,7 +19,6 @@ const coreIds = (v: Vehicle) => mountedParts(v, 'core').map((p) => p.defId).sort
 const roleOf = (defId: string) => { const def = partDef(defId); return def.kind === 'core' ? def.role : null; };
 const coreItem = (w: World, role: string) => w.vehicles[0].items.find((it) => it.kind === 'part' && roleOf(it.part.defId) === role)!;
 
-// First spot where the part lies fully on the given letter, found by scanning the layout.
 function spotOn(chassisId: string, defId: string, letter: Cell, items: GridItem[]): GridItem {
   const g = baseGrid(chassisId);
   const taken = new Set(items.flatMap((it) => itemCells(it).map((c) => `${c.x},${c.y}`)));
@@ -185,7 +184,6 @@ describe('side armor mounts', () => {
     const v = addVehicle(w, 'raiders', 'hauler', [], { x: 40, y: 40 });
     const onL = spotOn('hauler', 'plates', 'L', v.items);
     const g = baseGrid('hauler');
-    // Lay the plate across from the L column into the interior.
     const across: GridItem = { ...onL, rot: 1, id: 'i-plate', part: makePart(w, 'plates', 0) } as GridItem;
     const letters = new Set(itemCells(across).map((c) => g.cells[c.y][c.x]));
     expect(letters.has('L')).toBe(true);
@@ -233,12 +231,9 @@ describe('side armor mounts', () => {
   });
 });
 
-// The 2 wide interiors of these chassis cannot hold their four wheels, an engine bay, their other built-in parts and a
-// deck cell, so some of those still lie on the outline.
 const OPEN_RING = ['buggy', 'courier', 'jeep'];
 const FACES: Record<string, { dx: number; dy: number }> = { F: { dx: 0, dy: -1 }, B: { dx: 0, dy: 1 }, L: { dx: -1, dy: 0 }, R: { dx: 1, dy: 0 } };
 
-// The letters of the sides of a cell that face no cell.
 function openFaces(chassisId: string, x: number, y: number): string[] {
   const g = baseGrid(chassisId);
   return Object.entries(FACES).filter(([, f]) => g.cells[y + f.dy]?.[x + f.dx] == null).map(([letter]) => letter);

@@ -17,7 +17,6 @@ const spills = (w: World) => w.events.filter((e): e is Extract<GameEvent, { t: '
 const unitsOn = (v: Vehicle) => v.items.length;
 const pileUnits = (w: World) => w.salvage.filter((s) => s.pile).reduce((n, s) => n + Object.values(s.goods).reduce((a, b) => a + b, 0) + s.parts.length, 0);
 
-// The player's scout with its panniers row full of salt the player paid 20 for.
 function loadedPlayer(): { w: World; me: Vehicle } {
   const w = emptyWorld();
   const me = w.vehicles[0];
@@ -106,7 +105,6 @@ describe('cargo spills', () => {
 
   it('wear that breaks a cargo part on the road spills it in the same turn', () => {
     const { w, me } = loadedPlayer();
-    // One plain wear hit takes the panniers to 0, and a long enough drive makes that hit certain.
     const box = panniersOf(me);
     box.hp = maxHp(box) * WEAR.hpShare;
     const salt = onRow(me, lastRow(me)).length;

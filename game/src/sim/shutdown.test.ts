@@ -18,7 +18,6 @@ function emitterRadius(): number {
   return def.effect.radius;
 }
 
-// A trader hauler with an emitter on its deck at (30, 30), and the player parked far off.
 function emitterUser(): { w: World; me: Vehicle; emitter: PartInstance } {
   const w = emptyWorld({ x: 30, y: 60 });
   const me = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 30, y: 30 });
@@ -27,7 +26,6 @@ function emitterUser(): { w: World; me: Vehicle; emitter: PartInstance } {
   return { w, me, emitter };
 }
 
-// A trader hauler with a gun, a scanner and a Sprout, `gap` tiles east of the emitter's user.
 function trader(w: World, gap: number): Vehicle {
   return addVehicle(w, 'traders', 'hauler', ['stockEngine', 'mg', 'scanner', 'sprout'], { x: 30 + gap, y: 30 });
 }
@@ -36,20 +34,17 @@ function playerOf(w: World): Vehicle {
   return w.vehicles[0];
 }
 
-// Fires the emitter as the activation step does, on the world's current turn, and ends that turn's shutdowns step.
 function pulse(w: World, me: Vehicle, emitter: PartInstance): void {
   fireEmitter(w, me, emitter);
   settleShutdowns(w);
 }
 
-// Only the activation step, before the end of the turn settles the shutdowns.
 function fireEmitter(w: World, me: Vehicle, emitter: PartInstance): void {
   w.events = [];
   me.utilityOrders[emitter.id] = { kind: 'self' };
   activateUtilities(w);
 }
 
-// The next turn starts resolving: its number, and no events yet.
 function nextTurn(w: World): void {
   w.turn++;
   w.events = [];
@@ -173,7 +168,6 @@ describe('the emitter pulse', () => {
 });
 
 describe('a shut-down truck', () => {
-  // A trader shut down by another trader's pulse, on its first shut-down turn.
   function shutDownTrader(): { w: World; me: Vehicle; it: Vehicle } {
     const { w, me, emitter } = emitterUser();
     const it = trader(w, 3);
@@ -227,7 +221,6 @@ describe('a shut-down truck', () => {
 });
 
 describe('the player shut down', () => {
-  // The player with a Sprout on its deck, 3 tiles from a trader that pulses in the current turn.
   function pulsedPlayer(): { w: World; sprout: PartInstance } {
     const { w, me, emitter } = emitterUser();
     const player = playerOf(w);

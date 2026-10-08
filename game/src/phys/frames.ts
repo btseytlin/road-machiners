@@ -7,13 +7,10 @@ import type { Vec } from "../sim/vec";
 
 export type V3 = { x: number; y: number; z: number };
 export type Quat = { x: number; y: number; z: number; w: number };
-// steer and spin in radians, suspension in meters. ground: the tire touches the ground this step.
 export type WheelFrame = { steer: number; spin: number; suspension: number; ground: boolean };
-// acc: world-space acceleration over the last physics step, m/s^2. The view sways the body with it.
-export type VehicleFrame = { pos: V3; rot: Quat; acc: V3; wheels: WheelFrame[] }; // wheels follow wheelMounts order
-export type TurnFrames = Record<string, VehicleFrame[]>; // by vehicle id
+export type VehicleFrame = { pos: V3; rot: Quat; acc: V3; wheels: WheelFrame[] };
+export type TurnFrames = Record<string, VehicleFrame[]>;
 
-// Offsets a round across the line of fire in meters, positive to the shooter's right.
 export function computeRoundPoint(a: V3, b: V3, offset: number): V3 {
   const dx = b.x - a.x;
   const dz = b.z - a.z;
@@ -32,27 +29,21 @@ export function toMap(p: V3): Vec {
   return { x: p.x / S, y: p.z / S };
 }
 
-// A circle on the ground in physics space: center x and z and radius, in meters.
 export type Circle = { x: number; z: number; r: number };
 
-// A map circle of radius r tiles, in physics space.
 export function toPhysCircle(p: Vec, r: number): Circle {
   return { x: p.x * S, z: p.y * S, r: r * S };
 }
 
-// Ground point under a map point, in physics space.
 export function groundPoint(t: Terrain, p: Vec): V3 {
   return toPhys(p, heightAt(t, p.x, p.y));
 }
 
-// Map heading grows from +x toward +z. A rotation about y by -heading turns +x onto it.
 export function headingQuat(heading: number): Quat {
   return { x: 0, y: Math.sin(-heading / 2), z: 0, w: Math.cos(-heading / 2) };
 }
 
-// v turned by the unit quaternion q.
 export function rotateBy(q: Quat, v: V3): V3 {
-  // t = 2 (q.xyz × v); v' = v + w t + q.xyz × t
   const tx = 2 * (q.y * v.z - q.z * v.y);
   const ty = 2 * (q.z * v.x - q.x * v.z);
   const tz = 2 * (q.x * v.y - q.y * v.x);
@@ -63,12 +54,10 @@ export function rotateBy(q: Quat, v: V3): V3 {
   };
 }
 
-// Sine of the nose pitch: positive when the nose points uphill.
 export function noseRise(q: Quat): number {
   return 2 * (q.x * q.y + q.w * q.z);
 }
 
-// Vertical part of the body's up axis: 1 when level, 0 on its side, -1 upside down.
 export function upOf(q: Quat): number {
   return 1 - 2 * (q.x * q.x + q.z * q.z);
 }

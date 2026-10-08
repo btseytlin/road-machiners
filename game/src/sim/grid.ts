@@ -6,12 +6,9 @@ import type { GridItem, PartInstance, Vehicle } from './types';
 
 export type SideLetter = 'F' | 'B' | 'L' | 'R';
 export type Cell = 'D' | 'E' | SideLetter | 'X' | '.';
-// cells[y][x], null is a hole. Rows from chassisH on come from mounted cargo parts. Rows from deadFrom on
-// come from broken cargo parts: they stay in the grid, so lanes and items do not move, but hold nothing.
 export type Grid = { w: number; h: number; chassisH: number; deadFrom: number; cells: (Cell | null)[][] };
 export type Spot = { x: number; y: number; rot: 0 | 1 };
 
-// Letters each kind mounts on. Armor lists the front first, so auto-mounting fills the nose before the sides.
 export const MOUNT_CELLS: Record<PartKind, Cell[]> = {
   weapon: ['D'],
   engine: ['E'],
@@ -25,8 +22,6 @@ export const MOUNT_CELLS: Record<PartKind, Cell[]> = {
 const SIDES: readonly Cell[] = ['F', 'B', 'L', 'R'];
 const CELL_CHARS: readonly string[] = ['D', 'E', 'F', 'B', 'L', 'R', 'X', '.'];
 
-// A chassis's layout is fixed data, so its grid is cached: this runs on every mounted-part lookup,
-// for every vehicle, every turn.
 const baseGridCache = new Map<string, Grid>();
 
 export function baseGrid(chassisId: string): Grid {
@@ -59,13 +54,10 @@ export function itemCells(item: GridItem): { x: number; y: number }[] {
   return out;
 }
 
-// A part works when every cell it covers carries the same letter, and that letter is a mount of its kind.
 export function isMounted(chassisId: string, item: GridItem): boolean {
   return mountLetter(chassisId, item) !== null;
 }
 
-// The side armor faces as the truck lays it: its mount side when mounted, else the front when it lies wide and the
-// left when it lies tall.
 export function plateSide(chassisId: string, item: GridItem): SideLetter {
   const letter = mountLetter(chassisId, item);
   if (letter !== null && SIDES.includes(letter)) return letter as SideLetter;
@@ -85,14 +77,12 @@ function letterAt(g: Grid, x: number, y: number): Cell | null {
   return g.cells[y]?.[x] ?? null;
 }
 
-// True when every cell the item covers carries the letter.
 function coversOnly(g: Grid, item: GridItem & { kind: 'part' }, letter: Cell): boolean {
   const { w, h } = itemSize(item);
   for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) if (letterAt(g, item.x + dx, item.y + dy) !== letter) return false;
   return true;
 }
 
-// The side a mounted armor part covers. Null for any other part or an unmounted one.
 export function sideOf(v: Vehicle, part: PartInstance): SideLetter | null {
   const item = v.items.find((it) => it.kind === 'part' && it.part.id === part.id);
   if (!item) throw new Error(`Part ${part.id} is not on ${v.id}`);
@@ -100,7 +90,6 @@ export function sideOf(v: Vehicle, part: PartInstance): SideLetter | null {
   return letter !== null && SIDES.includes(letter) ? (letter as SideLetter) : null;
 }
 
-// Grids by chassis and cargo rows. Callers only read them, so one frozen grid serves every vehicle with that shape.
 const gridCache = new Map<string, Grid>();
 
 export function gridOf(v: Vehicle): Grid {
@@ -143,7 +132,6 @@ export function onDeadRow(g: Grid, item: GridItem): boolean {
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;
 
-// Mounted parts in reading order, so weapon numbering stays stable.
 export function mountedItems(v: Vehicle, kind?: PartKind): PartItem[] {
   const out: PartItem[] = [];
   for (const it of v.items) if (it.kind === 'part' && (!kind || partDef(it.part.defId).kind === kind) && isMounted(v.chassisId, it)) out.push(it);
@@ -154,19 +142,16 @@ export function mountedParts(v: Vehicle, kind?: PartKind): PartInstance[] {
   return mountedItems(v, kind).map((it) => it.part);
 }
 
-// Built-in parts of one role, such as the four wheels.
 export function coreParts(v: Vehicle, role: CoreDef['role']): PartInstance[] {
   return mountedParts(v, 'core').filter((p) => (partDef(p.defId) as CoreDef).role === role);
 }
 
-// The one built-in part of a role, such as the cab. Throws if the truck has none or several.
 export function corePart(v: Vehicle, role: CoreDef['role']): PartInstance {
   const parts = coreParts(v, role);
   if (parts.length !== 1) throw new Error(`${v.id} has ${parts.length} mounted ${role} parts, expected 1`);
   return parts[0];
 }
 
-// Anything a robber can take: goods, spare parts and mounted non-core parts. Mounted core parts are built in.
 export function isLoot(chassisId: string, item: GridItem): boolean {
   return item.kind === 'good' || partDef(item.part.defId).kind !== 'core' || !isMounted(chassisId, item);
 }
@@ -181,12 +166,10 @@ export function goodsCount(v: Vehicle): Record<string, number> {
   return out;
 }
 
-// Side armor cells are skin outside the model, so only armor lies on them. Every other cell can carry cargo.
 function isSkin(cell: Cell | null): boolean {
   return cell === 'L' || cell === 'R';
 }
 
-// The cells of a grid that carry cargo.
 export function cellCount(g: Grid): number {
   return g.cells.flat().filter((c) => c !== null && !isSkin(c)).length;
 }
@@ -197,7 +180,6 @@ export function freeCells(v: Vehicle): number {
   return cellCount(g) - used;
 }
 
-// Why an item cannot sit at (x, y, rot), or null if it can. ignoreId skips the item being moved.
 export function placementError(g: Grid, items: GridItem[], item: GridItem, ignoreId: string | null): string | null {
   const taken = takenCells(items, ignoreId);
   const cells = itemCells(item);
@@ -215,15 +197,11 @@ function onGrid(g: Grid, c: { x: number; y: number }): boolean {
   return c.x >= 0 && c.y >= 0 && c.x < g.w && c.y < g.h && g.cells[c.y][c.x] !== null;
 }
 
-// True when an item lies partly on the chassis grid and partly on cargo rows.
 function crossesChassisEnd(g: Grid, cells: { y: number }[]): boolean {
   const onChassis = cells.filter((c) => c.y < g.chassisH).length;
   return onChassis !== 0 && onChassis !== cells.length;
 }
 
-// First free spot in reading order. With mount letters given, only spots fully on one letter count,
-// and earlier letters win. Without them, plain cells are tried before mount cells so mounts stay free,
-// and spots fully on one avoid letter are skipped, so a stowed spare never mounts by accident.
 export function findSpot(g: Grid, items: GridItem[], item: GridItem, mount: Cell[] | null, avoid: Cell[] | null): Spot | null {
   if (mount) return mountSpots(g, items, item, mount)[0] ?? null;
   const tries = allSpots(g);
@@ -233,8 +211,6 @@ export function findSpot(g: Grid, items: GridItem[], item: GridItem, mount: Cell
   return tries.find((s) => allowed(s) && onlyOn(s, '.')) ?? tries.find(allowed) ?? null;
 }
 
-// Every free spot fully on one of the mount letters, earlier letters first, each letter in reading order.
-// Mount letters lie only on chassis rows, so a spot fully on one never crosses into cargo rows.
 export function mountSpots(g: Grid, items: GridItem[], item: GridItem, mount: Cell[]): Spot[] {
   const taken = takenCells(items, item.id);
   const tries = allSpots(g);
@@ -250,7 +226,6 @@ export function mountSpots(g: Grid, items: GridItem[], item: GridItem, mount: Ce
   return mount.flatMap((letter) => tries.filter((s) => free(s, letter)));
 }
 
-// A cell's number in a set. Grids are far narrower than the row stride, so keys never collide.
 const KEY_ROW = 1024;
 
 export function cellKey(x: number, y: number): number {
@@ -267,7 +242,6 @@ function takenCells(items: GridItem[], ignoreId: string | null): Set<number> {
   return taken;
 }
 
-// Every spot of a grid shape, by width and height. Spots are shared, so callers must not change them.
 const spotCache = new Map<number, readonly Spot[]>();
 
 function allSpots(g: Grid): readonly Spot[] {

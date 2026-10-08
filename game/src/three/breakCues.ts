@@ -13,11 +13,8 @@ const damageTo = (r: ShotRound, brk: PartBreak): number => {
   return hits.filter((h) => h.part === brk.part).reduce((sum, h) => sum + h.damage, 0);
 };
 
-// Events that deal part damage. The sim pushes each once its damage is dealt, after the partDisabled events it caused.
 const DAMAGING = new Set<GameEvent["t"]>(["shot", "collision", "claymore", "claymoreCookOff", "caltrops", "lineTorn"]);
 
-// Pairs each partDisabled with the first damaging event after it. For a shot the round is the last that dealt
-// positive damage to the part. Any other owner, like a crash or a claymore blast, gives the break no round.
 export function breakRounds(events: GameEvent[]): BreakRound[] {
   const out: BreakRound[] = [];
   events.forEach((e, i) => {
@@ -32,7 +29,6 @@ export function breakRounds(events: GameEvent[]): BreakRound[] {
   return out;
 }
 
-// Hands out each break of a turn once.
 export class BreakCues {
   private readonly pending: BreakRound[];
   private readonly played = new Map<string, Set<string>>();
@@ -41,17 +37,14 @@ export class BreakCues {
     this.pending = breakRounds(events);
   }
 
-  // The unplayed breaks this round of this shot causes.
   ofRound(owner: ShotLike, round: number): PartBreak[] {
     return this.take((b) => b.owner === owner && b.round === round);
   }
 
-  // Every unplayed break.
   rest(): PartBreak[] {
     return this.take(() => true);
   }
 
-  // Ids of the parts of this vehicle that have played their break.
   shown(vehicleId: string): ReadonlySet<string> {
     return this.played.get(vehicleId) ?? new Set();
   }
@@ -68,7 +61,6 @@ export class BreakCues {
   }
 }
 
-// The before-turn items, where each part whose break has played takes its after-turn look at its drawn place.
 export function shownItems(before: GridItem[], after: GridItem[], shown: ReadonlySet<string>): GridItem[] {
   if (shown.size === 0) return before;
   return before.map((it) => {
