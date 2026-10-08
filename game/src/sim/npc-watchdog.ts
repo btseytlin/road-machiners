@@ -32,12 +32,20 @@ function madeProgress(world: World, v: Vehicle): boolean {
 }
 
 function waits(world: World, v: Vehicle): boolean {
-  return isShutDown(world, v) || isOnRope(world, v.id) || awaitsTower(world, v) || liesUp(v) || waitsOnLeader(v);
+  return isShutDown(world, v) || isOnRope(world, v.id) || awaitsTower(world, v) || liesUp(v) || waitsOnLeader(world, v);
 }
 
-function waitsOnLeader(v: Vehicle): boolean {
+// A follower at its spot waits. So does one that stands as near a parked leader as its spot does: the spot lies on the
+// far side of the leader, which a parked leader's turn put there, and the follower does not drive around it.
+function waitsOnLeader(world: World, v: Vehicle): boolean {
   const top = topGoal(v);
-  return top?.kind === 'follow' && top.destination !== null && dist(v.pos, top.destination) <= RULES.arriveRadius;
+  if (top?.kind !== 'follow' || top.destination === null) return false;
+  return dist(v.pos, top.destination) <= RULES.arriveRadius || besideParkedLeader(world, v, top.targetId, top.destination);
+}
+
+function besideParkedLeader(world: World, v: Vehicle, leaderId: string | null, spot: Vec): boolean {
+  const leader = world.vehicles.find((other) => other.id === leaderId);
+  return leader !== undefined && leader.speed <= RULES.parkedSpeed && dist(v.pos, leader.pos) <= dist(spot, leader.pos) + RULES.arriveRadius;
 }
 
 function progressKey(v: Vehicle): string {

@@ -36,13 +36,18 @@ export function makePeace(world: World, a: Vehicle, b: Vehicle): void {
   for (const p of sideOf(world, a)) {
     for (const q of sideOf(world, b)) {
       if (p.id === q.id) continue;
-      for (const s of [stateOf(world, 'feud', p.id, q.id), stateOf(world, 'feud', q.id, p.id)]) if (s) endState(world, s, 'broken');
+      endBetween(world, 'feud', p, q);
+      endBetween(world, 'combat', p, q);
       addState(world, 'truce', p.id, q.id, { kind: 'none' });
       addState(world, 'truce', q.id, p.id, { kind: 'none' });
       holdFire(p, q);
       holdFire(q, p);
     }
   }
+}
+
+function endBetween(world: World, kind: 'feud' | 'combat', p: Vehicle, q: Vehicle): void {
+  for (const s of [stateOf(world, kind, p.id, q.id), stateOf(world, kind, q.id, p.id)]) if (s) endState(world, s, 'broken');
 }
 
 function holdFire(v: Vehicle, target: Vehicle): void {
@@ -86,7 +91,6 @@ export function giveUpTo(world: World, loser: Vehicle, winner: Vehicle): void {
 export function standDownTo(world: World, loser: Vehicle, winner: Vehicle): void {
   standDown(world, loser, winner.id);
   makePeace(world, loser, winner);
-  endFight(world, loser, winner);
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');
   creditYield(world, loser, winner);

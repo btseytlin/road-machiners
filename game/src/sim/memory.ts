@@ -6,7 +6,10 @@ import { MEMORY } from '../data/npcs';
 import type { Memory, MemoryFact, NpcBrain, Vehicle, World } from './types';
 
 export function subjectOf(fact: MemoryFact): string {
-  return `${fact.kind}:${fact.shop}`;
+  switch (fact.kind) {
+    case 'prices': return `prices:${fact.shop}`;
+    case 'stripped': return `stripped:${fact.stock}`;
+  }
 }
 
 function brainOf(vehicle: Vehicle): NpcBrain {

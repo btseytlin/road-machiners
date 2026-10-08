@@ -610,6 +610,8 @@ function inLootReach(world: World, v: Vehicle, targetId: string): boolean {
 
 export const CANNOT_HOLD: GoalReason = 'cargoFullLoot';
 
+export const STRIPPED: GoalReason = 'salvageExhausted';
+
 // One turn of an NPC looting a parked-beside truck. Every loose item that fits comes over at once, then one
 // installed part per refit, stowed as a spare. No refit starts with a foe in sight, so the looting ends then.
 // Returns why the loot ends, or null while work remains.

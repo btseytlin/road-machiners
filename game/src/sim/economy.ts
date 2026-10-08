@@ -25,6 +25,7 @@ import { corePart, coreParts, freeCells, goodsCount, mountedParts } from "./grid
 import { addGoods, cargoRoom, mountPart, removeGoods, spareParts, stowPart } from "./inventory";
 import type { NpcState, PartInstance, Vehicle, World } from "./types";
 import { playerCommand, Refused } from "./world";
+import { tankLeaks } from "./supplies";
 import { fuelCap, isStranded, isWorking, suppliesCap } from "./stats";
 
 export type Supply = "fuel" | "supplies";
@@ -290,6 +291,7 @@ export function scrapFuelNeed(world: World, v: Vehicle): number {
 
 export function scrapFuel(world: World, v: Vehicle): number {
   const fuel = scrapFuelNeed(world, v);
+  if (fuel > 0 && tankLeaks(v)) scrapPatchPart(corePart(v, 'tank'), RULES.scrapPatch);
   getResources(world, v).fuel += fuel;
   return fuel;
 }

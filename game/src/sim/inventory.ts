@@ -5,7 +5,7 @@ import { partDef } from '../data/parts';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { playerVehicle } from './damage';
 import { newId } from './factory';
-import { cabShield, gunLayoutScore } from './armor';
+import { cabShieldWith, gunLayoutScore } from './armor';
 import { findSpot, freeCells, gridOf, isMounted, itemCells, MOUNT_CELLS, mountSpots, placementError, type Cell, type Spot } from './grid';
 import { requireShop, shopAt } from './market';
 import { disarm } from './claymore';
@@ -56,8 +56,9 @@ function bestArcSpot(v: Vehicle, item: GridItem, mount: Cell[]): Spot | null {
 function bestShieldSpot(v: Vehicle, item: GridItem, mount: Cell[]): Spot | null {
   let best: Spot | null = null;
   let bestScore = -1;
+  const shield = cabShieldWith(v);
   for (const spot of mountSpots(gridOf(v), v.items, item, mount)) {
-    const score = cabShield({ ...v, items: [...v.items, { ...item, ...spot }] });
+    const score = shield({ ...item, ...spot });
     if (score > bestScore) [best, bestScore] = [spot, score];
   }
   return best;

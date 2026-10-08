@@ -129,8 +129,11 @@ function orderPoint(world: World, v: Vehicle, activity: NpcActivity): Vec | null
 }
 
 function waitsForEscort(world: World, v: Vehicle, activity: NpcActivity): boolean {
-  if (activity.kind === "fight" || activity.kind === "flee") return false;
-  return escortsOf(world, v.id).some((e) => topGoal(e)?.kind === "follow" && dist(e.pos, v.pos) > NPC_BEHAVIOR.escortWaitGap);
+  if (activity.kind === "fight" || activity.kind === "flee" || activity.kind === "resupply") return false;
+  return escortsOf(world, v.id).some((e) => {
+    const gap = dist(e.pos, v.pos);
+    return topGoal(e)?.kind === "follow" && gap > NPC_BEHAVIOR.escortWaitGap && gap <= NPC_BEHAVIOR.escortCatchUpGap;
+  });
 }
 
 function driveOrder(world: World, v: Vehicle, activity: NpcActivity, dest: Vec): MoveOrder {

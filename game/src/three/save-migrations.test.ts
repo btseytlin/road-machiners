@@ -41,6 +41,7 @@ import SAVE_SHAPE from './save-shape.json';
 import FORMAT_2_31 from './save-fixtures/format-2-31.json';
 import FORMAT_2_32 from './save-fixtures/format-2-32.json';
 import FORMAT_2_33 from './save-fixtures/format-2-33.json';
+import FORMAT_2_34 from './save-fixtures/format-2-34.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -762,13 +763,19 @@ describe('save migration 32 to 33', () => {
 });
 
 describe('save migration 33 to 34', () => {
+  it('keeps a save with only price memories as it is', () => {
+    expect(MIGRATIONS[33](structuredClone(FORMAT_2_33))).toEqual(FORMAT_2_33);
+  });
+});
+
+describe('save migration 34 to 35', () => {
   type Goal = { reason: string };
   type Saved = {
     vehicles: { id: string; name?: string; brain: { goals: Goal[] } | null }[];
     player: { call: { line: unknown } | null; contracts: Record<string, unknown>[] };
     shops: Record<string, { contracts: Record<string, unknown>[] }>;
   };
-  const next = MIGRATIONS[33](FORMAT_2_33) as unknown as Saved;
+  const next = MIGRATIONS[34](FORMAT_2_34) as unknown as Saved;
   const reasons = (v: { brain: { goals: Goal[] } | null }) => v.brain?.goals.map((g) => g.reason);
 
   it('turns known goal reasons into ids, an old phrase into the id that replaced it, and an unknown one into legacy', () => {
@@ -785,11 +792,11 @@ describe('save migration 33 to 34', () => {
   });
 
   it('keeps an open call on a known line as its id', () => {
-    expect(next.player.call?.line).toEqual({ line: 'dealTerms', vars: FORMAT_2_33.player.call.line.vars });
+    expect(next.player.call?.line).toEqual({ line: 'dealTerms', vars: FORMAT_2_34.player.call.line.vars });
   });
 
   it('hangs up a call on a line no table knows', () => {
-    const unknown = { ...FORMAT_2_33, player: { ...FORMAT_2_33.player, call: { ...FORMAT_2_33.player.call, line: { text: 'Words from a mod', vars: {} } } } };
-    expect((MIGRATIONS[33](unknown) as unknown as Saved).player.call).toBeNull();
+    const unknown = { ...FORMAT_2_34, player: { ...FORMAT_2_34.player, call: { ...FORMAT_2_34.player.call, line: { text: 'Words from a mod', vars: {} } } } };
+    expect((MIGRATIONS[34](unknown) as unknown as Saved).player.call).toBeNull();
   });
 });

@@ -523,7 +523,7 @@ function withCents_29_30(world: SavedJson): SavedJson {
 
 const UNITS_2_19 = new Set(['part']);
 
-function withGoalIds_33_34(v: SavedJson): SavedJson {
+function withGoalIds_34_35(v: SavedJson): SavedJson {
   const { name: _name, ...rest } = v;
   const brain = v.brain as SavedJson | null;
   if (!brain) return rest;
@@ -531,33 +531,33 @@ function withGoalIds_33_34(v: SavedJson): SavedJson {
   return { ...rest, brain: { ...brain, goals } };
 }
 
-function knownUnits_33_34(vars: SavedJson): boolean {
+function knownUnits_34_35(vars: SavedJson): boolean {
   return Object.values(vars).every((v) => (v as SavedJson).kind !== 'count' || UNITS_2_19.has((v as SavedJson).unit as string));
 }
 
 // The open call with its line as an id, or null when the call hangs up.
-function callWithLineId_33_34(call: SavedJson | null): SavedJson | null {
+function callWithLineId_34_35(call: SavedJson | null): SavedJson | null {
   if (!call) return null;
   const said = call.line as SavedJson;
   const line = LINES_2_19[said.text as string];
-  if (!line || !knownUnits_33_34(call.vars as SavedJson) || !knownUnits_33_34(said.vars as SavedJson)) return null;
+  if (!line || !knownUnits_34_35(call.vars as SavedJson) || !knownUnits_34_35(said.vars as SavedJson)) return null;
   return { ...call, line: { line, vars: said.vars } };
 }
 
-const withoutTargetName_33_34 = (c: SavedJson): SavedJson => {
+const withoutTargetName_34_35 = (c: SavedJson): SavedJson => {
   const { targetName: _targetName, ...rest } = c;
   return rest;
 };
 
-function withTextIds_33_34(world: SavedJson): SavedJson {
+function withTextIds_34_35(world: SavedJson): SavedJson {
   const player = world.player as SavedJson;
   const shops = Object.fromEntries(
-    Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(withoutTargetName_33_34) }]),
+    Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(withoutTargetName_34_35) }]),
   );
   return {
     ...world,
-    vehicles: (world.vehicles as SavedJson[]).map(withGoalIds_33_34),
-    player: { ...player, call: callWithLineId_33_34(player.call as SavedJson | null), contracts: (player.contracts as SavedJson[]).map(withoutTargetName_33_34) },
+    vehicles: (world.vehicles as SavedJson[]).map(withGoalIds_34_35),
+    player: { ...player, call: callWithLineId_34_35(player.call as SavedJson | null), contracts: (player.contracts as SavedJson[]).map(withoutTargetName_34_35) },
     shops,
   };
 }
@@ -642,7 +642,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     const { contacts: _contacts, clouds: _clouds, ...player } = world.player as SavedJson;
     return { ...world, player };
   },
-  withTextIds_33_34,
+  (world) => world,
+  withTextIds_34_35,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

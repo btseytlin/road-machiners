@@ -16,7 +16,7 @@ import { route, routeLength } from './path';
 import { decide, getKnownSite, getUpkeepReserve, isWeak, npcProfile } from './npc-decisions';
 import { placeBase, popGoal } from './npc-activities';
 import { skillEffect } from './progress';
-import { canUseSite, nearestPad, type Site } from './sites';
+import { canUseSite, nearestPad, reachedSite, type Site } from './sites';
 import { addState, endState, stateOf, towData, towPromiseData } from './states';
 import { isStranded, vehicleStats } from './stats';
 import { getResources } from './resources';
@@ -166,6 +166,7 @@ export function hitchNpc(world: World, npc: Vehicle, free: boolean): void {
   addState(world, 'tow', world.player.vehicleId, npc.id, { kind: 'tow', site: site.id, ...terms, hitched: true });
   npc.order = null;
   npc.speed = 0;
+  delete npc.brain!.farRoute;
 }
 
 export function releaseNpc(world: World, npc: Vehicle): void {
@@ -240,7 +241,7 @@ export function runTow(world: World, vehicle: Vehicle, activity: NpcActivity): G
     return 'towOfferLeft';
   }
   if (held) {
-    if (!canUseSite(vehicle.pos, getKnownSite(towData(held).site))) return null;
+    if (!canUseSite(vehicleById(world, held.other).pos, getKnownSite(towData(held).site))) return null;
     activity.phase = 'act';
     endState(world, held, 'fulfilled');
     return held.other === world.player.vehicleId ? 'towedPlayer' : 'towedStranded';
@@ -303,6 +304,7 @@ function hitch(world: World, tower: Vehicle, client: Vehicle): void {
   addState(world, 'tow', tower.id, client.id, { kind: 'tow', site, fee: paid, waived: 0, hitched: true });
   client.order = null;
   client.speed = 0;
+  delete client.brain!.farRoute;
   world.events.push({ t: 'towHitched', by: tower.id, client: client.id, site });
 }
 
@@ -483,7 +485,7 @@ export function checkEscort(w: World, s: NpcState): StateEnding | null {
   if (!escort || !leader) return null;
   if (escortBroken(w, escort, leader)) return 'broken';
   const site = escortData(s).site;
-  return site !== null && canUseSite(leader.pos, getKnownSite(site)) ? 'fulfilled' : null;
+  return site !== null && reachedSite(leader.pos, getKnownSite(site)) ? 'fulfilled' : null;
 }
 
 function escortBroken(w: World, escort: Vehicle, leader: Vehicle): boolean {
