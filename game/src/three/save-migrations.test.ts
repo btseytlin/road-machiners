@@ -38,6 +38,8 @@ import FORMAT_2_28 from './save-fixtures/format-2-28.json';
 import FORMAT_2_29 from './save-fixtures/format-2-29.json';
 import FORMAT_2_30 from './save-fixtures/format-2-30.json';
 import SAVE_SHAPE from './save-shape.json';
+import FORMAT_2_31 from './save-fixtures/format-2-31.json';
+import FORMAT_2_32 from './save-fixtures/format-2-32.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -730,5 +732,35 @@ describe('save migration 30 to 31', () => {
 
     expect(raid.phase).toBe('travel');
     expect('watchUntil' in raid).toBe(false);
+  });
+});
+
+describe('save migration 31 to 32', () => {
+  const next = MIGRATIONS[31](FORMAT_2_31) as Record<string, unknown> & { vehicles: object[]; player: object; broken: object[] };
+
+  it('drops trails, the visible tiles, the last turn events and removed vehicles', () => {
+    expect(next.vehicles).toEqual(FORMAT_2_31.vehicles.map(({ trail: _t, ...rest }) => rest));
+    expect('events' in next).toBe(false);
+    expect('removed' in next).toBe(false);
+    const { visible: _v, ...player } = FORMAT_2_31.player;
+    expect(next.player).toEqual(player);
+  });
+
+  it('keeps only the id and turn of a broken prop', () => {
+    expect(next.broken).toEqual([{ id: 'deadTree-1354', turn: 2559 }]);
+  });
+
+  it('keeps dust clouds, contacts and clouds', () => {
+    expect(next.dustClouds).toEqual(FORMAT_2_31.dustClouds);
+    expect(next.turn).toBe(FORMAT_2_31.turn);
+  });
+});
+
+describe('save migration 32 to 33', () => {
+  it('drops the contacts and seen clouds and keeps the dust clouds', () => {
+    const next = MIGRATIONS[32](FORMAT_2_32);
+    const { contacts: _c, clouds: _s, ...player } = FORMAT_2_32.player;
+
+    expect(next).toEqual({ ...FORMAT_2_32, player });
   });
 });

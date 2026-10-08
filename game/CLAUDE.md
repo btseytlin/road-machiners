@@ -80,6 +80,8 @@ Players keep their saves across updates. Migrate old saves whenever possible. [S
 - Never edit a committed step. Fix a bad step with a new step.
 - Every step gets a Vitest test on a fixture from `src/three/save-fixtures/`.
 - Run `npm run save:shape` after the new step or major bump.
+- A change to world state gets a test that saves the world, loads it and checks the loaded world. Load must give back the same world and award nothing: no XP, money or events.
+- A save holds only what load cannot rebuild. Load rebuilds derived state with the same function the turn uses, so that function must not change anything else. Rewards for what a refresh finds go in a separate call in the turn pipeline, as `practiceContacts()` does for `refreshVision()`.
 
 ## Agent practices
 

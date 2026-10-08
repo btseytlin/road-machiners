@@ -688,6 +688,20 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withCents_29_30,
   // 30 to 31: a raid may record when its watch ends; older raids have none.
   (world) => world,
+  // 31 to 32: a save keeps only what load cannot rebuild. Trails, visible tiles, the last turn's events and removed
+  // vehicles go, and a broken prop keeps its id and turn, since the map file holds the prop.
+  (world) => {
+    const { events: _events, removed: _removed, ...rest } = world;
+    const { visible: _visible, ...player } = world.player as SavedJson;
+    const vehicles = (world.vehicles as SavedJson[]).map(({ trail: _trail, ...vehicle }) => vehicle);
+    const broken = (world.broken as SavedJson[]).map((b) => ({ id: (b.obstacle as SavedJson).id, turn: b.turn }));
+    return { ...rest, player, vehicles, broken };
+  },
+  // 32 to 33: contacts and seen clouds go, since load rebuilds them with the rest of the player's view.
+  (world) => {
+    const { contacts: _contacts, clouds: _clouds, ...player } = world.player as SavedJson;
+    return { ...world, player };
+  },
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

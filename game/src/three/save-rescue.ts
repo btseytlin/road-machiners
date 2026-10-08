@@ -7,7 +7,8 @@ import { carriedWorld, type Carried, type CarriedItem, type CarriedPart, type Ca
 import type { World } from '../sim/types';
 import type { SlotId } from './save-slots';
 import { CENTS_PER_MONEY_29_30, pooledSkills_9_10 } from './save-migrations';
-import { storedSave, tryWriteSave } from './save';
+import { savedRunId, storedSave, writeSave } from './save';
+import type { SaveSlots } from './save-db';
 
 type Json = Record<string, unknown>;
 
@@ -129,10 +130,12 @@ function pooledOf(player: Json): Pick<Carried, 'xp' | 'ranks'> {
 
 // Builds a new world from the stored save and stores it, so the next boot loads it. Null when the stored
 // save is not a JSON object, which leaves nothing to carry.
-export function rescueSave(storage: Storage, slot: SlotId, map: BakedMap, kit: StartKit, freshSeed: () => number, savedAt: number): { world: World; report: CarryReport } | null {
-  const parsed = storedSave(storage, slot);
+// The rescued world stays in the save's run, so its log goes on.
+export function rescueSave(slots: SaveSlots, slot: SlotId, map: BakedMap, kit: StartKit, freshSeed: () => number, freshRunId: () => string, savedAt: number): { world: World; report: CarryReport; runId: string } | null {
+  const parsed = storedSave(slots, slot);
   if (objectOf(parsed) === null) return null;
   const rescued = carriedWorld(readCarried(parsed), kit, map, freshSeed);
-  tryWriteSave(storage, slot, rescued.world, savedAt);
-  return rescued;
+  const runId = savedRunId(parsed) ?? freshRunId();
+  writeSave(slots, slot, rescued.world, runId, savedAt);
+  return { ...rescued, runId };
 }

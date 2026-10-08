@@ -2718,6 +2718,14 @@ canvas.view {
   gap: 24px;
   padding: 8px 12px;
 }
+.save-panel .save-exports {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+.save-panel .save-exports button {
+  flex: 1;
+}
 
 /* The New game screen sits over the game, the menus and the death screen. */
 #ui .new-game {
