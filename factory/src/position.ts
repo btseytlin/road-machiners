@@ -119,5 +119,10 @@ function openReleaseDrift(release: ReleaseState, cards: Card[]): string[] {
   const lines: string[] = [];
   if (!cards.some((card) => card.issue === release.issue)) lines.push(`release tracking card #${release.issue} missing`);
   if (release.postId !== null && release.candidateSha !== release.playtest.passed) lines.push(`candidate post of ${release.candidateSha ?? 'no commit'} that the playtest did not pass`);
-  return lines;
+  return [...lines, ...missingTasks(release, cards)];
+}
+
+// The board lists a new card within a minute. A recorded task still missing holds the playtest until a member puts it back or ends it.
+function missingTasks(release: ReleaseState, cards: Card[]): string[] {
+  return release.tasks.filter((issue) => !cards.some((card) => card.issue === issue)).map((issue) => `release task #${issue} missing from the board`);
 }

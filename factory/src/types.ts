@@ -48,7 +48,8 @@ export type FactoryConfig = {
   replyRouteMinutes: number; // minutes Hermes has to route a plain approval reply before it becomes a failure
   releaseDays: number;
   playtestTurns: number; // turns of the release playtest's progression run
-  playtestRuns: number; // playtest runs a release may spend before it blocks for a member
+  playtestRuns: number; // plays of one release playtest job before it blocks for a member
+  playtestTimeoutMinutes: number; // minutes a release playtest job may run, since its plays and fixes outlast the verify queue's limit
   wasteReviewDays: number; // days between waste reviews of the factory
   itchTarget: string | null; // itch.io page as "user/game". Null until set, and then a release fails loud.
   butlerKey: string | null; // BUTLER_API_KEY, only ever in the env of the butler call
@@ -123,7 +124,8 @@ export const QUEUE_OF: Record<JobStage, Queue> = {
   checks: 'test',
   // An incident job pushes dev, and two of them at once would pick the same log id.
   approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', incident: 'branch',
-  // The release playtest runs a long agent review and moves no branch, so it never holds the branch queue.
+  // The release playtest runs for hours, so it never holds the branch queue. Its two release moves, main in and its fixes out,
+  // go through the locked merge and push, which merge again when another job moved the release.
   playtest: 'verify',
 };
 // Where a committee reply to an approval post sends the card. Answer moves nothing, patch fixes the build in place, redesign goes back to Design.
@@ -133,12 +135,11 @@ export type Failure = { stage: Stage; issue: number | null; error: string; log: 
 export type ChangeRequest ={ id: number; text: string; by: string };
 export type Removal = { issue: number; by: string; text: string };
 
-// The release playtest. Every run of one release plays the same seed, so a rerun after a fix replays what found the bug.
+// The release playtest. Every play of one release plays the same seed, so a replay after a fix replays what found the bug.
 export type PlaytestState = {
   seed: number;
-  runs: number; // runs started for this release. It names each run's audit folder and never goes back.
-  streak: number; // runs since the last clean pass or a member's retry, up to FACTORY_PLAYTEST_RUNS
-  passed: string | null; // the release head a clean run approved. The candidate builds only this commit.
+  runs: number; // plays started for this release. It names each play's audit folder and never goes back.
+  passed: string | null; // the release head a clean play approved. The candidate builds only this commit.
   blocked: { sha: string; reason: string } | null; // the gate stopped the release here until a member's retry
   notes: string[]; // members' decisions from `factory retry`, which every later review reads
 };
@@ -151,6 +152,7 @@ export type ReleaseState = {
   postId: number | null; // Telegram id of the current candidate post. Null while none is current.
   candidateSha: string | null; // short hash of the release head the current post was built from
   removed: number[]; // feature issues taken out of this release
+  tasks: number[]; // release tasks the factory created or labeled. Each holds the playtest until the board shows it in Done.
   playtest: PlaytestState;
 };
 

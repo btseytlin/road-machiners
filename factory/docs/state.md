@@ -60,14 +60,14 @@ Flags hold on any position:
 `factory release` prints the release position.
 
 - None: `release` is null. `cut` makes one.
-- Cut with open tasks: `release` is set, and release tasks are not all done. The playtest and the candidate wait.
+- Cut with open tasks: `release` is set, and release tasks are not all done. The playtest and the candidate wait. An open task is a `release-task` card outside Done, or an issue in `release.tasks` that the board does not show in Done.
 - Playtest: every release task is done, and `release.playtest.passed` is not the release head. The playtest runs.
 - Playtest blocked: `release.playtest.blocked` holds the commit and the reason. The tracking card has `factory-stuck`. `retry <tracking> [decision]` lifts it.
 - Candidate building: `release.playtest.passed` is the release head and no post is current. The candidate runs.
 - Candidate posted: `release.postId` holds the current candidate post, and `release.candidateSha` the commit it plays. Ship runs when a member presses Ship, or on `ship`. A tick that finds the release head past `candidateSha` drops the post and a queued Ship.
-
-`release.playtest` holds the playtest of the open release: `seed`, fixed at the cut; `runs`, every run started, which names the audit folders; `streak`, the runs since the last pass or retry, up to `FACTORY_PLAYTEST_RUNS`; `passed`, the commit a clean run approved; `blocked`; and `notes`, the members' decisions from `retry`.
 - Shipped: `ship` merged the release into `main`, closed its cards and set `release` to null.
+
+`release.playtest` holds the playtest of the open release: `seed`, fixed at the cut; `runs`, every play started, which names the audit folders; `passed`, the commit a clean play approved, which is also the next job's baseline; `blocked`; and `notes`, the members' decisions from `retry`. One job plays at most `FACTORY_PLAYTEST_RUNS` times, so the state keeps no count of plays left.
 
 The public post of a shipped release has its own position in `releasePost`, beside the next open release. `factory release` prints it as `public post`.
 
@@ -75,7 +75,9 @@ The public post of a shipped release has its own position in `releasePost`, besi
 - Waiting for a draft: Ship set `releasePost` with the changelog and the screenshot under `$FACTORY_HOME/release-posts/<day>/`, and `postId` is null. The incident watch shows `release post due`, and Hermes sends a draft.
 - Draft posted: `releasePost.postId` holds the draft post in the committee chat, and `releasePost.draft` its text. A reply to it goes to Hermes, who sends a new draft. Publish on the current draft posts it to `FACTORY_PUBLIC_CHANNEL` and sets `releasePost` to null.
 
-`factory audit` and `card N` flag four drifts: an open release whose tracking card is missing, a pending ship with no current candidate post, a candidate post of a commit the playtest did not pass, and a release post with a draft post id but no draft text or the reverse. `factory release` flags nothing.
+`release.tasks` lists every release task the factory created or labeled: the cut's cleanup tasks, a reply's task and a fix triage labeled. Each is written before its card or label goes on the board, since the board lists a write up to a minute late. `factory release` prints them as `recorded tasks`.
+
+`factory audit` and `card N` flag five drifts: an open release whose tracking card is missing, a recorded release task missing from the board, a pending ship with no current candidate post, a candidate post of a commit the playtest did not pass, and a release post with a draft post id but no draft text or the reverse. `factory release` flags nothing.
 
 The release tracking card has the label `release`. It waits in Approval for the whole release, and its post is `release.postId`. It never shows card drift.
 
@@ -150,6 +152,6 @@ Write orders wait while the factory is paused. The CLI still writes the order, s
 
 `hermes` may send mechanical orders: `move` to any position except `harden`, `merge` and `move` to `harden` of a card the committee approved, `cut`, `drop`, `retry`, `pause-card` and `resume-card`. A member must send the product decisions: `ship`, `remove`, `merge-change`, and `merge` or `move` to `harden` of a card the committee has not approved. The CLI and the tick both refuse a gated order from `hermes`.
 
-Immediate, with no tick wait: `retry N [decision]`, `pause <reason>`, `resume` and `repair-clone N --by <who> --reason <why> [--backup-merge]`. `retry` of the release tracking card also lifts a playtest block, sets its `streak` to 0 and keeps the decision in `release.playtest.notes`. `pause <reason>` writes `Paused with factory pause: <reason>`. `resume` lifts only a pause that starts with that text. It refuses a pause written by hand or by a member. Hermes deletes that file itself once its reason is gone.
+Immediate, with no tick wait: `retry N [decision]`, `pause <reason>`, `resume` and `repair-clone N --by <who> --reason <why> [--backup-merge]`. `retry` of the release tracking card also lifts a playtest block and keeps the decision in `release.playtest.notes`, so a new playtest job runs and reads it. `pause <reason>` writes `Paused with factory pause: <reason>`. `resume` lifts only a pause that starts with that text. It refuses a pause written by hand or by a member. Hermes deletes that file itself once its reason is gone.
 
 `repair-clone N` needs a pause and no running job. It moves the card's work clone whole into a clone backup, checks out GitHub's `factory/issue-N` fresh and copies only the factory folders over. It changes no label, card or `state.json` field. [operations.md](operations.md#repairing-a-work-clone) has the rules.

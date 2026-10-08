@@ -222,7 +222,7 @@ describe('read commands', () => {
   });
 });
 
-const RELEASE = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, candidateSha: null, removed: [] };
+const RELEASE = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, candidateSha: null, removed: [], tasks: [] };
 
 describe('immediate commands', () => {
   it('retry removes the stuck label and only that card failures', async () => {
@@ -234,19 +234,19 @@ describe('immediate commands', () => {
     expect(readState(f.ctx.statePath).failures.map((row) => row.issue)).toEqual([6]);
   });
 
-  it('retry of the release tracking card lifts a playtest block, gives back the runs and keeps the decision and the run count', async () => {
+  it('retry of the release tracking card lifts a playtest block and keeps the decision and the play count', async () => {
     const f = fake();
     f.ctx.cfg = { ...f.ctx.cfg, playtestRuns: 4 };
-    const playtest = { seed: 1, runs: 4, streak: 4, passed: null, blocked: { sha: 'abc1234', reason: 'taste' }, notes: [] };
+    const playtest = { seed: 1, runs: 4, passed: null, blocked: { sha: 'abc1234', reason: 'taste' }, notes: [] };
     writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, playtest } });
     await run(f, 'retry', String(RELEASE.issue), 'Raiders', 'may', 'chase', 'at', 'night.');
     expect(f.calls).toContain(`removeLabel ${RELEASE.issue} factory-stuck`);
-    expect(readState(f.ctx.statePath).release?.playtest).toEqual({ seed: 1, runs: 4, streak: 0, passed: null, blocked: null, notes: ['Raiders may chase at night.'] });
+    expect(readState(f.ctx.statePath).release?.playtest).toEqual({ seed: 1, runs: 4, passed: null, blocked: null, notes: ['Raiders may chase at night.'] });
   });
 
   it('retry of another card leaves the playtest alone', async () => {
     const f = fake();
-    const playtest = { seed: 1, runs: 4, streak: 0, passed: null, blocked: { sha: 'abc1234', reason: 'taste' }, notes: [] };
+    const playtest = { seed: 1, runs: 4, passed: null, blocked: { sha: 'abc1234', reason: 'taste' }, notes: [] };
     writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, playtest } });
     await run(f, 'retry', '5', 'note');
     expect(readState(f.ctx.statePath).release?.playtest).toEqual(playtest);

@@ -14,7 +14,7 @@ import { setPhase } from './verify';
 // Each step logs its start time, so the log shows where the time goes.
 // The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
 // Only the build gets SAVE_SCOPE, since the tests expect the default save key.
-const checkScript = (playtest: string) => `set -e
+export const checkScript = (playtest: string) => `set -e
 step() { echo "[checks] $(date -u +%T) $1"; }
 mkdir -p tmp
 step "npm ci"
@@ -166,20 +166,24 @@ export function timeoutOnly(failure: string): boolean {
 // Two reruns ride out a burst of load. A third timeout means the load stays, and Hermes has to look.
 const CHECK_RUNS = 3;
 
+async function checkPatiently(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
+  return checkUntilReal(() => runChecks(ctx, issue, base, build), (run) => ctx.log('checks', issue, `the checks only timed out, run ${run} of ${CHECK_RUNS}, running them again`));
+}
+
 // Runs the checks until they pass or fail for a real reason. Timeouts alone rerun the checks with no agent round,
 // since an agent would only raise the time limits. Returns null on a pass, or the real failure. Throws after CHECK_RUNS timeouts.
-async function checkPatiently(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
+export async function checkUntilReal(check: () => Promise<string | null>, onTimeout: (run: number) => void): Promise<string | null> {
   for (let run = 1; ; run++) {
-    const failure = await runChecks(ctx, issue, base, build);
+    const failure = await check();
     if (failure === null || !timeoutOnly(failure)) return failure;
     if (run === CHECK_RUNS) throw new Error(`The factory checks timed out ${CHECK_RUNS} times, under load. No test failed for another reason.\n${failure}`);
-    ctx.log('checks', issue, `the checks only timed out, run ${run} of ${CHECK_RUNS}, running them again`);
+    onTimeout(run);
   }
 }
 
 const FAILURE_TAIL_LINES = 150;
 
-function checkFailure(log: string, error: unknown): string {
+export function checkFailure(log: string, error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   const tail = existsSync(log) ? readFileSync(log, 'utf8').split('\n').slice(-FAILURE_TAIL_LINES).join('\n') : message;
   return stripAnsi(tail);

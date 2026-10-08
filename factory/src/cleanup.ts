@@ -23,6 +23,7 @@ const NAMED: Record<string, { stages: string[]; keep: (state: FactoryState) => b
   'release-main': { stages: ['ship'], keep: () => false },
   'release-candidate': { stages: ['candidate', 'ship'], keep: (state) => state.release !== null },
   'release-playtest': { stages: ['playtest'], keep: () => false },
+  'release-baseline': { stages: ['playtest'], keep: () => false },
   waste: { stages: ['waste'], keep: () => false },
 };
 const OWN = new Set(['land']);

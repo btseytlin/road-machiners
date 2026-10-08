@@ -117,7 +117,7 @@ Members, other jobs and releases push all the time, so any branch may move while
 
 ![Release](diagrams/release.svg)
 
-The playtest plays one seed of the progression harness on the release head, after every release task merged and before the candidate. An Opus agent reviews the whole log. A clean run passes that commit. Findings open a release fix task, and the same seed plays again on the new head. A blocked verdict or the run limit blocks the release for a member. [stages.md](stages.md#release-playtest) has the rules.
+The playtest is one job, after every release task merged and before the candidate. It merges `main` into the release, then plays one seed of the progression harness on the release head and on a baseline: the last commit the release passed, or `main`. An Opus agent reviews the logs and sorts each finding as caused by the release or old. It fixes the release's important findings in its clone, and the factory replays the seed on the fixes in the same agent session. A clean play passes its commit, after the factory checks for any fixes, which then land on the release. An important old finding opens a bug issue for `dev` and does not block. A blocked verdict or the play limit blocks the release for a member. [stages.md](stages.md#release-playtest) has the rules.
 
 The candidate builds only the commit the playtest passed, and its post records it. Every move of the release drops the Ship button of the current post, and the playtest runs again on the new head. A reply can open a release task while a candidate builds. That candidate lacks the task, so it is not posted.
 
