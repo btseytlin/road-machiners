@@ -138,14 +138,11 @@ async function checkDockLayout(page, [width, height]) {
       fits: { panel: fits(document.querySelector('.weapons')), grid: fits(grid) },
       text: document.querySelector('.weapons').innerText,
       icons: document.querySelectorAll('.weapon-pick .item-icon').length,
-      iconLooks: [...document.querySelectorAll('.weapon-pick .item-icon')].map(node => {
-        const style = getComputedStyle(node);
-        return { label: node.getAttribute('aria-label'), background: style.backgroundColor, image: style.backgroundImage, padding: style.padding };
-      }),
       oldIcons: document.querySelectorAll('.weapons .icon-mg, .weapons .icon-cannon').length,
       twoRows: grid.classList.contains('two-rows'),
     };
   }, [DOCK_PANELS, width <= 720]);
+  m.iconLooks = await readIconLooks(page);
   const guns = m.slots.length, at = `at ${width}x${height} with ${guns} guns`;
   console.log(at, Object.entries(m.rects).map(([n, r]) => `${n}=${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.width)}x${Math.round(r.height)}`).join(' '));
   await page.screenshot({ path: `.playtest/dock-${guns}g-${width}x${height}.png`, timeout: 180000 });
@@ -157,7 +154,7 @@ async function checkDockLayout(page, [width, height]) {
   assertDockSize(m, stacked, at);
   assertDockLevel(m, stacked, width, at);
   assertDockText(m, at);
-  assertDockIcons(m, at);
+  assertDockIcons(m.iconLooks, at);
   for (const c of m.controls) assert(c.ok, `Weapon control "${c.name}" must take the click at its center ${at}, hit ${c.hit}`);
 }
 
@@ -210,9 +207,14 @@ function assertDockText(m, at) {
   assert.equal(m.oldIcons, 0, `No old weapon glyphs ${at}`);
 }
 
+const readIconLooks = page => page.evaluate(() => [...document.querySelectorAll('.weapon-pick .item-icon')].map(node => {
+  const style = getComputedStyle(node);
+  return { label: node.getAttribute('aria-label'), background: style.backgroundColor, image: style.backgroundImage, padding: style.padding };
+}));
+
 // A gun shows its drawing alone: no tone tile, no image and no padding behind it.
-function assertDockIcons(m, at) {
-  for (const icon of m.iconLooks) {
+function assertDockIcons(looks, at) {
+  for (const icon of looks) {
     assert.equal(icon.background, 'rgba(0, 0, 0, 0)', `Weapon icon "${icon.label}" must have no tile ${at}`);
     assert.equal(icon.image, 'none', `Weapon icon "${icon.label}" must have no background image ${at}`);
     assert.equal(icon.padding, '0px', `Weapon icon "${icon.label}" must have no padding ${at}`);
@@ -234,25 +236,18 @@ async function checkWeaponDock(page) {
 // Saves the weapon panel unselected and with a gun selected, and checks the icons carry no tile.
 async function checkWeaponIcons(page, guns, distinct) {
   await page.setViewportSize({ width: 1280, height: 720 });
-  const read = () => page.evaluate(() => ({
-    iconLooks: [...document.querySelectorAll('.weapon-pick .item-icon')].map(node => {
-      const style = getComputedStyle(node);
-      return { label: node.getAttribute('aria-label'), background: style.backgroundColor, image: style.backgroundImage, padding: style.padding };
-    }),
-  }));
   const shoot = suffix => page.locator('.weapons').screenshot({ path: `.playtest/weapon-icons-${guns}g${suffix}.png`, timeout: 180000 });
   const at = `in the ${guns}-gun panel`;
-  let m = await read();
-  assertDockIcons(m, at);
-  const labels = new Set(m.iconLooks.map(icon => icon.label));
+  const looks = await readIconLooks(page);
+  assertDockIcons(looks, at);
+  const labels = new Set(looks.map(icon => icon.label));
   console.log('weapon icons', [...labels].join(', '));
   if (distinct) assert(labels.size >= 2, `The panel must show at least two distinct guns, got ${[...labels]}`);
   await shoot('');
   const first = page.locator('.weapon-pick').first();
   await first.click();
   assert(await page.locator('.weapon-pick.on').count(), `A clicked gun must show as selected ${at}`);
-  m = await read();
-  assertDockIcons(m, `${at} with a gun selected`);
+  assertDockIcons(await readIconLooks(page), `${at} with a gun selected`);
   await shoot('-selected');
   await first.click();
 }
