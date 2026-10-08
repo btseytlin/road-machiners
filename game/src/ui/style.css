@@ -673,6 +673,7 @@ body {
 }
 .knob-cell {
   flex: 1 1 0;
+  min-width: 0;
   align-self: stretch;
   display: flex;
   flex-direction: column;
@@ -912,11 +913,12 @@ body {
 /* The hover panel grows with the hit table down to the log, since the mouse stays on the truck and cannot scroll it. */
 .info {
   right: 14px;
-  top: 64px;
+  /* Below the game menu and its language row. */
+  top: 112px;
   width: var(--inspection-width);
   min-height: var(--inspection-height);
   /* Stops above the log. */
-  max-height: calc(100dvh - 64px - 234px - 8px);
+  max-height: calc(100dvh - 112px - 234px - 8px);
   max-width: calc(100vw - 28px);
   box-sizing: border-box;
   overflow: auto;
@@ -1608,9 +1610,17 @@ body {
     top: 190px;
     max-height: calc(100dvh - 190px - 256px - 8px);
   }
+  /* Ends above the instruments, which stand over the modal. */
   #ui .modal {
     padding: 20px 16px;
-    height: calc(100dvh - 290px);
+    height: calc(100dvh - 350px);
+  }
+  /* The top-right menu fills the top row, so the action button and the notes below it move down a row. */
+  #ui .action {
+    top: 112px;
+  }
+  #ui .toast {
+    top: 158px;
   }
   .inv-wrap {
     flex-direction: column;
@@ -1620,8 +1630,10 @@ body {
   .inv-side {
     width: 100%;
   }
+  /* Rows as tall as their content, so the truck grid does not spill over the shop tabs. */
   .town-split {
     grid-template-columns: 1fr;
+    grid-auto-rows: max-content;
     overflow: auto;
   }
   .town-truck,
@@ -1740,18 +1752,19 @@ canvas.view {
   padding: 0;
   border: 0;
 }
+/* A grid, so the menu is as wide as its wider row: Save, Load and New game, or the language control. */
 .game-menu {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  justify-content: end;
   gap: 6px;
   font-size: 12px;
 }
 
 /* The language control: the menu's last row, a small label and two equal buttons. */
 .language-switch {
+  grid-column: 1 / -1;
   display: flex;
-  flex-basis: 100%;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
@@ -2380,6 +2393,16 @@ canvas.view {
   padding: 8px 10px 8px 14px;
   font-size: 15px;
   z-index: 30;
+}
+/* Below the action button, which moves down a row in the narrow layout, and right of the condition panel. */
+@media (max-width: 720px) {
+  #ui .tip {
+    top: 158px;
+    left: auto;
+    right: 14px;
+    transform: none;
+    max-width: calc(100vw - 300px);
+  }
 }
 #ui .tip .tip-close {
   padding: 0 6px;

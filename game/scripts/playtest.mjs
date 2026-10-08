@@ -1,6 +1,8 @@
 // Boots the game in headless Chromium on the GPU, plays turns, and fails on page errors, the crash screen,
 // a blank canvas or a low frame rate. Screenshots go to .playtest/.
 // It also fails on HUD panels whose single control does not fill the panel, so a click in the box's edge or corner is dead.
+// It plays in Russian, switched from the menu: the menu and a HUD readout must turn Cyrillic, the log must hold no
+// English, and the choice must outlive a reload, until English is picked again.
 // The GPU is Metal on a Mac and Vulkan on Linux, like the factory's NVIDIA host. A run that falls back to software drawing fails.
 // With --cpu, Chromium draws in software and the frame rate is printed but not checked.
 // Usage: npm run playtest -- [--url http://localhost:5173] [--turns 12, or 4 with --cpu] [--cpu]
@@ -87,6 +89,18 @@ if (!(await helpOpen())) hitProblems.push('help did not open from a click in its
 await page.keyboard.press('Escape');
 if (await helpOpen()) hitProblems.push('help did not close on Escape');
 
+// The menu's language control switches at once, with no reload.
+const CYRILLIC = /[А-яЁё]/;
+const languageProblems = [];
+const languageReadout = () => page.evaluate(() => ({
+  lang: document.documentElement.lang,
+  label: document.querySelector('#ui .language-label')?.textContent ?? '',
+  money: document.querySelector('#ui [data-resource="money"] small')?.textContent ?? '',
+}));
+await page.locator('#ui .language-switch [data-lang="ru"]').click();
+const russian = await languageReadout();
+if (russian.lang !== 'ru' || !CYRILLIC.test(russian.label) || !CYRILLIC.test(russian.money)) languageProblems.push(`Русский did not switch the menu and HUD: ${JSON.stringify(russian)}`);
+
 for (let i = 0; i < turns; i++) {
   await page.evaluate((i) => {
     const g = window.__ROAM__;
@@ -106,20 +120,40 @@ for (let i = 0; i < turns; i++) {
 }
 await page.screenshot({ path: '.playtest/end.png' });
 
+// In Russian the log holds no English, apart from the drivers' names.
+const logLeaks = await page.evaluate(() => {
+  const g = window.__ROAM__;
+  const names = [...g.state.vehicles, ...g.state.removed].flatMap((v) => (v.brain ? v.brain.driver.split(' ') : []));
+  return [...document.querySelectorAll('#ui .log-lines > div')].map((row) => row.textContent ?? '')
+    .filter((text) => names.reduce((left, name) => left.split(name).join(' '), text).match(/[A-Za-z]{2,}/));
+});
+languageProblems.push(...logLeaks.map((line) => `English in the Russian log: ${line}`));
+
 const fps = await page.evaluate(() => new Promise((done) => {
   let n = 0;
   const t0 = performance.now();
   const f = () => (++n, performance.now() - t0 < 2000 ? requestAnimationFrame(f) : done(n / 2));
   requestAnimationFrame(f);
 }));
-const state = await page.evaluate(() => ({ turn: window.__ROAM__.state.turn, crashed: document.body.innerText.includes('The game crashed') }));
+const state = await page.evaluate(() => ({ turn: window.__ROAM__.state.turn, crashed: document.querySelector('.crash-screen') !== null }));
 const blank = await page.evaluate(() => {
   const c = document.querySelector('#game canvas');
   return !c || c.width === 0;
 });
+
+// The choice outlives a reload, and English comes back the same way.
+const reload = async () => {
+  await page.reload();
+  await page.waitForFunction(() => window.__ROAM__, null, { timeout: BOOT_LIMIT_MS });
+  return languageReadout();
+};
+if ((await reload()).lang !== 'ru') languageProblems.push('Russian did not survive a reload');
+await page.locator('#ui .language-switch [data-lang="en"]').click();
+const english = await reload();
+if (english.lang !== 'en' || CYRILLIC.test(english.label) || CYRILLIC.test(english.money)) languageProblems.push(`English did not stay after a reload: ${JSON.stringify(english)}`);
 await browser.close();
 
-const problems = [...errors, ...hitProblems];
+const problems = [...errors, ...hitProblems, ...languageProblems];
 if (state.crashed) problems.push('crash screen shown');
 if (state.turn !== turns + 1) problems.push(`expected turn ${turns + 1}, got ${state.turn}`);
 if (blank) problems.push('no WebGL canvas');

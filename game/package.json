@@ -7,6 +7,7 @@
     "test": "vitest run",
     "playtest": "node scripts/playtest.mjs",
     "ui-playtest": "node scripts/ui-playtest.mjs http://localhost:5173",
+    "layout": "node scripts/layout-check.mjs http://localhost:5173",
     "perf": "node scripts/perf.mjs",
     "sfx:gen": "vite-node scripts/sfx-gen.mjs",
     "sfx:import": "vite-node scripts/sfx-import.mjs",

@@ -88,7 +88,15 @@ async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<World> {
 }
 
 function newGame(): World {
-  return newWorld(CONFIG.seed ?? freshSeed(), startKit(CONFIG.startKit), map);
+  return newWorld(CONFIG.seed ?? urlSeed() ?? freshSeed(), startKit(CONFIG.startKit), map);
+}
+
+// In dev, ?seed=<n> starts a new game on a fixed seed, so a check like npm run layout sees the same world each run.
+function urlSeed(): number | null {
+  const seed = import.meta.env.DEV ? new URLSearchParams(window.location.search).get('seed') : null;
+  if (seed === null) return null;
+  if (!/^-?\d+$/.test(seed)) throw new Error(`?seed=${seed} is no whole number`);
+  return Number(seed);
 }
 
 installCrashScreen();

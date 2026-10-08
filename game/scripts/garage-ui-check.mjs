@@ -40,7 +40,7 @@ try {
   await page.waitForFunction(() => window.__ROAM__?.state, null, { timeout: 120000 });
   for (const spot of ['nose', 'bowl']) {
     await enter(page, spot);
-    await page.locator('.town-screen .tabs button', { hasText: 'Buy Parts' }).click();
+    await page.locator('.town-screen [data-tab="buyParts"]').click();
     const gun = () => page.locator('.inv-item.mounted', { hasText: /turret|rifle|cannon|shotgun|MG/i }).first();
     // Mouse: select, compare, clear.
     await gun().click();
@@ -81,7 +81,7 @@ try {
     await page.waitForTimeout(300);
     r = await read(page);
     assert(/\d+ broken/.test(r.repair), `${spot}: repair bar must show the broken count, got ${r.repair}`);
-    await page.locator('.town-repair button', { hasText: 'Repair all' }).waitFor();
+    await page.locator('.town-repair [data-key="repairAll"]').waitFor();
     await page.evaluate(() => window.__ROAM__.town.close());
   }
   // Stall and inventory keep the chip.
@@ -93,7 +93,7 @@ try {
   await page.keyboard.press('Escape');
   // Layout at narrower widths.
   await enter(page, 'nose');
-  await page.locator('.town-screen .tabs button', { hasText: 'Buy Parts' }).click();
+  await page.locator('.town-screen [data-tab="buyParts"]').click();
   await mkdir('.playtest', { recursive: true });
   for (const width of [1280, 1024, 800]) {
     await page.setViewportSize({ width, height: 730 });

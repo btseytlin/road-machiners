@@ -45,6 +45,7 @@ function showCrash(err: unknown): void {
   shown = true;
   const text = err instanceof Error ? `${err.message}\n\n${err.stack ?? ''}` : String(err);
   const box = document.createElement('div');
+  box.className = 'crash-screen';
   box.style.cssText =
     'position:fixed;inset:0;z-index:100000;background:rgba(40,8,6,0.96);color:#ffd8c8;padding:40px;overflow:auto;' +
     'font:14px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;';

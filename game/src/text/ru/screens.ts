@@ -369,7 +369,7 @@ export const SCREENS: Translation<typeof EN> = {
   'icon.blast': 'Защита от взрыва',
   'icon.heat': 'Нагрев',
   'icon.patch': 'Полевой ремонт',
-  'icon.tall': 'Высокая',
+  'icon.tall': 'Высота',
   'icon.clock': 'Осталось времени',
   'stat.same': '=',
   'stat.footprint': '{w}×{h} ячеек',

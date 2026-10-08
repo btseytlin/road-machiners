@@ -11,7 +11,7 @@ function doRectsOverlap(a, b) {
 }
 
 async function checkVisibleReadouts(page) {
-  for (const label of ['Money', 'Fuel', 'Supplies', 'Driver']) {
+  for (const label of ['money', 'fuel', 'supplies', 'driver']) {
     assert(await page.locator(`[data-resource="${label}"]`).isVisible(), `${label} must remain visible`);
   }
   assert(await page.locator('.log').isVisible(), 'Event log must remain visible');
@@ -217,8 +217,9 @@ async function checkWeaponDock(page) {
 }
 
 async function fillLog(page) {
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
     const game = window.__ROAM__;
+    const { verbatim } = await import('/src/text/msg.ts');
     const lines = [
       'Repair Scrap panels started: stay parked about three hours while the crew works',
       'Dust storm started and will sweep the whole valley until late in the evening',
@@ -227,7 +228,7 @@ async function fillLog(page) {
       'Raider Cass Dust regains consciousness', 'Repair Wheel started: stay parked about two hours',
       'Day turns to night over the long road east of the old bridge', 'Discovered Bowl',
     ];
-    for (let i = 0; i < 4; i++) for (const text of lines) game.hud.note(game.world, text, 'dim');
+    for (let i = 0; i < 4; i++) for (const text of lines) game.hud.note(game.world, verbatim(text), 'dim');
   });
 }
 

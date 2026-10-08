@@ -138,6 +138,7 @@ export class TownScreen {
         "button",
         {
           class: this.tab === tab ? "on" : "",
+          "data-tab": tab,
           onclick: () => {
             this.tab = tab;
             this.render();
@@ -331,8 +332,8 @@ export class TownScreen {
       { class: "town-repair" },
       createIcon("tools"),
       broken ? el("span", { class: "bad" }, t("trade.broken", { n: broken })) : null,
-      this.button(basics === 0 ? t("trade.basicsFine") : t("trade.repairBasics", { cost: basics }), repairBasics, basics === 0),
-      this.button(all === 0 ? t("trade.noRepairs") : t("trade.repairAll", { cost: all }), repairAll, all === 0),
+      this.button(basics === 0 ? t("trade.basicsFine") : t("trade.repairBasics", { cost: basics }), repairBasics, basics === 0, undefined, "repairBasics"),
+      this.button(all === 0 ? t("trade.noRepairs") : t("trade.repairAll", { cost: all }), repairAll, all === 0, undefined, "repairAll"),
     );
   }
 
@@ -590,7 +591,7 @@ export class TruckTradeScreen {
     return TRADE_TABS.map((tab) =>
       el(
         "button",
-        { class: this.tab === tab ? "on" : "", onclick: () => { this.tab = tab; this.render(); } },
+        { class: this.tab === tab ? "on" : "", "data-tab": tab, onclick: () => { this.tab = tab; this.render(); } },
         createIcon(TRADE_TAB_ICON[tab]),
         t(`trade.tradeTab.${tab}`),
       ),
