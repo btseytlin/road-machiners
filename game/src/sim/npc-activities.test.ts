@@ -1609,6 +1609,15 @@ describe('stall watchdog', () => {
     expect(follower(0)).toBe(false);
     expect(follower(RULES.arriveRadius + 2)).toBe(true);
   });
+
+  it('counts as waiting when its spot lies on the far side of the leader', () => {
+    const { w, npc } = createScavenger();
+    const leader = addVehicle(w, npc.faction, 'scout', ['stockEngine'], { x: npc.pos.x + 2, y: npc.pos.y });
+    leader.speed = 0;
+    npc.brain!.goals = [{ kind: 'follow', targetId: leader.id, destination: { x: leader.pos.x + 3, y: leader.pos.y }, phase: 'travel', reason: 'test goal' }];
+    run(w, NPC_BEHAVIOR.stallTurns + 1);
+    expect(w.events.some((e) => e.t === 'stall')).toBe(false);
+  });
 });
 
 describe('parking beside a truck', () => {
