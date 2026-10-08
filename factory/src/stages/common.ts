@@ -153,11 +153,12 @@ export function prepareOutputs(ctx: Ctx, issue: number, home: string): void {
 // `fresh` starts a new session even in a resumed job, for a read-only round that is safe to run again and that clears its own output first.
 // `evidenceCheck` gives the agent the command that runs the factory's evidence checks on its clone.
 // `disallowedTools` names Claude Code tools the agent cannot use.
-export type AgentExtras = { skill?: string; effort?: string; fresh?: boolean; evidenceCheck?: boolean; disallowedTools?: string[] };
+// `continue` sends the prompt as the next message of the round's session, so the agent that did the work gets its failure.
+export type AgentExtras = { skill?: string; effort?: string; fresh?: boolean; evidenceCheck?: boolean; disallowedTools?: string[]; continue?: boolean };
 
 function agentSession(ctx: Ctx, issue: number, stage: CardStage, round: string, extras: AgentExtras): AgentSession {
-  const session = roundSession(ctx.cfg.home, issue, round, extras.fresh !== true && isResuming(ctx, issue));
-  if (session.resume) ctx.log(stage, issue, `resuming round ${round}, session ${session.id}`);
+  const session = roundSession(ctx.cfg.home, issue, round, extras.continue === true || (extras.fresh !== true && isResuming(ctx, issue)));
+  if (session.resume) ctx.log(stage, issue, `${extras.continue === true ? 'continuing' : 'resuming'} round ${round}, session ${session.id}`);
   return session;
 }
 
@@ -170,7 +171,7 @@ export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round:
   const openNetwork = await useOpenNetwork(ctx, stage, issue);
   const session = agentSession(ctx, issue, stage, round, extras);
   const reports = issueReports(ctx.cfg.home, issue);
-  const full = session.resume ? RESUME_NOTE : [`${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`, ...(reports.section ? [reports.section] : [])].join('\n\n');
+  const full = session.resume ? (extras.continue === true ? prompt : RESUME_NOTE) : [`${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`, ...(reports.section ? [reports.section] : [])].join('\n\n');
   // A resumed round already ran its skill, so only the note goes in.
   const skill = session.resume ? undefined : extras.skill;
   return ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), readOnly: reports.readOnly, session, skill, effort: extras.effort, evidenceCheck: extras.evidenceCheck, disallowedTools: extras.disallowedTools });
