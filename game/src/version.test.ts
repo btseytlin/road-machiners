@@ -83,7 +83,6 @@ describe('gameVersion', () => {
     git(dir, 'checkout', '-q', 'main');
     writeFormat(dir, '2.3', '{\n "format": "2.3",\n "shape": {"main": 1}\n}\n');
     commit(dir, 'main step');
-    // Both sides changed the shape, so the merge stops on a conflict that the new format resolves.
     expect(() => git(dir, 'merge', '-q', '--no-ff', '--no-commit', 'side')).toThrow();
     writeFormat(dir, '2.4', '{\n "format": "2.4",\n "shape": {"main": 1, "side": 1}\n}\n');
     commit(dir, 'merge');

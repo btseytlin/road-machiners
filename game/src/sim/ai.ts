@@ -185,7 +185,6 @@ function gunRanges(world: World, v: Vehicle): number[] {
   return weapons.map((weapon) => weapon.def.range);
 }
 
-
 const F = NPC_BEHAVIOR.fight;
 const QUARTER = Math.PI / 2;
 
@@ -280,7 +279,6 @@ export function fightOrder(world: World, v: Vehicle, target: Vehicle, dest: Vec)
   const keepUp = target.speed + dist(v.pos, dest);
   return { kind: 'through', dest, pace: circling ? Math.max(F.circlePace, keepUp) : keepUp };
 }
-
 
 export function routeBlockers(world: World, v: Vehicle): Blocker[] {
   const standing = [...parkedVehicles(world, v.id, getHitchedTowIds(world)), ...fieldBlockers(world, v)];

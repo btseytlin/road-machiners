@@ -164,7 +164,6 @@ export function itemState(it: GridItem, mounted: boolean): string {
   return mounted ? "Mounted" : "Spare";
 }
 
-
 const SVG = "http://www.w3.org/2000/svg";
 
 export function nextRot(it: GridItem): Rot {

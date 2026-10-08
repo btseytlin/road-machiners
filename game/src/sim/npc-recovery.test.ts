@@ -23,7 +23,6 @@ function createScenario(templateId = 'scavenger') {
   return { world, npc };
 }
 
-// Long-term work for each template, far from the test area.
 function workGoal(templateId: string): NpcActivity {
   if (templateId === 'trader') return { kind: 'sell', targetId: REGION.towns[0].id, destination: { ...REGION.towns[0].pos }, phase: 'travel', reason: 'deliver purchased cargo' };
   return { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' };
@@ -40,8 +39,6 @@ function expectReturnFire(world: World, npc: Vehicle, enemy: Vehicle) {
   expect(Object.values(npc.weaponOrders).some((order) => order.targetId === enemy.id)).toBe(true);
 }
 
-// Runs `check` on a copy of the world for each seed and returns the share of seeds where it holds. Seeds are
-// spread over the RNG state, since neighboring states give correlated first draws.
 function shareOfSeeds(world: World, npcId: string, check: (x: World, npc: Vehicle) => boolean, seeds = 200): number {
   let held = 0;
   for (let seed = 0; seed < seeds; seed++) {
@@ -58,7 +55,6 @@ describe('NPC gameplay recovery', () => {
   it('lets an idle healthy scavenger attack a manageable hostile', () => {
     const { world, npc } = createScenario();
     const raider = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
-    // An equal truck looks manageable on about half of the sightings.
     expect(shareOfSeeds(world, npc.id, (x, me) => thinkNpc(x, me).kind === 'fight')).toBeGreaterThan(0.4);
     corePart(raider, 'cab').hp = 1;
     expect(shareOfSeeds(world, npc.id, (x, me) => thinkNpc(x, me).kind === 'fight')).toBeGreaterThan(0.8);
@@ -97,7 +93,6 @@ describe('NPC gameplay recovery', () => {
     const work = structuredClone(npc.brain!.goals[0]);
     const enemy = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
     fireAt(world, enemy, npc);
-    // Shots prompt defense or retreat. Against an equal truck, fighting back wins on about half of the rolls.
     const reactions = (kind: string) => shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);
       return topGoal(me)?.kind === kind && topGoal(me)?.targetId === enemy.id;
@@ -117,15 +112,13 @@ describe('NPC gameplay recovery', () => {
     expectReturnFire(world, npc, enemy);
     enemy.pos = { x: 200, y: 100 };
     enemy.speed = 0;
-    // The driver hunts a lost foe for a while before it gives up.
     world.turn += NPC_BEHAVIOR.fightSearchTurns + 1;
-    // The resume roll goes back to the interrupted work about nine times in ten.
     const resumed = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);
       return JSON.stringify(topGoal(me)) === JSON.stringify(work);
     });
     expect(resumed).toBeGreaterThan(0.8);
-  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
+  }, 90_000);
 
   it.each(['scavenger', 'trader'])('allows a retreating %s to return fire', (template) => {
     const { world, npc } = createScenario(template);
@@ -140,7 +133,6 @@ describe('NPC gameplay recovery', () => {
     expectReturnFire(world, npc, enemy);
   });
 
-  // Running only shows a foe the rear. A driver that would lose the race but could win the fight turns on it.
   it('turns on an attacker it cannot get away from rather than run', () => {
     const { world, npc } = createScenario('scavenger');
     const enemy = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
@@ -180,7 +172,6 @@ describe('NPC gameplay recovery', () => {
       expectReturnFire(x, me, byId(x, enemy.id));
       return topGoal(me)?.kind === 'fight';
     });
-    // Guard caution lowers starting a fight, never fighting back. An equal attacker is fought about half the time.
     expect(fought).toBeGreaterThan(0.3);
   });
 
@@ -278,8 +269,6 @@ describe('NPC gameplay recovery', () => {
     if (activity.kind === 'repair') expect(activity.destination).toBeNull();
   });
 
-  // A vulture's long gun shot a raider from beyond its sight. The flee ended as soon as nothing was in sight, and
-  // the raider drove back into range every two turns.
   it('keeps running from a threat out of sight until it has been calm a while', () => {
     const { world, npc } = createScenario('buggy');
     const shooter = addVehicle(world, 'vultures', 'van', ['mg', 'stockEngine'], { x: 190, y: 190 });
@@ -290,7 +279,6 @@ describe('NPC gameplay recovery', () => {
     thinkNpc(world, npc);
     expect(topGoal(npc)).toBe(flee);
 
-    // A hit from the unseen gun starts the calm count again.
     npc.brain!.hurt = 5;
     planNpcOrders(world);
     npc.brain!.hurt = 0;
@@ -303,7 +291,6 @@ describe('NPC gameplay recovery', () => {
     expect(npc.brain!.goals.map((g) => g.kind)).not.toContain('flee');
   });
 
-  // The investigate left under the flee sent the raider back to the truck it ran from as soon as the flee ended.
   it('stops looking for a truck it runs from', () => {
     const { world, npc } = createScenario('scavenger');
     const enemy = addVehicle(world, 'raiders', 'wagon', ['heavyMg', 'mg', 'stockEngine'], { x: 36, y: 30 });
@@ -337,7 +324,6 @@ describe('NPC gameplay recovery', () => {
     expect(kept).toBe(1);
   });
 
-  // A roamer chased a trader for 78 turns at a hit chance under a fifth. Nothing ended a fight that went nowhere.
   describe('a stalled fight', () => {
     const stalled = (worn: number) => {
       const { world, npc } = createScenario('buggy');

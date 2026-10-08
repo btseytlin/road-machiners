@@ -9,7 +9,6 @@ import SHAPES from './truck-shapes.json';
 const FILES = import.meta.glob<string>('/public/models/base_*.glb', { query: '?url&inline', import: 'default' });
 const DATA_URL = 'data:model/gltf-binary;base64,';
 
-// The same FNV-1a over the file bytes as scripts/shape-lib.mjs.
 function fnv1a(bytes: Uint8Array): string {
   let h = 0x811c9dc5;
   for (const b of bytes) h = Math.imul(h ^ b, 0x01000193) >>> 0;
@@ -56,7 +55,6 @@ describe('truck shapes', () => {
   });
 });
 
-// The profile is the highest top across |y| <= 0.6 m at each x, which ignores the hood hole and the engine hatch.
 type Profile = { x: number; top: number }[];
 
 function profileOf(name: keyof typeof SHAPES): Profile {
@@ -72,9 +70,8 @@ function profileOf(name: keyof typeof SHAPES): Profile {
   return columns.filter((c) => c.top > -Infinity).sort((a, b) => b.x - a.x);
 }
 
-const NEAR = 0.05; // m, how far from a level still counts as on it
+const NEAR = 0.05;
 
-// Stations of a nose-first profile: height above ground, and the lengths that the photos give as fractions of L.
 function stationsOf(profile: Profile, ground: number) {
   const nose = profile[0].x;
   const tail = profile[profile.length - 1].x;
@@ -100,13 +97,9 @@ function stationsOf(profile: Profile, ground: number) {
 type Band = [number, number];
 type Reference = { height: Band; hood?: Band; roof: Band; deck?: Band; roofStart?: Band; noseDrop?: Band; tailDrop?: Band };
 
-// Each band is 0.95-1.10 x the real height at the model's length scale, and the rest come from the reference photos.
 const REFERENCE: Record<'lincoln' | 'niva' | 'bukhanka', Reference> = {
-  // 1969 Lincoln Continental Mark III: 5.89 x 2.03 x 1.35 m, long hood, formal roof, long trunk.
   lincoln: { height: [1.56, 1.8], hood: [0.34, 0.42], roof: [0.14, 0.24], deck: [0.22, 0.3] },
-  // Lada Niva 4x4: 3.74 x 1.68 x 1.64 m, short hood, tall flat greenhouse, upright tailgate.
   niva: { height: [1.89, 2.19], hood: [0.22, 0.28], roof: [0.55, 1], tailDrop: [0, 0.1] },
-  // UAZ-452: 4.36 x 1.94 x 2.06 m, a loaf with a level roof and a rounded low nose.
   bukhanka: { height: [2.34, 2.7], roof: [0.75, 1], roofStart: [0, 0.12], noseDrop: [0.15, 9], tailDrop: [0, 0.15] },
 };
 

@@ -1,7 +1,7 @@
 import { partDef } from "../data/parts";
 import { fireBlock, gunOf, hitOdds, roundDamage, type FireBlock } from "../sim/combat";
 import { gaveUp, isKnockedOut } from "../sim/defeat";
-import { findPart, playerVehicle } from "../sim/damage";
+import { findPart, playerVehicle, vehicleById } from "../sim/damage";
 import { vehicleStats, type MountedWeapon } from "../sim/stats";
 import type { Aim, PartInstance, UtilityOrder, Vehicle, World } from "../sim/types";
 import { playerSees } from "../sim/vision";
@@ -96,9 +96,59 @@ function seenNpcJob(w: World, v: Vehicle): JobMark | null {
   return work && { label: workLabel(w, v, work), progress: workProgress(work) };
 }
 
-export function toggleTarget(w: World, weapons: MountedWeapon[], target: Vehicle): World {
+export function aimsBody(w: World, weapons: MountedWeapon[], targetId: string): boolean {
   const orders = playerVehicle(w).weaponOrders;
-  const aimed = weapons.length > 0 && weapons.every((mw) => orders[mw.part.id]?.targetId === target.id);
+  return weapons.length > 0 && weapons.every((mw) => orders[mw.part.id]?.targetId === targetId && orders[mw.part.id].aim === "body");
+}
+
+// Names the chosen guns as the panel numbers them.
+export function gunsLabel(w: World, selected: string | null): string {
+  if (!selected) return "all guns";
+  const i = vehicleStats(w, playerVehicle(w)).weapons.findIndex((mw) => mw.part.id === selected);
+  return i < 0 ? "all guns" : `gun ${i + 1}`;
+}
+
+export type AimState = { guns: string; body: number[]; bodyAimed: boolean; locked: boolean; hasGuns: boolean };
+
+// What the aim line shows for a truck. Locked while a turn plays or the player cannot act.
+export function aimStateOf(w: World, selected: string | null, locked: boolean, targetId: string): AimState {
+  const weapons = weaponsForClick(w, selected);
+  return { guns: gunsLabel(w, selected), body: bodyMarks(w, targetId), bodyAimed: aimsBody(w, weapons, targetId), locked, hasGuns: weapons.length > 0 };
+}
+
+type AimHost = { world: () => World; selected: () => string | null; canAim: () => boolean; apply: (w: World) => void };
+
+// The card's aim controls. Aim orders wait for a turn that is not playing and a player who can act.
+export function aimActions(h: AimHost) {
+  const guns = () => weaponsForClick(h.world(), h.selected());
+  return {
+    aimState: (id: string) => aimStateOf(h.world(), h.selected(), !h.canAim(), id),
+    aimBody: (id: string) => h.canAim() && h.apply(toggleBodyAim(h.world(), guns(), vehicleById(h.world(), id))),
+    aimPart: (id: string, partId: string) => h.canAim() && h.apply(aimAtPart(h.world(), guns(), vehicleById(h.world(), id), partId)),
+  };
+}
+
+// The line above the card's diagram. It holds the Body chip, whose tooltip names the chosen guns. It is missing for a player without guns.
+export function aimLine(state: AimState, onBody: () => void): HTMLElement | null {
+  if (!state.hasGuns) return null;
+  const chip = el(
+    "button",
+    {
+      class: "aim-body",
+      "aria-pressed": String(state.bodyAimed),
+      disabled: state.locked,
+      title: `Body shot with ${state.guns}: rounds hit whatever part they reach. Click again to stop.`,
+      onclick: onBody,
+    },
+    "Body",
+    ...(state.body.length ? [el("span", { class: "condition-aim" }, state.body.join(" "))] : []),
+  );
+  return el("div", { class: "aim-line dim" }, chip);
+}
+
+// The Body chip aims the chosen guns at a vehicle's body. When all of them already do, it clears them. A gun on a part moves to the body.
+export function toggleBodyAim(w: World, weapons: MountedWeapon[], target: Vehicle): World {
+  const aimed = aimsBody(w, weapons, target.id);
   if (w.player.autoFire) w = setAutoFire(w, false);
   for (const mw of weapons)
     w = setWeaponOrder(w, mw.part.id, aimed ? null : { targetId: target.id, aim: "body" });
@@ -110,7 +160,7 @@ export function aimAtPart(w: World, weapons: MountedWeapon[], target: Vehicle, p
   const aimed = weapons.length > 0 && weapons.every((mw) => orders[mw.part.id]?.targetId === target.id && orders[mw.part.id].aim === partId);
   if (w.player.autoFire) w = setAutoFire(w, false);
   for (const mw of weapons)
-    w = setWeaponOrder(w, mw.part.id, { targetId: target.id, aim: aimed ? "body" : partId });
+    w = setWeaponOrder(w, mw.part.id, aimed ? null : { targetId: target.id, aim: partId });
   return w;
 }
 
@@ -121,6 +171,16 @@ export function aimMarks(w: World, targetId: string): Map<string, number[]> {
     const order = orders[mw.part.id];
     if (!order || order.targetId !== targetId || order.aim === "body") return;
     marks.set(order.aim, [...(marks.get(order.aim) ?? []), i + 1]);
+  });
+  return marks;
+}
+
+export function bodyMarks(w: World, targetId: string): number[] {
+  const orders = playerVehicle(w).weaponOrders;
+  const marks: number[] = [];
+  vehicleStats(w, playerVehicle(w)).weapons.forEach((mw, i) => {
+    const order = orders[mw.part.id];
+    if (order?.targetId === targetId && order.aim === "body") marks.push(i + 1);
   });
   return marks;
 }
@@ -397,7 +457,7 @@ export class WeaponPanel {
         class: all ? "on" : "",
         "aria-pressed": String(all),
         disabled: locked,
-        title: "Aim all weapons with the next click [0]",
+        title: "Aim all weapons [0]",
         onclick: () => this.host.runKey("Digit0"),
       },
       "All [0]",
@@ -583,5 +643,48 @@ export class HoverHold {
   watch(panel: EventTarget): void {
     panel.addEventListener("mouseenter", () => this.cancel());
     panel.addEventListener("mouseleave", () => this.now(null));
+  }
+}
+
+// The truck whose inspection card a click pinned. Hover is transient and aim is a weapon order; the pin is only a selection.
+export class InspectPin {
+  private current: string | null = null;
+
+  private seen = false;
+
+  constructor(
+    private readonly onChange: () => void,
+    private readonly visible: (v: Vehicle) => boolean,
+  ) {}
+
+  get id(): string | null {
+    return this.current;
+  }
+
+  // Pins a truck. A click on the pinned truck keeps it, and a click on another truck switches the pin.
+  click(id: string): void {
+    if (id === "") throw new Error("InspectPin.click needs a vehicle id");
+    this.set(id);
+  }
+
+  clear(): void {
+    this.set(null);
+  }
+
+  // Called once per truck in a frame's pass. Only the pinned truck, when still in the world, is tested for sight.
+  note(v: Vehicle, inWorld: boolean): void {
+    if (v.id === this.current && inWorld && this.visible(v)) this.seen = true;
+  }
+
+  // Ends the frame's pass: drops the pin when its truck was not seen.
+  settle(): void {
+    if (this.current !== null && !this.seen) this.set(null);
+    this.seen = false;
+  }
+
+  private set(id: string | null): void {
+    if (id === this.current) return;
+    this.current = id;
+    this.onChange();
   }
 }

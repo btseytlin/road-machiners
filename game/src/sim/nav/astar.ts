@@ -7,7 +7,6 @@ import { count } from '../../perf';
 import type { Blocker } from './buckets';
 import { CELL, COARSE, componentOf, stampBlockers, tasted, type NavLayer, type Taste } from './layer';
 
-// Cells blocked by road and kill wrecks and parked vehicles: stamp[c] === gen. Valid until the next stampOverlay.
 export type Overlay = { stamp: Uint32Array; gen: number };
 
 const overlay: Overlay = { stamp: new Uint32Array(0), gen: 0 };
@@ -24,7 +23,6 @@ export function stampOverlay(layer: NavLayer, blockers: Blocker[], radius: numbe
   return overlay;
 }
 
-// Search scratch, sized to the last grid. seen[c] === gen means cost[c] and from[c] hold this search's values.
 let cost = new Float64Array(0);
 let from = new Int32Array(0);
 let seen = new Uint32Array(0);
@@ -44,9 +42,6 @@ function begin(size: number): number {
   return ++gen;
 }
 
-// Breadth-first search to the closest cell free in both the layer and the overlay.
-// With a component, only cells in that connected component count. With maxRing, only cells at most that many
-// steps away count.
 export function nearestFreeCell(layer: NavLayer, ov: Overlay, c: number, component: number | null = null, maxRing = Infinity): number | null {
   const n = layer.n;
   const g = begin(n * n);
@@ -71,20 +66,16 @@ function isFree(layer: NavLayer, ov: Overlay, c: number): boolean {
   return !layer.blocked[c] && ov.stamp[c] !== ov.gen;
 }
 
-// Steps from cell a to cell b when diagonal steps count as one.
 function ringOf(n: number, a: number, b: number): number {
   return Math.max(Math.abs((a % n) - (b % n)), Math.abs(Math.floor(a / n) - Math.floor(b / n)));
 }
 
-// The 8 neighbour offsets in search order, and each step's length in cells.
 const AROUND_X = [-1, -1, -1, 0, 0, 1, 1, 1];
 const AROUND_Y = [-1, 0, 1, -1, 1, -1, 0, 1];
 const AROUND_STEP = [Math.SQRT2, 1, Math.SQRT2, 1, 1, Math.SQRT2, 1, Math.SQRT2];
-// The last neighbours() result: the cells in around, and their step lengths in aroundStep.
 const around = new Int32Array(8);
 const aroundStep = new Float64Array(8);
 
-// Fills around and aroundStep with the in-grid neighbours of a cell, and returns their count.
 function neighbours(n: number, cell: number): number {
   const x = cell % n;
   const y = Math.floor(cell / n);
@@ -103,7 +94,6 @@ function inGrid(n: number, x: number, y: number): boolean {
   return x >= 0 && y >= 0 && x < n && y < n;
 }
 
-// Binary min-heap in typed arrays; grows by doubling and keeps its memory between searches.
 let heapItems = new Int32Array(1 << 16);
 let heapKeys = new Float64Array(1 << 16);
 let heapSize = 0;
@@ -151,31 +141,21 @@ function heapPop(): number {
   return top;
 }
 
-// Octile distance in cells from (x, y) to (gx, gy).
 function heuristic(x: number, y: number, gx: number, gy: number): number {
   const dx = Math.abs(x - gx);
   const dy = Math.abs(y - gy);
   return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
 }
 
-// Searches whose ends lie farther apart than this many cells first find a coarse corridor. Shorter
-// searches keep the exact full search.
 const LONG_CELLS = 32;
 
-// Cells from start to goal, both included. The start cell may be blocked when a vehicle hugs an
-// obstacle; it is allowed as a start. Long searches stay inside the corridor of a coarse path plus
-// one ring of blocks. Road and kill wrecks and parked vehicles are not in the coarse grid, so when they cut
-// the corridor the full search runs. A taste multiplies step costs in both searches.
 export function findCells(layer: NavLayer, ov: Overlay, start: number, goal: number, taste: Taste | null): Int32Array | null {
   const cells = findCellsToward(layer, ov, start, goal, taste);
   return cells && cells[cells.length - 1] === goal ? cells : null;
 }
 
-// Cells from start to goal, or when kill wrecks or parked vehicles wall the goal off, to the reachable cell
-// closest to it. Null when the goal lies in another static component.
 export function findCellsToward(layer: NavLayer, ov: Overlay, start: number, goal: number, taste: Taste | null): Int32Array | null {
   if (start === goal) return Int32Array.of(start);
-  // The overlay only blocks more cells, so separate static components can never join.
   if (!connected(layer, start, goal)) return null;
   const n = layer.n;
   if (heuristic(start % n, Math.floor(start / n), goal % n, Math.floor(goal / n)) > LONG_CELLS) {
@@ -188,13 +168,11 @@ export function findCellsToward(layer: NavLayer, ov: Overlay, start: number, goa
   return fineSearch(layer, ov, start, goal, false, taste);
 }
 
-// Whether a free goal shares a component with the start.
 function connected(layer: NavLayer, start: number, goal: number): boolean {
   const target = componentOf(layer, goal);
   return target !== 0 && target === startComponent(layer, start);
 }
 
-// The start's connected component, or a free neighbour's for a blocked start. 0 when none is free.
 export function startComponent(layer: NavLayer, start: number): number {
   const own = componentOf(layer, start);
   if (own !== 0) return own;
@@ -212,8 +190,6 @@ export function startComponent(layer: NavLayer, start: number): number {
   return 0;
 }
 
-// Whether the start cell or one of its neighbours is free in both the layer and the overlay, so a search can
-// step out of it.
 export function canStepOut(layer: NavLayer, ov: Overlay, start: number): boolean {
   if (isFree(layer, ov, start)) return true;
   const count = neighbours(layer.n, start);
@@ -221,8 +197,6 @@ export function canStepOut(layer: NavLayer, ov: Overlay, start: number): boolean
   return false;
 }
 
-// Coarse search scratch, sized to the last region count. inCorridor[b] === corridorGen marks the
-// blocks the fine search may enter.
 let coarseCost = new Float64Array(0);
 let coarseFrom = new Int32Array(0);
 let coarseSeen = new Uint32Array(0);
@@ -231,8 +205,6 @@ let coarseGen = 0;
 let inCorridor = new Uint32Array(0);
 let corridorGen = 0;
 
-// A* over coarse regions from the start's region to the goal's. Marks the blocks of the path's
-// regions and one ring of blocks around them. False when no coarse path exists.
 function markCorridor(layer: NavLayer, start: number, goal: number, taste: Taste | null): boolean {
   const { n: bn, region, block, x: rx, y: ry, slow, edgeStart, edges } = layer.coarse;
   const regions = block.length;
@@ -292,7 +264,6 @@ function markCorridor(layer: NavLayer, start: number, goal: number, taste: Taste
   return false;
 }
 
-// The start's region, or for a blocked start the region of a free neighbour in the goal's component.
 function startRegion(layer: NavLayer, start: number, goal: number): number {
   const region = layer.coarse.region;
   if (region[start] !== 0) return region[start];
@@ -310,9 +281,6 @@ function startRegion(layer: NavLayer, start: number, goal: number): number {
   throw new Error(`start cell ${start} has no free neighbour joined to goal ${goal}`);
 }
 
-// Weighted A* over the fine cells. With `corridor` set it enters only blocks the last markCorridor marked.
-// A search that runs out of cells has closed every cell it can reach, and returns the path to the one nearest
-// the goal.
 function fineSearch(layer: NavLayer, ov: Overlay, start: number, goal: number, corridor: boolean, taste: Taste | null): Int32Array {
   const n = layer.n;
   const g = begin(n * n);
@@ -353,7 +321,6 @@ function fineSearch(layer: NavLayer, ov: Overlay, start: number, goal: number, c
   return unwind(nearest);
 }
 
-// Whether the search in generation g may step into a cell: free, not closed, and inside the corridor when one is set.
 function canEnter(layer: NavLayer, ov: Overlay, c: number, g: number, corridor: boolean): boolean {
   if (!isFree(layer, ov, c) || closed[c] === g) return false;
   const n = layer.n;

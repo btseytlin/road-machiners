@@ -3,7 +3,6 @@ import { UNPRICED_WEAPONS } from './weapons';
 import { CLAYMORE, oilSlickLength, UNPRICED_UTILITIES } from './utilities';
 import { MASS_SCALE } from './mass-scale';
 
-
 export type PartKind =
   | "weapon"
   | "engine"
@@ -111,7 +110,6 @@ export type StoreDef = PartBase & {
   holds: "fuel" | "supplies";
   amount: number;
 };
-
 
 export type UtilityEffect =
   | { type: 'sprout'; radius: number; turns: number }

@@ -1,14 +1,13 @@
 {
-  "turn": 900,
-  "vehicles": [
-    {
-      "id": "player",
-      "items": [
-        { "id": "i1", "x": 0, "y": 0, "rot": 0, "kind": "part", "part": { "id": "p1", "defId": "mg", "hp": 20, "wear": 0 } },
-        { "id": "i2", "x": 2, "y": 1, "rot": 1, "kind": "part", "part": { "id": "p2", "defId": "mg", "hp": 20, "wear": 0 } },
-        { "id": "i3", "x": 3, "y": 3, "rot": 0, "kind": "good", "good": "scrap" }
-      ]
-    }
-  ],
-  "removed": []
+  "turn": 2600,
+  "player": {
+    "vehicleId": "v1",
+    "money": 5120,
+    "contacts": [{ "vehicleId": "v2", "sources": ["sound"] }],
+    "clouds": ["dust-v1-3685"],
+    "explored": "AAAA"
+  },
+  "dustClouds": [
+    { "id": "dust-v1-3685", "source": "v1", "pos": { "x": 112.4, "y": 419.4 }, "vel": { "x": 1.7, "y": -0.5 }, "age": 7, "range": 29.4 }
+  ]
 }

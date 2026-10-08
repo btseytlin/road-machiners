@@ -15,7 +15,6 @@ import { deckAt, deckById } from '../../sim/bridge';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import { TEST_MAP } from '../../test/map';
 
-// The model files as base64 data URLs, since tests run without a server.
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
 await loadModels(async (name) => {
   const url = FILES[`/public/models/${name}.glb`];
@@ -24,7 +23,6 @@ await loadModels(async (name) => {
 });
 const { root: sites, movers } = buildSites({ size: 1, heights: [0, 0, 0, 0], types: ['hardpan'] });
 
-// The ship's belly stands at least one wall height over the yard, 16 m.
 const FORTRESS_WALL_TILES = 4;
 const ALL = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 const ABANDONED = ALL.filter((s) => !isFortress(s));
@@ -35,7 +33,6 @@ function measureSite(id: string): Vector3 {
   return new Box3().setFromObject(site).getSize(new Vector3());
 }
 
-// Pieces marked outsideEdge, like Canyon Bridge, lie outside their site on purpose.
 function outsideEdge(o: Object3D): boolean {
   for (let p: Object3D | null = o; p; p = p.parent) if (p.userData.outsideEdge) return true;
   return false;
@@ -131,7 +128,6 @@ describe('landmark scale', () => {
           for (let i = 0; i < pos.count; i++) {
             v.fromBufferAttribute(pos, i).applyMatrix4(at);
             const p = { x: v.x / PHYSICS.metersPerTile, y: v.z / PHYSICS.metersPerTile };
-            // Where rock closes the curtain, a piece may run on into the rock.
             if (!insideCurtain(site, p) && !onFortressRock(site, p)) {
               bad.push(`${o.name || o.geometry.type} at ${(v.x / PHYSICS.metersPerTile - site.pos.x).toFixed(1)},${(v.z / PHYSICS.metersPerTile - site.pos.y).toFixed(1)}`);
               return;
@@ -235,7 +231,6 @@ describe('landmark scale', () => {
     const { node, motion } = own[0];
     const rest = { position: node.position.clone(), quaternion: node.quaternion.clone() };
     const v = new Vector3();
-    // The 6 s stroke is at rest at 0 s and at its ends at 1.5 s and 4.5 s.
     const tilts: number[] = [];
     for (const seconds of [0, 1.5, 4.5]) {
       motion(seconds, node, rest);
@@ -293,12 +288,10 @@ describe('landmark scale', () => {
     expect(own.map((m) => m.node.name)).toEqual(['granary-sacks']);
     const { node, motion } = own[0];
     expect(node.children).toHaveLength(4);
-    // The sacks ride on top of the belt, not under it.
     node.updateWorldMatrix(true, false);
     expect(new Vector3(0, 1, 0).transformDirection(node.matrixWorld).y).toBeGreaterThan(0.7);
     const rest = { position: node.position.clone(), quaternion: node.quaternion.clone() };
     const v = new Vector3();
-    // 4 sacks on a belt about 12 m long ride one 3 m spacing per loop at 0.6 m/s, so a loop is about 5 s.
     const heights: number[] = [];
     for (const seconds of [0, 2.4, 4.9]) {
       motion(seconds, node, rest);
@@ -316,7 +309,6 @@ describe('landmark scale', () => {
       });
       expect(outside.slice(0, 3), `sacks at ${seconds} s`).toEqual([]);
     }
-    // The sacks climb the belt through the loop.
     expect(heights[1]).toBeGreaterThan(heights[0] + 0.5);
     expect(heights[2]).toBeGreaterThan(heights[1] + 0.5);
     motion(0, node, rest);
@@ -358,7 +350,6 @@ describe('landmark scale', () => {
     expect(grab.node.parent).toBe(upper.node);
     const rests = own.map(({ node }) => ({ position: node.position.clone(), quaternion: node.quaternion.clone() }));
     const v = new Vector3();
-    // The 14 s slew is at rest at 0 s and at its ends at 3.5 s and 10.5 s. The 7 s hoist is at its top at both ends.
     const turns: number[] = [];
     const lifts: number[] = [];
     for (const seconds of [0, 3.5, 10.5]) {
@@ -430,7 +421,6 @@ describe('landmark scale', () => {
     const { node, motion } = own[0];
     const rest = { position: node.position.clone(), quaternion: node.quaternion.clone() };
     const v = new Vector3();
-    // The 8 s turn passes a quarter turn every 2 s.
     const turns: number[] = [];
     for (const seconds of [0, 2, 4, 6]) {
       motion(seconds, node, rest);
@@ -459,14 +449,11 @@ describe('landmark scale', () => {
     const group = sites.getObjectByName('landmark-nose')!;
     const gates = fortressGates(nose);
     const south = gates[0].out.y > gates[1].out.y ? gates[0] : gates[1];
-    // The ship's frame in tiles from the center: u along the ship toward its nose, v back from the south gate.
     const uAxis = { x: -south.out.y, y: south.out.x };
     const toFrame = (p: { x: number; y: number }) => ({ u: (p.x - nose.pos.x) * uAxis.x + (p.y - nose.pos.y) * uAxis.y, v: -((p.x - nose.pos.x) * south.out.x + (p.y - nose.pos.y) * south.out.y) });
     const discs = gates.map((g) => ({ ...toFrame(g.face), r: g.width / 2 + GATE_CLEAR }));
-    // The rise and the crag are baked props: a point is under them where their collision boxes stand.
     const rockBoxes = noseRocks(nose).flatMap((p, k) => propBoxes(propObstacle(p, k)));
     const inRise = (p: { x: number; y: number }) => rockBoxes.some((b) => boxDistance(b, p) === 0);
-    // Interior points on a 1 tile grid, a tile in from the curtain's wall.
     const interior: { x: number; y: number; u: number; v: number }[] = [];
     for (let x = Math.floor(nose.pos.x - nose.radius); x <= nose.pos.x + nose.radius; x++) {
       for (let y = Math.floor(nose.pos.y - nose.radius); y <= nose.pos.y + nose.radius; y++) {
@@ -480,7 +467,6 @@ describe('landmark scale', () => {
       group.updateWorldMatrix(true, true);
       group.traverse((o) => {
         if (!(o instanceof Mesh) || o instanceof InstancedMesh) return;
-        // The gate furniture, lamps and guns, stands on the curtain on purpose. Everything Nose's interior adds is named nose-.
         let ours = false;
         for (let p: Object3D | null = o; p !== null; p = p.parent) ours = ours || p.name.startsWith('nose-');
         if (!ours) return;
@@ -519,13 +505,10 @@ describe('landmark scale', () => {
         });
       }
       expect(belly / S, 'the lowest point of ship_nose').toBeGreaterThanOrEqual(FORTRESS_WALL_TILES);
-      // The ship's length along its axis against the curtain's diameter.
       const diameter = 2 * (nose.radius - FORTRESS.inset) * S;
       const length = shipBox.max.x - shipBox.min.x;
       expect(length / diameter).toBeGreaterThanOrEqual(0.7);
       expect(length / diameter).toBeLessThanOrEqual(0.8);
-      // The ship's box, in the frame's meters with +y toward the gate, clears both gate discs.
-      // The open ground at a gate: half its width and 1.5 tiles more.
       for (const d of discs.map((x) => ({ ...x, r: x.r - GATE_CLEAR + 1.5 }))) {
         const gx = d.u * S;
         const gy = -d.v * S;
@@ -539,7 +522,6 @@ describe('landmark scale', () => {
       const covered = interior.filter((p) => inRise(p));
       expect(covered.length / interior.length).toBeGreaterThanOrEqual(0.35);
       expect(covered.length / interior.length).toBeLessThanOrEqual(0.55);
-      // A merged box may reach a little past the rock's front edge.
       for (const p of covered) expect(p.v, `${p.u}, ${p.v}`).toBeGreaterThan(riseFront(p.u) - 0.5);
       expect(Math.max(...propShape('nose_crag').map((b) => b.z1))).toBeGreaterThanOrEqual(1.5 * 22);
     });
@@ -579,7 +561,7 @@ describe('landmark scale', () => {
 
   it('keeps everything a truck could touch inside the edge of an abandoned site', () => {
     const S = PHYSICS.metersPerTile;
-    const reach = 1; // tiles above the ground a truck body reaches
+    const reach = 1;
     const v = new Vector3();
     const m = new Matrix4();
     for (const site of ABANDONED) {

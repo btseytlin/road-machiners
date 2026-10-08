@@ -7,7 +7,6 @@ import { vehicleStats } from './stats';
 import type { Vehicle, World } from './types';
 import { wornDef } from './wear';
 
-
 const SIDE_LETTERS: readonly SideLetter[] = ['F', 'L', 'R', 'B'];
 const LETTER_SIDE = { F: 'front', L: 'left', R: 'right', B: 'rear' } as const;
 

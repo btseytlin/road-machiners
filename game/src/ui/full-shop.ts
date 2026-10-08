@@ -16,7 +16,6 @@ import { FILTER_ICON, STOCK_FILTER_LABEL, STOCK_FILTERS, type StockFilter } from
 
 const KIND_ORDER = STOCK_FILTERS.filter((f): f is Exclude<StockFilter, "all"> => f !== "all");
 
-// Every part a truck can mount, by kind as the filters run, then tier and name.
 function shopParts(): PartDef[] {
   const rank = (d: PartDef) => KIND_ORDER.indexOf(d.kind as Exclude<StockFilter, "all">);
   return Object.values(PARTS)
@@ -24,7 +23,6 @@ function shopParts(): PartDef[] {
     .sort((a, b) => rank(a) - rank(b) || a.tier - b.tier || a.name.localeCompare(b.name));
 }
 
-// A pristine part of the def for its card, never placed in the world.
 function sample(defId: string): PartInstance {
   const part: PartInstance = { id: `fullshop-${defId}`, defId, hp: 0, wear: 0, ...gunFor(defId), ...chargeFor(defId) };
   return { ...part, hp: maxHp(part) };
@@ -93,7 +91,6 @@ export class FullShopScreen {
     });
   }
 
-  // A part that does not fit in the truck reads why, and leaves the truck as it was.
   private take(w: World, defId: string): void {
     try {
       this.host.apply(give(w, defId, 1));

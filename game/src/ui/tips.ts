@@ -1,8 +1,6 @@
 // First-time tips for driving and the horn, and a farewell once the player heads out. A tip shows while its moment lasts, one at a time. It goes away for good
 // once the player closes it or does what it says. Seen tips stay in browser storage across saves, and a new game clears them.
 // A new game first runs the opening tips: reach the opening wreck, search it, loot it, patch the engine and mount the
-// cage. The step comes from saved world facts. While an opening tip waits, no other tip shows or counts as done, so
-// the driving tips start whole after it.
 
 import { isKnockedOut } from "../sim/defeat";
 import { playerVehicle } from "../sim/damage";
@@ -175,7 +173,7 @@ const TIPS: readonly Tip[] = [
   },
   {
     id: "aim",
-    text: "Click an enemy truck, then click one of its parts to aim your guns at it.",
+    text: "Click a truck to inspect it. Pick a weapon first to aim it at the body, or click a part in the card.",
     when: (w) => vehicleStats(w, playerVehicle(w)).weapons.length > 0 && hostileInSight(w),
     done: (w) => Object.values(playerVehicle(w).weaponOrders).some((o) => o.aim !== "body"),
   },

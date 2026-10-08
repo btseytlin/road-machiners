@@ -37,9 +37,11 @@ import FORMAT_2_27 from './save-fixtures/format-2-27.json';
 import FORMAT_2_28 from './save-fixtures/format-2-28.json';
 import FORMAT_2_29 from './save-fixtures/format-2-29.json';
 import FORMAT_2_30 from './save-fixtures/format-2-30.json';
+import FORMAT_2_33 from './save-fixtures/format-2-33.json';
+import FORMAT_2_34 from './save-fixtures/format-2-34.json';
+import SAVE_SHAPE from './save-shape.json';
 import FORMAT_2_31 from './save-fixtures/format-2-31.json';
 import FORMAT_2_32 from './save-fixtures/format-2-32.json';
-import SAVE_SHAPE from './save-shape.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -118,11 +120,13 @@ describe('save migration 1 to 2', () => {
   });
 
   it('puts every item of every truck on a free cell, and every non-core part still mounted', () => {
+    const wide = (item: { kind: string; part?: { defId: string } }) => item.kind === 'part' && item.part?.defId === 'mg';
     for (const v of all) {
       const grid = baseGrid(v.chassisId);
-      v.items.forEach((item, i) => {
-        expect(placementError(grid, v.items.filter((_, j) => j !== i), item, null), `${v.id} ${item.id}`).toBeNull();
-        if (item.kind === 'part' && !['mg', 'rack', 'cannon'].includes(item.part.defId)) expect(isMounted(v.chassisId, item), `${v.id} ${item.id}`).toBe(true);
+      const others = v.items.filter((it) => !wide(it));
+      others.forEach((item, i) => {
+        expect(placementError(grid, others.filter((_, j) => j !== i), item, null), `${v.id} ${item.id}`).toBeNull();
+        if (item.kind === 'part' && !['rack', 'cannon'].includes(item.part.defId)) expect(isMounted(v.chassisId, item), `${v.id} ${item.id}`).toBe(true);
       });
     }
   });
@@ -731,24 +735,66 @@ describe('save migration 30 to 31', () => {
 });
 
 describe('save migration 31 to 32', () => {
-  it('sets every lie-up spot to its driver place and keeps every other field', () => {
-    const next = MIGRATIONS[31](FORMAT_2_31);
-    const [player, resting, patrol] = FORMAT_2_31.vehicles;
-    const gone = FORMAT_2_31.removed[0];
+  const next = MIGRATIONS[31](FORMAT_2_31) as Record<string, unknown> & { vehicles: object[]; player: object; broken: object[] };
 
-    expect(next).toEqual({
-      ...FORMAT_2_31,
-      vehicles: [player, { ...resting, brain: { goals: [resting.brain!.goals[0], { ...resting.brain!.goals[1], destination: { x: 198.5, y: 230.2 } }] } }, patrol],
-      removed: [{ ...gone, brain: { goals: [{ ...gone.brain.goals[0], destination: { x: 10, y: 20 } }] } }],
-    });
+  it('drops trails, the visible tiles, the last turn events and removed vehicles', () => {
+    expect(next.vehicles).toEqual(FORMAT_2_31.vehicles.map(({ trail: _t, ...rest }) => rest));
+    expect('events' in next).toBe(false);
+    expect('removed' in next).toBe(false);
+    const { visible: _v, ...player } = FORMAT_2_31.player;
+    expect(next.player).toEqual(player);
+  });
+
+  it('keeps only the id and turn of a broken prop', () => {
+    expect(next.broken).toEqual([{ id: 'deadTree-1354', turn: 2559 }]);
+  });
+
+  it('keeps dust clouds, contacts and clouds', () => {
+    expect(next.dustClouds).toEqual(FORMAT_2_31.dustClouds);
+    expect(next.turn).toBe(FORMAT_2_31.turn);
   });
 });
 
 describe('save migration 32 to 33', () => {
-  it('keeps every item and its rot, since 0 and 1 keep their footprint', () => {
+  it('drops the contacts and seen clouds and keeps the dust clouds', () => {
     const next = MIGRATIONS[32](FORMAT_2_32);
+    const { contacts: _c, clouds: _s, ...player } = FORMAT_2_32.player;
 
-    expect(next).toEqual(FORMAT_2_32);
-    expect(FORMAT_2_32.vehicles[0].items.map((it) => it.rot)).toEqual([0, 1, 0]);
+    expect(next).toEqual({ ...FORMAT_2_32, player });
+  });
+});
+
+describe('save migration 33 to 34', () => {
+  it('sets every lie-up spot to its driver place and keeps every other field', () => {
+    const next = MIGRATIONS[33](FORMAT_2_33);
+    const [player, resting, patrol] = FORMAT_2_33.vehicles;
+
+    expect(next).toEqual({
+      ...FORMAT_2_33,
+      vehicles: [player, { ...resting, brain: { goals: [resting.brain!.goals[0], { ...resting.brain!.goals[1], destination: { x: 198.5, y: 230.2 } }] } }, patrol],
+    });
+  });
+});
+
+describe('save migration 34 to 35', () => {
+  const next = MIGRATIONS[34](FORMAT_2_34) as { vehicles: { id: string; items: { id: string; rot: number }[] }[]; player: { storage: { id: string }[] } };
+  const itemsOf = (id: string) => next.vehicles.find((v) => v.id === id)!.items;
+
+  it('keeps a machine gun whose second cell is free as it was', () => {
+    expect(itemsOf('player').filter((it) => ['i1', 'i2'].includes(it.id)).map((it) => it.rot)).toEqual([0, 1]);
+  });
+
+  it('turns a machine gun a quarter turn when only that way has room', () => {
+    expect(itemsOf('player').find((it) => it.id === 'i4')!.rot).toBe(1);
+  });
+
+  it('stows the player machine gun with no room either way and drops an npc one', () => {
+    expect(itemsOf('player').some((it) => it.id === 'i5')).toBe(false);
+    expect(next.player.storage.map((p) => p.id)).toEqual(['s1', 'p5']);
+    expect(itemsOf('npc-3').some((it) => it.id === 'i8')).toBe(false);
+  });
+
+  it('leaves every other item alone', () => {
+    expect(itemsOf('player').filter((it) => ['i3', 'i6', 'i7'].includes(it.id))).toEqual(FORMAT_2_34.vehicles[0].items.filter((it) => ['i3', 'i6', 'i7'].includes(it.id)));
   });
 });

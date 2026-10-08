@@ -38,19 +38,16 @@ import { endTurn, newWorld } from './world';
 
 const CAMPS = REGION.locations.filter((l) => l.kind === 'camp');
 
-// The largest chassis any raider template rolls: posts must hold it.
 const RAIDER_RADIUS = Math.max(
   ...Object.values(NPCS).filter((t) => t.traits.includes('raider')).flatMap((t) => t.loadout.chassis.map((c) => chassisDef(c.value).radius)),
 );
 
-// The real map with its fixed props only: no road wrecks, which come and go.
 function mapWorld(): World {
   const w = newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
   w.obstacles = w.obstacles.filter((o) => !isTransientWreck(o));
   return w;
 }
 
-// Every rule of IV3 but sight, checked from the map itself.
 function expectPostRules(w: World, post: Vec, where: string): void {
   const gates = lawmanTowns().flatMap((town) => siteGates(town));
   expect(isRoadTile(w.terrain, post), where).toBe(false);
@@ -62,7 +59,6 @@ function expectPostRules(w: World, post: Vec, where: string): void {
   expect(isFree({ ...w, vehicles: [] }, post, RAIDER_RADIUS, null), where).toBe(true);
 }
 
-// The most a raider can pay for a full tank at the camp pump.
 function fuelBill(w: World, id: string): number {
   return fuelCap(vehicle(w, id)) * ECONOMY.supplyPrice.fuel;
 }
@@ -138,7 +134,6 @@ function raidGoal(post: Vec): NpcActivity {
 
 const scrapjaw = CAMPS.find((c) => c.id === 'scrapjaw') as Site;
 
-// A raider of Scrapjaw on flat ground, ten tiles short of one of its posts, with the player parked far away.
 function raiderNearPost() {
   const w = emptyWorld({ x: 30, y: 30 });
   const post = raiderGrounds(w, scrapjaw)[0];
@@ -154,7 +149,6 @@ function vehicle(w: World, id: string): Vehicle {
   return v;
 }
 
-// A raider of Scrapjaw on flat ground, watching its post, and a trader loaded with cargo worth a raid.
 function watchingRaider(traderGap: number) {
   const { w, post, raiderId } = raiderNearPost();
   const raider = vehicle(w, raiderId);
@@ -286,9 +280,6 @@ describe('the watch', () => {
   });
 });
 
-// ---- Going home with loot.
-
-// Plays whole turns until `done` holds, at most `limit` of them. `each` sees every turn's world.
 function playUntil(start: World, limit: number, done: (w: World) => boolean, each: (w: World) => void = () => {}): World {
   let w = start;
   for (let i = 0; i < limit; i++) {
@@ -312,8 +303,6 @@ function soldCargo(w: World, id: string): boolean {
   return w.events.some((e) => e.t === 'activity' && e.vehicle === id && e.reason === 'sold cargo');
 }
 
-// What the given trucks hold: each good unit and each part by its id. A taken item gets a new grid id, so looting a
-// truck shows as the same holdings moved between the trucks, with nothing new.
 function holdings(w: World, ids: string[]): string[] {
   return ids.flatMap((id) => vehicle(w, id).items.map((item) => (item.kind === 'good' ? `good:${item.good}` : `part:${item.part.id}`))).sort();
 }
@@ -326,19 +315,16 @@ function pileGoods(w: World, good: string): number {
   return w.salvage.filter((s) => s.pile).reduce((sum, s) => sum + (s.goods[good] ?? 0), 0);
 }
 
-// What a camp pays for every good and spare part the raider carries.
 function campValue(raider: Vehicle): number {
   const goods = Object.entries(goodsCount(raider)).reduce((sum, [good, count]) => sum + count * campGoodPrice(good), 0);
   return goods + spareParts(raider).reduce((sum, part) => sum + campPartPrice(part), 0);
 }
 
-// Whether the raider goes after the victim again: a fight or robbery goal on it, or a combat state toward it.
 function huntsAgain(w: World, raiderId: string, victimId: string): boolean {
   const goals = vehicle(w, raiderId).brain!.goals;
   return goals.some((g) => g.targetId === victimId && g.kind !== 'loot') || stateOf(w, 'combat', raiderId, victimId) !== null;
 }
 
-// A raider watching the post nearest its camp, and loaded prey `gap` tiles off, so the drive home stays short.
 function watchingNearCamp(gap: number) {
   const start = watchingRaider(gap);
   const post = nearestOf(raiderGrounds(start.w, scrapjaw), sitePads(scrapjaw)[0]);
@@ -347,7 +333,6 @@ function watchingNearCamp(gap: number) {
   return start;
 }
 
-// The raider dropped its raid in the turn its loot goal ended, rather than going back to the watch.
 function droppedRaidAfterLoot(w: World, id: string): boolean {
   const events = w.events.filter((e) => e.t === 'activity' && e.vehicle === id);
   return events.some((e) => e.t === 'activity' && e.previous === 'loot') && events.some((e) => e.t === 'activity' && e.previous === 'raid' && e.reason === 'chose something new');
@@ -405,7 +390,6 @@ describe('going home with loot', () => {
     expect(goals).toEqual([expect.objectContaining({ kind: 'sell', targetId: scrapjaw.id })]);
     expect(looted).toBe(carried);
     expect(value).toBe(carried * campGoodPrice('electronics'));
-    // The sale is the only income. The camp then sells the raider fuel for its tank, so a little of it goes back.
     const after = getResources(end, vehicle(end, raider.id)).money;
     expect(after).toBeLessThanOrEqual(money + value);
     expect(after).toBeGreaterThan(money + value - fuelBill(end, raider.id));
@@ -456,7 +440,6 @@ describe('going home with loot', () => {
     expect(sale!.holdings).toEqual(before);
     expect(looted).toBeGreaterThan(0);
     expect(goals).toEqual([expect.objectContaining({ kind: 'sell', targetId: scrapjaw.id })]);
-    // The sale is the only income. The camp then sells the raider fuel for its tank, so a little of it goes back.
     const after = getResources(end, vehicle(end, raider.id)).money;
     expect(after).toBeLessThanOrEqual(money + value);
     expect(after).toBeGreaterThan(money + value - fuelBill(end, raider.id));

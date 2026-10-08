@@ -51,7 +51,6 @@ describe('crash contacts', () => {
     if (!ram || !engine) throw new Error('Missing front armor or engine');
     ram.hp = 1;
     const hp = engine.hp;
-    // Slow enough that the bar's armor stops the crash in every lane.
     applyContactCrash(world, vehicle, null, 'rock', 5, { a: { side: 'front', lanes: [1, 2, 3] }, b: null });
     expect(ram.hp).toBe(0);
     expect(engine.hp).toBe(hp);
@@ -105,7 +104,6 @@ describe('ram practice', () => {
 
 
 describe('crash damage multiplier', () => {
-  // Total damage a scout takes from a head-on crash into a rock with the given multiplier.
   function rockCrash(mult: number, impact: number): number {
     const saved = RULES.crashDamage;
     (RULES as { crashDamage: number }).crashDamage = mult;
@@ -120,8 +118,6 @@ describe('crash damage multiplier', () => {
     }
   }
 
-  // Crash energy grows with the square of the impact, so half the multiplier equals the impact over the square root of 2.
-  // Both impacts stay below RULES.hardCrashSpeed.
   it('acts on crash energy like a slower impact', () => {
     const impact = RULES.hardCrashSpeed;
     expect(rockCrash(0.5, impact)).toBe(rockCrash(1, impact / Math.SQRT2));
@@ -137,7 +133,6 @@ describe('crash damage multiplier', () => {
 describe('the rammer perk', () => {
   const geometry = { a: { side: 'front' as const, lanes: [1, 2] }, b: { side: 'left' as const, lanes: [1, 2] } };
 
-  // The player truck and a raider it feuds with, side by side.
   function rammerWorld() {
     const world = emptyWorld();
     const me = world.vehicles[0];

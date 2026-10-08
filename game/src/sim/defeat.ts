@@ -1,7 +1,6 @@
 // A lost fight knocks a driver out, the player or an NPC alike. The truck keeps every item, trucks parked beside
 // it strip it, and nobody is its foe while it lies out. It wakes once the trucks that fought it look away. Health
 // at 0 ends the player's run. A woken NPC retreats home and lies up there, and nobody is its foe until it refits at
-// the end of the lie-up.
 
 import { NPC_BEHAVIOR, NPCS } from "../data/npcs";
 import { chassisDef } from "../data/chassis";
@@ -189,7 +188,6 @@ function advanceNpcKnockout(world: World, v: Vehicle): void {
 function attackerWatches(world: World, v: Vehicle, foes: string[]): boolean {
   return world.vehicles.some((x) => foes.includes(x.id) && canVehicleSee(world, x, v.pos));
 }
-
 
 function advanceRetreat(world: World, v: Vehicle): void {
   const defeat = v.defeat!;

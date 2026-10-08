@@ -44,7 +44,7 @@ import { advanceAid, readyAid } from './aid';
 import type { GridItem, MoveOrder, PartInstance, Rot, UtilityOrder, Vehicle, WeaponOrder, World, WorldSettings, WorldSetup, XpSource } from './types';
 import { defaultSetup, parseSetup, repairSetup } from './settings';
 import { canOverdrive, vehicleStats } from './stats';
-import { playerSees, refreshVision } from './vision';
+import { playerSees, practiceContacts, refreshVision } from './vision';
 import { noteEscape } from './escape';
 import { advanceWeather } from './weather';
 import { advanceContracts, advanceShops, initializeShops, marketStream, shopNear } from './market';
@@ -300,7 +300,7 @@ export function endTurn(
     fadeCraters(w);
     advanceJobs(w);
     startAutoRepair(w);
-    refreshVision(w);
+    practiceContacts(w, refreshVision(w));
     raiseCalls(w);
     assignAutoOrders(w);
     assignUtilityOrders(w);
@@ -335,7 +335,7 @@ export function endTurn(
     advanceNpcKnockouts(w);
     spawnNpcs(w);
     advanceShops(w);
-    refreshVision(w);
+    practiceContacts(w, refreshVision(w));
     noteEscape(w);
     noteHurt(w);
     settleShutdowns(w);
@@ -431,7 +431,6 @@ export function setAutoFire(world: World, on: boolean): World {
 export function hostileToPlayer(world: World, v: Vehicle): boolean {
   return isHostile(world, playerVehicle(world), v);
 }
-
 
 export type CarriedPart = { defId: string; wear: number; hp: number; rebuilt: boolean };
 export type CarriedItem = ({ kind: 'part'; part: CarriedPart } | { kind: 'good'; good: string }) & { x: number; y: number; rot: Rot };

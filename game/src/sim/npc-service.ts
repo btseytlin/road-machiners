@@ -1,7 +1,6 @@
 // NPC service at a site, and the lie-up for fresh gear. Service buys what the driver can pay for. A driver that only
 // fresh gear can make fit then lies up at a site that serves it under a rearm goal. The goal ends early once the
 // driver is fit again, else at its until turn with a fresh loadout from refitAtHome(). The wait is the template's
-// refill time, so fresh gear comes no faster per template than respawn allows.
 
 import { NPC_BEHAVIOR, NPC_UPKEEP, NPCS, SPAWN } from '../data/npcs';
 import { shopDef } from '../data/market';
@@ -20,7 +19,6 @@ import { isStranded, suppliesCap, vehicleStats } from './stats';
 import { isOnRope } from './tow';
 import type { NpcActivity, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
-
 
 export function servingSiteIds(profile: NpcProfile): string[] {
   return profile.bases.length > 0 ? profile.bases : REGION.towns.map((t) => t.id);
@@ -63,7 +61,6 @@ function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
   else if (shopDef(site.id).kind === 'stall') serviceAtStall(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else serviceVehicle(world, vehicle, site.id, NPC_UPKEEP.repairParts);
 }
-
 
 function needsFreshGear(world: World, vehicle: Vehicle): boolean {
   return isDefeated(vehicle) || isStranded(world, vehicle) || (huntsPrey(vehicle) && !fitToHunt(world, vehicle));

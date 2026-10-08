@@ -29,9 +29,6 @@ Never use a drawn or invented render, or a text claim, in place of a real captur
 Write the result under "Visual self-review" in the Conclusion of {{taskFile}}. It lists the views you read, each mismatch you found and fixed, and what remains.
 A task nobody can see, like a rule, a save step or a tool, needs no screenshots. Write under "Visual self-review" in the Conclusion why nothing visible changed, and skip the rest.
 
-When `.factory/issue.md` has a comment under "## Visual review findings", the build exists and the testing agent found these mismatches in its gameplay images.
-Fix those first, then run the self-review above on every view the findings name.
-
 Modeling an asset from a reference image
 Use the `blender-image-to-3d` skill when the work builds or reshapes a game model that a reference image shows.
 Read its SKILL.md, then only the reference files for your asset category.
@@ -64,7 +61,7 @@ The next stage does that.
 This machine is slow. Keep checks focused.
 While you work, run only the tests near your change with `npx vitest run <files>`.
 Prove the feature works with a targeted test. Playtest game behavior with the progression recorder, and use a short Playwright check only for what the screen shows.
-Do not run the full test suite or the playtest. The factory's checks run both after the testing stage.
+Do not run the full test suite or the playtest. The testing stage runs the playtest, and the merge runs the full suite.
 Before you finish, run `npm run typecheck` once.
 Every test you ran must pass, not only the tests for this issue.
 

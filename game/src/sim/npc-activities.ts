@@ -17,7 +17,7 @@ import { bodyStop } from './meeting-stop';
 import {
   tradeOffers, tradeSpend, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolStopsOf, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, npcSenses, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  canStartFight, lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition,
+  canStartFight, lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition, firepower,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -43,7 +43,6 @@ import { chooseOn, comesInSight, sensedAt, senseTracks, trackOf } from './tracks
 import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, steerToStranded, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut } from './defeat';
 import { beginRearm, holdsRearm, liesUp, rearmInvalid, resolveRearm, resolveResupply, serveStranded, servingSiteIds } from './npc-service';
-
 
 export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot', 'repair', 'patch', 'meet', 'retreat', 'rearm', 'follow'];
 
@@ -123,7 +122,6 @@ export function placeBase(w: World, v: Vehicle, goal: NpcActivity): void {
   logChange(w, v, previous, goal.reason);
 }
 
-
 function createActivity(kind: NpcActivity['kind'], targetId: string | null, destination: Vec | null, reason: string): NpcActivity {
   return { kind, targetId, destination, reason, phase: destination ? 'travel' : 'act' };
 }
@@ -143,7 +141,6 @@ function fleeDestination(world: World, vehicle: Vehicle, profile: NpcProfile, th
   const destination = safe[0] ? siteSpot(world, vehicle, safe[0], vehicleStats(world, vehicle).radius + RULES.arriveRadius, 0) : away;
   return { x: clamp(destination.x, 1, world.size - 1), y: clamp(destination.y, 1, world.size - 1) };
 }
-
 
 type ServiceNeed = { reason: string; suppliesOnly: boolean };
 
@@ -309,7 +306,6 @@ export function idleGoal(world: World, vehicle: Vehicle): NpcActivity {
   return IDLE_GOALS[option](world, vehicle);
 }
 
-
 export function finishGoal(world: World, vehicle: Vehicle, reason: string): void {
   const done = popGoal(world, vehicle, reason);
   if (reason === CANNOT_HOLD) noteCannotHold(world, vehicle, done.targetId);
@@ -335,7 +331,7 @@ function fightInvalid(world: World, vehicle: Vehicle, goal: NpcActivity, contact
   const target = world.vehicles.find((v) => v.id === goal.targetId);
   if (!target || !isHostile(world, vehicle, target)) return 'lost the target';
   if (holdsOffRobbery(world, vehicle, target)) return GAVE_UP_ROBBERY;
-  if (vehicleStats(world, vehicle).weapons.length === 0) return 'no gun left to fight with';
+  if (firepower(world, vehicle) <= 0) return 'no gun left to fight with';
   return fightTargetLost(world, vehicle, target, contacts) ? 'lost the target' : null;
 }
 
@@ -477,7 +473,6 @@ function invalidReason(world: World, vehicle: Vehicle, goal: NpcActivity, contac
   if (EXPOSED.includes(goal.kind) && inCombat(world, vehicle)) return 'in combat';
   return watchOver(world, goal) ?? GOAL_CHECKS[goal.kind]?.(world, vehicle, goal, contacts) ?? null;
 }
-
 
 function forget(world: World, vehicle: Vehicle, contacts: Contact[]): void {
   const brain = vehicle.brain!;

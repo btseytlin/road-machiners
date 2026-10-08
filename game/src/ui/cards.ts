@@ -148,7 +148,6 @@ export function createSpeedDial(speed: number, maxSpeed: number): HTMLElement {
   return dial;
 }
 
-
 type Sheet = "items" | "chassis";
 type View = "top" | "diagonal";
 
@@ -377,7 +376,6 @@ function cellClass(c: Cell | null): string {
   if (c === null) return "hole";
   return `c-${c === "." ? "plain" : c}`;
 }
-
 
 export type StatIcon =
   | "damage"

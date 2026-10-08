@@ -15,7 +15,6 @@ const SIZE = REGION.size;
 const O = REGION.obstacles;
 const SITES = [...REGION.towns, ...REGION.locations];
 
-// Every rock and crag off roads, sites, the bridge deck and the map margin, and apart from every other one.
 function expectClear(rocks: BakedProp[]): void {
   const bridge = deckById('canyon-bridge');
   for (const rock of rocks) {
@@ -30,7 +29,6 @@ function expectClear(rocks: BakedProp[]): void {
   }
 }
 
-// A full map draft: a high plateau west of FOOT - FACE, a cliff face falling to x = FOOT, and flat ground east of it.
 const FOOT = 300;
 const FACE = 10;
 const RISE = TERRAIN.drive.maxSlope * 2;
@@ -80,7 +78,6 @@ describe('boulders', () => {
   });
 
   it('keeps every boulder off dirt track tiles, and places every other boulder as without the track', () => {
-    // A dirt track 6 tiles wide across the cliff foot, as a territory's spur crosses open land.
     const marked = cliffDraft();
     for (let y = 200; y < 206; y++) for (let x = FOOT - 20; x < FOOT + 20; x++) marked.built[y * SIZE + x] = BUILT_TRACK;
     const onTrack = (d: MapDraft, rock: BakedProp) => [tileOf(SIZE, rock.pos), ...tilesWithin(SIZE, rock.pos, rock.r)].some((tile) => d.built[tile] === BUILT_TRACK);
@@ -89,14 +86,12 @@ describe('boulders', () => {
     const without = rockLayer(1337, cliffDraft()).props;
 
     expect(withTrack.filter((rock) => onTrack(marked, rock))).toEqual([]);
-    // Boulders the track turned away leave every other draw where it was.
     const away = (rock: BakedProp) => rock.pos.y < 200 - 3 || rock.pos.y > 206 + 3;
     expect(without.filter((rock) => !away(rock)).length).toBeGreaterThan(0);
     expect(withTrack.filter(away)).toEqual(without.filter(away));
   });
 
   it('keeps every boulder off fused glass', () => {
-    // A glass field across the cliff foot, as a territory's glass meets a ridge.
     const marked = cliffDraft();
     for (let y = 200; y < 230; y++) for (let x = FOOT - 20; x < FOOT + 20; x++) marked.built[y * SIZE + x] = BUILT_GLASS;
     const onGlass = (rock: BakedProp) => [tileOf(SIZE, rock.pos), ...tilesWithin(SIZE, rock.pos, rock.r)].some((tile) => marked.built[tile] === BUILT_GLASS);
@@ -116,8 +111,6 @@ describe('boulders', () => {
   });
 });
 
-// A full map draft with one straight ridge along x = RIDGE, its crest `crest` high, its flanks falling
-// at a drivable slope to both sides.
 const RIDGE = 300;
 const FLANK = 0.3;
 
@@ -157,7 +150,6 @@ describe('crags', () => {
   });
 });
 
-// The committed map file, inlined by Vite as base64 data, since the project carries no Node file typings.
 const FILES = import.meta.glob<string>('/public/maps/*.bin', { query: '?url&inline', import: 'default', eager: true });
 const DATA_URL = 'data:application/octet-stream;base64,';
 
@@ -178,7 +170,7 @@ describe('boulders on the baked map', () => {
 
   it('keeps every boulder clear of roads, sites, the bridge, the margin and other rocks', () => {
     expectClear(boulders);
-  }, budget(120_000)); // checks every boulder against every road and site, slow when the suite runs in parallel
+  }, budget(120_000));
 
   it('puts no boulder on or beside a dirt track tile', () => {
     const terrain: Terrain = map.terrain;
@@ -191,5 +183,5 @@ describe('boulders on the baked map', () => {
     const onCliff = boulders.filter((rock) => isCliff(map.terrain, tileAt(map.terrain, rock.pos)));
 
     expect(onCliff).toEqual([]);
-  }, budget(120_000)); // decoding and checking the baked map takes 25s alone and near 40s when the whole suite shares the cores
+  }, budget(120_000));
 });

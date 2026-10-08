@@ -1,7 +1,6 @@
 // Trucks drawn as one base model per chassis, with every grid item's model from the shared kit on its own cells.
 // Items stand on the model's top surface under their projected footprint. A mounted engine stands at the model's engine anchor.
 // Body space: +x is the nose, +z the truck's right, +y up, origin at the collider center. Models share that frame.
-// A gun stands on a post that lifts its head over the cab ahead and over every drawn item and body surface its barrel can sweep.
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';

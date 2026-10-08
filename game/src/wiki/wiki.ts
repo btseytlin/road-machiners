@@ -1,8 +1,6 @@
 // Game wiki pages in docs/wiki/. A page mixes prose with generated blocks between `<!-- wiki:<id> -->` and
 // `<!-- /wiki:<id> -->`. fillPage() rewrites the blocks from code and leaves the prose alone. `npm run wiki` writes
 // the pages and src/wiki/wiki.test.ts fails when a committed page differs from the fresh fill.
-// What each table shows is below the engine: rows read src/data and two read-only lookups, the binds flag in
-// src/sim/states.ts and the models in src/render/partLooks.ts. Nothing in the game imports this file.
 import { CHASSIS } from '../data/chassis';
 import { DETECT } from '../data/detect';
 import { GOODS, ECONOMY } from '../data/goods';

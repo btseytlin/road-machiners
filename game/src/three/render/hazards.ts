@@ -1,36 +1,6 @@
 // The views of the utility effects that lie in the world: smoke clouds, ground fields, flares, harpoon lines and
 // emitter pulses. HazardViews owns them and updates them each frame. Render only: they read the world and never change it.
 // No hazard view draws a ring, disc or band at a hazard's radius (IV23). Each is drawn as the thing it is, built so its
-// visible edge sits near the sim radius. Only the planning-time aim UI marks the ground.
-//
-// Smoke clouds from world.smoke: a dense black plume of puffs in two height layers that fill the circle out to its
-// radius, with a ragged soft edge from each puff's own size and offset. Its center hides the ground and trucks behind
-// it; trucks inside still show through their stencil outlines. A new cloud billows out from its source: the Sprout's
-// truck, or where the mortar's shell lands. A cloud thins in its last turn. Puffs between the camera and the player's
-// truck thin out, so the player always finds its own truck inside a cloud.
-//
-// Ground fields from world.fields: a caltrop field is steel spikes strewn densest along the line its dropper drove and
-// thinning toward the radius. An oil field is a flat, opaque, glossy black blob with a noise-shaped rim and a faint
-// rainbow sheen. Blobs of one spill overlap, so they merge into one streak with no darker overlaps. New spikes fall
-// onto the ground one by one and new oil spreads out from its center. A field that ends sinks or soaks into the ground.
-//
-// Shown: clouds and fields the player sees any part of, and the player's own.
-//
-// Flares from world.flares: a white-hot core in a red glow hanging over its point, and a red point light,
-// drawn while it burns within FLARE.seenRange of the player. It sinks FLARE_LOOK.sink a turn. The truck its launch or its light shows is marked by
-// contacts.ts from the player's contacts.
-//
-// Emitter pulses from the turn's pulse events: a blue-white flash at the emitter and jagged electric arcs to each truck
-// it hit, where the player sees the user, a truck it hit or the player is involved. Trucks with shut-down turns ahead
-// crackle with sparks while they are drawn.
-//
-// Timing (TurnClock, from the playback in game.ts): a hazard made in the turn now playing, absent from the world
-// before it, shows when it happens. Oil and caltrops appear as their dropper's animated spot passes them (fieldShown).
-// Smoke, flares, harpoon lines and pulses start when movement has played, at the volley (volleyShown). There a flare
-// round flies from its cannon on a Flight arc and bursts alight at the top, and a mortar shell flies to where its
-// cloud billows. Both rounds are solid cylinders nose first along the arc.
-// A playback that ends in its volley frame, as a turn with no gunfire does, still gets its volley: the views keep its
-// world before the turn until the next turn. Hazards from earlier turns, and everything after a load, show at once.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
@@ -50,11 +20,8 @@ import type { VehicleView } from './vehicle';
 
 const S = PHYSICS.metersPerTile;
 
-// Where the turn's playback stands. before: the world before the turn. progress: 0..1 of the movement played.
-// moved: movement has played and the volley is on. Null while no turn plays.
 export type TurnClock = { before: World | null; progress: number; moved: boolean };
 
-// Every utility effect view, under one root.
 export class HazardViews {
   private readonly smoke = new SmokeCloudsView();
   private readonly fields = new GroundFieldsView();
@@ -62,14 +29,12 @@ export class HazardViews {
   private readonly lines = new HarpoonLinesView();
   private readonly pulses = new PulseView();
   readonly root = new THREE.Group();
-  private played: { before: World; turn: number } | null = null; // the last playback's world before it, and the turn it led to
+  private played: { before: World; turn: number } | null = null;
 
   constructor() {
     this.root.add(this.smoke.root, this.fields.root, this.flares.root, this.lines.root, this.pulses.root);
   }
 
-  // views: the vehicle views by vehicle id, which flights leave from, harpoon lines run between and sparks crackle on.
-  // camera: the one drawing the scene, for the smoke's cutaway over the player's truck.
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, turnClock: TurnClock | null, camera: THREE.Camera): void {
     const clock = this.clockOf(world, turnClock);
     this.smoke.update(world, terrain, views, nowMs, clock, cutawayOf(world, views, camera));
@@ -80,8 +45,6 @@ export class HazardViews {
     this.pulses.update(world, terrain, views, nowMs, clock);
   }
 
-  // The playback's clock, and after it ends, a clock at its volley for the rest of its turn. A turn with no gunfire
-  // ends its playback in the frame its movement ends, so this is how the views meet that turn's volley.
   private clockOf(world: World, clock: TurnClock | null): TurnClock | null {
     if (clock) {
       this.played = clock.before ? { before: clock.before, turn: world.turn } : null;
@@ -91,25 +54,18 @@ export class HazardViews {
   }
 }
 
-// ---- Reveal timing
-
 const NO_IDS: ReadonlySet<string> = new Set();
 
 type HazardList = 'smoke' | 'fields' | 'flares' | 'lines';
 
-// Whether the hazard with this id was made in the turn now playing: a turn plays and the world before it lacks it.
 function madeThisTurn(clock: TurnClock | null, list: HazardList, id: string): boolean {
   return clock !== null && clock.before !== null && !clock.before[list].some((h) => h.id === id);
 }
 
-// Whether a hazard made at the volley shows yet: once movement has played. One from an earlier turn shows at once.
 export function volleyShown(clock: TurnClock | null, list: HazardList, id: string): boolean {
   return clock === null || clock.moved || !madeThisTurn(clock, list, id);
 }
 
-// Whether a field shows yet. One dropped this turn appears once its dropper's animated spot, sampled from its trail at
-// the playback's progress, is past the field along the trail by half the dropper's length plus the field's radius: it
-// lands just clear of the rear. A dropper gone from the world shows it when movement has played.
 export function fieldShown(world: World, f: GroundField, clock: TurnClock | null): boolean {
   if (clock === null || clock.moved || !madeThisTurn(clock, 'fields', f.id)) return true;
   const dropper = world.vehicles.find((v) => v.id === f.source);
@@ -117,12 +73,10 @@ export function fieldShown(world: World, f: GroundField, clock: TurnClock | null
   return arcAt(dropper.trail, clock.progress) >= arcOf(pathOf(dropper), f.pos) + dropClearance(dropper, f.r);
 }
 
-// The ground the truck drove this turn, from its start to its position.
 function pathOf(v: Vehicle): Vec[] {
   return [...v.trail, v.pos].map((p) => ({ x: p.x, y: p.y }));
 }
 
-// Tiles along the trail at this share of the turn. Trail poses are evenly spaced in time from the start pose.
 function arcAt(trail: readonly Vec[], progress: number): number {
   if (trail.length < 2) return 0;
   const lengths = runningLengths(trail);
@@ -137,7 +91,6 @@ function runningLengths(points: readonly Vec[]): number[] {
   return out;
 }
 
-// Tiles along the path to the point nearest p. Before the path's start it is negative, along the first leg's line.
 function arcOf(path: readonly Vec[], p: Vec): number {
   const near = nearestOnPath(path, p);
   return near ? near.arc : -dist(path[0], p);
@@ -145,7 +98,6 @@ function arcOf(path: readonly Vec[], p: Vec): number {
 
 type PathSpot = { arc: number; dir: Vec; gap: number };
 
-// The spot on the path nearest p, with the path's direction there, or null for a path with no length.
 function nearestOnPath(path: readonly Vec[], p: Vec): PathSpot | null {
   const lengths = runningLengths(path);
   let best: PathSpot | null = null;
@@ -156,7 +108,6 @@ function nearestOnPath(path: readonly Vec[], p: Vec): PathSpot | null {
   return best;
 }
 
-// The nearest spot to p on the leg from a to b. The first leg runs on back past its start.
 function spotOnLeg(a: Vec, b: Vec, p: Vec, first: boolean): PathSpot | null {
   const length = dist(a, b);
   if (length === 0) return null;
@@ -165,10 +116,6 @@ function spotOnLeg(a: Vec, b: Vec, p: Vec, first: boolean): PathSpot | null {
   return { arc: along, dir, gap: dist(p, { x: a.x + dir.x * along, y: a.y + dir.y * along }) };
 }
 
-// ---- Flight: a flare or a mortar shell between its launcher and where it goes
-
-// A body thrown from one point to another over ms, on a parabola `apex` meters above the straight line at mid flight.
-// An apex of a quarter of the rise ends the climb at the top, as a flare's.
 export class Flight {
   constructor(
     private readonly from: V3,
@@ -178,29 +125,24 @@ export class Flight {
     readonly startMs: number,
   ) {}
 
-  // Share of the flight flown at nowMs, 0..1.
   share(nowMs: number): number {
     return Math.min(1, Math.max(0, (nowMs - this.startMs) / this.ms));
   }
 
-  // The point at share t of the flight.
   at(t: number): V3 {
     const lift = 4 * this.apex * t * (1 - t);
     return { x: this.from.x + (this.to.x - this.from.x) * t, y: this.from.y + (this.to.y - this.from.y) * t + lift, z: this.from.z + (this.to.z - this.from.z) * t };
   }
 }
 
-// casing: the body's color. length and radius: the body's size in tiles.
 type FlightLook = { casing: number; length: number; radius: number; trail: number; trailPuffs: number; trailLag: number; trailSize: number; trailOpacity: number };
 
 type Flying = { flight: Flight; head: THREE.Mesh; trail: THREE.Sprite[] };
 
 const UP = new THREE.Vector3(0, 1, 0);
 const HEADING = new THREE.Vector3();
-const FLIGHT_LOOKAHEAD = 0.01; // share of the flight ahead that the round's nose points to
+const FLIGHT_LOOKAHEAD = 0.01;
 
-// The bodies and fading smoke trails of every round in flight. A round is a solid cylinder that points along its arc.
-// It is dropped when it lands.
 class FlightsView {
   readonly root = new THREE.Group();
   private readonly flying: Flying[] = [];
@@ -233,7 +175,6 @@ class FlightsView {
     }
   }
 
-  // The head at t, and each trail puff where the head was a little earlier, fading and spreading with its lag.
   private fly(body: Flying, t: number): void {
     const at = body.flight.at(t);
     const ahead = body.flight.at(t + FLIGHT_LOOKAHEAD);
@@ -257,14 +198,11 @@ class FlightsView {
 
 type UtilityEvent = Extract<GameEvent, { t: 'utility' }>;
 
-// The utility event that launched a round of this effect from source at pos this turn, if any.
 function launchOf(world: World, effect: 'mortar' | 'flare', source: string, pos: Vec): UtilityEvent | null {
   const launched = (e: GameEvent): e is UtilityEvent => e.t === 'utility' && e.effect === effect && e.vehicle === source;
   return world.events.filter(launched).find((e) => e.point !== null && e.point.x === pos.x && e.point.y === pos.y) ?? null;
 }
 
-// Where a round leaves: the launcher's part on the drawn truck. A launcher the player does not see, or no longer
-// carrying the part, starts it at its last contact point, else at the target point.
 function launchPoint(world: World, views: ReadonlyMap<string, VehicleView>, e: UtilityEvent, target: Vec): V3 {
   const view = views.get(e.vehicle);
   const launcher = world.vehicles.find((v) => v.id === e.vehicle);
@@ -273,33 +211,27 @@ function launchPoint(world: World, views: ReadonlyMap<string, VehicleView>, e: U
   return groundPoint(world.terrain, contact ? contact.center : target);
 }
 
-// ---- Smoke clouds
-
-const SMOKE_ORDER = 905; // above the fog (900) and dust (904), below contact markers
+const SMOKE_ORDER = 905;
 const SMOKE_LOOK = {
   basePuffs: 16,
-  puffsPerArea: 2.2, // sprites per square tile of cloud, on top of basePuffs
-  size: { min: 3, max: 4 }, // tiles across a puff
-  opacity: { min: 0.8, max: 0.9 }, // per puff
-  inset: 1.3, // tiles in from the radius the puff centers spread to, about a puff's soft half width
-  ragged: 0.6, // tiles each puff's center is pushed in or out, so the edge is ragged
-  low: { share: 0.6, from: 0.35, to: 0.9 }, // the ground layer: share of puffs, height range in tiles
-  high: { from: 1.3, to: 2.3, spread: 0.8 }, // the upper layer: height range in tiles, share of the low layer's spread
-  billowMs: 1500, // a new cloud's time to billow out from its source
-  lastTurn: 0.55, // opacity share in the cloud's last turn, so a thinning cloud reads as ending
-  wobble: 0.35, // tiles each puff wanders
+  puffsPerArea: 2.2,
+  size: { min: 3, max: 4 },
+  opacity: { min: 0.8, max: 0.9 },
+  inset: 1.3,
+  ragged: 0.6,
+  low: { share: 0.6, from: 0.35, to: 0.9 },
+  high: { from: 1.3, to: 2.3, spread: 0.8 },
+  billowMs: 1500,
+  lastTurn: 0.55,
+  wobble: 0.35,
   wobbleSeconds: 5,
-  // Over the player's truck: a puff is thinnest while its center lies within `inner` of its half width of the truck on
-  // screen, whole once it is `clear` tiles past its half width, and keeps `floor` of its opacity at its thinnest.
   cutaway: { inner: 0.9, clear: 0.6, floor: 0.04 },
 };
-// The mortar's shell: a dark round with a gray smoke trail on a low arc.
-export const SHELL = { flightMs: 900, apex: 3 }; // apex: tiles above the straight line at mid flight
+export const SHELL = { flightMs: 900, apex: 3 };
 const SHELL_LOOK: FlightLook = { casing: PAL.shell.casing, length: 0.05, radius: 0.015, trail: PAL.shell.trail, trailPuffs: 6, trailLag: 0.05, trailSize: 0.5, trailOpacity: 0.55 };
-const RIM_SAMPLES = 8; // rim points checked for sight, besides the center
+const RIM_SAMPLES = 8;
 
 type Puff = { sprite: THREE.Sprite; home: THREE.Vector3; size: number; opacity: number; seed: number };
-// bornMs: when the billow starts. from: where it starts, in meters from the cloud's center.
 type CloudView = { group: THREE.Group; puffs: Puff[]; bornMs: number; from: THREE.Vector3 };
 
 class SmokeCloudsView {
@@ -338,7 +270,6 @@ class SmokeCloudsView {
     return view;
   }
 
-  // A new cloud billows: a mortar's from where its shell lands, once it lands, and a Sprout's from its truck at once.
   private billow(world: World, views: ReadonlyMap<string, VehicleView>, c: SmokeCloud, fresh: boolean, nowMs: number): Pick<CloudView, 'bornMs' | 'from'> {
     const center = groundPoint(world.terrain, c.pos);
     if (!fresh) return { bornMs: -Infinity, from: new THREE.Vector3() };
@@ -353,7 +284,6 @@ class SmokeCloudsView {
   }
 }
 
-// The cloud's puffs, laid out once from its id. The low layer fills the circle; the high layer piles over its middle.
 export function puffsOf(c: SmokeCloud, texture: THREE.Texture): Puff[] {
   const count = Math.round(SMOKE_LOOK.basePuffs + SMOKE_LOOK.puffsPerArea * c.r * c.r);
   const seed = hashId(c.id);
@@ -361,7 +291,6 @@ export function puffsOf(c: SmokeCloud, texture: THREE.Texture): Puff[] {
     const k = seed + i * 17;
     const low = hash2(k, 19) < SMOKE_LOOK.low.share;
     const reach = Math.max(0, c.r - SMOKE_LOOK.inset) * (low ? 1 : SMOKE_LOOK.high.spread);
-    // Square root spreads the puffs evenly over the disk instead of crowding the center.
     const r = Math.max(0, Math.sqrt(hash2(k, 3)) * reach + (hash2(k, 23) - 0.5) * 2 * SMOKE_LOOK.ragged);
     const a = hash2(k, 5) * 2 * Math.PI;
     const band = low ? SMOKE_LOOK.low : SMOKE_LOOK.high;
@@ -374,7 +303,6 @@ export function puffsOf(c: SmokeCloud, texture: THREE.Texture): Puff[] {
   });
 }
 
-// The player sees an area hazard when it sees its center or a point of its rim. The player's own always shows.
 function isShown(world: World, c: { source: string; pos: Vec; r: number }): boolean {
   if (c.source === world.player.vehicleId) return true;
   const rim: Vec[] = Array.from({ length: RIM_SAMPLES }, (_, i) => {
@@ -384,7 +312,6 @@ function isShown(world: World, c: { source: string; pos: Vec; r: number }): bool
   return [c.pos, ...rim].some((p) => p.x >= 0 && p.y >= 0 && p.x < world.size && p.y < world.size && playerSees(world, p));
 }
 
-// Where the player's truck is drawn and which way the camera looks, so puffs over the truck can thin out.
 export type Cutaway = { at: THREE.Vector3; look: THREE.Vector3 };
 
 function cutawayOf(world: World, views: ReadonlyMap<string, VehicleView>, camera: THREE.Camera): Cutaway | null {
@@ -395,20 +322,17 @@ function cutawayOf(world: World, views: ReadonlyMap<string, VehicleView>, camera
 const CUT_OFF = new THREE.Vector3();
 const PUFF_AT = new THREE.Vector3();
 
-// Opacity share of a puff at p of this half width: low where it lies between the camera and the player's truck,
-// rising to whole once it clears the truck on screen by SMOKE_LOOK.cutaway.clear.
 export function cutShare(cut: Cutaway | null, p: THREE.Vector3, half: number): number {
   if (!cut) return 1;
   const off = CUT_OFF.copy(p).sub(cut.at);
   const along = off.dot(cut.look);
-  if (along > 0) return 1; // behind the truck as seen
+  if (along > 0) return 1;
   const across = off.addScaledVector(cut.look, -along).length();
   const { inner, clear, floor } = SMOKE_LOOK.cutaway;
   const t = Math.min(1, Math.max(0, (across - half * inner) / (half * (1 - inner) + clear * S)));
   return floor + (1 - floor) * t * t * (3 - 2 * t);
 }
 
-// Each puff swells out from the billow's start to its spot, and wanders a little.
 function place(terrain: Terrain, view: CloudView, c: SmokeCloud, nowMs: number, cutaway: Cutaway | null): void {
   view.group.position.y = heightAt(terrain, c.pos.x, c.pos.y) * S;
   const grown = easeOut(Math.min(1, Math.max(0, (nowMs - view.bornMs) / SMOKE_LOOK.billowMs)));
@@ -433,7 +357,6 @@ function easeIn(t: number): number {
 }
 
 function createSmokeTexture(): THREE.CanvasTexture {
-  // A full core with a long soft falloff, so overlapping puffs make a solid screen with a soft edge.
   return radialTexture([[0, 1], [0.45, 0.85], [0.75, 0.4], [1, 0]]);
 }
 
@@ -449,49 +372,37 @@ function radialTexture(stops: [number, number][]): THREE.CanvasTexture {
   return new THREE.CanvasTexture(canvas);
 }
 
-// A stable seed from an id, so a hazard's scatter keeps its look from frame to frame.
 function hashId(id: string): number {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (Math.imul(h, 31) + id.charCodeAt(i)) | 0;
   return Math.abs(h);
 }
 
-// ---- Ground fields
-
-const FIELD_ORDER = 903; // above the fog (900), below dust (904) and smoke (905)
+const FIELD_ORDER = 903;
 const FIELD_LOOK = {
-  spikesPerArea: 6, // spikes per square tile of field, on top of baseSpikes
+  spikesPerArea: 6,
   baseSpikes: 8,
-  spike: { radius: 0.1, height: 0.2 }, // tiles
-  across: 0.45, // share of the radius most spikes lie within across the drop line
-  // A fresh field's spikes drop from `height` tiles over `ms`, each starting up to `stagger` ms after the first, so
-  // they rain down one by one. A gone field's spikes sink `depth` spike heights into the ground over sinkMs, with the
-  // same stagger.
+  spike: { radius: 0.1, height: 0.2 },
+  across: 0.45,
   fall: { height: 0.8, ms: 300, stagger: 250 },
   sink: { ms: 1200, depth: 1.5 },
 };
 const OIL_LOOK = {
-  rim: { min: 0.6, max: 1.25 }, // the blob's rim, in shares of the field's radius
+  rim: { min: 0.6, max: 1.25 },
   lobes: { min: 2, max: 3 },
-  noise: 0.6, // share of the rim's shape from noise; the rest from the lobes
-  angles: 32, // rim points
-  rings: [0.5, 1], // shares of the rim the draped rings lie at, so the blob follows the ground
-  lift: 0.06, // meters above the ground
+  noise: 0.6,
+  angles: 32,
+  rings: [0.5, 1],
+  lift: 0.06,
   roughness: 0.25,
-  // The rainbow highlight: on `share` of the blobs, so a streak has no repeating pattern. Size and offset in shares of
-  // the radius.
   sheen: { share: 0.35, size: 0.45, shift: 0.3, opacity: 0.14 },
-  wobble: 2.4, // noise cycles around the rim
-  spreadMs: 700, // a fresh blob spreads from its center to its rim over this
-  soakMs: 1400, // a gone blob shrinks into the ground over this
+  wobble: 2.4,
+  spreadMs: 700,
+  soakMs: 1400,
 };
 
-// A spike's height at rest, and its delay from the field's start, so spikes land and sink one by one.
 type Spike = { mesh: THREE.Mesh; restY: number; delayMs: number };
-// The sheen's plane and the direction it sits off the blob's center.
 type Sheen = { mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshBasicMaterial>; angle: number };
-// bornMs: when a field dropped this turn first showed, or -Infinity for one shown whole at once. goneMs: when it left
-// the world or the player's sight. spread: the blob's drawn share of its rim.
 type FieldView = {
   f: GroundField;
   root: THREE.Group;
@@ -508,14 +419,11 @@ class GroundFieldsView {
   private readonly views = new Map<string, FieldView>();
   private readonly spikeGeometry = new THREE.ConeGeometry(FIELD_LOOK.spike.radius * S, FIELD_LOOK.spike.height * S, 4);
   private readonly spikeMaterial = new THREE.MeshLambertMaterial({ color: PAL.caltrops.spike, flatShading: true });
-  // One opaque material for every blob, so overlapping blobs draw as one slick.
   private readonly oilMaterial = new THREE.MeshStandardMaterial({
     color: PAL.oil.slick, roughness: OIL_LOOK.roughness, metalness: 0.1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
   });
   private readonly sheenTexture = createSheenTexture();
 
-  // A field that leaves the world or sight stays drawn while it fades into the ground. One that shows again before it
-  // is gone comes back whole.
   update(world: World, terrain: Terrain, clock: TurnClock | null, nowMs: number): void {
     const shown = new Map(world.fields.filter((f) => fieldShown(world, f, clock) && isShown(world, f)).map((f) => [f.id, f]));
     for (const [id, view] of this.views) markGone(view, shown.has(id), nowMs);
@@ -523,7 +431,6 @@ class GroundFieldsView {
     for (const [id, view] of this.views) if (!this.pose(terrain, view, nowMs)) this.drop(id, view);
   }
 
-  // Returns whether the field is still drawn.
   private pose(terrain: Terrain, view: FieldView, nowMs: number): boolean {
     return view.slick ? this.poseBlob(terrain, view, nowMs) : poseSpikes(view, nowMs);
   }
@@ -536,7 +443,6 @@ class GroundFieldsView {
     this.views.delete(id);
   }
 
-  // A field sits still, so its look is built once. One dropped this turn lands as it shows.
   private makeView(world: World, terrain: Terrain, f: GroundField, clock: TurnClock | null, nowMs: number): FieldView {
     const root = new THREE.Group();
     const view: FieldView = { f, root, bornMs: madeThisTurn(clock, 'fields', f.id) ? nowMs : -Infinity, goneMs: null, spikes: [], slick: null, sheen: null, spread: -1 };
@@ -546,8 +452,6 @@ class GroundFieldsView {
     return view;
   }
 
-  // A flat glossy blob with a noise-shaped rim draped on the ground, and on some blobs a faint sheen spot. poseBlob
-  // gives it its shape.
   private blob(view: FieldView): void {
     const seed = hashId(view.f.id);
     view.slick = new THREE.Mesh(new THREE.BufferGeometry(), this.oilMaterial);
@@ -555,7 +459,6 @@ class GroundFieldsView {
     view.root.add(view.slick);
     const { share, opacity } = OIL_LOOK.sheen;
     if (hash2(seed, 29) >= share) return;
-    // Pushed toward the camera past every blob's own offset, so a neighbor blob never clips it.
     const material = new THREE.MeshBasicMaterial({
       map: this.sheenTexture, transparent: true, opacity, depthWrite: false, blending: THREE.AdditiveBlending, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
     });
@@ -567,8 +470,6 @@ class GroundFieldsView {
     view.sheen = { mesh, angle };
   }
 
-  // A fresh blob spreads out from its center; a gone one shrinks back into it. The shape is redrawn only while it
-  // changes. Returns whether the blob is still drawn.
   private poseBlob(terrain: Terrain, view: FieldView, nowMs: number): boolean {
     const spread = view.goneMs === null
       ? easeOut(Math.min(1, (nowMs - view.bornMs) / OIL_LOOK.spreadMs))
@@ -590,8 +491,6 @@ class GroundFieldsView {
     return view.goneMs === null || nowMs - view.goneMs < OIL_LOOK.soakMs;
   }
 
-  // Spikes strewn densest along the drop line and thinning toward the radius, each at its own lean on the ground.
-  // With no known drop line they spread evenly over the disk.
   private scatter(terrain: Terrain, f: GroundField, line: Vec | null, root: THREE.Group): Spike[] {
     const seed = hashId(f.id);
     const count = Math.round(FIELD_LOOK.baseSpikes + FIELD_LOOK.spikesPerArea * Math.PI * f.r * f.r);
@@ -608,14 +507,11 @@ class GroundFieldsView {
   }
 }
 
-// A field keeps the moment it first went from view, and loses it when it shows again.
 function markGone(view: FieldView, shown: boolean, nowMs: number): void {
   if (shown) view.goneMs = null;
   else view.goneMs ??= nowMs;
 }
 
-// A fresh field's spikes fall onto the ground one by one; a gone field's spikes sink into it one by one. Returns
-// whether any spike is still drawn.
 function poseSpikes(view: FieldView, nowMs: number): boolean {
   const { fall, sink, spike } = FIELD_LOOK;
   let drawn = false;
@@ -629,7 +525,6 @@ function poseSpikes(view: FieldView, nowMs: number): boolean {
   return drawn;
 }
 
-// The direction of the dropper's path at a caltrop field dropped this turn, or null when not known.
 function dropLine(world: World, f: GroundField, clock: TurnClock | null): Vec | null {
   if (!madeThisTurn(clock, 'fields', f.id)) return null;
   const dropper = world.vehicles.find((v) => v.id === f.source);
@@ -643,7 +538,6 @@ function onDisk(f: GroundField, k: number): Vec {
   return { x: f.pos.x + Math.cos(a) * r, y: f.pos.y + Math.sin(a) * r };
 }
 
-// Even along the line, bunched toward it across, and pulled inside the radius.
 function onLine(f: GroundField, dir: Vec, k: number): Vec {
   const along = (hash2(k, 3) - 0.5) * 2 * f.r;
   const across = ((hash2(k, 5) + hash2(k, 17) + hash2(k, 19) - 1.5) / 1.5) * f.r * FIELD_LOOK.across * 2;
@@ -651,8 +545,6 @@ function onLine(f: GroundField, dir: Vec, k: number): Vec {
   return { x: f.pos.x + (dir.x * along - dir.y * across) * shrink, y: f.pos.y + (dir.y * along + dir.x * across) * shrink };
 }
 
-// A fan of rim points around the center, through draped rings so the blob lies on the ground. Normals point up, so
-// every blob shades alike and overlaps do not show. spread: the share of the rim drawn, as the blob spreads or soaks in.
 function blobGeometry(terrain: Terrain, f: GroundField, seed: number, spread: number): THREE.BufferGeometry {
   const rim = Array.from({ length: OIL_LOOK.angles }, (_, i) => rimRadius(f.r, seed, (2 * Math.PI * i) / OIL_LOOK.angles) * spread);
   const positions = [...drape(terrain, f, 0, 0)];
@@ -663,7 +555,6 @@ function blobGeometry(terrain: Terrain, f: GroundField, seed: number, spread: nu
   return geometry;
 }
 
-// The rim's radius at angle a: 2-3 lobes blended with noise around the rim, seeded by the field.
 function rimRadius(r: number, seed: number, a: number): number {
   const { lobes, noise, rim } = OIL_LOOK;
   const count = lobes.min + Math.floor(hash2(seed, 41) * (lobes.max - lobes.min + 1));
@@ -678,7 +569,6 @@ function drape(terrain: Terrain, f: GroundField, a: number, r: number): number[]
   return [x * S, markHeightAt(terrain, f.pos, x, y) * S + OIL_LOOK.lift, y * S];
 }
 
-// Vertex 0 is the center, then each ring of `angles` points. Triangles face up.
 function blobIndices(angles: number, rings: number): number[] {
   const idx: number[] = [];
   const ring = (j: number, i: number) => 1 + j * angles + (i % angles);
@@ -694,7 +584,6 @@ function createSheenTexture(): THREE.CanvasTexture {
   canvas.width = canvas.height = 64;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Could not create the oil sheen texture');
-  // Thin rainbow bands fading out to the edge, as light on a film of oil.
   const g = ctx.createRadialGradient(32, 32, 4, 32, 32, 32);
   ['rgba(120,90,200,0)', 'rgba(120,90,200,0.8)', 'rgba(60,170,190,0.8)', 'rgba(200,190,80,0.7)', 'rgba(210,90,120,0.5)', 'rgba(210,90,120,0)'].forEach((c, i, all) => g.addColorStop(i / (all.length - 1), c));
   ctx.fillStyle = g;
@@ -702,24 +591,21 @@ function createSheenTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(canvas);
 }
 
-// ---- Flares
-
-const FLARE_ORDER = 906; // above smoke (905), below contact markers
+const FLARE_ORDER = 906;
 export const FLARE_LOOK = {
-  height: 6, // tiles above the ground the flare hangs
-  sink: 1, // tiles the hanging flare sinks a turn
-  flightMs: 1600, // from the cannon to the top
-  igniteMs: 300, // the light's ramp once lit
-  core: 0.5, // tiles across the white-hot core sprite
-  halo: { size: 3, opacity: 0.75 }, // the red glow around the core: tiles across, opacity at full brightness
-  burst: { size: 4, ms: 300 }, // the shell bursting at the top: the glow starts this many tiles across and shrinks to its size over ms
-  light: { intensity: 60, reach: 1.6, decay: 1 }, // reach: the light's range as a share of the flare's radius
-  flicker: { share: 0.25, speed: 6 }, // the glow and the light waver by this share, this many noise cycles a second
-  lastTurn: 0.55, // brightness share in the flare's last turn, so a dying flare reads as ending
+  height: 6,
+  sink: 1,
+  flightMs: 1600,
+  igniteMs: 300,
+  core: 0.5,
+  halo: { size: 3, opacity: 0.75 },
+  burst: { size: 4, ms: 300 },
+  light: { intensity: 60, reach: 1.6, decay: 1 },
+  flicker: { share: 0.25, speed: 6 },
+  lastTurn: 0.55,
 };
 const FLARE_FLIGHT: FlightLook = { casing: PAL.flare.casing, length: 0.09, radius: 0.024, trail: PAL.flare.trail, trailPuffs: 10, trailLag: 0.04, trailSize: 0.55, trailOpacity: 0.5 };
 
-// igniteMs: when it bursts and lights at the top. bornTurn: the world's turn when first drawn, for its sinking.
 type FlareView = { core: THREE.Sprite; halo: THREE.Sprite; igniteMs: number; bornTurn: number };
 
 class FlaresView {
@@ -727,8 +613,6 @@ class FlaresView {
   private readonly views = new Map<string, FlareView>();
   private readonly texture = createGlowTexture();
   private readonly flights = new FlightsView(FLARE_FLIGHT);
-  // A change in light count recompiles every material, so the pool only grows, to the most flares shown at once.
-  // Unused lights stay dark.
   private readonly lights: THREE.PointLight[] = [];
 
   constructor() {
@@ -754,8 +638,6 @@ class FlaresView {
     this.root.add(light);
   }
 
-  // A new flare flies from its cannon as a round, bursts at its top and lights there. One from an earlier turn burns
-  // at once.
   private makeView(world: World, views: ReadonlyMap<string, VehicleView>, f: Flare, fresh: boolean, nowMs: number): FlareView {
     const core = this.glowSprite(PAL.flare.core, FLARE_ORDER + 1);
     core.scale.setScalar(FLARE_LOOK.core * S);
@@ -787,8 +669,6 @@ class FlaresView {
     this.views.delete(id);
   }
 
-  // Lit, the core, its halo and its light waver together, ramp up at ignition, dim in the flare's last turn and sink a
-  // little each turn from the turn after its launch. At ignition the halo bursts wide and bright and shrinks back.
   private place(terrain: Terrain, view: FlareView, light: THREE.PointLight, f: Flare, at: { nowMs: number; turn: number; progress: number }): void {
     const lit = Math.min(1, Math.max(0, (at.nowMs - view.igniteMs) / FLARE_LOOK.igniteMs));
     const burst = lit > 0 ? 1 - Math.min(1, (at.nowMs - view.igniteMs) / FLARE_LOOK.burst.ms) : 0;
@@ -808,43 +688,38 @@ class FlaresView {
   }
 }
 
-// A flare shows within FLARE.seenRange of the player, and the player's own always does.
 function flareShown(world: World, f: Flare): boolean {
   return f.source === world.player.vehicleId || dist(playerVehicle(world).pos, f.pos) <= FLARE.seenRange;
 }
 
 function createGlowTexture(): THREE.CanvasTexture {
-  // A hot white core that fades out through the sprite's color.
   return radialTexture([[0, 1], [0.25, 0.8], [1, 0]]);
 }
 
-// ---- Emitter pulses
-
-const PULSE_ORDER = 906; // above smoke (905), below contact markers
+const PULSE_ORDER = 906;
 const PULSE_LOOK = {
-  ms: 600, // the flash and the arcs, from the volley to gone
-  flash: 3.5, // tiles across the flash at its start
-  rise: 1.2, // meters above a truck's center the flash and the arcs' ends sit
-  segments: 9, // points along an arc
-  jitter: 0.9, // meters an arc's inner points jump off the straight line, every frame
-  strands: 2, // lines per arc, each jittered on its own, so it reads thicker than one pixel
-  sparks: 10, // per shut-down truck
-  sparkSize: 0.7, // meters across a spark; a sprite, since points on the orthographic camera size in pixels
-  sparkReach: 1.4, // meters from the truck's center a spark jumps to
-  sparkHeight: 2.2, // meters above the truck's center the sparks spread up to, so most clear the body and show
+  ms: 600,
+  flash: 3.5,
+  rise: 1.2,
+  segments: 9,
+  jitter: 0.9,
+  strands: 2,
+  sparks: 10,
+  sparkSize: 0.7,
+  sparkReach: 1.4,
+  sparkHeight: 2.2,
 };
 
 type PulseEvent = Extract<GameEvent, { t: 'pulse' }>;
-// A pulse's look while it plays: the flash at the user, and the strands of each arc to a hit truck.
 type Strand = THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
 type Zap = { e: PulseEvent; flash: THREE.Sprite; arcs: { to: string; strands: Strand[] }[]; startMs: number };
 
 class PulseView {
   readonly root = new THREE.Group();
   private readonly zaps: Zap[] = [];
-  private played = new Set<string>(); // pulse events of the shown turn whose zap has started
+  private played = new Set<string>();
   private turn = -1;
-  private readonly sparks = new Map<string, THREE.Group>(); // by vehicle id
+  private readonly sparks = new Map<string, THREE.Group>();
   private readonly glowTexture = createGlowTexture();
   private readonly sparkMaterial = new THREE.SpriteMaterial({ map: this.glowTexture, color: PAL.pulse.spark, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
 
@@ -874,7 +749,6 @@ class PulseView {
     return { e, flash, arcs, startMs: nowMs };
   }
 
-  // The flash swells and fades; each arc flickers to a new jagged line every frame and fades with it.
   private play(zap: Zap, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number): void {
     const t = (nowMs - zap.startMs) / PULSE_LOOK.ms;
     if (t >= 1) return this.end(zap);
@@ -899,7 +773,6 @@ class PulseView {
     this.zaps.splice(this.zaps.indexOf(zap), 1);
   }
 
-  // Sparks jump to new spots around each drawn truck with shut-down turns ahead, every frame.
   private crackle(world: World, views: ReadonlyMap<string, VehicleView>): void {
     const shut = shutDownViews(world, views);
     for (const [id, group] of this.sparks) {
@@ -934,7 +807,6 @@ function makeStrand(): Strand {
   return line;
 }
 
-// The pulse's user as drawn, else where it pulsed.
 function userPoint(e: PulseEvent, terrain: Terrain, views: ReadonlyMap<string, VehicleView>): V3 {
   const view = views.get(e.vehicle);
   return view ? view.center() : groundPoint(terrain, e.pos);
@@ -944,8 +816,6 @@ function zapPoint(p: V3): V3 {
   return { x: p.x, y: p.y + PULSE_LOOK.rise, z: p.z };
 }
 
-// Lays a strand from a to b with its inner points knocked off the line at random. Render only, so Math.random() is
-// fine: an arc needs no repeatable pattern. A hit truck that is not drawn gets no arc.
 function jag(strand: Strand, a: V3, b: V3 | null, opacity: number): void {
   strand.visible = b !== null;
   if (!b) return;
@@ -960,7 +830,6 @@ function jag(strand: Strand, a: V3, b: V3 | null, opacity: number): void {
   strand.material.opacity = opacity;
 }
 
-// The drawn trucks with shut-down turns ahead, by vehicle id.
 function shutDownViews(world: World, views: ReadonlyMap<string, VehicleView>): Map<string, VehicleView> {
   const shut = new Map<string, VehicleView>();
   for (const v of world.vehicles) {
@@ -970,7 +839,6 @@ function shutDownViews(world: World, views: ReadonlyMap<string, VehicleView>): M
   return shut;
 }
 
-// The player sees a pulse it fired or that hit it, or one whose user or a hit truck it sees.
 function pulseShown(world: World, e: PulseEvent): boolean {
   const me = world.player.vehicleId;
   if (e.vehicle === me || e.hit.includes(me) || playerSees(world, e.pos)) return true;
@@ -980,7 +848,6 @@ function pulseShown(world: World, e: PulseEvent): boolean {
   });
 }
 
-// Scatters the sparks around a truck's center. Render only, so Math.random() is fine: sparks need no repeatable pattern.
 function jump(group: THREE.Group, at: { x: number; y: number; z: number }): void {
   for (const spark of group.children) {
     const a = Math.random() * 2 * Math.PI;

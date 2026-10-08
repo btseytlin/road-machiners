@@ -19,7 +19,7 @@ beforeEach(() => {
   labels = [];
   bases = [];
   earlier = [];
-  writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } } });
+  writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } } });
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
@@ -153,16 +153,6 @@ describe('design stage', () => {
     await runStage(ctx, 7);
     expect(calls).toContain('push w1 factory/issue-7');
     expect(calls.at(-1)).toBe('move 7 Implementation');
-  });
-
-  it('drops a patch queued before the card came to Design, so Implementation runs the new plan', async () => {
-    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), patching: { 7: 'abc1234', 8: 'def5678' } });
-    const ctx = fakeCtx((run) => {
-      mkdirSync(`${run.clone}/${run.dir}/.factory-tasks`, { recursive: true });
-      writeFileSync(`${run.clone}/${run.dir}/.factory-tasks/issue-7.md`, PLAN);
-    });
-    await runStage(ctx, 7);
-    expect(readState(`${home}/state.json`).patching).toEqual({ 8: 'def5678' });
   });
 
   it('writes the issue input as untrusted text', async () => {

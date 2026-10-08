@@ -1,8 +1,9 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { afterEach, expect, it } from 'vitest';
 import * as live from './live';
-import { recordObservation } from '../observability';
+import { recordObservation, reportScheduler } from '../observability';
 import { EMPTY_STATE } from '../state';
+import type { Card } from '../types';
 const homes: string[] = [];
 function createHome() { mkdirSync('tmp', { recursive: true }); const home = mkdtempSync('tmp/live-'); homes.push(home); return home; }
 afterEach(() => { for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true }); });
@@ -47,4 +48,12 @@ it('does not invent idle manager activity when no reports exist', () => {
   const result = live.readLiveOperations(createHome(), structuredClone(EMPTY_STATE), new Date(), 10000, 60000);
   expect(result.manager).toBeNull();
   expect(result.scheduler).toBeNull();
+});
+it('keeps the scheduler snapshot fresh when a card sits in Merging', () => {
+  const home = createHome();
+  const card = (issue: number, column: Card['column']): Card => ({ itemId: `I${issue}`, issue, column, labels: [] });
+  reportScheduler(home, 'ready', new Date('2026-10-04T12:00:00Z'), null, [card(1, 'Testing')]);
+  reportScheduler(home, 'ready', new Date('2026-10-04T12:05:00Z'), null, [card(1, 'Testing'), card(163, 'Merging')]);
+  const result = live.readLiveOperations(home, EMPTY_STATE, new Date('2026-10-04T12:05:30Z'), 10000, 60000);
+  expect(result.scheduler).toMatchObject({ at: '2026-10-04T12:05:00.000Z', freshness: 'ok', counts: { Testing: 1, Merging: 1 } });
 });

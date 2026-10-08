@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { hitOdds } from "../sim/combat";
 import { playerVehicle } from "../sim/damage";
 import { mountedParts } from "../sim/grid";
@@ -11,7 +11,7 @@ import type { UiHost } from "./host";
 import { makePart } from "../sim/factory";
 import { mountPart } from "../sim/inventory";
 import { wornReload } from "../sim/utility";
-import { HoverHold, UtilityRow, WeaponPanel, aimAtPart, aimMarks, aimName, ammoCells, canForceReload, getWeaponReadout, shortStatus, weaponGrid, BLOCK_SHORT, toggleTarget, utilityKey, utilitySlots, utilityStatus, vehicleMarks } from "./weapons";
+import { HoverHold, UtilityRow, WeaponPanel, aimAtPart, aimMarks, aimsBody, bodyMarks, InspectPin, aimLine, type AimState, gunsLabel, aimName, ammoCells, canForceReload, getWeaponReadout, toggleBodyAim, vehicleMarks, shortStatus, weaponGrid, BLOCK_SHORT, utilityKey, utilitySlots, utilityStatus } from "./weapons";
 
 function createDuel() {
   const world = emptyWorld();
@@ -144,21 +144,46 @@ describe("weapon readout at current positions", () => {
   });
 });
 
-describe("targeting by click", () => {
+describe("aiming the body", () => {
   it("aims at the clicked vehicle, and a second click clears the order", () => {
     const { world, target, gun } = createDuel();
     world.vehicles[0].weaponOrders = {};
-    const aimed = toggleTarget(world, [gun], target);
+    const aimed = toggleBodyAim(world, [gun], target);
     expect(aimed.vehicles[0].weaponOrders[gun.part.id]).toEqual({ targetId: target.id, aim: "body" });
-    expect(toggleTarget(aimed, [gun], target).vehicles[0].weaponOrders).toEqual({});
+    expect(toggleBodyAim(aimed, [gun], target).vehicles[0].weaponOrders).toEqual({});
   });
 
   it("moves an order from another vehicle instead of clearing it", () => {
     const { world, gun } = createDuel();
     const other = addVehicle(world, "raiders", "buggy", ["mg", "stockEngine"], { x: 30, y: 33 });
     refreshVision(world);
-    const moved = toggleTarget(world, [gun], other);
+    const moved = toggleBodyAim(world, [gun], other);
     expect(moved.vehicles[0].weaponOrders[gun.part.id].targetId).toBe(other.id);
+  });
+});
+
+describe("aim query", () => {
+  it("tells whether the chosen guns have a body shot at a target, and names them", () => {
+    const { world, target, gun } = createDuel();
+    world.vehicles[0].weaponOrders = {};
+    expect(aimsBody(world, [gun], target.id)).toBe(false);
+    expect(aimsBody(world, [], target.id)).toBe(false);
+    const aimed = toggleBodyAim(world, [gun], target);
+    expect(aimsBody(aimed, [gun], target.id)).toBe(true);
+    expect(bodyMarks(aimed, target.id)).toEqual([1]);
+    expect(gunsLabel(world, null)).toBe("all guns");
+    expect(gunsLabel(world, gun.part.id)).toBe("gun 1");
+  });
+
+  it("moves a part aim to the body, and a second toggle clears it", () => {
+    const { world, target, gun } = createDuel();
+    world.vehicles[0].weaponOrders = {};
+    const wheel = mountedParts(target).find((p) => p.defId === "wheel")!;
+    const onPart = aimAtPart(world, [gun], target, wheel.id);
+    expect(bodyMarks(onPart, target.id)).toEqual([]);
+    const body = toggleBodyAim(onPart, [gun], target);
+    expect(playerVehicle(body).weaponOrders[gun.part.id]).toEqual({ targetId: target.id, aim: "body" });
+    expect(toggleBodyAim(body, [gun], target).vehicles[0].weaponOrders).toEqual({});
   });
 });
 
@@ -270,11 +295,11 @@ describe("aiming at parts", () => {
     expect(aimMarks(next, target.id).get(wheel.id)).toEqual([1]);
   });
 
-  it("returns to a body shot when the guns already aim at the part", () => {
+  it("stops the guns when they already aim at the part", () => {
     const { world, target, gun } = createDuel();
     const wheel = wheelOf(target);
     const again = aimAtPart(aimAtPart(world, [gun], target, wheel.id), [gun], target, wheel.id);
-    expect(playerVehicle(again).weaponOrders[gun.part.id]).toEqual({ targetId: target.id, aim: "body" });
+    expect(playerVehicle(again).weaponOrders[gun.part.id]).toBeUndefined();
     expect(aimMarks(again, target.id).size).toBe(0);
   });
 
@@ -488,6 +513,91 @@ describe("weapon panel keys and the turn button", () => {
     expect(host.pressTurn).toHaveBeenCalledTimes(1);
     win.fire("pointercancel");
     expect(host.releaseTurn).toHaveBeenCalledTimes(1);
+  });
+});
+
+function make() {
+  const calls = { n: 0 };
+  const sight = { seen: true };
+  const pass = (pin: InspectPin, id: string, inWorld = true) => {
+    pin.note({ id } as Vehicle, inWorld);
+    pin.settle();
+  };
+  return { calls, sight, pass, pin: new InspectPin(() => calls.n++, () => sight.seen) };
+}
+
+describe("InspectPin", () => {
+  it("pins and switches, and a second click keeps the pin", () => {
+    const { pin, calls } = make();
+    pin.click("a");
+    expect(pin.id).toBe("a");
+    pin.click("b");
+    expect(pin.id).toBe("b");
+    pin.click("b");
+    expect(pin.id).toBe("b");
+    expect(calls.n).toBe(2);
+  });
+
+  it("clears, and tells only about real changes", () => {
+    const { pin, calls, pass } = make();
+    pin.clear();
+    pass(pin, "a");
+    expect(calls.n).toBe(0);
+    pin.click("a");
+    pass(pin, "a");
+    expect(pin.id).toBe("a");
+    pin.clear();
+    expect(pin.id).toBeNull();
+    expect(calls.n).toBe(2);
+  });
+
+  it("drops the pin when its truck is out of sight, gone from the world or not in the pass", () => {
+    const { pin, sight, pass } = make();
+    pin.click("a");
+    sight.seen = false;
+    pass(pin, "a");
+    expect(pin.id).toBeNull();
+    sight.seen = true;
+    pin.click("a");
+    pass(pin, "a", false);
+    expect(pin.id).toBeNull();
+    pin.click("a");
+    pass(pin, "b");
+    expect(pin.id).toBeNull();
+  });
+
+  it("rejects an empty id", () => {
+    expect(() => make().pin.click("")).toThrow();
+  });
+});
+
+describe("aim line", () => {
+  beforeEach(() => vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t) }));
+  afterEach(() => vi.unstubAllGlobals());
+
+  const line = (state: Partial<AimState>, onBody = vi.fn()) =>
+    aimLine({ guns: "all guns", body: [], bodyAimed: false, locked: false, hasGuns: true, ...state }, onBody) as unknown as FakeNode;
+  const chip = (n: FakeNode) => n.find((c) => c.tag === "button")!;
+
+  it("holds only the Body chip, with no instruction text", () => {
+    expect(line({}).text()).toBe("Body");
+    expect(chip(line({ guns: "gun 2" })).attrs.get("title")).toContain("gun 2");
+  });
+
+  it("shows the numbers of the guns with a body shot", () => {
+    expect(line({ body: [1, 2] }).text()).toBe("Body1 2");
+  });
+
+  it("presses the chip while aimed, disables it while locked and calls back on click", () => {
+    const onBody = vi.fn();
+    expect(chip(line({ bodyAimed: true })).attrs.get("aria-pressed")).toBe("true");
+    expect(chip(line({ locked: true })).attrs.get("disabled")).toBe("");
+    chip(line({}, onBody)).fire("click");
+    expect(onBody).toHaveBeenCalledOnce();
+  });
+
+  it("is missing without guns", () => {
+    expect(aimLine({ guns: "all guns", body: [], bodyAimed: false, locked: false, hasGuns: false }, vi.fn())).toBeNull();
   });
 });
 

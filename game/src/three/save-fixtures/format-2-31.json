@@ -1,32 +1,47 @@
 {
-  "turn": 900,
+  "turn": 2600,
   "vehicles": [
-    { "id": "player", "pos": { "x": 100, "y": 100 }, "brain": null },
     {
-      "id": "npc-3",
-      "pos": { "x": 198.5, "y": 230.2 },
-      "brain": {
-        "goals": [
-          { "kind": "raid", "targetId": null, "destination": { "x": 40, "y": 40 }, "phase": "travel", "reason": "look for prey at known hunting grounds" },
-          { "kind": "rearm", "targetId": "kiln", "destination": { "x": 198, "y": 228 }, "phase": "act", "reason": "lie up for fresh gear", "until": 1400 }
-        ]
-      }
+      "id": "v1",
+      "chassisId": "buggy",
+      "speed": 3.2,
+      "trail": [
+        { "x": 10, "y": 20, "heading": 0 },
+        { "x": 11, "y": 20, "heading": 0 }
+      ]
     },
     {
-      "id": "npc-4",
-      "pos": { "x": 60, "y": 70 },
-      "brain": {
-        "goals": [{ "kind": "patrol", "targetId": null, "destination": { "x": 66, "y": 76 }, "phase": "travel", "reason": "patrol the roads near camp" }]
-      }
+      "id": "v2",
+      "chassisId": "hauler",
+      "speed": 0,
+      "trail": []
     }
   ],
   "removed": [
     {
-      "id": "npc-9",
-      "pos": { "x": 10, "y": 20 },
-      "brain": {
-        "goals": [{ "kind": "rearm", "targetId": "bowl", "destination": { "x": 15, "y": 25 }, "phase": "act", "reason": "lie up for fresh gear", "until": 1200 }]
-      }
+      "id": "gone",
+      "chassisId": "buggy",
+      "trail": [{ "x": 1, "y": 2, "heading": 0 }]
     }
-  ]
+  ],
+  "events": [
+    { "t": "arrived", "vehicle": "v1" }
+  ],
+  "broken": [
+    {
+      "obstacle": { "id": "deadTree-1354", "pos": { "x": 103.18, "y": 318.67 }, "r": 0.35, "kind": "landmark", "look": "deadTree", "yaw": 6.0 },
+      "turn": 2559
+    }
+  ],
+  "dustClouds": [
+    { "id": "dust-v1-3685", "source": "v1", "pos": { "x": 112.4, "y": 419.4 }, "vel": { "x": 1.7, "y": -0.5 }, "age": 7, "range": 29.4 }
+  ],
+  "player": {
+    "vehicleId": "v1",
+    "money": 5120,
+    "visible": [251489, 251490, 251491],
+    "contacts": [{ "vehicleId": "v2" }],
+    "clouds": ["dust-v1-3685"],
+    "explored": "AAAA"
+  }
 }

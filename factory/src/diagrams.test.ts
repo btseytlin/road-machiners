@@ -6,7 +6,6 @@ import { describe, expect, it } from 'vitest';
 const DIR = join(import.meta.dirname, '..', 'docs', 'diagrams');
 const sources = readdirSync(DIR).filter((file) => file.endsWith('.dot'));
 
-// The docs show the SVGs, so a .dot change without `npm run diagrams` would leave the spec showing the old process.
 describe('process diagrams', () => {
   it('has diagrams to check', () => {
     expect(sources.length).toBeGreaterThan(0);

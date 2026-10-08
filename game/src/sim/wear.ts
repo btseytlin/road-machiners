@@ -1,9 +1,6 @@
 // Wear and part condition. Parts lose HP with distance driven, speed and rough ground, and rarely break down.
 // The distance driven comes from each vehicle's trail. One rule for the player and NPCs. The player's driving also
 // practices from the rough ground it crosses.
-// This file is the only place that writes part HP. A part gains one wear step each time it drops from above
-// 0 HP to 0 HP. Each step lowers its max HP and its job stat. A part past the last wear step is junk,
-// and no repair rebuilds it from 0 HP. Only the Rebuild perk's garage work brings it back, once per part.
 
 import { ECONOMY } from '../data/goods';
 import { partDef, type PartDef } from '../data/parts';
@@ -102,7 +99,6 @@ function practiceRoughGround(world: World): void {
   }
   if (tiles > 0) practice(world, 'roughTiles', tiles, weighted / tiles, regionOf(playerVehicle(world).pos));
 }
-
 
 export function maxHp(part: PartInstance): number {
   return Math.round(partDef(part.defId).hp * worse(part.wear));

@@ -1,7 +1,6 @@
 // Combat harness: plays fights through the real turn pipeline and Rapier physics on flat open ground. Two sides fight,
 // and each truck names its driver and its gear apart, so a run can hold the driver and vary the gear to tune gear, or
 // hold the gear and vary the driver to tune behavior. It measures hit rates, damage and outcomes, so a balance change
-// can be judged before it ships. The game never imports this module.
 
 import { CHASSIS } from '../data/chassis';
 import { DECISIONS, GEAR_LEVEL_IDS, NPC_BEHAVIOR, NPCS, TRAITS, type GearLevel } from '../data/npcs';

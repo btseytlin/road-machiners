@@ -6,7 +6,6 @@ import type { PartInstance, Vehicle, World } from './types';
 import { dist } from './vec';
 import { wornDef } from './wear';
 
-
 const LETTER_SIDE: Record<string, Side> = { F: 'front', B: 'rear', L: 'left', R: 'right' };
 
 export const THREATS: Round[] = threatRounds(Object.values(PARTS).filter((d): d is WeaponDef => d.kind === 'weapon'), 3);

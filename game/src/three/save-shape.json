@@ -1,10 +1,9 @@
 {
- "format": "2.33",
+ "format": "2.35",
  "shape": {
   "broken": [],
   "craters": [],
   "dustClouds": [],
-  "events": [],
   "fields": [],
   "flares": [],
   "lines": [],
@@ -32,8 +31,6 @@
    "autoRepair": "boolean",
    "beacon": "boolean",
    "call": "null",
-   "clouds": [],
-   "contacts": [],
    "contracts": [],
    "costBasis": {
     "scrap": "number"
@@ -70,9 +67,6 @@
    "talked": {},
    "townPatched": "boolean",
    "vehicleId": "string",
-   "visible": [
-    "number"
-   ],
    "xp": "number",
    "xpBySource": {
     "aid": "number",
@@ -104,7 +98,6 @@
     "toughness": "number"
    }
   },
-  "removed": [],
   "rngState": "number",
   "salvage": [
    {
@@ -1302,7 +1295,6 @@
     "resources": "null",
     "speed": "number",
     "stormExposure": {},
-    "trail": [],
     "utilityOrders": {},
     "weaponOrders": {}
    },
@@ -1391,7 +1383,6 @@
     },
     "speed": "number",
     "stormExposure": {},
-    "trail": [],
     "utilityOrders": {},
     "weaponOrders": {}
    },
@@ -1491,7 +1482,6 @@
     },
     "speed": "number",
     "stormExposure": {},
-    "trail": [],
     "utilityOrders": {},
     "weaponOrders": {}
    }

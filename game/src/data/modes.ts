@@ -10,8 +10,6 @@ export const GAME_MODES: Record<GameModeId, GameMode> = {
   roaming: { name: 'Roaming', description: 'The open wasteland. Drive, trade, scavenge and fight as you like.' },
 };
 
-// Every setting runs 50% to 200% in 25% steps. Below 50% a fight could drag on without end and a truck could hardly
-// run dry; at 200% fuel use the starting tank still covers the Bowl to Nose road trip.
 export type WorldSettingDef = { name: string; description: string; default: number; min: number; max: number; step: number };
 
 export const WORLD_SETTINGS: Record<keyof WorldSettings, WorldSettingDef> = {
