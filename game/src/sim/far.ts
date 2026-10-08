@@ -7,12 +7,14 @@ import { chassisDef } from '../data/chassis';
 import { RULES } from '../data/rules';
 import { inLiveRange, isHeadless } from './fidelity';
 import { boxSegmentDistance, propBoxes, propReach } from './mapgen';
+import { keepsOffRoads } from './off-road';
 import { route } from './path';
 import { propSlotsAlong } from './prop-index';
 import { breakProp } from './salvage';
 import { burnFuel, getResources } from './resources';
 import { fuelCap, vehicleStats, type VehicleStats } from './stats';
 import { parkedVehicles, throughSpeed } from './steering';
+import { fieldBlockers } from './hazards';
 import { getHitchedTowIds, isOnRope, ropeClientOf } from './tow';
 import type { Blocker } from './nav/buckets';
 import type { MoveOrder, Obstacle, Pose, Vehicle, World } from './types';
@@ -66,10 +68,8 @@ export function advanceFar(w: World, v: Vehicle): void {
 
   const s = fuelLimited(w, v, full, v.speed, order);
   const next = order.kind === 'through' ? throughSpeed(s, v.speed, dist(v.pos, order.dest), order.pace) : Math.min(s.maxSpeed, v.speed + s.accel);
-  const stored = keptFarRoute(v);
-  const onRope = getHitchedTowIds(w);
-  // A new route steers around parked vehicles, like the physics driver's, and around slower ones it could reach.
-  const points = stored && stored.dest.x === order.dest.x && stored.dest.y === order.dest.y ? stored.points : route(w, v.pos, order.dest, full.radius, farBlockers(w, v, s, onRope), v);
+  const offRoad = keepsOffRoads(w, v);
+  const points = farPoints(w, v, order.dest, offRoad, full, s);
 
   const planned = follow(v.pos, points, (v.speed + next) / 2);
   const block = firstContact(w, v, planned.path, full.radius);
@@ -88,11 +88,21 @@ export function advanceFar(w: World, v: Vehicle): void {
   burnFuel(w, v, walk.moved);
   breakCrossed(w, v, walk.path, full.radius);
   // A blocked truck drops its route, so next turn it plans one around the vehicles now parked.
-  keepFarRoute(v, done || block ? undefined : { dest: { ...order.dest }, points: walk.ahead });
+  keepFarRoute(v, done || block ? undefined : { dest: { ...order.dest }, points: walk.ahead, offRoad });
   if (done) {
     w.events.push({ t: 'arrived', vehicle: v.id });
     v.order = null;
   }
+}
+
+// The kept route toward dest, or a new one. A new route steers around parked vehicles, like the physics driver's, and
+// around slower ones it could reach. A kept route planned on or off roads is dropped once the driver's style has changed.
+function farPoints(w: World, v: Vehicle, dest: Vec, offRoad: boolean, full: VehicleStats, s: VehicleStats): Vec[] {
+  const onRope = getHitchedTowIds(w);
+  const stored = keptFarRoute(v);
+  if (stored && stored.dest.x === dest.x && stored.dest.y === dest.y && keptOffRoad(stored) === offRoad) return stored.points;
+  // A new route steers around parked vehicles and seen ground fields, like the physics driver's, and around slower ones it could reach.
+  return route(w, v.pos, dest, full.radius, [...farBlockers(w, v, s, onRope), ...fieldBlockers(w, v)], v);
 }
 
 // The trucks a new far route steers around: parked ones, and moving ones slower than this truck's top speed within
@@ -111,11 +121,17 @@ function radiusOf(v: Vehicle): number {
 // A truck without a brain has nowhere to store its route, so in a game it plans every turn. The recorder's player is
 // such a truck, and keeps its route here instead: the world is cloned each turn, so the route waits beside it, with
 // the spot it ended on. A truck moved from that spot by anything else plans anew.
-type FarRoute = { dest: Vec; points: Vec[] };
+type FarRoute = { dest: Vec; points: Vec[]; offRoad: boolean };
 const playerRoutes = new Map<string, { route: FarRoute; at: Vec }>();
 
 export function clearFarRoutes(): void {
   playerRoutes.clear();
+}
+
+// Whether a kept route was planned off roads. Every saved route has the flag since its save step.
+function keptOffRoad(stored: FarRoute): boolean {
+  if (typeof stored.offRoad !== 'boolean') throw new Error('A far route has no offRoad flag');
+  return stored.offRoad;
 }
 
 function keptFarRoute(v: Vehicle): FarRoute | undefined {

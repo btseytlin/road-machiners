@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { startKit } from '../data/start';
 import { newWorld, update } from '../sim/world';
+import { playerVehicle } from '../sim/damage';
+import { mountedParts } from '../sim/grid';
+import { inOverdrive } from '../sim/stats';
 import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
 import { canStowPart, moveItem, storePart, stowPart, stowSpot, takeFromStorage } from '../sim/inventory';
 import { buyStockPart } from '../sim/economy';
@@ -74,12 +77,23 @@ describe('local game save', () => {
     expect(loaded?.vehicles[0].weaponOrders.w1).toEqual({ targetId: foe.id, aim: 'body' });
   });
 
-  it('keeps a held bounty across a reload, and a knockout after it finishes the bounty once', () => {
+  it('loads a save with overdrive on and a worn engine as not overdriving, and clears the flag on the next update', () => {
+    const storage = makeStorage();
+    const world = emptyWorld();
+    world.player.overdrive = true;
+    mountedParts(world.vehicles[0], 'engine')[0].hp = 5;
+    writeSave(storage, 'auto', world, 1000);
+    const loaded = loadWorld(storage, 'auto', TEST_MAP)!;
+    expect(inOverdrive(loaded, playerVehicle(loaded))).toBe(false);
+    expect(update(loaded, () => {}).player.overdrive).toBe(false);
+  });
+
+  it('keeps a held bounty across a reload, and a knockout after it fulfils the bounty once', () => {
     const storage = makeStorage();
     const world = emptyWorld();
     const raider = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 }, Math.PI);
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
-    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1 };
+    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1, fulfilled: false };
     world.player.contracts = [bounty];
     writeSave(storage, 'auto', world, 1000);
     const loaded = loadWorld(storage, 'auto', TEST_MAP);
@@ -89,10 +103,10 @@ describe('local game save', () => {
       d.events = [{ t: 'npcKnockout', vehicle: raider.id, by: d.player.vehicleId }];
       advanceContracts(d);
     });
-    expect(after.events.filter((e) => e.t === 'contract')).toEqual([{ t: 'contract', contract: bounty, outcome: 'done' }]);
-    expect(after.player.money).toBe(loaded.player.money + 100);
+    expect(after.events.filter((e) => e.t === 'contract')).toEqual([{ t: 'contract', contract: { ...bounty, fulfilled: true }, outcome: 'fulfilled' }]);
+    expect(after.player.money).toBe(loaded.player.money);
     writeSave(storage, 'auto', after, 1000);
-    expect(loadWorld(storage, 'auto', TEST_MAP)?.player.contracts).toEqual([]);
+    expect(loadWorld(storage, 'auto', TEST_MAP)?.player.contracts).toEqual([{ ...bounty, fulfilled: true }]);
   });
 
   it('resumes a pending refit after loading without losing progress', () => {
@@ -317,7 +331,7 @@ describe('local game save', () => {
     const world = newWorld(1337, startKit('standard'), TEST_MAP);
     const npc = world.vehicles.find((v) => v.brain);
     if (!npc?.brain) throw new Error('The start world needs an NPC');
-    npc.brain.farRoute = { dest: { x: 300, y: 200 }, points: [{ x: 290, y: 205 }, { x: 300, y: 200 }] };
+    npc.brain.farRoute = { dest: { x: 300, y: 200 }, points: [{ x: 290, y: 205 }, { x: 300, y: 200 }], offRoad: false };
     saveWorld(storage, { ...world, turn: 21 }, 20, 1000, () => {});
     expect(JSON.parse(storage.getItem('roam.save')!).world).not.toHaveProperty('terrain');
     const loaded = loadWorld(storage, 'auto', TEST_MAP)!;

@@ -125,6 +125,13 @@ describe('scatterPlacements', () => {
     }
   });
 
+  it('puts no stones, scrub or cacti on fused glass, where only spires stand', () => {
+    const types = t.types.map(() => 'glass' as const);
+    expect(scatterPlacements({ ...t, types }, []).flatMap(all).length).toBe(0);
+    expect(t.types.some((type) => type === 'glass')).toBe(true);
+    for (const p of placed) expect(typeAt(at(p))).not.toBe('glass');
+  });
+
   it('places the same scatter on every load', () => {
     const again = scatterPlacements(t, world.obstacles).flatMap(all);
     expect(again.map((p) => p.matrix.elements)).toEqual(placed.map((p) => p.matrix.elements));

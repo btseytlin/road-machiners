@@ -8,7 +8,7 @@ it('pins both comparison refs and fetches only public issue data through read ca
   const head = 'a'.repeat(40);
   const base = 'b'.repeat(40);
   const calls: string[][] = [];
-  const columns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
+  const columns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Done'];
   const run: Run = async (_cmd, args) => {
     calls.push(args);
     const endpoint = args[1];

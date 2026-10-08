@@ -11,7 +11,7 @@ import { advanceFar, fuelLimit, fuelLimited, isNear } from './far';
 import { getResources } from './resources';
 import { addState } from './states';
 import { fuelCap, vehicleStats } from './stats';
-import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import { addVehicle, editableTerrain, emptyWorld, npcBrain } from './testkit';
 import type { Obstacle, Pose, World } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
@@ -233,6 +233,38 @@ describe('far NPC travel', () => {
     expect(far.brain.farRoute!.dest).toEqual({ x: 150, y: 100 });
   });
 
+  it('drops a kept road route once a raider runs dry, and plans one off the road to the same point', () => {
+    const w = emptyWorld();
+    const t = editableTerrain(w);
+    for (let i = 0; i < t.types.length; i++) t.types[i] = Math.abs(Math.floor(i / t.size) + 0.5 - 120) < 3 ? 'road' : 'hardpan';
+    const far = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 120, y: 120 });
+    far.brain = npcBrain('raider', { x: 0, y: 0 }, ['raider']);
+    far.brain.goals = [{ kind: 'patrol', targetId: null, destination: null, phase: 'travel', reason: 'test patrol' }];
+    far.order = { kind: 'stopAt', dest: { x: 180, y: 120 } };
+    advanceFar(w, far);
+    expect(far.brain.farRoute!.offRoad).toBe(false);
+    const marker = { x: 180, y: 120 };
+    far.brain.farRoute!.points = [marker];
+    advanceFar(w, far);
+    expect(far.brain.farRoute!.points).toEqual([marker]);
+    far.resources!.fuel = 0;
+    advanceFar(w, far);
+    const route = far.brain.farRoute!;
+    expect(route.offRoad).toBe(true);
+    expect(route.dest).toEqual(marker);
+    expect(route.points.length).toBeGreaterThan(1);
+    expect(route.points.slice(0, -1).every((p) => Math.abs(p.y - 120) >= 3)).toBe(true);
+  });
+
+  it('throws on a kept far route without its road style', () => {
+    const w = emptyWorld();
+    const far = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });
+    far.brain = npcBrain('trader', { x: 0, y: 0 }, ['trader']);
+    far.order = { kind: 'stopAt', dest: { x: 150, y: 120 } };
+    far.brain.farRoute = { dest: { x: 150, y: 120 }, points: [{ x: 150, y: 120 }] } as NonNullable<typeof far.brain.farRoute>;
+    expect(() => advanceFar(w, far)).toThrow(/offRoad/);
+  });
+
   it('adds a body at the sim pose when a far vehicle crosses into range', () => {
     let w = emptyWorld();
     const npc = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 30 + LIVE + 6, y: 30 });
@@ -323,7 +355,7 @@ describe('far travel contact', () => {
     addState(w, 'tow', mover.id, towed.id, { kind: 'tow', site: 'bowl', fee: 0, waived: 0, hitched: true });
     const dest = { x: 200, y: 120 };
     mover.brain = npcBrain('trader', mover.pos, ['trader']);
-    mover.brain.farRoute = { dest, points: [dest] };
+    mover.brain.farRoute = { dest, points: [dest], offRoad: false };
     mover.order = { kind: 'through', dest };
 
     advanceFar(w, mover);

@@ -80,16 +80,19 @@ describe('NPC restraint', () => {
     expect(grouped).toBeGreaterThan(alone + 0.2);
   });
 
-  it('mostly attacks an isolated manageable target', () => {
+  it('mostly sets on an isolated manageable target, and robs it or fights it', () => {
     const { world, npc } = createNpc('buggy');
-    const prey = addVehicle(world, 'traders', 'scout', [], { x: 33, y: 30 });
+    const prey = addVehicle(world, 'traders', 'scout', ['stockEngine'], { x: 33, y: 30 });
+    prey.brain = npcBrain('trader', prey.pos, ['trader']);
     addGoods(world, prey, 'electronics', 3);
     const fought = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);
       assignAutoOrders(x);
       const fights = topGoal(me)?.kind === 'fight';
       if (fights) expect(Object.keys(me.weaponOrders)).toHaveLength(1);
-      return fights;
+      // Prey that pays at the hold-up leaves the raider a loot goal over its fight.
+      const paid = topGoal(me)?.kind === 'loot' && topGoal(me)?.reason === 'take the handed-over cargo';
+      return fights || paid;
     });
     expect(fought).toBeGreaterThan(0.9);
   }, budget(90_000)); // many seeds of planning take a few seconds alone and near 30s when the whole suite shares the cores
@@ -210,19 +213,20 @@ describe('NPC field repairs', () => {
     expect(npc.job?.kind).toBe('repair');
   });
 
-  it('mostly flees instead of repairing under visible threat, and never starts the repair then', () => {
+  // The raider has no engine, so some drivers judge it beatable and fight it instead of fleeing.
+  it('mostly flees or fights instead of repairing under visible threat, and starts no repair then', () => {
     const { world, npc } = createNpc();
     addGoods(world, npc, 'parts', 2);
     corePart(npc, 'cab').hp = 1;
     addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
-    const fled = shareOfSeeds(world, npc.id, (x, me) => {
+    const answered = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);
       resolveNpcActivities(x);
-      const flees = topGoal(me)!.kind === 'flee';
-      if (flees) expect(me.job).toBeNull();
-      return flees;
+      const answers = topGoal(me)!.kind === 'flee' || topGoal(me)!.kind === 'fight';
+      if (answers) expect(me.job).toBeNull();
+      return answers;
     });
-    expect(fled).toBeGreaterThan(0.9);
+    expect(answered).toBeGreaterThan(0.9);
   });
 
   it.each([false, true])('orders escape during a repair and obeys parked-job rules, pinned: %s', (pinned) => {
@@ -299,7 +303,7 @@ describe('NPC field repairs', () => {
     addGoods(world, npc, 'parts', 2);
     // A dry tank strands the truck, and a stranded driver at a town gets a fresh loadout. A low tank only needs a visit.
     npc.resources!.fuel = 0.3;
-    npc.resources!.money = 500;
+    npc.resources!.money = 16667;
     npc.pos = { ...sitePads(REGION.towns[0])[0] };
     planNpcOrders(world);
     expect(topGoal(npc)!.kind).toBe('resupply');

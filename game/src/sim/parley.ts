@@ -12,7 +12,7 @@ import { corePart, isMounted } from './grid';
 import { applyRefitLayout } from './inventory';
 import { creditBounty } from './market';
 import { backOffLoot, defyThreat, finishGoal, pushGoal, topGoal } from './npc-activities';
-import { decide, firepower, holdsUp, perceiveThreat, visibleHostiles, wantsLoot } from './npc-decisions';
+import { decide, firepower, holdsUp, perceiveDanger, robbedFor, visibleHostiles, wantsLoot } from './npc-decisions';
 import { SPARE_LINE } from '../data/dialogue';
 import { vehicleHasPerk } from './progress';
 import { backedOff, canReachSalvage, claimantOf, claimPile, createCargoSalvage, dumpOnPile, hasCargo, lootClaimedBy, salvageInRange, takeError } from './salvage';
@@ -57,14 +57,27 @@ function holdFire(v: Vehicle, target: Vehicle): void {
 // `dumped` is the pile the loser already threw parts onto.
 export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, dumped: SalvageStock | null = null): void {
   const stock = hasCargo(loser) ? createCargoSalvage(world, loser, 1) : dumped;
+  cede(world, loser, winner, stock, 'take the handed-over cargo');
+  creditYield(world, loser, winner);
+}
+
+// The loser leaves its spilled cargo to the winner for a truce. The rest of its cargo stays on its truck.
+export function abandonSpill(world: World, loser: Vehicle, winner: Vehicle, stock: SalvageStock): void {
+  cede(world, loser, winner, stock, 'take the spilled cargo');
+}
+
+// Both sides make peace and the winner's grudge is settled. An NPC winner goes to take the pile and claims it.
+function cede(world: World, loser: Vehicle, winner: Vehicle, stock: SalvageStock | null, reason: string): void {
   makePeace(world, loser, winner);
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');
-  if (stock && winner.brain) {
-    pushGoal(world, winner, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'take the handed-over cargo' });
-    claimPile(world, stock, winner, [loser.id]);
-  }
-  creditYield(world, loser, winner);
+  if (stock && winner.brain) goTake(world, winner, stock, [loser.id], reason);
+}
+
+// The NPC claims the pile and goes to take it. In combat its loot goal pops, and the claim holds through the fight.
+function goTake(world: World, npc: Vehicle, stock: SalvageStock, warned: string[], reason: string): void {
+  pushGoal(world, npc, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason });
+  claimPile(world, stock, npc, warned);
 }
 
 // A stranded truck gives up to a robber: the cargo and the best installed parts go onto the ground, and the truck stays.
@@ -103,7 +116,7 @@ export type PleaAnswer = 'yes' | 'no' | 'demand';
 
 // An NPC's answer to a plea, rolled once. A robber holding up the pleader rolls nothing and makes its demand.
 export function answersPlea(world: World, answerer: Vehicle, pleader: Vehicle, plea: Plea): PleaAnswer {
-  const danger = perceiveThreat(world, answerer, pleader);
+  const danger = perceiveDanger(world, answerer, pleader);
   if (plea === 'truce') {
     if (holdsUp(world, answerer, pleader, danger)) return 'demand';
     return decide(world, answerer, 'truceOffered', pleader.id, danger) === 'accept' ? 'yes' : 'no';
@@ -129,20 +142,6 @@ function grantPlea(world: World, pleader: Vehicle, answerer: Vehicle, plea: Plea
   else yieldTo(world, pleader, answerer);
 }
 
-// A hurt driver pleads once this turn with the last hostile that hit it, if it can still see that truck.
-export function considerPlea(world: World, vehicle: Vehicle): void {
-  const foe = findHurtingFoe(world, vehicle);
-  if (!foe) return;
-  const option = decide(world, vehicle, 'parley', foe.id, perceiveThreat(world, vehicle, foe));
-  if (option !== 'keep') plead(world, vehicle, foe, option === 'truce' ? 'truce' : 'mercy');
-}
-
-function findHurtingFoe(world: World, vehicle: Vehicle): Vehicle | null {
-  if (vehicle.brain!.hurt <= 0) return null;
-  const foe = world.vehicles.find((v) => v.id === vehicle.lastHitBy);
-  return foe && isHostile(world, vehicle, foe) && canVehicleSee(world, vehicle, foe.pos) ? foe : null;
-}
-
 // An NPC pleads with a foe. Another NPC answers at once. The player answers when the NPC calls.
 export function plead(world: World, npc: Vehicle, foe: Vehicle, plea: Plea): void {
   addState(world, 'plea', npc.id, foe.id, { kind: 'plea', plea, answered: foe.brain !== null });
@@ -154,7 +153,7 @@ export function plead(world: World, npc: Vehicle, foe: Vehicle, plea: Plea): voi
   world.events.push({ t: 'plea', from: npc.id, to: foe.id, plea, accepted: answer === 'yes' });
   if (answer === 'yes') grantPlea(world, npc, foe, plea);
   if (answer !== 'demand') return;
-  const reply = decide(world, npc, 'threatened', foe.id, perceiveThreat(world, npc, foe));
+  const reply = decide(world, npc, 'threatened', foe.id, perceiveDanger(world, npc, foe));
   answersHoldUp(world, npc, foe, reply);
   if (reply !== 'comply') return;
   const held = stateOf(world, 'plea', npc.id, foe.id);
@@ -205,7 +204,7 @@ export function playerPleaded(world: World, npc: Vehicle): boolean {
 // An NPC's answer to the player's demand for its cargo, rolled once.
 export function answersThreat(world: World, npc: Vehicle): ThreatAnswer {
   const me = playerVehicle(world);
-  return decide(world, npc, 'threatened', me.id, perceiveThreat(world, npc, me));
+  return decide(world, npc, 'threatened', me.id, perceiveDanger(world, npc, me));
 }
 
 // A driver that complies drops its cargo and holds a truce with the player. Otherwise it fights or runs.
@@ -227,7 +226,7 @@ export function warnedOff(world: World, vehicle: Vehicle, stock: SalvageStock): 
   const claimant = claimantOf(world, stock);
   if (!claimant || claimant.id === vehicle.id || !canVehicleSee(world, claimant, vehicle.pos)) return false;
   if (!backedOff(stock, vehicle.id)) {
-    const answer = decide(world, vehicle, 'threatened', claimant.id, perceiveThreat(world, vehicle, claimant));
+    const answer = decide(world, vehicle, 'threatened', claimant.id, perceiveDanger(world, vehicle, claimant));
     if (answer === 'fightBack') {
       defyThreat(world, vehicle, claimant, 'fightBack', 'take the claimed loot');
       defendClaim(world, claimant, vehicle);
@@ -242,6 +241,30 @@ export function warnedOff(world: World, vehicle: Vehicle, stock: SalvageStock): 
 // The piles the NPC claims.
 function claimedBy(world: World, npc: Vehicle): SalvageStock[] {
   return world.salvage.filter((stock) => claimantOf(world, stock) === npc);
+}
+
+// The nearest robber that sees cargo spilled from its target claims it and goes to take it, unless another driver
+// holds a claim on the pile. An NPC target answers at once, as it answers a demand. The player answers the robber's call.
+export function claimSpill(world: World, victim: Vehicle, stock: SalvageStock): void {
+  if (claimantOf(world, stock)) return;
+  const robbers = world.vehicles.filter((npc) => npc.brain && npc.id !== victim.id && claimsSpillOf(world, npc, victim, stock));
+  const robber = robbers.sort((a, b) => dist(a.pos, stock.pos) - dist(b.pos, stock.pos))[0];
+  if (!robber) return;
+  goTake(world, robber, stock, [], 'take the spilled cargo');
+  if (!victim.brain || isKnockedOut(victim)) return;
+  if (decide(world, victim, 'threatened', robber.id, perceiveDanger(world, victim, robber)) === 'comply') abandonSpill(world, victim, robber, stock);
+}
+
+function claimsSpillOf(world: World, npc: Vehicle, victim: Vehicle, stock: SalvageStock): boolean {
+  if (!isHostile(world, npc, victim) || !robbedFor(world, npc, victim)) return false;
+  return !isStranded(world, npc) && !isKnockedOut(npc) && canVehicleSee(world, npc, stock.pos);
+}
+
+// The player's spilled cargo a hostile NPC claims, while the player has not left it. The robber's call asks for it.
+export function spillClaimOn(world: World, npc: Vehicle): SalvageStock | null {
+  const me = playerVehicle(world);
+  if (!isHostile(world, npc, me)) return null;
+  return claimedBy(world, npc).find((stock) => stock.pile!.fromPlayer && !backedOff(stock, me.id)) ?? null;
 }
 
 // The player takes from a claimed pile. A claimant that sees it fights for the pile, or runs without a gun.
@@ -285,7 +308,7 @@ export function lootsBesidePlayer(world: World, npc: Vehicle): boolean {
 // A looter's answer to the player's warning off its wreck, rolled once.
 export function answersWarning(world: World, npc: Vehicle): WarnAnswer {
   const me = playerVehicle(world);
-  return decide(world, npc, 'warnedOff', me.id, perceiveThreat(world, npc, me));
+  return decide(world, npc, 'warnedOff', me.id, perceiveDanger(world, npc, me));
 }
 
 // A driver that complies leaves the wreck to the player, and one that fights back fights the player like a defied

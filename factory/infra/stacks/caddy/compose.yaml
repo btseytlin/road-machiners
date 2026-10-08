@@ -13,6 +13,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - /opt/factory/www:/srv/www:ro
       - /opt/factory/dashboard:/opt/factory/dashboard:ro
+      - /opt/factory/errors:/opt/factory/errors:ro
       - /opt/factory/caddy/data:/data
       - /opt/factory/caddy/config:/config
     security_opt:

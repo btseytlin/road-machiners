@@ -1,11 +1,10 @@
 import { ECONOMY, GOODS } from '../../data/goods';
 import { partDef, type PartKind } from '../../data/parts';
-import { freeCells, mountedItems, type Spot } from '../grid';
+import { freeCells, mountedItems, mountedParts, type Spot } from '../grid';
 import { getLayoutError, installSpot } from '../inventory';
-import { getUpkeepReserve, vehicleDanger } from '../npc-decisions';
+import { firepower, getUpkeepReserve } from '../npc-decisions';
 import { getResources } from '../resources';
 import { vehicleStats } from '../stats';
-import type { GearJob } from '../../data/npcs';
 import type { GridItem, PartInstance, Vehicle, World } from '../types';
 import { isJunk, maxHp, partValue } from '../wear';
 
@@ -15,6 +14,9 @@ import { isJunk, maxHp, partValue } from '../wear';
 //
 // A job is what the truck earns by: a fighter by its fight strength, guns times armor, a trader and a carrier by cargo room, a courier by
 // speed. A carrier hauls or salvages and needs no goods money. A driver takes only parts that raise its job's score.
+
+// What a driver earns by, which decides the gear it wants.
+export type GearJob = 'fighter' | 'trader' | 'courier' | 'carrier';
 
 export type PartItem = Extract<GridItem, { kind: 'part' }>;
 
@@ -33,10 +35,17 @@ export function goodsRoom(v: Vehicle): number {
   return freeCells({ ...v, items: v.items.filter((it) => it.kind === 'part') });
 }
 
+// How strong a fighter is as it stands: firepower times toughness, the current HP of the chassis core parts and the
+// mounted armor.
+function fighterStrength(world: World, v: Vehicle): number {
+  const toughness = [...mountedParts(v, 'core'), ...mountedParts(v, 'armor')].reduce((sum, part) => sum + part.hp, 0);
+  return firepower(world, v) * toughness;
+}
+
 // The number a job grows by. A fighter's score is its danger, firepower times toughness, so it buys a gun first and
 // then whichever of gun and armor adds more strength. A trader or carrier moves cargo, so its score is room times speed.
 export function jobScore(world: World, v: Vehicle, job: GearJob): number {
-  if (job === 'fighter') return vehicleDanger(world, v);
+  if (job === 'fighter') return fighterStrength(world, v);
   if (job === 'courier') return vehicleStats(world, v).maxSpeed;
   return goodsRoom(v) * vehicleStats(world, v).maxSpeed;
 }
@@ -89,8 +98,16 @@ function placement(v: Vehicle, offer: Offer): { replaces: PartItem | null; spot:
 }
 
 // How a driver buys: `skip` names part kinds it also leaves alone, and `resale` is what the shop pays for the part a
-// plan replaces.
-export type Buyer = { job: GearJob; skip: readonly PartKind[]; resale: (part: PartInstance) => number };
+// plan replaces. A plan that leaves fewer free cells than the lower of `lootRoom` and the free cells now, or a top speed
+// below the lower of `minSpeed` and the speed now, is left out.
+export type Buyer = { job: GearJob; skip: readonly PartKind[]; resale: (part: PartInstance) => number; lootRoom?: number; minSpeed?: number };
+
+// Whether the truck after a plan keeps the free cells and the top speed the buyer asks to keep.
+function keepsRoomAndSpeed(world: World, before: Vehicle, result: Vehicle, buyer: Buyer): boolean {
+  const room = buyer.lootRoom === undefined || freeCells(result) >= Math.min(buyer.lootRoom, freeCells(before));
+  const speed = buyer.minSpeed === undefined || vehicleStats(world, result).maxSpeed >= Math.min(buyer.minSpeed, vehicleStats(world, before).maxSpeed);
+  return room && speed;
+}
 
 // Every plan that does not lower the job's score.
 export function gearPlans<O extends Offer>(world: World, v: Vehicle, offers: readonly O[], buyer: Buyer): Plan<O>[] {
@@ -98,7 +115,9 @@ export function gearPlans<O extends Offer>(world: World, v: Vehicle, offers: rea
   return offers.filter((o) => !isJunk(o.part) && ![...NEVER, ...buyer.skip].includes(partDef(o.part.defId).kind)).flatMap((offer) => {
     const place = placement(v, offer);
     if (!place) return [];
-    const jobGain = jobScore(world, after(v, offer, place.replaces, place.spot), buyer.job) - now;
+    const result = after(v, offer, place.replaces, place.spot);
+    if (!keepsRoomAndSpeed(world, v, result, buyer)) return [];
+    const jobGain = jobScore(world, result, buyer.job) - now;
     if (jobGain < 0) return [];
     const resale = place.replaces ? buyer.resale(place.replaces.part) : 0;
     const given = place.replaces ? quality(place.replaces.part) : 0;

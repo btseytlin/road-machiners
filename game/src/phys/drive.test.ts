@@ -2,20 +2,25 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
-import { makeVehicle } from '../sim/factory';
-import { addGoods, removeAllGoods } from '../sim/inventory';
+import { makePart, makeVehicle } from '../sim/factory';
+import { addGoods, mountPart, removeAllGoods } from '../sim/inventory';
 import { loadFactor, vehicleMass } from '../sim/mass';
 import { corePart, mountedParts } from '../sim/grid';
 import { addVehicle, editableTerrain, emptyWorld, npcBrain, partHp } from '../sim/testkit';
 import type { MoveOrder, World } from '../sim/types';
-import { angleDiff, bearing, dist, type Vec } from '../sim/vec';
+import { angleDiff, bearing, DEG, dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
+import { TERRAIN_TYPES } from '../data/terrain';
 import { endTurn, setDirect, setMoveOrder } from '../sim/world';
 import { PHYSICS } from '../data/physics';
 import { chassisDef } from '../data/chassis';
 import { bodyOf } from '../sim/body';
-import { buildDrive, freeDrive, initPhysics, restWheels, routeAim, simulateTurn, syncDrive, trailFrames, TURN_STEPS, type Drive, type TurnResult } from './drive';
+import { buildDrive, freeDrive, initPhysics, restWheels, routeAim, simulateTurn, syncDrive, tailKick, trailFrames, TURN_STEPS, type Drive, type TurnResult } from './drive';
+import { headingOf, upOf } from './frames';
+import { dropClearance, spillOil, type OilSpill } from '../sim/hazards';
+import { OIL, oilSlickLength } from '../data/utilities';
 import { physicsMove } from './turn';
+import type { VehicleFrame } from './frames';
 import { playerTow, unhitch } from '../sim/tow';
 import { callVehicle, chooseOption, currentOptions } from '../sim/dialogue';
 import { TOW } from '../data/tow';
@@ -78,6 +83,97 @@ describe('impact geometry', () => {
       freeDrive(drive);
     }
   });
+
+  // A truck with a claymore ram on its front, armed or not, driven nose first at 7 tiles per turn into the side of a
+  // truck parked across its path, or into a rock.
+  function noseRam(arm: boolean, into: 'truck' | 'rock' = 'truck'): World {
+    let w = emptyWorld();
+    w.vehicles[0].speed = 7;
+    w.vehicles[0].heading = 0;
+    w.vehicles[0].items = w.vehicles[0].items.filter((i) => !(i.kind === 'part' && i.part.defId === 'cage'));
+    const ram = makePart(w, 'claymoreRam', 0);
+    if (!mountPart(w, w.vehicles[0], ram)) throw new Error('No front mount for the claymore ram');
+    ram.charge = arm ? { reload: 0, armed: true } : { reload: 0 };
+    if (into === 'rock') w.obstacles = [{ id: 'rock1', pos: { x: 37, y: 30 }, r: 0.8, kind: 'rock' }];
+    else addVehicle(w, 'raiders', 'hauler', ['mg', 'stockEngine'], { x: 37, y: 30 }, Math.PI / 2).brain = npcBrain('trader', { x: 37, y: 30 }, ['trader']);
+    w = setDirect(w, true);
+    return setMoveOrder(w, { kind: 'through', dest: { x: 45, y: 30 } });
+  }
+
+  // n turns of w through the real pipeline: the world after them and the ids each claymore blast went off against.
+  function ramTurns(w: World, n: number): { w: World; blasts: string[] } {
+    let d = buildDrive(w);
+    const blasts: string[] = [];
+    for (let i = 0; i < n; i++) {
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      blasts.push(...w.events.flatMap((e) => (e.t === 'claymore' ? [e.other] : [])));
+      freeDrive(d);
+      d = next!;
+    }
+    freeDrive(d);
+    return { w, blasts };
+  }
+
+  // The trucks touch through several collider pairs in one step. The first read was once a side graze at no closing
+  // speed, which hid the hit.
+  it('counts a nose ram at its full closing speed on the rammer front and the rammed side', () => {
+    const world = noseRam(false);
+    const [me, parked] = world.vehicles;
+    const drive = buildDrive(world);
+    const result = simulateTurn(drive, world);
+    try {
+      const crash = result.crashes.find((hit) => hit.a === me.id && hit.b === parked.id);
+      if (!crash) throw new Error('Expected the nose ram');
+      expect(crash.impact).toBeGreaterThan(0.8 * 7 * PHYSICS.metersPerTile);
+      expect(crash.contact.a.side).toBe('front');
+      expect(crash.contact.b?.side).toBe('right');
+    } finally {
+      freeDrive(result.next);
+      freeDrive(drive);
+    }
+  });
+
+  it('blows an armed claymore ram in a nose ram', () => {
+    const { w, blasts } = ramTurns(noseRam(true), 2);
+    expect(blasts).toEqual([w.vehicles[1].id]);
+  });
+
+  // The ram's gap to the truck it hit 12 steps after the crash, and the lowest up vector y of both trucks over the turn.
+  function afterRam(arm: boolean): { gap: number; lowestUp: number } {
+    const w = noseRam(arm);
+    const d = buildDrive(w);
+    const r = simulateTurn(d, w);
+    try {
+      const [a, b] = w.vehicles.map((v) => r.frames[v.id]);
+      const i = Math.min(a.length - 1, r.crashes[0].step + 12);
+      return { gap: Math.hypot(a[i].pos.x - b[i].pos.x, a[i].pos.z - b[i].pos.z), lowestUp: Math.min(...[...a, ...b].map((f) => upOf(f.rot))) };
+    } finally {
+      freeDrive(r.next);
+      freeDrive(d);
+    }
+  }
+
+  it('throws both trucks apart in a claymore blast, without rolling either', () => {
+    const plain = afterRam(false);
+    const blown = afterRam(true);
+    expect(blown.gap).toBeGreaterThan(plain.gap + 3);
+    expect(blown.lowestUp).toBeGreaterThan(0.5);
+  });
+
+  it('throws each truck back from the other over the next turns', () => {
+    const plain = ramTurns(noseRam(false), 2).w;
+    const blown = ramTurns(noseRam(true), 2).w;
+    expect(blown.vehicles[0].pos.x).toBeLessThan(plain.vehicles[0].pos.x - 1.5);
+    expect(blown.vehicles[1].pos.x).toBeGreaterThan(plain.vehicles[1].pos.x + 1);
+  });
+
+  it('blows an armed claymore ram against a rock, even when the crash breaks the ram, and throws the truck back', () => {
+    const plain = ramTurns(noseRam(false, 'rock'), 2).w;
+    const blown = ramTurns(noseRam(true, 'rock'), 2);
+    expect(blown.blasts).toEqual(['rock1']);
+    expect(blown.w.vehicles[0].pos.x).toBeLessThan(plain.vehicles[0].pos.x - 1.5);
+  });
 });
 
 function ordered(order: MoveOrder, speed = 0, heading = 0): World {
@@ -90,6 +186,7 @@ function ordered(order: MoveOrder, speed = 0, heading = 0): World {
 const me = (w: World) => w.vehicles[0];
 const HILL_GRADE = 0.2; // height per tile, steeper than 90% of the generated map's slopes
 const LIMP_GRADE = 0.35; // height per tile, a steep bank beside a road
+const KICK_SEEN = 0.2; // rad/s of yaw rate change in one step; steering alone never turns a truck this fast
 
 describe('physics turns', () => {
   // A handle that once belonged to a collider, as a record left behind by a removal would hold.
@@ -242,6 +339,79 @@ describe('physics turns', () => {
 
     it('a player at driving rank 5 covers more mud than at rank 0', () => {
       expect(me(mudSkill5).pos.x).toBeGreaterThan(me(mudSkill0).pos.x);
+    });
+  });
+
+  describe('glass grip', () => {
+    const SPEED = 6; // tiles per turn, in the middle of a truck's range
+
+    // A truck at speed on one ground type, given one order, played for some turns.
+    function onGround(type: 'sand' | 'glass', order: MoveOrder, turns: number): World {
+      const w = emptyWorld({ x: 20, y: 40 });
+      editableTerrain(w).types.fill(type);
+      w.vehicles[0].speed = SPEED;
+      const { w: after, d } = play(setMoveOrder(w, order), turns);
+      freeDrive(d);
+      return after;
+    }
+
+    it('only glass has less than full grip', () => {
+      const slippery = Object.values(TERRAIN_TYPES).filter((t) => t.grip !== 1 || t.sideGrip !== 1).map((t) => t.id);
+      expect(slippery).toEqual(['glass']);
+    });
+
+    // The mean angle in degrees between where the truck moves and where its nose points, over the moving steps of
+    // a turn: how far it skids sideways.
+    function meanSkid(type: 'sand' | 'glass'): number {
+      let w = emptyWorld({ x: 20, y: 40 });
+      editableTerrain(w).types.fill(type);
+      w.vehicles[0].speed = SPEED;
+      w = setMoveOrder(w, { kind: 'through', dest: { x: 30, y: 70 } });
+      let d = buildDrive(w);
+      const frames: VehicleFrame[] = [];
+      for (let i = 0; i < 3; i++) {
+        let next: Drive | null = null;
+        w = endTurn(w, physicsMove(d, (r) => {
+          next = r.next;
+          frames.push(...r.frames[w.vehicles[0].id]);
+        }));
+        freeDrive(d);
+        d = next!;
+      }
+      freeDrive(d);
+      const skids = frames.slice(1).flatMap((f, i) => {
+        const [a, b, q] = [frames[i].pos, f.pos, f.rot];
+        if (Math.hypot(b.x - a.x, b.z - a.z) * PHYSICS.stepsPerSecond < 2) return [];
+        const nose = Math.atan2(2 * (q.x * q.z - q.w * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
+        return [Math.abs(angleDiff(Math.atan2(b.z - a.z, b.x - a.x), nose)) * (180 / Math.PI)];
+      });
+      return skids.reduce((s, x) => s + x, 0) / skids.length;
+    }
+
+    it('a turning truck skids sideways on glass and holds its line on sand', () => {
+      expect(meanSkid('sand')).toBeLessThan(3);
+      expect(meanSkid('glass')).toBeGreaterThan(10);
+    });
+
+    it('a braking truck slides further on glass than on sand', () => {
+      const sand = onGround('sand', { kind: 'brake' }, 1);
+      const glass = onGround('glass', { kind: 'brake' }, 1);
+      expect(me(glass).pos.x - 20).toBeGreaterThan((me(sand).pos.x - 20) * 1.5);
+      expect(me(glass).speed).toBeGreaterThan(me(sand).speed);
+    });
+
+    it('a truck turns wider on glass than on sand with the same click', () => {
+      const click: MoveOrder = { kind: 'through', dest: { x: 20, y: 80 } }; // square to its heading, so it must curve
+      const sand = onGround('sand', click, 1);
+      const glass = onGround('glass', click, 1);
+      expect(Math.abs(angleDiff(me(glass).heading, Math.PI / 2))).toBeGreaterThan(Math.abs(angleDiff(me(sand).heading, Math.PI / 2)));
+    });
+
+    it('a truck sent to a point on glass still arrives and stops', () => {
+      const dest = { x: 60, y: 40 };
+      const after = onGround('glass', { kind: 'stopAt', dest }, 14); // it brakes gently, so the stop takes more turns than on sand
+      expect(dist(me(after).pos, dest)).toBeLessThan(RULES.arriveRadius * 2);
+      expect(me(after).speed).toBeLessThan(0.5);
     });
   });
 
@@ -798,6 +968,188 @@ describe('stranded trucks', () => {
     const me = after.vehicles[0];
     const hauler = after.vehicles.find((v) => v.id === npc.id)!;
     expect(dist(me.pos, hauler.pos)).toBeGreaterThan(chassisDef(me.chassisId).radius + chassisDef('hauler').radius);
+  });
+});
+
+describe('oil patches', () => {
+  // The player at 30,30 facing +x at 6 tiles per turn, driving by hand toward dest, with oil patches of radius r.
+  function oiled(dest: Vec, patches: Vec[], r = 1.25): World {
+    const w = setDirect(ordered({ kind: 'through', dest }, 6), true);
+    w.fields = patches.map((pos, i) => ({ id: `oil${i}`, kind: 'oil', source: me(w).id, pos, r, turnsLeft: 8, hit: [] }));
+    return w;
+  }
+
+  // Where the truck's body ends the turn, in meters.
+  function endOfTurn(w: World): { x: number; z: number } {
+    const d = buildDrive(w);
+    const r = simulateTurn(d, w);
+    const { pos } = r.frames[me(w).id].at(-1)!;
+    freeDrive(r.next);
+    freeDrive(d);
+    return { x: pos.x, z: pos.z };
+  }
+
+  // Patches every 2 tiles over the rectangle.
+  function slick(x0: number, x1: number, y0: number, y1: number): Vec[] {
+    const out: Vec[] = [];
+    for (let x = x0; x <= x1; x += 2) for (let y = y0; y <= y1; y += 2) out.push({ x, y });
+    return out;
+  }
+
+  // The oil spiller's spill, from the part data.
+  function spillOf(): OilSpill {
+    const def = partDef('oilSpiller');
+    if (def.kind !== 'utility' || def.effect.type !== 'oil') throw new Error('The oil spiller spills no oil');
+    return def.effect;
+  }
+
+  // The player at 30,30 facing +x at `speed` tiles per turn, on a drive-through order to 80,30 under its route driver.
+  // `spills` times, a truck ahead on the same line spilled a streak back toward the player and drove off. The streak's
+  // near edge lies `gap` tiles ahead of the player's center. The player has not seen the streak, so its route runs
+  // straight over it.
+  function streakAhead(speed: number, spills: number, gap = 2): World {
+    const w = ordered({ kind: 'through', dest: { x: 80, y: 30 } }, speed);
+    const spill = spillOf();
+    const dropper = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 0, y: 30 });
+    dropper.pos = { x: 30 + gap + dropClearance(dropper, spill.behind) + oilSlickLength(), y: 30 };
+    for (let i = 0; i < spills; i++) spillOil(w, dropper, spill);
+    w.vehicles = w.vehicles.filter((v) => v.id !== dropper.id);
+    w.player.visible = [];
+    return w;
+  }
+
+  // One turn of the player from w: its end pose in meters and radians, the lowest up vector y over the turn, and the
+  // steps where its yaw rate jumped by more than steering can turn it in one step, which only a tail kick does.
+  function crossing(w: World): { x: number; z: number; heading: number; lowestUp: number; kicks: number } {
+    const d = buildDrive(w);
+    const r = simulateTurn(d, w);
+    const frames = r.frames[me(w).id];
+    freeDrive(r.next);
+    freeDrive(d);
+    const yaw = frames.slice(1).map((f, i) => angleDiff(headingOf(frames[i].rot), headingOf(f.rot)) * PHYSICS.stepsPerSecond);
+    const kicks = yaw.slice(1).filter((rate, i) => Math.abs(rate - yaw[i]) > KICK_SEEN).length;
+    const end = frames.at(-1)!;
+    return { x: end.pos.x, z: end.pos.z, heading: headingOf(end.rot), lowestUp: Math.min(...frames.map((f) => upOf(f.rot))), kicks };
+  }
+
+  it('a truck crossing a slick straight at 10 tiles per turn loses its line', () => {
+    const dry = crossing(streakAhead(10, 0));
+
+    const wet = crossing(streakAhead(10, 1));
+
+    const turned = Math.abs(angleDiff(dry.heading, wet.heading)) >= 20 * DEG;
+    const offset = Math.abs(wet.z - dry.z) >= 2;
+    expect(turned || offset).toBe(true);
+  });
+
+  it('a truck crossing a slick straight at 3 tiles per turn keeps its line', () => {
+    const dry = crossing(streakAhead(3, 0, 0.5));
+
+    const wet = crossing(streakAhead(3, 1, 0.5));
+
+    expect(Math.hypot(wet.x - dry.x, wet.z - dry.z)).toBeLessThan(0.5);
+  });
+
+  it('kicks the tail once in a turn, however long the rear wheels stay on oil', () => {
+    const dry = crossing(streakAhead(10, 0));
+
+    const wet = crossing(streakAhead(10, 1));
+
+    expect(dry.kicks).toBe(0);
+    expect(wet.kicks).toBe(1);
+  });
+
+  // The route driver speeds up on the way: a truck starting at 3.5 tiles per turn reaches the oil at about 4.
+  it('gives no kick to a truck reaching oil at the safe speed', () => {
+    expect(crossing(streakAhead(3.5, 1, 0.5)).kicks).toBe(0);
+  });
+
+  it('gives the same end pose twice from the same input', () => {
+    expect(crossing(streakAhead(10, 1))).toEqual(crossing(streakAhead(10, 1)));
+  });
+
+  it('two slicks on one spot act as one', () => {
+    expect(crossing(streakAhead(10, 2))).toEqual(crossing(streakAhead(10, 1)));
+  });
+
+  it('leaves no truck rolled over after a kick', () => {
+    for (const speed of [5, 6, 8, 10, 12]) expect(crossing(streakAhead(speed, 1)).lowestUp).toBeGreaterThan(0.5);
+  });
+
+  it('sizes the kick by speed over the safe speed, up to the cap', () => {
+    const left = [false, false, true, false];
+
+    expect(Math.abs(tailKick(OIL.safeSpeed, left, 0))).toBe(0);
+    expect(Math.abs(tailKick(OIL.safeSpeed * 2, left, 0))).toBeCloseTo(OIL.kick);
+    expect(Math.abs(tailKick(1000, left, 0))).toBe(OIL.maxKick);
+  });
+
+  it('swings the tail toward the oiled rear wheel, and with both on oil with the yaw rate or else to the left', () => {
+    const fast = OIL.safeSpeed * 3;
+
+    expect(tailKick(fast, [false, false, true, false], 0)).toBeLessThan(0); // the left rear: nose right, tail left
+    expect(tailKick(fast, [false, false, false, true], 0)).toBeGreaterThan(0); // the right rear: nose left
+    expect(tailKick(fast, [false, false, true, true], -0.1)).toBeLessThan(0);
+    expect(tailKick(fast, [false, false, true, true], 0.1)).toBeGreaterThan(0);
+    expect(tailKick(fast, [false, false, true, true], 0)).toBeGreaterThan(0); // no yaw: the nose turns left
+  });
+
+  it('refuses a kick with no rear wheel on oil', () => {
+    expect(() => tailKick(10, [true, true, false, false], 0)).toThrow();
+  });
+
+  it('a truck steering hard on oil slides out of its dry line', () => {
+    const dest = { x: 34, y: 40 };
+    const dry = endOfTurn(oiled(dest, []));
+
+    const wet = endOfTurn(oiled(dest, slick(28, 46, 24, 44)));
+
+    expect(Math.hypot(wet.x - dry.x, wet.z - dry.z)).toBeGreaterThan(2);
+  });
+
+  it('overlapping patches cut grip as much as one patch', () => {
+    const dest = { x: 34, y: 40 };
+    const dry = endOfTurn(oiled(dest, []));
+    const one = endOfTurn(oiled(dest, [{ x: 34, y: 32 }], 2));
+
+    const many = endOfTurn(oiled(dest, [{ x: 34, y: 32 }, { x: 34, y: 32 }, { x: 34.5, y: 32 }], 2));
+
+    expect(one).not.toEqual(dry);
+    expect(many).toEqual(one);
+  });
+});
+
+describe('a truck an emitter pulse shut down', () => {
+  // The player at 8 tiles per turn on flat ground, shut down from the next turn on for longer than the test plays.
+  function shutDown(order: MoveOrder | null): World {
+    const w = order ? ordered(order, 8) : emptyWorld();
+    me(w).speed = 8;
+    me(w).shutDown = { from: w.turn + 1, until: w.turn + 10 };
+    return w;
+  }
+
+  it('coasts on with no order, keeping over half its speed after a turn', () => {
+    const { w, d } = play(shutDown(null), 1);
+    freeDrive(d);
+
+    expect(me(w).speed).toBeGreaterThan(4);
+  });
+
+  it('coasts toward a drive-through point instead of braking, and burns no fuel', () => {
+    const w0 = shutDown({ kind: 'through', dest: { x: 120, y: 30 } });
+    const fuel = w0.player.fuel;
+    const { w, d } = play(w0, 1);
+    freeDrive(d);
+
+    expect(me(w).speed).toBeGreaterThan(4);
+    expect(w.player.fuel).toBe(fuel);
+  });
+
+  it('still brakes to a stop on a brake order', () => {
+    const { w, d } = play(shutDown({ kind: 'brake' }), 3);
+    freeDrive(d);
+
+    expect(me(w).speed).toBeLessThan(0.1);
   });
 });
 

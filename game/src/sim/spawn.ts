@@ -6,13 +6,13 @@ import { chassisDef } from "../data/chassis";
 import { REGION } from "../data/region";
 import { playerVehicle } from "./damage";
 import { makeVehicle } from "./factory";
-import { blockingBoxes, boxDistance, isDriveObstacle, obstacleReach } from "./mapgen";
+import { isDriveObstacle, touchesObstacle } from "./mapgen";
 import { generateNpcLoadout, type NpcLoadout } from "./npc-loadout";
 import { getKnownSite, profileOf } from "./npc-decisions";
 import { chance, randInt, randRange, type Rng } from "./rng";
-import { siteGates, type Site } from "./sites";
+import { isFortress, siteGates, siteUnder, type Site } from "./sites";
 import { startEscort } from "./tow";
-import type { Obstacle, Vehicle, World } from "./types";
+import type { Vehicle, World } from "./types";
 import { dist, type Vec } from "./vec";
 
 // Escort templates never spawn on their own timer. They come with their leader.
@@ -153,6 +153,7 @@ export function spawnAt(world: World, tpl: NpcTemplate, loadout: NpcLoadout, pos
       traits: rollTraits(world, tpl),
       goals: [],
       noticed: {},
+      tracks: {},
       hurt: 0,
       attackers: {},
       goal: null,
@@ -226,29 +227,22 @@ function gateSpot(world: World, site: Site, given: Vec | null, radius: number): 
   return { x: gate.x + Math.cos(a) * d, y: gate.y + Math.sin(a) * d };
 }
 
-// Whether a circle at pos touches the obstacle: a site's edge circle, or a prop's boxes that start below truck roofs.
-function hitsObstacle(world: World, o: Obstacle, pos: Vec, radius: number): boolean {
-  if (o.kind === "site" || o.kind === "water") return true;
-  return blockingBoxes(o, world.terrain).some((b) => boxDistance(b, pos) < radius);
+function onMap(world: World, pos: Vec, radius: number): boolean {
+  return pos.x >= radius && pos.y >= radius && pos.x <= world.size - radius && pos.y <= world.size - radius;
+}
+
+// A fortress has no circle obstacle, so the ground inside its curtain is kept free here.
+function insideFortress(pos: Vec): boolean {
+  const site = siteUnder(pos);
+  return site !== null && isFortress(site);
 }
 
 // Whether a vehicle of radius fits at pos, on the map and clear of obstacles and other vehicles.
 // ignoreId names a vehicle left out of the check, like the one being moved.
 export function isFree(world: World, pos: Vec, radius: number, ignoreId: string | null): boolean {
-  if (
-    pos.x < radius ||
-    pos.y < radius ||
-    pos.x > world.size - radius ||
-    pos.y > world.size - radius
-  )
-    return false;
+  if (!onMap(world, pos, radius) || insideFortress(pos)) return false;
   const margin = 0.3;
-  if (
-    world.obstacles
-      .filter(isDriveObstacle)
-      .some((o) => dist(o.pos, pos) < obstacleReach(o) + radius + margin && hitsObstacle(world, o, pos, radius + margin))
-  )
-    return false;
+  if (world.obstacles.filter(isDriveObstacle).some((o) => touchesObstacle(o, world.terrain, pos, radius, margin))) return false;
   return world.vehicles.every(
     (v) => v.id === ignoreId || dist(v.pos, pos) >= chassisDef(v.chassisId).radius + radius + margin,
   );

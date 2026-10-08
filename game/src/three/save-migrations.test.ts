@@ -24,7 +24,20 @@ import FORMAT_2_14 from './save-fixtures/format-2-14.json';
 import FORMAT_2_15 from './save-fixtures/format-2-15.json';
 import FORMAT_2_16 from './save-fixtures/format-2-16.json';
 import FORMAT_2_17 from './save-fixtures/format-2-17.json';
+import FORMAT_2_18 from './save-fixtures/format-2-18.json';
+import FORMAT_2_19 from './save-fixtures/format-2-19.json';
+import FORMAT_2_20 from './save-fixtures/format-2-20.json';
+import FORMAT_2_21 from './save-fixtures/format-2-21.json';
+import FORMAT_2_22 from './save-fixtures/format-2-22.json';
+import FORMAT_2_23 from './save-fixtures/format-2-23.json';
+import FORMAT_2_24 from './save-fixtures/format-2-24.json';
+import FORMAT_2_25 from './save-fixtures/format-2-25.json';
+import FORMAT_2_26 from './save-fixtures/format-2-26.json';
+import FORMAT_2_27 from './save-fixtures/format-2-27.json';
+import FORMAT_2_28 from './save-fixtures/format-2-28.json';
+import SAVE_SHAPE from './save-shape.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
+import { searchStream } from '../sim/search';
 import { packExplored } from './save';
 import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
 
@@ -376,5 +389,321 @@ describe('save migration 17 to 18', () => {
 
   it('loads every truck feeling exactly the settled weather where it stands', () => {
     for (const v of next.vehicles) expect(weatherOn(next, v), v.id).toEqual(weatherAt(next, v.pos));
+  });
+});
+
+describe('save migration 18 to 19', () => {
+  const next = MIGRATIONS[18](FORMAT_2_18);
+
+  it('marks every far route of a truck in play or removed as planned with roads', () => {
+    const route = (v: (typeof FORMAT_2_18.vehicles)[number]) => ({ ...v, brain: { ...v.brain, farRoute: { ...v.brain!.farRoute, offRoad: false } } });
+    expect(next).toEqual({
+      ...FORMAT_2_18,
+      vehicles: [FORMAT_2_18.vehicles[0], route(FORMAT_2_18.vehicles[1]), FORMAT_2_18.vehicles[2]],
+      removed: [route(FORMAT_2_18.removed[0])],
+    });
+  });
+});
+
+describe('save migration 19 to 20', () => {
+  it('drops guard shots, guard kill credit and the gate a driver was shot by, and keeps every other field', () => {
+    const next = MIGRATIONS[19](FORMAT_2_19);
+
+    expect(next).toEqual({
+      ...FORMAT_2_19,
+      events: [FORMAT_2_19.events[0], FORMAT_2_19.events[2]],
+      vehicles: [{ id: 'player', lastHitBy: null }, FORMAT_2_19.vehicles[1], { id: 'npc-4', lastHitBy: null, brain: { goals: [] } }],
+      removed: [{ id: 'npc-8', lastHitBy: null }, FORMAT_2_19.removed[1]],
+    });
+  });
+});
+
+describe('save migration 20 to 21', () => {
+  it('stamps every flee goal with the save turn and keeps every other field', () => {
+    const next = MIGRATIONS[20](FORMAT_2_20);
+    const [player, runner, fighter] = FORMAT_2_20.vehicles;
+    const fled = (g: { kind: string }) => (g.kind === 'flee' ? { ...g, perceived: 620 } : g);
+
+    expect(next).toEqual({
+      ...FORMAT_2_20,
+      vehicles: [player, { ...runner, brain: { goals: runner.brain!.goals.map(fled) } }, fighter],
+      removed: [{ ...FORMAT_2_20.removed[0], brain: { goals: FORMAT_2_20.removed[0].brain.goals.map(fled) } }],
+    });
+  });
+});
+
+describe('save migration 21 to 22', () => {
+  it('gives every fight goal a fresh wear window from the save turn and keeps every other field', () => {
+    const next = MIGRATIONS[21](FORMAT_2_21);
+    const [player, raider, runner] = FORMAT_2_21.vehicles;
+    const worn = (g: { kind: string }) => (g.kind === 'fight' ? { ...g, worn: { turn: 700, condition: 1 } } : g);
+
+    expect(next).toEqual({
+      ...FORMAT_2_21,
+      vehicles: [player, { ...raider, brain: { goals: raider.brain!.goals.map(worn) } }, runner],
+      removed: [{ ...FORMAT_2_21.removed[0], brain: { goals: FORMAT_2_21.removed[0].brain.goals.map(worn) } }],
+    });
+  });
+});
+
+describe('save migration 22 to 23', () => {
+  it('turns noted hostiles and fight or flee targets into tracks, and keeps every other field', () => {
+    const next = MIGRATIONS[22](FORMAT_2_22) as typeof FORMAT_2_22;
+    const [player, raider, runner] = FORMAT_2_22.vehicles;
+    const [raid, fight] = raider.brain!.goals;
+    const { perceived: _, ...untimedFight } = fight;
+    const robbery = FORMAT_2_22.removed[0].brain.goals[0];
+    const { perceived: __, ...untimedRobbery } = robbery;
+
+    expect(next).toEqual({
+      ...FORMAT_2_22,
+      vehicles: [
+        player,
+        {
+          ...raider,
+          brain: {
+            noticed: { 'preySeen:npc-5': 799 },
+            goals: [raid, untimedFight],
+            tracks: {
+              player: { at: { x: 30, y: 30 }, turn: 797, sighted: true, choice: 'fight', chosenInSight: true },
+              'npc-5': { at: { x: 10, y: 12 }, turn: 797, sighted: false, choice: 'keep', chosenInSight: false },
+            },
+          },
+        },
+        { ...runner, brain: { ...runner.brain, tracks: { 'npc-2': { at: { x: 40, y: 40 }, turn: 799, sighted: true, choice: 'flee', chosenInSight: true } } } },
+      ],
+      removed: [
+        {
+          ...FORMAT_2_22.removed[0],
+          brain: { noticed: {}, goals: [untimedRobbery], tracks: { 'npc-5': { at: { x: 10, y: 12 }, turn: 790, sighted: true, choice: 'fight', chosenInSight: true } } },
+        },
+      ],
+    });
+  });
+});
+
+describe('save migration 23 to 24', () => {
+  it('marks every track out of sight and keeps every other field', () => {
+    const next = MIGRATIONS[23](FORMAT_2_23) as typeof FORMAT_2_23;
+    const [player, runner] = FORMAT_2_23.vehicles;
+    const tracks = runner.brain!.tracks;
+
+    expect(next).toEqual({
+      ...FORMAT_2_23,
+      vehicles: [player, { ...runner, brain: { ...runner.brain, tracks: { player: { ...tracks.player, seenSince: null }, 'npc-5': { ...tracks['npc-5'], seenSince: null } } } }],
+    });
+  });
+});
+
+describe('save migration 24 to 25', () => {
+  const before = structuredClone(FORMAT_2_24);
+
+  it('does not mutate its input', () => {
+    MIGRATIONS[24](FORMAT_2_24);
+    expect(FORMAT_2_24).toEqual(before);
+  });
+
+  it('drops the circles of the fortress sites and the Bowl and Nose buildings, and keeps every other obstacle', () => {
+    const next = MIGRATIONS[24](FORMAT_2_24) as { obstacles: { id: string }[] };
+
+    expect(next.obstacles.map((o) => o.id)).toEqual(['site-old-mill', 'bld-dustwell-1', 'cw-convoy-0', 'wreck4']);
+    expect(next.obstacles[0]).toEqual(FORMAT_2_24.obstacles[5]);
+  });
+
+  it('drops both obsolete oasis ponds but keeps water elsewhere', () => {
+    const world = { ...FORMAT_2_24, obstacles: [
+      { id: 'pond-dustwell' }, { id: 'pond-green-pit' }, { id: 'pond-old-mill' }, { id: 'lake-west' },
+    ] };
+    const next = MIGRATIONS[24](world) as { obstacles: { id: string }[] };
+    expect(next.obstacles.map((o) => o.id)).toEqual(['pond-old-mill', 'lake-west']);
+  });
+
+  it('drops the old salvage yard wrecks, which a fortress yard no longer has', () => {
+    const world = { ...FORMAT_2_24, obstacles: [{ id: 'cw-salvage-yard-0' }, { id: 'cw-convoy-0' }] };
+    const next = MIGRATIONS[24](world) as { obstacles: { id: string }[] };
+
+    expect(next.obstacles.map((o) => o.id)).toEqual(['cw-convoy-0']);
+  });
+});
+
+describe('save migration 25 to 26', () => {
+  type Loot = { goods: Partial<Record<string, number>>; parts: unknown[]; fuel?: number; supplies?: number };
+  type Stock = Loot & { id: string; hidden: Loot };
+  type Saved = {
+    vehicles: { id: string; utilityOrders: object }[];
+    removed: { id: string; utilityOrders: object }[];
+    smoke: unknown[];
+    fields: unknown[];
+    flares: unknown[];
+    lines: unknown[];
+    searchRng: { rngState: number };
+    salvage: Stock[];
+  };
+  const next = MIGRATIONS[25](FORMAT_2_25) as Saved;
+  const stock = (id: string) => next.salvage.find((s) => s.id === id)!;
+  const before = (id: string) => FORMAT_2_25.salvage.find((s) => s.id === id)!;
+  const NO_HIDDEN = { goods: {}, parts: [], fuel: 0, supplies: 0 };
+
+  it('gives the player the freeze switch, off', () => {
+    expect((next as unknown as { player: object }).player).toEqual({ ...FORMAT_2_25.player, frozen: false });
+  });
+
+  it('gives every vehicle and removed vehicle empty utility orders, keeping its other fields', () => {
+    expect(next.vehicles).toEqual(FORMAT_2_25.vehicles.map((v) => ({ ...v, utilityOrders: {} })));
+    expect(next.removed).toEqual(FORMAT_2_25.removed.map((v) => ({ ...v, utilityOrders: {} })));
+  });
+
+  it('starts empty smoke, fields, flares and lines, and the search stream a new game of the same seed has', () => {
+    expect([next.smoke, next.fields, next.flares, next.lines]).toEqual([[], [], [], []]);
+    expect(next.searchRng).toEqual(searchStream(FORMAT_2_25.seed));
+  });
+
+  it.each(['burnt-convoy', 'barn-759', 'wreck12'])('hides all the loot of the unsearched rolled stock %s', (id) => {
+    const old = before(id);
+    expect(stock(id)).toEqual({
+      ...old,
+      goods: {},
+      parts: [],
+      fuel: 0,
+      supplies: 0,
+      hidden: { goods: old.goods, parts: old.parts, fuel: old.fuel, supplies: old.supplies },
+    });
+  });
+
+  it('counts a rolled stock without fuel or supplies fields as none of them', () => {
+    expect(stock('deckBay-1450').hidden).toEqual({ goods: { scrap: 4 }, parts: [], fuel: 0, supplies: 0 });
+  });
+
+  it.each(['podfield', 'wreck4', 'wreck-v40', 'cargo-v41-30'])('leaves the searched stock, truck wreck or pile %s in the open', (id) => {
+    expect(stock(id)).toEqual({ ...before(id), hidden: NO_HIDDEN });
+  });
+
+  it('keeps the loot total of every stock', () => {
+    const total = (s: Loot) => Object.values(s.goods).reduce((a: number, b) => a + (b ?? 0), 0) + s.parts.length + (s.fuel ?? 0) + (s.supplies ?? 0);
+    for (const s of next.salvage) expect(total(s) + total(s.hidden), s.id).toBe(total(before(s.id)));
+  });
+});
+
+describe('save migration 26 to 27', () => {
+  type Contracts = { contracts: Record<string, unknown>[] };
+  const next = MIGRATIONS[26](FORMAT_2_26) as { turn: number; player: Contracts & { money: number }; shops: Record<string, Contracts> };
+
+  it('starts every held and posted bounty unfulfilled', () => {
+    expect(next.player.contracts[0]).toEqual({ ...FORMAT_2_26.player.contracts[0], fulfilled: false });
+    expect(next.shops.bowl.contracts[0]).toEqual({ ...FORMAT_2_26.shops.bowl.contracts[0], fulfilled: false });
+  });
+
+  it('keeps every other contract and field', () => {
+    expect(next.player.contracts[1]).toEqual(FORMAT_2_26.player.contracts[1]);
+    expect(next.shops.bowl.contracts[1]).toEqual(FORMAT_2_26.shops.bowl.contracts[1]);
+    expect(next.shops.nose).toEqual(FORMAT_2_26.shops.nose);
+    expect({ ...next, player: { ...next.player, contracts: [] }, shops: {} }).toEqual({ ...FORMAT_2_26, player: { ...FORMAT_2_26.player, contracts: [] }, shops: {} });
+  });
+});
+
+describe('save migration 27 to 28', () => {
+  const before = structuredClone(FORMAT_2_27);
+  const next = MIGRATIONS[27](FORMAT_2_27) as { salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
+
+  it('drops the Glass Flats stock and its searched mark, and keeps every other stock', () => {
+    expect(next.salvage.map((stock) => stock.id)).toEqual(FORMAT_2_27.salvage.map((stock) => stock.id).filter((id) => id !== 'glass-flats'));
+    expect(next.player.scavenged).toEqual(['podfield', 'wreck4']);
+  });
+
+  it('ends a search of the old stock, keeps other searches and does not mutate its input', () => {
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[1]).toEqual(FORMAT_2_27.vehicles[1]);
+    expect(FORMAT_2_27).toEqual(before);
+  });
+});
+
+describe('save migration 28 to 29', () => {
+  const next = MIGRATIONS[28](structuredClone(FORMAT_2_28)) as typeof FORMAT_2_28;
+  const cents = (money: number) => Math.round((money * 100) / 3);
+
+  it('turns player money, debt included, cost basis and contract rewards into cents', () => {
+    expect(next.player.money).toBe(-33333);
+    expect(next.player.costBasis).toEqual({ scrap: 350, salt: 700 });
+    expect(next.player.contracts[0].reward).toBe(4000);
+    expect(next.shops.bowl.contracts[0].reward).toBe(10000);
+    expect(next.shops.bowl.pressure).toEqual(FORMAT_2_28.shops.bowl.pressure);
+  });
+
+  it('turns the open call\'s money, deal and prices into cents and leaves other vars alone', () => {
+    const { vars, line } = next.player.call;
+    expect(vars.fee).toEqual({ kind: 'money', amount: 1500 });
+    expect(vars.deal).toEqual({ ...FORMAT_2_28.player.call.vars.deal, price: 1000 });
+    expect(vars.town).toEqual(FORMAT_2_28.player.call.vars.town);
+    expect(line.vars.prices.goods).toEqual([{ good: 'salt', buy: cents(31), sell: 700 }]);
+    expect(line.vars.far).toEqual(FORMAT_2_28.player.call.line.vars.far);
+    expect(line.text).toBe(FORMAT_2_28.player.call.line.text);
+  });
+
+  it('turns driver wallets and pile bases into cents and keeps fuel, memories and stock', () => {
+    expect(next.vehicles[0]).toEqual(FORMAT_2_28.vehicles[0]);
+    expect(next.vehicles[1]).toEqual({ ...FORMAT_2_28.vehicles[1], resources: { ...FORMAT_2_28.vehicles[1].resources, money: cents(1250) } });
+    expect(next.removed[0].resources.money).toBe(233);
+    expect(next.salvage[0]).toEqual(FORMAT_2_28.salvage[0]);
+    expect(next.salvage[1].pile).toEqual({ ...FORMAT_2_28.salvage[1].pile, basis: { salt: 750 } });
+  });
+
+  it('turns every fee and price in a deal state into cents and nothing else', () => {
+    const data = next.states.map((s) => s.data as Record<string, unknown>);
+    expect(data[0]).toEqual({ ...FORMAT_2_28.states[0].data, fee: cents(55), waived: 0 });
+    expect(data[1]).toEqual({ ...FORMAT_2_28.states[1].data, fee: 600 });
+    expect(data[2]).toEqual({ ...FORMAT_2_28.states[2].data, fee: 2600 });
+    expect(data[3]).toEqual({ ...FORMAT_2_28.states[3].data, price: cents(32) });
+    expect(data[4]).toEqual({ ...FORMAT_2_28.states[4].data, price: cents(22) });
+    expect(next.states[5]).toEqual(FORMAT_2_28.states[5]);
+  });
+
+  it('turns money in events into cents, and scales only money practice amounts', () => {
+    const e = next.events as Record<string, unknown>[];
+    expect(e[0].amount).toBe(-400);
+    expect(e[1].amount).toBeCloseTo(450);
+    expect(e[2].amount).toBeCloseTo(1000);
+    expect(e[3].amount).toBeCloseTo(300);
+    expect(e[4]).toEqual(FORMAT_2_28.events[4]);
+    expect((e[5].contract as { reward: number }).reward).toBe(5000);
+    expect([e[6].fee, e[7].fee, e[8].fee, e[9].fee]).toEqual([cents(55), 600, 2600, 2600]);
+    expect(e[10].paid).toBe(cents(22));
+    expect(((e[11].state as { data: { price: number } }).data).price).toBe(500);
+    expect(e[12].vars).toEqual({ fee: { kind: 'money', amount: 100 } });
+    expect(e[13]).toEqual(FORMAT_2_28.events[13]);
+    for (const [i, ev] of e.entries()) if (ev.t === 'practice') expect(ev.xp, `event ${i}`).toBe(FORMAT_2_28.events[i].xp);
+  });
+
+  it('keeps the turn and touches nothing outside money', () => {
+    expect(next.turn).toBe(FORMAT_2_28.turn);
+    expect(next.player.fuel).toBe(FORMAT_2_28.player.fuel);
+  });
+
+  it('throws on a money field that is not a number', () => {
+    const bad = { ...structuredClone(FORMAT_2_28), player: { ...structuredClone(FORMAT_2_28.player), money: 'x' } };
+    expect(() => MIGRATIONS[28](bad)).toThrow(/player money/);
+  });
+
+  // A money-named key in the saved shape that the step neither converts nor lists here as not money stays in the old
+  // unit after a load.
+  it('converts every money-named field of the saved shape', () => {
+    const MONEY_KEYS = new Set(['money', 'reward', 'fee', 'waived', 'price', 'paid', 'amount', 'buy', 'sell', 'basis', 'costBasis']);
+    const CONVERTED = new Set([
+      '.player.money', '.player.costBasis', '.player.contracts[].reward', '.shops.*.contracts[].reward',
+      '.vehicles[].resources.money', '.removed[].resources.money', '.salvage[].pile.basis',
+      '.states[].data.fee', '.states[].data.waived', '.states[].data.price',
+    ]);
+    const found: string[] = [];
+    const walk = (node: unknown, path: string): void => {
+      if (Array.isArray(node)) return node.forEach((x) => walk(x, `${path}[]`));
+      if (!node || typeof node !== 'object') return;
+      for (const [key, value] of Object.entries(node)) {
+        const at = path === '.shops' ? `${path}.*` : `${path}.${key}`;
+        if (MONEY_KEYS.has(key)) found.push(at);
+        walk(value, at);
+      }
+    };
+    walk(SAVE_SHAPE.shape, '');
+    expect(found.length).toBeGreaterThan(0);
+    for (const at of found) expect(CONVERTED.has(at), at).toBe(true);
   });
 });

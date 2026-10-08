@@ -2,6 +2,7 @@ import { readFile, chmod } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildBadge } from './badges';
 import type { SnapshotCollector } from './snapshot';
 
 // Chart.js ships its browser bundle under a path its package exports do not expose, so it is read from the factory's node_modules.
@@ -16,6 +17,7 @@ const ASSETS: Record<string, [string, string]> = {
   '/factory/fonts/barlow-bold.woff2': ['fonts/barlow-bold.woff2', 'font/woff2'],
   '/factory/fonts/plex.woff2': ['fonts/plex.woff2', 'font/woff2'],
 };
+const BADGE_PREFIX = '/factory/api/badges/';
 const SECURITY_HEADERS = {
   'content-security-policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
   'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', 'cache-control': 'no-store',
@@ -91,6 +93,7 @@ export class DashboardServer {
     }
     const path = new URL(request.url ?? '/', 'http://localhost').pathname;
     if (path === '/factory') { response.writeHead(308, { location: '/factory/' }); return void response.end(); }
+    if (path.startsWith(BADGE_PREFIX)) return this.sendBadge(path.slice(BADGE_PREFIX.length), response);
     return this.servePath(path, request, response);
   }
   private async servePath(path: string, request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -102,6 +105,11 @@ export class DashboardServer {
     const content = await readFile(resolve(this.assets, asset[0]));
     response.writeHead(200, { 'content-type': asset[1] });
     response.end(content);
+  }
+  private sendBadge(name: string, response: ServerResponse): void {
+    const badge = buildBadge(name, this.collector.getSnapshot());
+    if (badge === null) { response.writeHead(404); return void response.end('Not found'); }
+    this.sendJson(response, badge);
   }
   async stop(): Promise<void> {
     this.stopped = true;

@@ -6,14 +6,14 @@ import { goodBasePrice, goodValue, vehicleValue } from './market';
 import { BUSY_LINE, TRAIT_TALK, END, HONK_RANGE, HUB, REFUSED, TOPICS, type Topic } from '../data/dialogue';
 import { REGION } from '../data/region';
 import { playerVehicle } from './damage';
-import { callVehicle, chooseOption, currentOptions, endCallIfOut, hangUp, honk, onAir, placeholders, radioSpeakers, raiseCalls } from './dialogue';
+import { callVehicle, callTrucks, chooseOption, currentOptions, endCallIfOut, hangUp, honk, placeholders, radioSpeakers, raiseCalls } from './dialogue';
 import { fireBlock, isHostile } from './combat';
 import { MEMORY, NPC_UPKEEP, NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { aidPrice, offerAid, playerAid, spareAid, wantedAid } from './aid';
 import { corePart, isMounted } from './grid';
 import { addGoods } from './inventory';
-import { hasCargo } from './salvage';
+import { hasCargo, emptyHidden } from './salvage';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
 import { addState, aidData, endState, stateOf } from './states';
@@ -247,7 +247,7 @@ describe('NPC calls', () => {
 
   it('only the fight topics call during combat', () => {
     const fight = Object.values(TOPICS).filter((t) => t.raise?.duringCombat).map((t) => t.id);
-    expect(fight.sort()).toEqual(['demand', 'giveUp', 'mercyPlea', 'surrender', 'truceOffer']);
+    expect(fight.sort()).toEqual(['demand', 'giveUp', 'mercyPlea', 'spillClaim', 'surrender', 'truceOffer']);
   });
 
   it('an NPC that does not see the player stays quiet', () => {
@@ -480,7 +480,7 @@ describe('warn off', () => {
   // A scavenger parked at a road wreck at `at` with a scavenge goal in the act phase. With `search` it searches it.
   function looterAt(at: { x: number; y: number }, search: boolean): { w: World; npc: Vehicle; wreckId: string } {
     const w = emptyWorld({ x: 30, y: 30 });
-    const wreck = { id: 'wreck901', pos: { ...at }, radius: 1, goods: { scrap: 6 }, parts: [] };
+    const wreck = { id: 'wreck901', pos: { ...at }, radius: 1, goods: { scrap: 6 }, parts: [], hidden: emptyHidden() };
     w.salvage.push(wreck);
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine', 'mg'], { x: at.x + 1, y: at.y });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
@@ -759,7 +759,7 @@ describe('rumor mill', () => {
   }
 
   function wreck(id: string, pos: { x: number; y: number }): SalvageStock {
-    return { id, pos, radius: 0.6, goods: { scrap: 2 }, parts: [] };
+    return { id, pos, radius: 0.6, goods: { scrap: 2 }, parts: [], hidden: emptyHidden() };
   }
 
   it('names the nearest wreck to the driver and marks it rumored', () => {
@@ -892,7 +892,7 @@ describe('fuel and supply aid', () => {
   // A driver with full tanks and 500 money beside the player, both at peace.
   function aidWorld(templateId = 'trader', faction: Vehicle['faction'] = 'traders'): { w: World; npc: Vehicle } {
     const { w, npc } = withNpc(templateId, faction);
-    npc.resources = { fuel: fuelCap(npc), supplies: suppliesCap(npc), money: 500, health: 100 };
+    npc.resources = { fuel: fuelCap(npc), supplies: suppliesCap(npc), money: 16667, health: 100 };
     return { w, npc };
   }
 
@@ -1023,14 +1023,14 @@ describe('fuel and supply aid', () => {
 });
 
 describe('trucks on the radio', () => {
-  it('lists both trucks of an open call, and the player while the beacon is on', () => {
+  it('lists both trucks of an open call, and none with only the beacon on', () => {
     const { w, npc } = withNpc('trader', 'traders');
-    expect(onAir(w)).toEqual([]);
+    expect(callTrucks(w)).toEqual([]);
     const open = callVehicle(w, npc.id);
-    expect(onAir(open).sort()).toEqual([open.player.vehicleId, npc.id].sort());
+    expect(callTrucks(open).sort()).toEqual([open.player.vehicleId, npc.id].sort());
     const beacon = structuredClone(w);
     beacon.player.beacon = true;
-    expect(onAir(beacon)).toEqual([w.player.vehicleId]);
+    expect(callTrucks(beacon)).toEqual([]);
   });
 
   it('reads the radio talk events and nothing else', () => {

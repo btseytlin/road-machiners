@@ -5,7 +5,8 @@
 // speed for a bot that wants speed.
 
 import { chassisDef, PLAYER_CHASSIS } from '../../data/chassis';
-import { partDef, type PartKind } from '../../data/parts';
+import { startKit } from '../../data/start';
+import { partDef, PARTS, type PartKind } from '../../data/parts';
 import { playerVehicle } from '../damage';
 import { buyChassis, buyStockPart, chassisTradeIn, partTradePrice, sellPart } from '../economy';
 import { type Spot, goodsCount, mountedItems } from '../grid';
@@ -13,8 +14,7 @@ import { installSpot, moveItem, spareParts, storePart, takeFromStorage } from '.
 import { shopAt, shopState } from '../market';
 import { townAt } from '../sites';
 import { getUpkeepReserve } from '../npc-decisions';
-import { bestPlan, gearBudget, gearPlans, probe, type Offer } from './gear';
-import type { GearJob } from '../../data/npcs';
+import { bestPlan, gearBudget, gearPlans, probe, type GearJob, type Offer } from './gear';
 import type { ThreatAnswer } from '../parley';
 import type { GameEvent, GridItem, PartInstance, Vehicle, World } from '../types';
 import { isJunk } from '../wear';
@@ -26,6 +26,9 @@ export type LedgerKey = (typeof LEDGER_KEYS)[number];
 export type Ledger = Record<LedgerKey, number>;
 
 export const emptyLedger = (): Ledger => Object.fromEntries(LEDGER_KEYS.map((k) => [k, 0])) as Ledger;
+
+// Units of the parts good every bot keeps for field repair: what the standard start kit carries.
+export const REPAIR_PARTS = startKit('standard').cargo.parts ?? 0;
 
 // What the bot did that the events do not say: a demand and the driver's answer, and goods and spares it looted.
 export type BotNote =
@@ -71,7 +74,14 @@ export class Orders {
 
 // skip names part kinds a bot leaves alone. job picks parts that help it fight or earn. budgetJob lets a driver that
 // trades and hunts reserve trading capital while buying fighting gear. A chassis kept avoids paying the swap spread.
-export type UpgradeStyle = { skip: readonly PartKind[]; chassis: 'value' | 'speed' | 'keep'; job: GearJob; budgetJob?: GearJob };
+// lootRoom is the cells a bot with a fighter's gear keeps free for loot, and minSpeed the top speed it keeps for the
+// chase. A part that leaves fewer free cells, or a top speed below the lower of minSpeed and the current one, stays on
+// the shelf.
+export type UpgradeStyle = { skip: readonly PartKind[]; chassis: 'value' | 'speed' | 'keep'; job: GearJob; budgetJob?: GearJob; lootRoom?: number; minSpeed?: number };
+
+// The footprint of the biggest part in the game. A fighter that keeps this many cells free can always take the best
+// part of a wreck it knocked out.
+export const BIGGEST_PART_CELLS = Math.max(...Object.values(PARTS).map((p) => p.w * p.h));
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;
 type Option = { gain: number; cost: number; take: (o: Orders) => void };
@@ -89,7 +99,7 @@ function bestOption(o: Orders, style: UpgradeStyle): Option | null {
   const budget = gearBudget(o.world, o.me, chooseBudgetJob(style));
   const chassis = strongest(chassisOptions(o, style).filter((option) => option.cost <= budget));
   if (style.chassis === 'speed' && chassis) return chassis;
-  const buyer = { job: style.job, skip: style.skip, resale: (part: PartInstance) => partTradePrice(o.world, o.me, part, 'sell') };
+  const buyer = { job: style.job, skip: style.skip, lootRoom: style.lootRoom, minSpeed: style.minSpeed, resale: (part: PartInstance) => partTradePrice(o.world, o.me, part, 'sell') };
   const plan = bestPlan(gearPlans(o.world, o.me, candidates(o, shop), buyer), budget);
   return plan ? { gain: plan.worthGain, cost: plan.cost, take: (orders) => mount(orders, plan.offer, plan.replaces) } : chassis;
 }
@@ -116,10 +126,12 @@ function strongest(options: Option[]): Option | null {
 
 // ---- Chassis.
 
-// A chassis change moves the cargo through the new grid, and goods may not fit. So the bot changes chassis only empty.
+// A chassis change moves the cargo through the new grid, and goods may not fit. So the bot changes chassis only with
+// no goods but its repair parts, a few single cells that fit any grid.
 function chassisOptions(o: Orders, style: UpgradeStyle): Option[] {
   // Chassis sell only in a town, as buyChassis() requires.
-  if (style.chassis === 'keep' || !townAt(o.world) || Object.keys(goodsCount(o.me)).length > 0) return [];
+  const load = Object.entries(goodsCount(o.me)).some(([good, n]) => good !== 'parts' || n > REPAIR_PARTS);
+  if (style.chassis === 'keep' || !townAt(o.world) || load) return [];
   const current = chassisDef(o.me.chassisId);
   return PLAYER_CHASSIS.filter((id) => id !== current.id).flatMap((id) => {
     const def = chassisDef(id);

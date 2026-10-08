@@ -68,10 +68,10 @@ describe('climbing', () => {
   }, 90_000);
 
   it('flat ground acceleration from rest is unchanged', () => {
-    // Measured after armor halved in weight, with no climb reserve in the way: the scout's x after each of its first three turns from rest at x 26.
+    // Measured before the climb reserve: the scout's x after each of its first three turns from rest at x 26.
     const xs = drive(ramp('scout', 0, 'road'), 3);
-    expect(xs[0]).toBeCloseTo(26.976677, 5);
-    expect(xs[1]).toBeCloseTo(29.488319, 5);
-    expect(xs[2]).toBeCloseTo(33.512367, 5);
+    expect(xs[0]).toBeCloseTo(26.945196, 5);
+    expect(xs[1]).toBeCloseTo(29.37628, 5);
+    expect(xs[2]).toBeCloseTo(33.271481, 5);
   }, 90_000);
 });

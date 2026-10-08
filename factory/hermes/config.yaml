@@ -72,12 +72,13 @@ platform_toolsets:
     - session_search
     - vision
     - factory
-  # The incident watch job runs with no chat. It resolves incidents with the same tools.
+  # The incident watch job runs with no chat. It resolves incidents and drafts the release post with the same tools.
   cron:
     - terminal
     - file
     - skills
     - memory
+    - factory
     - session_search
     - vision
     - factory
