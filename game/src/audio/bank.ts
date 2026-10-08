@@ -2,7 +2,7 @@
 
 import type { Cue } from "../data/sounds";
 
-export type Bank = Map<string, AudioBuffer>; // by file name
+export type Bank = Map<string, AudioBuffer>;
 
 export const SFX_DIR = `${import.meta.env.BASE_URL}sfx/`;
 

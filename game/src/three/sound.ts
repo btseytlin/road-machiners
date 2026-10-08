@@ -17,9 +17,8 @@ import type { GameEvent, ShotRound } from "../sim/types";
 import type { CameraRig } from "./render/camera";
 
 const CENTER: Placement = { pan: 0, gain: 1 };
-const LOG_SIZE = 100; // recent cues kept for debugging, enough for several busy turns
+const LOG_SIZE = 100;
 
-// Turn result stings, most important first. Only the first one found plays, so a busy turn stays readable.
 const STINGS: {
   cue: CueId;
   match: (e: GameEvent, playerId: string) => boolean;
@@ -36,18 +35,16 @@ export function stingOf(events: GameEvent[], playerId: string): CueId | null {
   );
 }
 
-// Combat score: one random base loop per battle, and two accent lines that SoundDesigner plays on its beat.
 export type AccentCue = Extract<CueId, `accent-${string}`>;
 const BASE_CUES = ["score-drums", "score-bass"] as const;
 type BaseCue = (typeof BASE_CUES)[number];
 type Base = { loop: BeatLoopHandle; grid: Grid };
 
-const START_LEAD_SECONDS = 0.1; // bases are scheduled to start this far ahead, so each starts on its first beat
-const ACCENT_LEAD_SECONDS = 0.02; // earliest accent start from now, so Web Audio never gets a time in the past
-const LOOKAHEAD_SECONDS = 0.15; // hits are scheduled this far ahead, several frames, so none is missed
+const START_LEAD_SECONDS = 0.1;
+const ACCENT_LEAD_SECONDS = 0.02;
+const LOOKAHEAD_SECONDS = 0.15;
 
 
-// What the score did with one accent request, for the sound log.
 export type AccentResult = { cue: AccentCue; offer: Offer["result"]; heat: number };
 
 export class CombatScore {
@@ -66,7 +63,6 @@ export class CombatScore {
     this.bases = BASE_CUES.map((id) => this.base(id, start));
   }
 
-  // A battle starts on one random base with fresh lines. Heat carries over, so a quick second fight starts warm.
   setCombat(on: boolean, fadeSeconds: number): void {
     if (on === (this.active !== null)) return;
     this.active?.loop.setGain(0, fadeSeconds);
@@ -79,12 +75,10 @@ export class CombatScore {
     this.setIntensity(this.active, now, fadeSeconds);
   }
 
-  // In a turn pause the lead repeats its last phrase a few times, then only the base plays.
   setPaused(paused: boolean): void {
     this.paused = paused;
   }
 
-  // Called every frame: schedules the lines' hits just ahead, and on each bar moves the base toward the heat.
   tick(): void {
     const base = this.active;
     if (!base || !this.designer) return;
@@ -97,8 +91,6 @@ export class CombatScore {
     this.setIntensity(base, now, base.grid.beat * base.grid.beatsPerBar);
   }
 
-  // Outside a battle the score is silent and events are ignored. In one, the event adds heat, and its stab plays
-  // with the sound's loudest moment delayMs from now, or as soon as it can when that is too soon.
   accent(cue: AccentCue, delayMs: number): AccentResult | null {
     const base = this.active;
     if (!base || !this.designer) return null;
@@ -111,7 +103,6 @@ export class CombatScore {
     return { cue, offer: offer.result, heat: this.heat.read(now) };
   }
 
-  // A hit whose time is too soon or already past sounds as soon as it can, and the base ducks when it sounds.
   private sound(base: Base, h: Hit, now: number, file?: string): void {
     const start = now + Math.max(ACCENT_LEAD_SECONDS, h.time - now);
     this.player.play(h.cue as AccentCue, { pan: h.pan, gain: h.gain }, (start - now) * 1000, file === undefined ? undefined : { file, rate: 1 });
@@ -119,7 +110,6 @@ export class CombatScore {
     if (h.line === "lead") base.loop.duck(start, s.duckGain, s.duckAttackSeconds, base.grid.beat * s.duckReleaseBeats);
   }
 
-  // Quiet heat leaves the base lower and muffled; fullHeat opens it.
   private setIntensity(base: Base, now: number, rampSeconds: number): void {
     const s = MIX.score;
     const t = Math.min(1, this.heat.read(now) / s.fullHeat);
@@ -131,7 +121,6 @@ export class CombatScore {
     return Math.floor((time - base.grid.start) / (base.grid.beat * base.grid.beatsPerBar));
   }
 
-  // Every base starts silent at one time from its first beat, so its grid is known from then on.
   private base(id: BaseCue, start: number): Base {
     const files = SOUNDS[id].files;
     const beat = SOUNDS[id].beat;
@@ -142,7 +131,6 @@ export class CombatScore {
   }
 }
 
-// A volley or crash the score answers.
 export function accentOf(e: GameEvent, playerId: string): AccentCue | null {
   if (e.t === "collision") return [e.a, e.b].includes(playerId) ? "accent-crash" : null;
   if (e.t === "shot") return volleyAccent(e.rounds, e.shooter === playerId, e.target === playerId);
@@ -150,7 +138,6 @@ export function accentOf(e: GameEvent, playerId: string): AccentCue | null {
   return null;
 }
 
-// Crits by or at the player win over plain hits. Enemy misses get none.
 function volleyAccent(rounds: ShotRound[], mine: boolean, atPlayer: boolean): AccentCue | null {
   if (!mine && !atPlayer) return null;
   if (rounds.some((r) => r.crit)) return "accent-crit";
@@ -164,12 +151,9 @@ function plainAccent(struck: boolean, mine: boolean): AccentCue | null {
 
 export type CombatSigns = { sighted: boolean };
 
-// Remembers the last turn each hostile was in sight.
 export class CombatWatch {
   private seen = new Map<string, number>();
 
-  // sighted is true when a hostile in sight now was out of sight for a whole turn. Sight flickers from frame
-  // to frame while a turn plays, so a gap inside one turn does not count.
   observe(turn: number, hostiles: string[]): CombatSigns {
     const sighted = hostiles.some((id) => (this.seen.get(id) ?? -Infinity) < turn - 1);
     for (const [id, last] of this.seen) if (last < turn - 1) this.seen.delete(id);
@@ -179,7 +163,7 @@ export class CombatWatch {
 }
 
 export class SoundDirector {
-  readonly log: string[] = []; // recent cue ids and accent decisions, newest last; read it from __ROAM__ in dev
+  readonly log: string[] = [];
 
   constructor(
     private player: Pick<SoundPlayer, "play">,
@@ -187,14 +171,12 @@ export class SoundDirector {
     private score: Pick<CombatScore, "accent">,
   ) {}
 
-  // Logs what the score did with every accent request, and the heat after it.
   accent(cue: AccentCue, delayMs: number): void {
     const r = this.score.accent(cue, delayMs);
     if (!r) return;
     this.record(`${cue} ${r.offer} heat${r.heat.toFixed(1)}`);
   }
 
-  // delayOf gives when each event's moment comes, or null to skip the event in this call.
   accents(events: GameEvent[], playerId: string, delayOf: (e: GameEvent) => number | null): void {
     for (const e of events) {
       const cue = accentOf(e, playerId);
@@ -236,7 +218,6 @@ export class SoundDirector {
   }
 }
 
-// What the loops respond to each frame.
 export type LoopState = { stormTiles: number; inCombat: boolean; paused: boolean };
 
 export type LoopLevels = {
@@ -259,7 +240,6 @@ export function loopLevels(s: LoopState, mix: typeof MIX): LoopLevels {
   };
 }
 
-// Engine over one turn from the player's speed at its start and end, in m/s, or null when standing still.
 export function computeEngineGlide(
   frames: VehicleFrame[],
   seconds: number,
@@ -310,8 +290,6 @@ export function engineGlide(
   };
 }
 
-// Engine, wind, calm music and the combat score bases run for the whole session. Wind and music change gain;
-// the engine sounds only while a turn plays.
 export class SoundLoops {
   private engine: LoopHandle | null = null;
   private engineChassis: string | null = null;
@@ -339,12 +317,10 @@ export class SoundLoops {
     engine.glide(g);
   }
 
-  // A throttle blip on the chassis's own engine note when overdrive comes on.
   rev(chassisId: string): void {
     this.player.loop("engine", { pan: 0, gain: 0 }, engineFileFor(chassisId)).once(MIX.rev);
   }
 
-  // Sends only changed targets, so ramps are not restarted every frame.
   update(s: LoopState): void {
     const l = loopLevels(s, MIX);
     const was = this.last;
@@ -355,7 +331,6 @@ export class SoundLoops {
     this.score.tick();
   }
 
-  // Calm music comes back after a fight as a new random track.
   private updateMusic(l: LoopLevels, was: LoopLevels | null): void {
     this.updateCalm(l.calmGain, was);
     if (was?.musicCutoffHz !== l.musicCutoffHz) this.player.setBusTone("music", l.musicCutoffHz, MIX.music.toneSeconds);

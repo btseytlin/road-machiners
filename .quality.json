@@ -1,3 +1,4 @@
 {
-  "maxFilesPerKloc": 5
+  "maxFilesPerKloc": 5,
+  "maxDocstringLines": 3
 }

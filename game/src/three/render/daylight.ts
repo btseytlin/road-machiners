@@ -11,15 +11,13 @@ import { PAL } from "../../render/palette";
 import { bodyOf } from "../../sim/body";
 import { DEG, type Vec } from "../../sim/vec";
 
-const MIN_LIGHT_ELEVATION = 6; // degrees; a lower light would stretch every shadow across the whole view
-const TWILIGHT = 10; // degrees below the horizon where the handover to moonlight ends
-const MOON_ELEVATION = 25; // degrees
+const MIN_LIGHT_ELEVATION = 6;
+const TWILIGHT = 10;
+const MOON_ELEVATION = 25;
 const MOON_DIR = TERRAIN.light;
 const WHITE = new THREE.Color(0xffffff);
-const GLASS_SATURATION = 0.9; // share of the glow color's saturation kept, so windows read softer than the light
+const GLASS_SATURATION = 0.9;
 
-// Keyed by the sun's height in degrees, highest first. Negative is below the horizon.
-// By day the ground color is warm sand, so faces turned down catch light bounced off the desert.
 type Key = {
   h: number;
   sun: number;
@@ -27,8 +25,8 @@ type Key = {
   sky: number;
   ground: number;
   skyI: number;
-  glassI: number; // strength of the glow cab windows add: none by day, most at sunset
-  glassWhite: number; // share of white in that glow, so it goes from the sunset color to a whitish night glow
+  glassI: number;
+  glassWhite: number;
 };
 const KEYS: Key[] = [
   {
@@ -94,17 +92,16 @@ const KEYS: Key[] = [
 ];
 
 export type Daylight = {
-  dir: Vec; // unit map direction toward the light
-  elevation: number; // radians
+  dir: Vec;
+  elevation: number;
   sun: THREE.Color;
   sunIntensity: number;
   sky: THREE.Color;
   ground: THREE.Color;
   skyIntensity: number;
-  glass: THREE.Color; // glow cab windows add: the sun color at sunset, whitish at night
+  glass: THREE.Color;
 };
 
-// The sun's height in degrees. At night it keeps sinking at its horizon rate, so twilight has a length.
 function sunHeight(hour: number): { h: number; dir: Vec } {
   const span = TIME.sunset - TIME.sunrise;
   const t = (hour - TIME.sunrise) / span;
@@ -114,7 +111,7 @@ function sunHeight(hour: number): { h: number; dir: Vec } {
       dir: { x: Math.cos(Math.PI * t), y: -Math.sin(Math.PI * t) },
     };
   }
-  const rate = (TIME.noonElevation * Math.PI) / span; // degrees per hour at the horizon
+  const rate = (TIME.noonElevation * Math.PI) / span;
   const afterSunset = (hour - TIME.sunset + 24) % 24;
   const beforeSunrise = (TIME.sunrise - hour + 24) % 24;
   const evening = afterSunset < beforeSunrise;
@@ -125,7 +122,6 @@ function sunHeight(hour: number): { h: number; dir: Vec } {
 }
 
 function colorsAt(h: number): Omit<Daylight, "dir" | "elevation"> {
-  // Past either end the light holds the end key, so deep night never extrapolates.
   const hi = KEYS.findIndex((k) => k.h <= h);
   const a = hi === -1 ? KEYS[KEYS.length - 1] : KEYS[Math.max(0, hi - 1)];
   const b = hi === -1 ? a : KEYS[hi];
@@ -157,7 +153,6 @@ export function daylightAt(turn: number): Daylight {
       dir,
       elevation: Math.max(h, MIN_LIGHT_ELEVATION) * DEG,
     };
-  // Below the horizon the light swings from the set sun to the moon while it is dim.
   const s = Math.min(1, -h / TWILIGHT);
   const x = dir.x + (MOON_DIR.x - dir.x) * s;
   const y = dir.y + (MOON_DIR.y - dir.y) * s;
@@ -171,9 +166,8 @@ export function daylightAt(turn: number): Daylight {
   };
 }
 
-const SUN_RADIUS = 150; // meters from the focus to the sun light
+const SUN_RADIUS = 150;
 
-// Puts the sun above focus in the light's direction and colors both lights.
 export function lightScene(sun: THREE.DirectionalLight, sky: THREE.HemisphereLight, focus: V3, light: Daylight): void {
   const horiz = Math.cos(light.elevation) * SUN_RADIUS;
   sun.target.position.set(focus.x, focus.y, focus.z);
@@ -185,12 +179,10 @@ export function lightScene(sun: THREE.DirectionalLight, sky: THREE.HemisphereLig
   sky.intensity = light.skyIntensity;
 }
 
-// The sun light with its shadow box. The box follows the player, so shadows draw near the truck.
 export function sunLight(): THREE.DirectionalLight {
   const sun = new THREE.DirectionalLight();
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  // The terrain shadows itself. Without a normal offset its lit slopes show striped shadow acne.
   sun.shadow.normalBias = 0.3;
   Object.assign(sun.shadow.camera, {
     left: -80,
@@ -203,43 +195,33 @@ export function sunLight(): THREE.DirectionalLight {
   return sun;
 }
 
-// Lights that exist only at night: headlight beams for every vehicle within gray vision, also one the
-// player cannot see, and a faint glow over the player truck so its paint reads against the dark ground.
-
 const BEAM_COLOR = 0xfff2c8;
 const BEAM_INTENSITY = 25;
-const BEAM_DECAY = 0.4; // below the physical 2, so the ground by the nose does not burn white
-const BEAM_RANGE = 70; // meters where the light fades to nothing
-const BEAM_ANGLE = 42 * DEG; // half-angle of the cone
-const BEAM_PENUMBRA = 0.6; // soft share of the cone edge
-const BEAM_HEIGHT = 4; // meters above the truck center where the beam starts
-const BEAM_AIM = { ahead: 30, down: 6 }; // meters ahead of the nose and below the truck center the beam points at
+const BEAM_DECAY = 0.4;
+const BEAM_RANGE = 70;
+const BEAM_ANGLE = 42 * DEG;
+const BEAM_PENUMBRA = 0.6;
+const BEAM_HEIGHT = 4;
+const BEAM_AIM = { ahead: 30, down: 6 };
 
 const GLOW_INTENSITY = 0.5;
-const GLOW_RANGE = 4.5; // meters where the glow fades to nothing
-const GLOW_DECAY = 1; // below the physical 2, so the roof under the light does not burn white
-const GLOW_HEIGHT = 3; // meters above the truck center
+const GLOW_RANGE = 4.5;
+const GLOW_DECAY = 1;
+const GLOW_HEIGHT = 3;
 
-// on: the vehicle's lamps shine now. Beams of vehicles with lamps off stay in the pool at zero.
-// Each vehicle switches its lamps at its own moment within the turn that dusk or dawn falls on.
-// lightTurn: the clock the light shows, fractional while a turn plays.
 export function lampsOn(id: string, lightTurn: number): boolean {
-  // The share of the movement that plays before the switch, in (0, 1]. A vehicle at rest shows its turn's state.
   const delay = 1 - hashStr(id);
   return !sunAt(Math.floor(lightTurn + 1 - delay));
 }
 
 export type LitVehicle = { chassisId: string; frame: VehicleFrame; on: boolean };
 
-// A change in light count recompiles every material. So the lights exist only at night, and through the night
-// the beam pool only grows, to the most vehicles seen at once. Unused beams stay at zero until dawn.
 export class NightLights {
   private readonly beams: THREE.SpotLight[] = [];
   private glow: THREE.PointLight | null = null;
 
   constructor(private readonly scene: THREE.Scene) {}
 
-  // truck: the drawn player truck position. lit: vehicles within gray vision.
   update(night: boolean, truck: V3, lit: LitVehicle[]): void {
     if (!night) {
       this.clear();

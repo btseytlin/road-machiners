@@ -1,7 +1,6 @@
 // Replays every trace in tmp/progression/ through the current XP rules and prints, per archetype, the in-game day
 // each skill reaches each level, its XP per day, and each miss against the targets in src/data/skills.ts.
 // Days show the median over seeds and the min-max range. A level some seeds never reach shows how many seeds reached it.
-// Usage: npm run progression:report
 import { createReadStream, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { MAX_SKILL_LEVEL, SKILL_IDS } from '../src/data/skills.ts';
@@ -18,7 +17,6 @@ for (const file of files) runs.push(await readRun(`${DIR}/${file}`));
 const archetypes = [...new Set(runs.map((r) => r.archetype))];
 for (const archetype of archetypes) printArchetype(archetype, runs.filter((r) => r.archetype === archetype));
 
-// A trace file, replayed with the current XP rules.
 async function readRun(path) {
   const run = parseRun(await readValues(path), path);
   const curve = replay(run.trace, run.turns);
@@ -49,7 +47,6 @@ function printArchetype(archetype, group) {
   if (group.every((run) => run.misses.length === 0)) console.log('  all targets met');
 }
 
-// The turns to a level over seeds. Seeds that never reach it are counted, not averaged in.
 function levelCell(turns, seeds) {
   const reached = turns.filter((t) => t !== null);
   if (reached.length === 0) return 'never';

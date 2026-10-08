@@ -31,7 +31,6 @@ function createNpc(w: World, templateId: string, traits: TraitId[], chassis: str
   return npc;
 }
 
-// The first goal the driver's idle roll picks in a copy of the world, for each of `seeds` RNG states.
 function idleGoals(w: World, npcId: string, seeds: number): NpcActivity[] {
   const goals: NpcActivity[] = [];
   for (let seed = 0; seed < seeds; seed++) {

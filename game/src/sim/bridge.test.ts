@@ -39,7 +39,6 @@ describe('Canyon Bridge', () => {
   it('cuts the causeway, so the canyon floor lies far below the deck', () => {
     const mid = at(BRIDGE_LENGTH / 2, 0);
     expect(groundAt(t, mid.x, mid.y)).toBeLessThan(heightAt(t, mid.x, mid.y) - 3);
-    // Beside the deck the cut ground is low too, while the abutments stay at deck level.
     const beside = at(BRIDGE_LENGTH / 2, B.width + 4);
     expect(groundAt(t, beside.x, beside.y)).toBeLessThan(heightAt(t, mid.x, mid.y) - 3);
     for (const along of [0, BRIDGE_LENGTH]) {
@@ -54,7 +53,6 @@ describe('Canyon Bridge', () => {
     const deck = heightAt(t, onDeck.x, onDeck.y);
     expect(markHeightAt(t, onDeck, floor.x, floor.y)).toBe(deck);
     expect(markHeightAt(t, floor, floor.x, floor.y)).toBe(groundAt(t, floor.x, floor.y));
-    // Past the deck ends a mark lies on the ground.
     const past = at(-3, 0);
     expect(markHeightAt(t, onDeck, past.x, past.y)).toBe(heightAt(t, past.x, past.y));
   });

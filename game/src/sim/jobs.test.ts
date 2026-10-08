@@ -48,11 +48,11 @@ describe('field repair job', () => {
     addGoods(w, me, 'parts', 20);
     const held = goodsCount(me).parts ?? 0;
     const next = startRepair(w, cage.id);
-    advanceJobs(next); // one turn parked, progress made
-    next.vehicles[0].speed = 5; // moves before the job finishes
+    advanceJobs(next);
+    next.vehicles[0].speed = 5;
     advanceJobs(next);
     expect(next.vehicles[0].job).toBeNull();
-    expect(armorPart(next.vehicles[0]).hp).toBe(1); // no HP gained, parts untouched
+    expect(armorPart(next.vehicles[0]).hp).toBe(1);
     expect(goodsCount(next.vehicles[0]).parts).toBe(held);
   });
 
@@ -67,7 +67,7 @@ describe('field repair job', () => {
     expect(plan.turns).toBeGreaterThan(1);
     const next = startRepair(w, cage.id);
     for (let i = 0; i < plan.turns - 1; i++) advanceJobs(next);
-    expect(goodsCount(next.vehicles[0]).parts).toBe(held); // not yet spent
+    expect(goodsCount(next.vehicles[0]).parts).toBe(held);
     advanceJobs(next);
     expect(goodsCount(next.vehicles[0]).parts).toBe(held - plan.parts);
   });
@@ -189,7 +189,6 @@ describe('repair without parts', () => {
 });
 
 describe('auto patch and promised parts', () => {
-  // A damaged, parked player holding exactly `held` parts, and an NPC client a patch deal can name.
   function setup(held: number, deal: 'paid' | 'ownParts', playerIsPatcher: boolean) {
     const w = emptyWorld();
     const me = w.vehicles[0];
@@ -460,7 +459,6 @@ describe('field job practice', () => {
 });
 
 describe('jobs in combat', () => {
-  // A player with a damaged part, spare parts, and a raider parked in sight that shoots at it unless told not to.
   function underFire(attacking = true) {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = w.vehicles[0];
@@ -503,7 +501,6 @@ describe('jobs in combat', () => {
 describe('weld job', () => {
   const { scrap, turns, part } = PERK_NUMBERS.welder;
 
-  // Sets the truck's scrap metal to exactly n units.
   function holdScrap(w: ReturnType<typeof emptyWorld>, n: number): void {
     const me = w.vehicles[0];
     removeGoods(me, 'scrap', goodsCount(me).scrap ?? 0);

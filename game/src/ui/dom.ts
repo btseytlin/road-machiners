@@ -21,7 +21,6 @@ export function uiRoot(): HTMLElement {
   return root;
 }
 
-// Panels in the top left corner sit side by side in one row.
 export function topLeft(): HTMLElement {
   const root = uiRoot();
   const found = root.querySelector<HTMLElement>(':scope > .top-left');
@@ -31,7 +30,6 @@ export function topLeft(): HTMLElement {
   return row;
 }
 
-// Panels in the top right corner sit side by side in one row.
 export function topRight(): HTMLElement {
   const root = uiRoot();
   const found = root.querySelector<HTMLElement>(':scope > .top-right');
@@ -43,7 +41,6 @@ export function topRight(): HTMLElement {
 
 export function panel(cls: string, parent: HTMLElement = uiRoot()): HTMLElement {
   const p = el('div', { class: `panel ${cls}` });
-  // Keep clicks on panels from reaching the game canvas.
   p.addEventListener('pointerdown', (e) => e.stopPropagation());
   p.addEventListener('wheel', (e) => e.stopPropagation());
   parent.append(p);

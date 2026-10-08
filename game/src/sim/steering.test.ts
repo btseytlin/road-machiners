@@ -30,7 +30,6 @@ describe("throttle by click distance", () => {
     expect(at((z.brakeEnd + z.holdEnd) / 2)).toBe(4);
     expect(at(z.reach + 5)).toBe(Math.min(s.maxSpeed, 4 + s.accel));
     expect(throttleFor(1, 4)).toBe("brake");
-    // Braking for a close point stops at the speed from rest.
     expect(zoneSpeed(s, 0.5, 1)).toBeCloseTo(zoneSpeed(s, 0, 1), 5);
     expect(throttleFor(5, 4)).toBe("hold");
     expect(throttleFor(20, 4)).toBe("accelerate");

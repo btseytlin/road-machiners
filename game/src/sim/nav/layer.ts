@@ -1,7 +1,6 @@
 // Static navigation layers: per-tile cliff flags and route costs, and per-cell blocked flags and step
 // costs for one vehicle radius. Road and kill wrecks and parked vehicles are not in here; the A* overlay
 // stamps them per query. Breakable props make their cells costly instead of blocked. Per-driver route taste
-// scales these costs.
 
 import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
@@ -15,61 +14,48 @@ import type { Obstacle, Vehicle, World } from '../types';
 import { dist, type Vec } from '../vec';
 import { ObstacleBuckets, type Blocker } from './buckets';
 
-export const CELL = 0.5; // tiles per grid cell
-export const CLEARANCE = 0.4; // extra gap from obstacles on top of the vehicle radius; covers RULES.maxBulge
+export const CELL = 0.5;
+export const CLEARANCE = 0.4;
 
-// Per-terrain data every radius shares.
 export type TerrainNav = {
   size: number;
-  n: number; // grid cells per side
-  cliffTile: Uint8Array; // 1 where the tile is too steep to drive
-  tileCost: Float64Array; // route cost per tile driven: flatCost times the slope multiplier
-  flatCost: Float64Array; // route cost per tile before the slope multiplier: 1 / terrain speed, times offRoadCost off the road
-  slow: Float32Array; // step cost multiplier per cell, the tileCost under its center
+  n: number;
+  cliffTile: Uint8Array;
+  tileCost: Float64Array;
+  flatCost: Float64Array;
+  slow: Float32Array;
 };
 
-export const COARSE = 8; // cells per coarse block side
+export const COARSE = 8;
 
-// Coarse graph for the corridor search of long routes. A region is a connected piece of free cells
-// inside one COARSE x COARSE block. Two regions are linked when a cell of one touches a cell of the
-// other, so a chain of linked regions always holds a fine path.
 export type CoarseGrid = {
-  n: number; // blocks per side
-  region: Int32Array; // per cell: its region, from 1; 0 on blocked cells
-  block: Int32Array; // per region: its block, row-major over n x n blocks
-  x: Float32Array; // per region: centroid in cells
+  n: number;
+  region: Int32Array;
+  block: Int32Array;
+  x: Float32Array;
   y: Float32Array;
-  slow: Float32Array; // per region: mean slow of its cells
-  comp: Int32Array; // per region: its connected component over 8-neighbour steps, from 1
-  edgeStart: Int32Array; // per region: first index into edges; edgeStart[r + 1] ends the list
-  edges: Int32Array; // linked regions
+  slow: Float32Array;
+  comp: Int32Array;
+  edgeStart: Int32Array;
+  edges: Int32Array;
 };
 
-// Its slow also holds the costly cells of breakable props.
 export type NavLayer = TerrainNav & {
-  id: number; // identity for route cache keys
+  id: number;
   radius: number;
-  blocked: Uint8Array; // cliffs and bridge rails within reach and static drive obstacles, per cell
+  blocked: Uint8Array;
   coarse: CoarseGrid;
 };
 
-// The static drive obstacles of one obstacles array as blockers, and a bucket index over all of them. Solid
-// blockers block cells. Breakable ones make cells costly, and straight line checks treat them as solid, so only
-// the grid search decides to drive through one.
 export type StaticSet = { key: string; solidKey: string; solid: Blocker[]; costly: Blocker[]; buckets: ObstacleBuckets };
 
-// Road and kill wrecks come and go in play. Every other drive obstacle is fixed at map generation.
 export function isTransientWreck(o: Obstacle): boolean {
   return o.kind === 'wreck' && o.id.startsWith('wreck');
 }
 
-// Terrains are frozen and shared by world clones, so identity is the key. Dropped terrains free their layers.
-// solidGrids: cliff cells plus solid props, and the coarse grid over them, per radius and solid set. Layers share
-// them and never write to them.
 type SolidGrid = { blocked: Uint8Array; coarse: CoarseGrid };
 type TerrainEntry = { nav: TerrainNav; cellCliff: Map<number, Uint8Array>; solidGrids: Map<string, SolidGrid>; layers: Map<string, NavLayer> };
 const terrains = new WeakMap<Terrain, TerrainEntry>();
-// Per terrain: a few chassis radii times the current static obstacle set. Tests build more sets, so clear when full.
 const LAYERS_MAX = 16;
 let nextLayerId = 1;
 
@@ -93,15 +79,10 @@ function terrainEntry(t: Terrain) {
   return e;
 }
 
-// Road tiles and the ground next to sites are on the road. Roads meet at site centers, but sites
-// block driving, so traffic crosses from one road to the next around the site. Pricing that ground as
-// road lets routes leave the road early and round the site, instead of driving head-on at its edge.
-// Asphalt patches are loose pieces that lead nowhere, so they count as open ground.
 function routeCost(type: TerrainTypeId, bySite: boolean): number {
   return (type === 'road' || bySite ? 1 : REGION.navigation.offRoadCost) / TERRAIN_TYPES[type].speed;
 }
 
-// Steeper ground is slower to climb and harder to hold, so routes prefer gentler ground.
 function slopeCost(t: Terrain, tile: number): number {
   const s = tileSlope(t, tile);
   return 1 + REGION.navigation.slopeCost * (Math.hypot(s.x, s.y) / TERRAIN.drive.maxSlope) ** 2;
@@ -109,7 +90,6 @@ function slopeCost(t: Terrain, tile: number): number {
 
 const SITES = [...REGION.towns, ...REGION.locations];
 
-// Within one road width of a site's edge.
 function nearSite(x: number, y: number): boolean {
   return SITES.some((s) => (s.pos.x - x) ** 2 + (s.pos.y - y) ** 2 < (s.radius + REGION.roadWidth) ** 2);
 }
@@ -118,22 +98,18 @@ export function terrainNav(t: Terrain): TerrainNav {
   return terrainEntry(t).nav;
 }
 
-// Same clamping as tileAt.
 export function tileIndex(size: number, x: number, y: number): number {
   const tx = Math.min(size - 1, Math.max(0, Math.floor(x)));
   const ty = Math.min(size - 1, Math.max(0, Math.floor(y)));
   return ty * size + tx;
 }
 
-// A cliff tile within reach of the point, checked at the point and four compass offsets.
 export function nearCliff(nav: TerrainNav, x: number, y: number, reach: number): boolean {
   const c = nav.cliffTile;
   const s = nav.size;
   return c[tileIndex(s, x, y)] === 1 || c[tileIndex(s, x + reach, y)] === 1 || c[tileIndex(s, x - reach, y)] === 1 || c[tileIndex(s, x, y + reach)] === 1 || c[tileIndex(s, x, y - reach)] === 1;
 }
 
-// Built once per obstacles array and its content. Props break and grow back in place during a turn, so a hit
-// needs the same obstacle objects in the same order.
 const staticSets = new WeakMap<Obstacle[], { items: Obstacle[]; set: StaticSet }>();
 
 export function staticSet(obstacles: Obstacle[], size: number): StaticSet {
@@ -160,19 +136,15 @@ function sameItems(a: readonly Obstacle[], b: readonly Obstacle[]): boolean {
   return true;
 }
 
-// Blockers that change during play: road and kill wrecks and the caller's extra circles.
 export function dynamicBlockers(obstacles: Obstacle[], extra: Blocker[]): Blocker[] {
   return [...obstacles.filter((o) => isDriveObstacle(o) && isTransientWreck(o)).map(driveBlocker), ...extra];
 }
 
-// A site's edge blocks as a circle. A prop blocks with its boxes that start below truck roofs, so trucks pass
-// under canopies.
 function driveBlocker(o: Obstacle): Blocker {
   if (o.kind === 'site') return { pos: o.pos, r: o.r };
   return { pos: o.pos, r: propReach(o), prop: { key: propKey(o), boxes: lowBoxes(propBoxes(o)) } };
 }
 
-// World clones share posed boxes, so each box list is filtered once.
 const lowBoxCache = new WeakMap<readonly PosedBox[], PosedBox[]>();
 
 function lowBoxes(boxes: readonly PosedBox[]): PosedBox[] {
@@ -184,7 +156,6 @@ function lowBoxes(boxes: readonly PosedBox[]): PosedBox[] {
   return low;
 }
 
-// Exact content key: number-to-string round-trips, so equal keys mean equal circles, and a prop key names its pose.
 export function blockerKey(blockers: Blocker[]): string {
   return blockers.map((o) => (o.prop ? o.prop.key : `${o.pos.x},${o.pos.y},${o.r}`)).join('|');
 }
@@ -206,7 +177,6 @@ export function navLayer(terrain: Terrain, obstacles: Obstacle[], radius: number
   return layer;
 }
 
-// Cells too close to a cliff or a bridge rail for a truck of this radius, per radius.
 function cliffCells(e: TerrainEntry, radius: number): Uint8Array {
   const cached = e.cellCliff.get(radius);
   if (cached) return cached;
@@ -227,8 +197,6 @@ function markCliffCells(nav: TerrainNav, reach: number): Uint8Array {
   return cliff;
 }
 
-// Blocked cells and the coarse grid over them, per radius and solid set, with the terrain's step costs. Breakable
-// props never block, so a prop breaking or growing back keeps this grid and only changes region costs.
 function solidGrid(e: TerrainEntry, cliff: Uint8Array, statics: StaticSet, radius: number): SolidGrid {
   const key = `${radius}:${statics.solidKey}`;
   let grid = e.solidGrids.get(key);
@@ -242,7 +210,6 @@ function solidGrid(e: TerrainEntry, cliff: Uint8Array, statics: StaticSet, radiu
   return grid;
 }
 
-// The same coarse grid with each region's mean step cost taken from slow.
 function withRegionSlow(coarse: CoarseGrid, slow: Float32Array): CoarseGrid {
   const sum = new Float64Array(coarse.slow.length);
   const count = new Uint32Array(coarse.slow.length);
@@ -256,8 +223,6 @@ function withRegionSlow(coarse: CoarseGrid, slow: Float32Array): CoarseGrid {
   return { ...coarse, slow: mean };
 }
 
-// The terrain's step costs, times BREAKABLE.routeCost on cells a breakable prop would block. A cell near two
-// breakable props costs the same as near one.
 function costlySlow(nav: TerrainNav, costly: Blocker[], radius: number): Float32Array {
   if (costly.length === 0) return nav.slow;
   const marked = new Uint8Array(nav.n * nav.n);
@@ -267,8 +232,6 @@ function costlySlow(nav: TerrainNav, costly: Blocker[], radius: number): Float32
   return slow;
 }
 
-// Calls mark for every cell whose center lies closer than the vehicle radius plus clearance to a blocker: to a
-// circle's edge, or to the ground outline of a prop's box.
 export function stampBlockers(n: number, blockers: Blocker[], radius: number, mark: (cell: number) => void): void {
   const grow = radius + CLEARANCE;
   for (const o of blockers) {
@@ -281,14 +244,12 @@ export function stampBlockers(n: number, blockers: Blocker[], radius: number, ma
   }
 }
 
-// Half the width and height of the map-aligned square around a box's outline grown by grow.
 function boxExtent(box: PosedBox, grow: number): [number, number] {
   const ax = Math.abs(box.axis.x);
   const ay = Math.abs(box.axis.y);
   return [ax * box.half.x + ay * box.half.y + grow, ay * box.half.x + ax * box.half.y + grow];
 }
 
-// Marks the cells within ex and ey tiles of center whose centers pass the test.
 function stampWithin(n: number, center: Vec, ex: number, ey: number, inside: (p: Vec) => boolean, mark: (cell: number) => void): void {
   const x0 = Math.max(0, Math.floor((center.x - ex) / CELL));
   const y0 = Math.max(0, Math.floor((center.y - ey) / CELL));
@@ -297,7 +258,6 @@ function stampWithin(n: number, center: Vec, ex: number, ey: number, inside: (p:
   for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) if (inside({ x: (x + 0.5) * CELL, y: (y + 0.5) * CELL })) mark(y * n + x);
 }
 
-// The connected component of a cell over the 8-neighbour steps A* takes, from 1; 0 on blocked cells.
 export function componentOf(layer: NavLayer, cell: number): number {
   const r = layer.coarse.region[cell];
   return r === 0 ? 0 : layer.coarse.comp[r];
@@ -306,7 +266,6 @@ export function componentOf(layer: NavLayer, cell: number): number {
 function coarseGrid(n: number, blocked: Uint8Array, slow: Float32Array): CoarseGrid {
   const bn = Math.ceil(n / COARSE);
   const region = new Int32Array(n * n);
-  // Queue entries are block-local: ly * COARSE + lx.
   const queue = new Int32Array(COARSE * COARSE);
   const blockOf: number[] = [0];
   const sumX: number[] = [0];
@@ -319,7 +278,6 @@ function coarseGrid(n: number, blocked: Uint8Array, slow: Float32Array): CoarseG
       const y0 = by * COARSE;
       const w = Math.min(n, x0 + COARSE) - x0;
       const h = Math.min(n, y0 + COARSE) - y0;
-      // Most blocks are open ground: one region of all cells, no flood fill needed.
       if (allFree(blocked, n, x0, y0, w, h)) {
         const id = blockOf.length;
         blockOf.push(by * bn + bx);
@@ -374,9 +332,6 @@ function coarseGrid(n: number, blocked: Uint8Array, slow: Float32Array): CoarseG
     }
   const count = blockOf.length;
   const links: number[][] = Array.from({ length: count }, () => []);
-  // Touching cells in different regions sit on either side of a block edge, so only those rows and
-  // columns are scanned. Each pair of lines is checked straight across and along both diagonals.
-  // Along one edge the same pair repeats cell after cell, so a repeat of the last pair is skipped.
   let lastA = 0;
   let lastB = 0;
   const link = (a: number, b: number) => {
@@ -424,7 +379,6 @@ function allFree(blocked: Uint8Array, n: number, x0: number, y0: number, w: numb
   return true;
 }
 
-// Flood fills the region graph. Regions are internally connected, so this equals a flood fill of the cells.
 function components(count: number, edgeStart: Int32Array, edges: Int32Array): Int32Array {
   const comp = new Int32Array(count);
   const queue = new Int32Array(count);
@@ -448,20 +402,11 @@ function components(count: number, edgeStart: Int32Array, edges: Int32Array): In
   return comp;
 }
 
-// A driver's route taste: a smooth cost field over the map that differs per driver, so drivers
-// between the same points take different ways. Value noise on a lattice of points
-// REGION.navigation.taste.scale tiles apart, smoothly blended between them. It multiplies route cost
-// by 1 - taste.strength / 2 to 1 + taste.strength / 2. Centering it on 1 keeps the A* estimate as tight
-// as for a plain route, so a tasted search visits about as many cells.
 export type Taste = { seed: number; side: number; values: Float32Array };
 
-// Tastes are pure functions of seed and map size, and every route of a driver asks for its taste. 256 is many
-// times the NPC drivers alive at once.
 const TASTES_MAX = 256;
 const tastes = new Map<string, Taste>();
 
-// The taste of an NPC driver, fixed for its life by the world seed and its id. No driver, the player
-// and vehicles without a brain plan plain routes.
 export function tasteOf(world: World, v: Pick<Vehicle, "id" | "brain"> | undefined): Taste | null {
   if (!v?.brain) return null;
   const chars = Array.from(v.id, (ch) => ch.charCodeAt(0));
@@ -484,7 +429,6 @@ export function makeTaste(seed: number, size: number): Taste {
   return { seed, side, values };
 }
 
-// Cost multiplier at map point (x, y) in tiles.
 export function tasteAt(t: Taste, x: number, y: number): number {
   const scale = REGION.navigation.taste.scale;
   const gx = Math.max(0, x / scale);
@@ -500,12 +444,10 @@ export function tasteAt(t: Taste, x: number, y: number): number {
   return top + (bottom - top) * fy;
 }
 
-// A step cost scaled by the taste at map point (x, y), or unchanged without a taste.
 export function tasted(t: Taste | null, cost: number, x: number, y: number): number {
   return t ? cost * tasteAt(t, x, y) : cost;
 }
 
-// The part of a route cache key that tells tastes apart.
 export function tasteKey(t: Taste | null): string {
   return t ? String(t.seed) : 'plain';
 }

@@ -8,18 +8,14 @@ import { bridgeCut } from './bridge';
 import { INDEX_CELL, ROAD_INDEX, RoadIndex } from './road-index';
 
 const SITES = [...REGION.towns, ...REGION.locations];
-// Squared distance past which a site is sure to lie beyond flattenMargin. The extra tile keeps
-// the cheap test clear of rounding, so the exact test decides every near case.
 const SITE_SKIP2 = SITES.map((site) => (site.radius + TERRAIN.flattenMargin + 1) ** 2);
 const FEATURES = [TERRAIN.features.canyon, TERRAIN.features.dryRiver].map((feature) => ({
   feature,
   index: new RoadIndex([feature.path], INDEX_CELL),
   reach: feature.width + feature.bank,
 }));
-// Road distances beyond this flatten nothing.
 const FLATTEN_REACH = REGION.roadWidth / 2 + TERRAIN.flattenMargin;
 
-// Own hash, independent of render/noise.ts (render-only) and sim/rng.ts (consumes world.rngState).
 function hash(x: number, y: number, seed: number): number {
   let h = (Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(seed | 0, 2246822519)) | 0;
   h = Math.imul(h ^ (h >>> 13), 1274126177);
@@ -42,7 +38,6 @@ function noise2(x: number, y: number, seed: number): number {
   return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
 }
 
-// Fractal sum of a few octaves, in [0, 1].
 function fbm(x: number, y: number, seed: number): number {
   let sum = 0;
   let total = 0;
@@ -53,18 +48,16 @@ function fbm(x: number, y: number, seed: number): number {
   return sum / total;
 }
 
-// Plain value noise in [0, 1] for secondary patterns like scrub patches.
 export function noiseAt(seed: number, x: number, y: number): number {
   return noise2(x, y, seed + NOISE_SEED_OFFSET);
 }
 
-const NOISE_SEED_OFFSET = 7919; // keeps secondary noise independent of the elevation octaves
+const NOISE_SEED_OFFSET = 7919;
 
 function rawElevation(seed: number, x: number, y: number): number {
   return fbm(x, y, seed) * 2 - 1;
 }
 
-// 0 = untouched terrain, 1 = fully flattened, based on distance to the nearest road, town or location.
 export function flattenFactor(x: number, y: number): number {
   let best = ROAD_INDEX.nearestWithin(x, y, FLATTEN_REACH) - REGION.roadWidth / 2;
   for (let k = 0; k < SITES.length; k++) {
@@ -77,14 +70,12 @@ export function flattenFactor(x: number, y: number): number {
   return flattenFalloff(best);
 }
 
-// 1 on a road or site, falling smoothly to 0 at flattenMargin. gap is the distance past its edge.
 export function flattenFalloff(gap: number): number {
   if (gap <= 0) return 1;
   if (gap >= TERRAIN.flattenMargin) return 0;
   return 1 - smooth(gap / TERRAIN.flattenMargin);
 }
 
-// Broad rolling height at each site center. Holds one seed, the one terrain generation is using.
 let levels: { seed: number; values: number[] } | undefined;
 
 function siteLevels(seed: number): number[] {
@@ -96,15 +87,11 @@ function siteLevels(seed: number): number[] {
   return levels.values;
 }
 
-// Terrain elevation as the game builds it today: relief flattened near roads and sites, plus the broad
-// rolling height with its craters.
 export function elevationAt(seed: number, x: number, y: number): number {
   const height = reliefAt(seed, x, y) * (1 - flattenFactor(x, y) * (1 - bridgeCut(x, y)));
-  // Roads retain broad grades; only their small bumps and channel crossings are smoothed.
   return cratered(height + rollingAt(seed, x, y), x, y);
 }
 
-// Unflattened elevation noise, ridges and the canyon and dry river channels.
 export function reliefAt(seed: number, x: number, y: number): number {
   const relief = TERRAIN.relief;
   const ridges = Math.abs(noise2(x * relief.ridgeFrequency, y * relief.ridgeFrequency, seed + 5000) - 0.5) * relief.ridgeAmplitude;
@@ -116,8 +103,6 @@ export function reliefAt(seed: number, x: number, y: number): number {
   return height;
 }
 
-// Broad rolling elevation, held at each site's own level near the site, with the craters cut in.
-// Flattening never touches it.
 export function broadAt(seed: number, x: number, y: number): number {
   return cratered(rollingAt(seed, x, y), x, y);
 }
@@ -139,13 +124,11 @@ function rollingAt(seed: number, x: number, y: number): number {
   return rolling;
 }
 
-// The height with every crater bowl cut into it.
 function cratered(height: number, x: number, y: number): number {
   let out = height;
   for (const crater of TERRAIN.features.craters) {
     const dx = crater.center.x - x;
     const dy = crater.center.y - y;
-    // One tile past the bank keeps this cheap skip clear of rounding.
     if (dx * dx + dy * dy > (crater.radius + crater.bank + 1) ** 2) continue;
     const gap = Math.hypot(dx, dy) - crater.radius;
     if (gap < crater.bank) out -= crater.depth * (gap <= 0 ? 1 : 1 - smooth(gap / crater.bank));

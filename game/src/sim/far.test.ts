@@ -21,7 +21,6 @@ beforeAll(async () => {
 
 const LIVE = TERRAIN.vision.radius + PERF.liveMargin;
 
-// Plays n turns through the real turn pipeline with physics movement.
 function play(w: World, n: number): { w: World; d: Drive; last: TurnResult } {
   let d = buildDrive(w);
   let last: TurnResult | null = null;
@@ -41,7 +40,6 @@ function pathLength(trail: Pose[]): number {
   return total;
 }
 
-// Player at (30, 30); one NPC inside the live radius and one far beyond it.
 function mixedWorld(): World {
   const w = emptyWorld();
   const near = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 40, y: 30 });
@@ -189,7 +187,6 @@ describe('far NPC travel', () => {
       { kind: 'investigate' as const, targetId: w.player.vehicleId, destination: { x: 30 + LIVE + 60, y: 80 }, phase: 'travel' as const, reason: 'interruption' },
     ];
     npc.brain.goals = structuredClone(goals);
-    // The investigation needs a hostile target, so the NPC holds a feud toward the player.
     w.states.push({ id: 'feud-test', kind: 'feud', holder: npc.id, other: w.player.vehicleId, turnsLeft: 10, born: w.turn, data: { kind: 'feud', robbery: false } });
     const { w: after, d } = play(w, 1);
     w = after;
@@ -270,7 +267,7 @@ describe('far travel contact', () => {
   it('stops just short of a moving truck in the way', () => {
     const { w, mover } = far();
     const parked = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 122.5, y: 120 });
-    parked.speed = 2; // moving, so the route planner does not steer around it
+    parked.speed = 2;
     mover.order = { kind: 'through', dest: { x: 200, y: 120 } };
     advanceFar(w, mover);
     const contact = vehicleStats(w, mover).radius + vehicleStats(w, parked).radius;
@@ -299,7 +296,6 @@ describe('far travel contact', () => {
 });
 
 describe('far NPCs and breakable props', () => {
-  // A fence line along map y at x, 60 tiles long: going around it costs far more than smashing through.
   function fenceLine(x: number, y: number): Obstacle[] {
     return Array.from({ length: 64 }, (_, k) => ({ id: `fence-${k}`, pos: { x, y: y - 30 + k * 0.95 }, r: 0.5, kind: 'landmark' as const, look: 'fence' as const, yaw: Math.PI / 2 }));
   }
@@ -322,7 +318,6 @@ describe('far NPCs and breakable props', () => {
   it('leaves a fence beside its route standing', () => {
     const w = emptyWorld();
     const x = 30 + LIVE + 50;
-    // Yaw 0 lays the fence along map x, two tiles beside the straight way.
     const fence: Obstacle = { id: 'fence-0', pos: { x, y: 80 }, r: 0.5, kind: 'landmark', look: 'fence', yaw: 0 };
     w.obstacles = [fence];
     const npc = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: x - 10, y: 82 });

@@ -8,8 +8,6 @@ import { addState, stateOf, strayData } from './states';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { Vehicle, World } from './types';
 
-// The player fires a shotgun at a raider buggy 6 tiles east. A trader stands on the line of fire 1 tile past the
-// buggy, and another trader stands far off the line.
 function range(): { w: World; me: Vehicle; target: Vehicle; onLine: Vehicle; offLine: Vehicle } {
   const w = emptyWorld();
   const me = addVehicle(w, 'player', 'scout', ['shotgun', 'stockEngine'], { x: 30, y: 30 });
@@ -26,7 +24,6 @@ function range(): { w: World; me: Vehicle; target: Vehicle; onLine: Vehicle; off
   return { w, me, target, onLine, offLine };
 }
 
-// Plays turns with the gun kept loaded and the target kept alive, and sums the damage each truck took.
 function fire(w: World, me: Vehicle, turns: number): Map<string, number> {
   const total = new Map<string, number>();
   for (let i = 0; i < turns; i++) {

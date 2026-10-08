@@ -30,8 +30,6 @@ import { canDouse } from "../sim/engine-heat";
 import { ENGINE_HEAT } from "../data/wear";
 import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
 
-// The E key action. ready is false while the truck must stop first.
-// A hint marks an action that can never run here, and says why. combat is the turns of combat left when it blocks the action.
 export type ContextAction = { label: string; ready: boolean; hint?: string; combat?: number };
 
 export const combatBlocked = (turns: number): string => `Can't do this while in combat, ${turns} turns left`;
@@ -51,7 +49,6 @@ type HudActions = {
   recenter: () => void;
   aimPart: (vehicleId: string, partId: string) => void;
 };
-// Centered keeps the truck in the middle of the screen. Auto shifts the view ahead of it.
 export type CameraMode = "centered" | "auto";
 
 const LOG_LINES = 14;
@@ -68,7 +65,6 @@ function weatherLabel(w: World): string {
   return [...new Set(w.weather.map((e) => WEATHER_NAMES[e.kind]))].join(", ");
 }
 
-// A log line led by the turn it happened on.
 function turnStamped(turn: number, line: LogLine): LogLine {
   const stamp = `T${turn} `;
   return { ...line, text: stamp + line.text, spans: line.spans && [{ text: stamp, cls: "" }, ...line.spans] };
@@ -87,9 +83,7 @@ export class Hud {
   private action = panel("action");
   private toastBox = panel("toast");
   private rescue = panel("rescue");
-  // Stands on top of the part condition panel.
   private stranded = panel("stranded", this.condition.root);
-  // Shows only while a pan has left the truck.
   private recenter = panel("recenter");
   private cameraSwitch = panel("camera-mode", topRight());
   private tips = new Tips(window.localStorage);
@@ -199,8 +193,6 @@ export class Hud {
     );
   }
 
-  // The context action for the E key, or hidden. An action that needs a stop first shows disabled.
-  // Work shows its progress instead, except work that blocks no job, which yields to any action.
   renderAction(
     action: ContextAction | null,
     world: World,
@@ -251,8 +243,6 @@ export class Hud {
     );
   }
 
-  // The rescue prompts: an open radio call and the knockout banner or tow in the middle of the screen,
-  // and the beacon switch of a stranded truck above the part condition panel.
   renderRescue(w: World): void {
     this.dialogue.render(w);
     const r = getRescueReadout(w);
@@ -297,7 +287,6 @@ export class Hud {
     );
   }
 
-  // Compact list of held contracts and their due times. Hidden while the player holds none.
   private renderContracts(w: World): void {
     if (w.player.contracts.length === 0) {
       this.contracts.style.display = "none";
@@ -316,7 +305,6 @@ export class Hud {
     );
   }
 
-  // The character button, marked while a perk pair waits for a pick.
   private engineButtons(w: World, busy: boolean): HTMLElement[] {
     const overdrive = createSwitch({
       on: "Overdrive",
@@ -451,7 +439,6 @@ export class Hud {
     );
   }
 
-  // Sends a horn pressed during the turn that just ended.
   flushHorn(): void {
     this.dialogue.flushHorn();
   }
@@ -470,7 +457,6 @@ export class Hud {
     this.renderLog();
   }
 
-  // A log line from the UI itself, not from a sim event.
   note(w: World, text: string, cls: string): void {
     this.lines.unshift({ text: `T${w.turn} ${text}`, cls });
     this.renderLog();
@@ -489,7 +475,6 @@ export class Hud {
     );
   }
 
-  // Parts of another truck take clicks that aim the guns.
   private aimOf(w: World, v: Vehicle): ConditionAim | undefined {
     if (v.id === playerVehicle(w).id) return undefined;
     return { marks: aimMarks(w, v.id), pick: (partId) => this.actions.aimPart(v.id, partId) };
@@ -519,8 +504,6 @@ export class Hud {
   }
 }
 
-// An NPC reads as its driver's name, what it is doing now, then its template name. The player's truck keeps its own
-// name.
 function infoHeading(w: World, v: Vehicle): HTMLElement[] {
   if (!v.brain) return [el("h3", {}, v.name)];
   const activity = formatNpcActivity(w, v);
@@ -531,8 +514,6 @@ function infoHeading(w: World, v: Vehicle): HTMLElement[] {
   ];
 }
 
-// The NPC's traits, cargo and mark once perks show them, and the states it holds toward the player. The player's own
-// truck has none.
 function npcLines(w: World, v: Vehicle): HTMLElement[] {
   if (!v.brain) return [];
   const traits = formatNpcTraits(w, v);
@@ -548,8 +529,6 @@ function npcLines(w: World, v: Vehicle): HTMLElement[] {
   ];
 }
 
-// Work that blocks no job, like an auto patch or a patch deal, gives way to any usable context action, so the
-// player can still act.
 function shownWork(action: ContextAction | null, work: Work | null): Work | null {
   const blocks = work?.from === "job" && !isAutoPatch(work.job);
   return action && !action.hint && !blocks ? null : work;

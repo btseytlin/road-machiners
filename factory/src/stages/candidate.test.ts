@@ -7,7 +7,6 @@ import type { ReleaseState } from '../types';
 import { changeLines } from './release-common';
 import { ROOT, fake, reset } from './test-fakes';
 
-// The candidate posts a photo, so its screenshot must be a real image.
 const SHOT = pngBytes(0).toString('latin1');
 const deployed: string[] = [];
 vi.mock('../deploy', () => ({
@@ -148,7 +147,6 @@ describe('candidate', () => {
 });
 
 describe('candidate evidence', () => {
-  // The fake agent writes into the clone's .factory, and the fake shell leaves the screenshot there.
   function setup(manifest = JSON.stringify({ images: [{ file: 'screenshot.png', description: 'Faster trucks' }, { file: 'view1.png', description: 'Louder horn' }] })): ReturnType<typeof fake> {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];

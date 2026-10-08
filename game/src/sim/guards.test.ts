@@ -10,7 +10,6 @@ import type { Vec } from "./vec";
 
 const bowl = REGION.towns.find((t) => t.id === "bowl")!;
 const gate = siteGates(bowl)[0];
-// A point `d` tiles out from the gate, away from the town.
 function outside(d: number): Vec {
   return {
     x: gate.x + ((gate.x - bowl.pos.x) / bowl.radius) * d,

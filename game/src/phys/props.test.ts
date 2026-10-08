@@ -24,7 +24,6 @@ function landmark(id: string, look: LandmarkLook, pos: { x: number; y: number },
   return { id, kind: 'landmark', look, pos, r, yaw };
 }
 
-// A careless driver, so the truck drives straight at its point instead of routing around the prop.
 function straight(from: { x: number; y: number }, heading: number, to: { x: number; y: number }, props: Obstacle[]): World {
   const w = emptyWorld(from);
   me(w).heading = heading;
@@ -34,7 +33,6 @@ function straight(from: { x: number; y: number }, heading: number, to: { x: numb
   return setMoveOrder(w, { kind: 'through', dest: to });
 }
 
-// A careless driver holding a steady pace in tiles per turn, from the start.
 function paced(from: { x: number; y: number }, to: { x: number; y: number }, pace: number, props: Obstacle[]): World {
   const w = emptyWorld(from);
   me(w).speed = pace;
@@ -44,9 +42,6 @@ function paced(from: { x: number; y: number }, to: { x: number; y: number }, pac
   return w;
 }
 
-// Plays turns through the real turn pipeline, carrying one Drive from turn to turn as the game does.
-// live holds the props with colliders in the physics world the last turn left. speeds holds the player truck's
-// ground speed in m/s over each physics step.
 function play(w: World, turns: number): { w: World; hits: string[]; crashes: Crash[]; breaks: Break[]; live: string[]; speeds: number[] } {
   let d = buildDrive(w);
   const hits: string[] = [];
@@ -70,18 +65,15 @@ function play(w: World, turns: number): { w: World; hits: string[]; crashes: Cra
   return { w, hits, crashes, breaks, live, speeds };
 }
 
-// Tiles from a truck's center line to its side.
 const halfWidth = (w: World) => bodyOf(me(w).chassisId).half.z / S;
 
-// Prop colliders that hold a point in meters.
 function propsAt(d: Drive, p: { x: number; y: number; z: number }): string[] {
   return Object.entries(d.obstacles).flatMap(([id, handles]) => (handles.some((h) => d.world.getCollider(h).containsPoint(p)) ? [id] : []));
 }
 
 describe('prop colliders follow the model shape', () => {
-  // A fence segment is 4 m long at scale 1, so its radius is half a tile. Yaw a quarter turn lays it along map y.
   const fence = landmark('fence1', 'fence', { x: 40, y: 30 }, 0.5, Math.PI / 2);
-  const fenceEnd = 2.02 / S; // tiles from the fence center to its end post
+  const fenceEnd = 2.02 / S;
 
   it('a truck driving at the middle of a fence is stopped by it', () => {
     const { w, hits } = play(paced({ x: 37, y: 30 }, { x: 48, y: 30 }, toTilesPerTurn(BREAKABLE.breakSpeed / 2), [fence]), 8);
@@ -104,7 +96,6 @@ describe('prop colliders follow the model shape', () => {
   });
 
   it('a truck drives under the end of a billboard board', () => {
-    // The billboard stands at its real size. Its board reaches past its left leg, 4 to 7 m out and over 3.1 m up.
     const board = landmark('board1', 'billboard', { x: 40, y: 30 }, 1.5, 0);
     const y = 30 - 5.6 / S;
     const { w, hits } = play(straight({ x: 34, y }, 0, { x: 48, y }, [board]), 5);
@@ -113,7 +104,6 @@ describe('prop colliders follow the model shape', () => {
   });
 
   it('a gas station canopy is no collider, its posts are', () => {
-    // Scale 0.74, as the baked stations stand. The canopy then starts 3 m up; a post stands at model (0, -3.5).
     const station = landmark('gas1', 'gasStation', { x: 40, y: 30 }, 1.332, 0);
     const w = emptyWorld();
     w.obstacles = [station];
@@ -204,7 +194,6 @@ describe('breakable props', () => {
     expect(me(w).pos.x).toBeGreaterThan(42);
   });
 
-  // The contact pushes the truck back for the steps it lasts. Within a few steps of the first push it drives at the kept speed.
   it('breaking a fence costs the truck its slowdown share of speed, not a full stop', () => {
     const { w, speeds } = play(paced({ x: 37, y: 30 }, { x: 60, y: 30 }, fast, [fence]), 3);
     const hit = speeds.indexOf(Math.min(...speeds));

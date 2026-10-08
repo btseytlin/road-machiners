@@ -29,7 +29,6 @@ describe('runJob', () => {
     const state = readState(statePath);
     expect(state.jobs.map((job) => job.id)).toEqual(['a']);
     expect(state.pendingChanges).toEqual([]);
-    // A change resumes like an agent job, so its end clears its mark and sessions.
     expect(state.interrupted).toEqual([]);
     expect(existsSync(join(ROOT, 'sessions', 'issue-9'))).toBe(false);
     expect(posts).toEqual([]);
@@ -144,7 +143,6 @@ describe('runJob', () => {
   describe('sessions', () => {
     const sessions = (issue: number) => join(ROOT, 'sessions', `issue-${issue}`);
 
-    // The design stage asks GitHub for the issue first, so the fake sees the sessions as the job starts.
     async function run(stage: 'design' | 'approve', issue: number, interrupted: number[], died: JobStage | null = null): Promise<boolean[]> {
       rmSync(ROOT, { recursive: true, force: true });
       mkdirSync(sessions(issue), { recursive: true });

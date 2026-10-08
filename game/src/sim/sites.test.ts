@@ -64,7 +64,6 @@ describe('site gates and pads', () => {
   it('refuses use from beside an open site, away from its gates', () => {
     const oasis = REGION.locations.find((l) => l.kind === 'oasis')!;
     const gateAngles = siteGates(oasis).map((g) => Math.atan2(g.y - oasis.pos.y, g.x - oasis.pos.x));
-    // The edge point farthest in angle from every gate.
     let best = 0;
     let bestGap = -1;
     for (let a = -Math.PI; a < Math.PI; a += 0.01) {

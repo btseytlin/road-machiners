@@ -9,11 +9,8 @@ import { gradeRoads } from './road-grade';
 import { TEST_MAP } from '../test/map';
 import { dist, type Vec } from './vec';
 
-// Heights are stored as whole steps of 1 / heightScale, so a grade read from the map file can pass
-// its limit by up to one step per tile.
 const STORED_STEP = 1 / MAPGEN.heightScale;
 
-// Points every quarter tile along a road.
 function walk(road: readonly Vec[]): Vec[] {
   const points: Vec[] = [];
   for (let i = 1; i < road.length; i++) {
@@ -25,8 +22,6 @@ function walk(road: readonly Vec[]): Vec[] {
   return points;
 }
 
-// Steepest height change per tile between the corners of the tiles a road crosses. Tiles over the
-// canyon under Canyon Bridge are skipped, since the road runs on the deck there.
 function steepest(road: readonly Vec[]): number {
   const t = TEST_MAP.terrain;
   const n = t.size + 1;

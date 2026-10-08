@@ -186,7 +186,6 @@ describe("waypoint travel with physics", () => {
     travel.release();
     let turns = 0;
     try {
-      // The existing stop-at physics fixture reaches this destination within eight turns.
       for (; turns < 8; turns++) {
         travel.update(canTravel(world), playerVehicle(world).order !== null);
         if (!travel.shouldAdvance(0)) break;

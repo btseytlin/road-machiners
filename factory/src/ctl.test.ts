@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EMPTY_STATE, readState, writeState } from './state';
 import { ROOT, fake, reset, type Fake } from './stages/test-fakes';
 
-// The control module has its own tests. These fakes write the inbox file like the real one and let only the name "ann" act.
 vi.mock('./control', async (importOriginal) => ({
   DROP_QUEUES: (await importOriginal<{ DROP_QUEUES: readonly string[] }>()).DROP_QUEUES,
   resolveActor: (_ctx: unknown, by: string, gated: boolean) => {
@@ -20,7 +19,6 @@ vi.mock('./control', async (importOriginal) => ({
     return path;
   },
 }));
-// The repair has its own tests with real git. Here it records the order it got.
 const repairs: unknown[] = [];
 vi.mock('./repair-clone', () => ({ repairClone: async (_ctx: unknown, order: unknown) => { repairs.push(order); return ['repaired']; } }));
 const { runCtl } = await import('./ctl');

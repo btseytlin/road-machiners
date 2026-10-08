@@ -27,7 +27,6 @@ describe('route taste', () => {
     const t = makeTaste(7, 600);
     let biggest = 0;
     for (let x = 0; x < 600; x += 0.5) biggest = Math.max(biggest, Math.abs(tasteAt(t, x + 0.5, 123) - tasteAt(t, x, 123)));
-    // Smoothstep blending climbs at most 1.5 times the lattice slope.
     expect(biggest).toBeLessThanOrEqual((1.5 * strength * 0.5) / scale);
   });
 
@@ -47,12 +46,10 @@ describe('route taste', () => {
 
 describe('prop footprints', () => {
   const S = PHYSICS.metersPerTile;
-  const radius = 0.2; // a small vehicle, so the grown outlines leave room between walls
+  const radius = 0.2;
   const cellAt = (n: number, p: Vec) => Math.floor(p.y / CELL) * n + Math.floor(p.x / CELL);
   const center = (p: Vec) => ({ x: (Math.floor(p.x / CELL) + 0.5) * CELL, y: (Math.floor(p.y / CELL) + 0.5) * CELL });
 
-  // The ruin model at scale 2 (radius 2.4 tiles). Its walls ring a courtyard around model (-1.8, 0.75) m,
-  // 1.66 m from the nearest wall box at scale 1. Model y runs to map -y.
   const ruin: Obstacle = { id: 'ruin-0', pos: { x: 40.2, y: 40.3 }, r: 2.4, kind: 'landmark', look: 'ruin', yaw: 0 };
   const courtyard = center({ x: 40.2 + (-1.8 * 2) / S, y: 40.3 - (0.75 * 2) / S });
   const westWall = center({ x: 40.2 + (-4 * 2) / S, y: 40.3 });
@@ -75,7 +72,6 @@ describe('prop footprints', () => {
     const boxes = propBoxes(w.obstacles[0]);
     const near = (p: Vec) => boxes.some((b) => boxDistance(b, p) < radius + CLEARANCE);
 
-    // Every cell is compared, but a mismatch is collected and asserted once, since an expect per cell of the whole map takes half a minute.
     let stamped = 0;
     const wrong: number[] = [];
     for (let c = 0; c < layer.n * layer.n; c++) {
@@ -88,8 +84,6 @@ describe('prop footprints', () => {
     expect(stamped).toBeGreaterThan(0);
   });
 
-  // The gas station at scale 3. Model point (-3.1, -4.8) m lies under the canopy, 3.1 m from the nearest box
-  // that reaches below truck roofs.
   it('leaves the ground under a canopy open', () => {
     const w = emptyWorld();
     const spot = { x: 40.25, y: 40.25 };
@@ -117,10 +111,8 @@ describe('breakable props', () => {
   const grow = radius + CLEARANCE;
   const cellAt = (n: number, p: Vec) => Math.floor(p.y / CELL) * n + Math.floor(p.x / CELL);
 
-  // A fence segment is 4 m long, a tile at radius 0.5. Yaw a quarter turn lays it along map y.
   const fenceAt = (id: string, pos: Vec): Obstacle => ({ id, pos, r: 0.5, kind: 'landmark', look: 'fence', yaw: Math.PI / 2 });
 
-  // A straight fence line along map y at x, reaching `half` tiles to either side of y. Segments overlap a little.
   function fenceLine(x: number, y: number, half: number): Obstacle[] {
     const count = Math.ceil((2 * half) / 0.95) + 1;
     return Array.from({ length: count }, (_, k) => fenceAt(`fence-${k}`, { x, y: y - half + (2 * half * k) / (count - 1) }));
@@ -156,11 +148,7 @@ describe('breakable props', () => {
     expect(layer.blocked[cellAt(layer.n, shack.pos)]).toBe(1);
   });
 
-  // On flat road every cell costs 1 per tile. Crossing the fence adds routeCost - 1 per tile across its stamped
-  // band, which is the rails' width plus the grown clearance on both sides.
   const crossExtra = (2 * grow + 0.1) * (BREAKABLE.routeCost - 1);
-  // Half the length of a fence line whose detour between points `gap` tiles either side of it costs `extra` more
-  // than the straight way.
   const halfFor = (gap: number, extra: number) => Math.sqrt(((2 * gap + extra) / 2) ** 2 - gap ** 2) - grow;
 
   it('goes around a short fence line, whose detour costs less than crossing', () => {
@@ -181,7 +169,6 @@ describe('breakable props', () => {
     expect(crosses(w.obstacles, from, route(w, from, { x: 60 + gap, y: 120 }, radius, []))).toBe(true);
   });
 
-  // In one draft a fence may break while another prop grows back, so the list keeps its length.
   it('builds a new layer when a fence breaks in place and the same one when it grows back', () => {
     const w = emptyWorld();
     const fence = fenceAt('fence-0', { x: 40.2, y: 40.3 });

@@ -91,7 +91,6 @@ describe('calls', () => {
     expect(() => callVehicle(w, npc.id)).toThrow(/out of sight/);
   });
 
-  // A refusal shows in the call panel with only hang up on offer. Neither side's line reaches the log.
   function expectRefused(w: World, npcId: string, line: string): void {
     const next = callVehicle(w, npcId);
     expect(next.player.call).toEqual({ with: npcId, topic: null, node: REFUSED, vars: {}, line: { text: line, vars: {} } });
@@ -183,7 +182,6 @@ describe('directions', () => {
 });
 
 describe('NPC calls', () => {
-  // Directions stands in for a topic NPCs raise once, so the raise rules run without real raised content.
   const original = { ...TOPICS.directions };
   beforeEach(() => Object.assign(TOPICS.directions, { once: true, raise: { when: ['knowsTown'], priority: 1, duringFeud: false, duringCombat: false }, hangUp: ['settleRefused'] } satisfies Partial<Topic>));
   afterEach(() => Object.assign(TOPICS.directions, original));
@@ -213,7 +211,6 @@ describe('NPC calls', () => {
     expect(w.player.call).toBeNull();
   });
 
-  // A raider with no brain in the player's sight. It puts the player in combat only when it attacks.
   function withRaiderInSight(w: World, attacking = true): void {
     const raider = addVehicle(w, 'raiders', 'scout', [], { x: 26, y: 30 });
     refreshVision(w);
@@ -360,8 +357,6 @@ describe('calls during a turn', () => {
 });
 
 describe('demand', () => {
-  // A raider with a machine gun spots a player who carries goods. It always picks the fight, and calls first unless
-  // told to open fire unwarned.
   function ambush(mugging: 'demand' | 'attack' = 'demand'): { w: World; raider: Vehicle } {
     const w = emptyWorld({ x: 30, y: 30 });
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -397,7 +392,6 @@ describe('demand', () => {
 
   it('a raider that picks attack opens fire with no call', () => {
     const { w: start, raider } = ambush('attack');
-    // Demand keeps its minimum chance, so take the first seed that rolls attack.
     const seed = Array.from({ length: 20 }, (_, i) => i).find((i) => endTurn({ ...start, rngState: i }, testDrive).player.call === null);
     if (seed === undefined) throw new Error('No seed in 20 attacks unwarned');
     let w = endTurn({ ...start, rngState: seed }, testDrive);
@@ -449,7 +443,6 @@ describe('demand', () => {
     let shots = 0;
     for (let i = 0; i < 8; i++) {
       w = endTurn(w, testDrive);
-      // A raider that shot the player to a standstill may offer surrender. The demand itself never returns.
       expect(w.player.call?.topic).not.toBe('demand');
       if (w.player.call) w = hangUp(w);
       shots += shotsBetween(w, raider.id, w.player.vehicleId).length;
@@ -476,7 +469,6 @@ describe('warn off', () => {
   const WARN = TOPICS.warnOff.ask!.text;
   const asks = (w: World, npcId: string) => currentOptions(callVehicle(w, npcId)).map((o) => o.text);
 
-  // A scavenger parked at a road wreck at `at` with a scavenge goal in the act phase. With `search` it searches it.
   function looterAt(at: { x: number; y: number }, search: boolean): { w: World; npc: Vehicle; wreckId: string } {
     const w = emptyWorld({ x: 30, y: 30 });
     const wreck = { id: 'wreck901', pos: { ...at }, radius: 1, goods: { scrap: 6 }, parts: [] };
@@ -768,7 +760,6 @@ describe('fuel and supply aid', () => {
   const offerText = TOPICS.offerAid.ask!.text;
   const askText = TOPICS.askAid.ask!.text;
 
-  // A driver with full tanks and 500 money beside the player, both at peace.
   function aidWorld(templateId = 'trader', faction: Vehicle['faction'] = 'traders'): { w: World; npc: Vehicle } {
     const { w, npc } = withNpc(templateId, faction);
     npc.resources = { fuel: fuelCap(npc), supplies: suppliesCap(npc), money: 500, health: 100 };

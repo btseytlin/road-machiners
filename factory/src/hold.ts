@@ -8,8 +8,6 @@ import { readState, updateState } from './state';
 import { interruptJob } from './tick';
 import { RELEASE_LABEL, type Card, type Ctx, type FactoryState, type Hold, type Job } from './types';
 
-// Every check comes before the kill, so a refused hold changes nothing.
-// A merge or a revert is never killed, since it may stop between its push and its deploy.
 function requireHoldable(state: FactoryState, card: Card | undefined, issue: number): void {
   if (card === undefined) throw new Error(`Issue #${issue} is not on the board.`);
   if (card.labels.includes(RELEASE_LABEL)) throw new Error(`Issue #${issue} is the release tracking card. The release flow owns it.`);
@@ -20,13 +18,10 @@ function requireHoldable(state: FactoryState, card: Card | undefined, issue: num
   if (branchJob !== undefined) throw new Error(`Issue #${issue} runs a ${branchJob.stage} job, which a hold never stops. Repeat the order after it ends.`);
 }
 
-// The merge job has no issue, and it merges every free card in Merging.
 function branchJobOf(state: FactoryState, card: Card): Job | undefined {
   return state.jobs.find((job) => (job.issue === card.issue && !CARD_JOBS.includes(job.stage)) || (job.stage === 'merge' && card.column === 'Merging'));
 }
 
-// The kill comes first, so the job cannot write to the state after the hold. A job that left the list meanwhile ended on its own:
-// its own ledger line stands and its sessions are gone, so it gets no line and no resume here.
 export async function holdCard(ctx: Ctx, issue: number, by: string, reason: string): Promise<string> {
   const card = (await ctx.github.cards()).find((row) => row.issue === issue);
   requireHoldable(readState(ctx.statePath), card, issue);
@@ -47,7 +42,6 @@ export async function holdCard(ctx: Ctx, issue: number, by: string, reason: stri
   return `Held. Its ${stopped[0].stage} job stopped. Its work clone and agent sessions stay, and the factory starts no job on it until resume-card.`;
 }
 
-// Needs no board, so the hold of a card that left the board can still go.
 export function releaseHold(ctx: Ctx, issue: number): string {
   const hold = readState(ctx.statePath).held[String(issue)];
   if (hold === undefined) throw new Error(`Issue #${issue} is not held.`);

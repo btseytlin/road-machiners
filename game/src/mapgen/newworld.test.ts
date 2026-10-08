@@ -29,7 +29,6 @@ const WASH = GEOLOGY.ground.washFlow;
 const FENCE = NEW_WORLD.fenceLength;
 const SEED = 1337;
 
-// IV2: off every road surface, clear of sites with their pads, and off the Canyon Bridge deck.
 function expectOffBuilt(p: BakedProp): void {
   const bridge = TERRAIN.features.bridge;
   expect(ROAD_INDEX.nearestWithin(p.pos.x, p.pos.y, Infinity)).toBeGreaterThanOrEqual(HALF + p.r);
@@ -37,8 +36,6 @@ function expectOffBuilt(p: BakedProp): void {
   expect(segmentDist(p.pos, bridge.from, bridge.to)).toBeGreaterThanOrEqual(bridge.width / 2 + p.r);
 }
 
-// IV4: whether a tile center lies on a road, the deck, a site or a pad. The far corners of a pad reach
-// hypot(radius + pad length, pad width / 2) from the site center.
 function onBuilt(c: Vec): boolean {
   if (ROAD_INDEX.nearestWithin(c.x, c.y, HALF) < HALF || deckAlong(c.x, c.y) !== null) return true;
   return SITES.some((site) => dist(c, site.pos) <= Math.hypot(site.radius + REGION.sites.pad.length, REGION.sites.pad.width / 2));
@@ -65,7 +62,6 @@ function ofKind(d: MapDraft, kind: string): BakedProp[] {
   return d.props.filter((p) => p.kind === kind);
 }
 
-// Fence segments by line, each line in step order.
 function fenceLines(d: MapDraft): BakedProp[][] {
   const lines = new Map<number, BakedProp[]>();
   for (const p of ofKind(d, 'fence')) lines.set(p.group, [...(lines.get(p.group) ?? []), p]);
@@ -77,13 +73,11 @@ function ends(p: BakedProp): [Vec, Vec] {
   return [{ x: p.pos.x - along.x, y: p.pos.y - along.y }, { x: p.pos.x + along.x, y: p.pos.y + along.y }];
 }
 
-// The end of a line's end segment away from its neighbor in the line.
 function outerEnd(p: BakedProp, neighbor: BakedProp): Vec {
   const [a, b] = ends(p);
   return dist(a, neighbor.pos) > dist(b, neighbor.pos) ? a : b;
 }
 
-// IV5: a fence line is open, a missing step or a gap between its two outer ends at least one segment long.
 function expectOpen(line: BakedProp[]): void {
   if (line.length === 1) return;
   const missing = line.some((p, k) => k > 0 && p.step !== line[k - 1].step + 1);
@@ -91,7 +85,6 @@ function expectOpen(line: BakedProp[]): void {
   expect(missing || gap >= FENCE - 1e-6).toBe(true);
 }
 
-// Props of different fence lines and every other prop stand apart. Segments of one line join end to end.
 function expectApart(props: BakedProp[]): void {
   for (let a = 0; a < props.length; a++) for (let b = a + 1; b < props.length; b++) {
     const [p, q] = [props[a], props[b]];
@@ -101,7 +94,6 @@ function expectApart(props: BakedProp[]): void {
 }
 
 describe('pools', () => {
-  // Flat ground with a small bowl at (20, 20) and a wide one at (50, 50), each 0.5 units deep.
   function bowlDraft(): MapDraft {
     const d = newDraft(80);
     const bowl = (p: Vec, c: Vec, r: number) => -0.5 * Math.max(0, 1 - dist(p, c) / r);
@@ -143,7 +135,6 @@ describe('pools', () => {
 });
 
 describe('scrub growth', () => {
-  // Flat ground with a wash bed from x 38 to 42 and moist banks two tiles wide on each side.
   function washDraft(): MapDraft {
     const d = newDraft(80);
     setCorners(d, 'flow', (i) => (i >= 38 && i <= 42 ? WASH * 2 : i >= 36 && i <= 44 ? WASH * NEW_WORLD.scrub.seedFlow * 1.2 : 0));
@@ -287,7 +278,6 @@ describe('camps', () => {
 });
 
 describe('field fences', () => {
-  // A field of 12 by 8 tiles, turned 30 degrees, around (40, 40).
   function fieldDraft(): MapDraft {
     const d = newDraft(80);
     const [cos, sin] = [Math.cos(Math.PI / 6), Math.sin(Math.PI / 6)];
@@ -368,7 +358,6 @@ describe('car wrecks', () => {
   });
 
   it('lie nose down in wash beds', () => {
-    // Ground falls toward +x, with a wash bed from y 38 to 42.
     const d = newDraft(80);
     setCorners(d, 'heights', (i) => -i * 0.05);
     setCorners(d, 'flow', (_i, j) => (j >= 38 && j <= 42 ? WASH * 2 : 0));
@@ -385,8 +374,6 @@ describe('car wrecks', () => {
 });
 
 describe('new-world layer on a baked draft', () => {
-  // The bake's layers before the new world. Rain runs a quarter of the passes with four times the rain per
-  // pass, so washes carry the same water and the draft builds within the test time.
   let d: MapDraft;
   beforeAll(() => {
     const base = baseLayer(SEED, SIZE);

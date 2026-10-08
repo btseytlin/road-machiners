@@ -10,7 +10,6 @@ const SIZE = REGION.size;
 const O = REGION.obstacles;
 const SITES = [...REGION.towns, ...REGION.locations];
 
-// Every rock and crag off roads, sites, the bridge deck and the map margin, and apart from every other one.
 function expectClear(rocks: BakedProp[]): void {
   const bridge = TERRAIN.features.bridge;
   for (const rock of rocks) {
@@ -25,7 +24,6 @@ function expectClear(rocks: BakedProp[]): void {
   }
 }
 
-// A full map draft: a high plateau west of FOOT - FACE, a cliff face falling to x = FOOT, and flat ground east of it.
 const FOOT = 300;
 const FACE = 10;
 const RISE = TERRAIN.drive.maxSlope * 2;
@@ -82,8 +80,6 @@ describe('boulders', () => {
   });
 });
 
-// A full map draft with one straight ridge along x = RIDGE, its crest `crest` high, its flanks falling
-// at a drivable slope to both sides.
 const RIDGE = 300;
 const FLANK = 0.3;
 
@@ -123,7 +119,6 @@ describe('crags', () => {
   });
 });
 
-// The committed map file, inlined by Vite as base64 data, since the project carries no Node file typings.
 const FILES = import.meta.glob<string>('/public/maps/*.bin', { query: '?url&inline', import: 'default', eager: true });
 const DATA_URL = 'data:application/octet-stream;base64,';
 
@@ -144,7 +139,7 @@ describe('boulders on the baked map', () => {
 
   it('keeps every boulder clear of roads, sites, the bridge, the margin and other rocks', () => {
     expectClear(boulders);
-  }, 120_000); // checks every boulder against every road and site, slow when the suite runs in parallel
+  }, 120_000);
 
   it('puts no boulder on a cliff tile', () => {
     const onCliff = boulders.filter((rock) => isCliff(map.terrain, tileAt(map.terrain, rock.pos)));

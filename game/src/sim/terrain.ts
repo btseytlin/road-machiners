@@ -1,7 +1,6 @@
 // The terrain grid. Heights live on tile corners, (size + 1) x (size + 1), so neighboring tiles share
 // edges. Each tile reads its four corners for slope, and has a type. Driving, sight, routing and
 // drawing all read this grid. On Canyon Bridge, heights and slopes are the deck's (see bridge.ts).
-// The grid comes from the baked map file, decoded below. The game never builds it.
 
 import { MAPGEN, TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../data/terrain';
 import { BRIDGE_AXIS, BRIDGE_LENGTH, deckAlong, spanAlong } from './bridge';
@@ -9,8 +8,8 @@ import { clamp, type Vec } from './vec';
 
 export type Terrain = {
   size: number;
-  heights: number[]; // corner (i, j) at j * (size + 1) + i
-  types: TerrainTypeId[]; // tile (x, y) at y * size + x
+  heights: number[];
+  types: TerrainTypeId[];
 };
 
 const T = TERRAIN;
@@ -23,22 +22,17 @@ function corner(t: Terrain, i: number, j: number): number {
   return t.heights[clamp(j, 0, t.size) * (t.size + 1) + clamp(i, 0, t.size)];
 }
 
-// Tile index under a map point, clamped to the map.
 export function tileAt(t: Terrain, p: Vec): number {
   const x = clamp(Math.floor(p.x), 0, t.size - 1);
   const y = clamp(Math.floor(p.y), 0, t.size - 1);
   return y * t.size + x;
 }
 
-// Height at a map point: the deck on Canyon Bridge, else the ground.
 export function heightAt(t: Terrain, x: number, y: number): number {
   const a = deckAlong(x, y);
   return a === null ? groundAt(t, x, y) : deckHeight(t, a);
 }
 
-// Height of a mark drawn on the map around a truck at `origin`, like its throttle zones. Beside Canyon
-// Bridge, a mark stays level with the deck where the truck is nearer the deck than the canyon floor, so
-// it does not hang down into the canyon.
 export function markHeightAt(t: Terrain, origin: Vec, x: number, y: number): number {
   const h = heightAt(t, x, y);
   const a = spanAlong(x, y);
@@ -49,7 +43,6 @@ export function markHeightAt(t: Terrain, origin: Vec, x: number, y: number): num
   return Math.abs(from - deck) < Math.abs(from - h) ? deck : h;
 }
 
-// Ground height at a map point: blend of the four corners of its tile. Outside the map, the nearest edge.
 export function groundAt(t: Terrain, x: number, y: number): number {
   const cx = x < 0 ? 0 : x > t.size ? t.size : x;
   const cy = y < 0 ? 0 : y > t.size ? t.size : y;
@@ -57,7 +50,6 @@ export function groundAt(t: Terrain, x: number, y: number): number {
   const j = Math.min(Math.floor(cy), t.size - 1);
   const fx = cx - i;
   const fy = cy - j;
-  // i and j are inside the map after clamping, so the four corner indices need no further clamp.
   const row = t.size + 1;
   const k = j * row + i;
   const a = t.heights[k];
@@ -67,19 +59,16 @@ export function groundAt(t: Terrain, x: number, y: number): number {
   return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
 }
 
-// Deck surface height at a distance along it: a straight line between the ground at both ends.
 export function deckHeight(t: Terrain, along: number): number {
   const [from, to] = deckEnds(t);
   return from + (to - from) * (along / BRIDGE_LENGTH);
 }
 
-// Ground height at the deck's from and to ends.
 export function deckEnds(t: Terrain): [number, number] {
   const { from, to } = T.features.bridge;
   return [groundAt(t, from.x, from.y), groundAt(t, to.x, to.y)];
 }
 
-// Height change per tile along x and y. A tile centered on the deck takes the deck's grade.
 export function tileSlope(t: Terrain, tile: number): Vec {
   const i = tile % t.size;
   const j = Math.floor(tile / t.size);
@@ -89,7 +78,6 @@ export function tileSlope(t: Terrain, tile: number): Vec {
   return { x: grade * BRIDGE_AXIS.x, y: grade * BRIDGE_AXIS.y };
 }
 
-// Ground height change per tile along x and y, averaged over the tile's two edges on each axis.
 export function groundSlope(t: Terrain, tile: number): Vec {
   const i = tile % t.size;
   const j = Math.floor(tile / t.size);
@@ -105,25 +93,12 @@ export function isCliff(t: Terrain, tile: number): boolean {
   return Math.hypot(s.x, s.y) > T.drive.maxSlope;
 }
 
-// The map file. All numbers little-endian:
-//   'KMAP', format version u32, size u32, map seed u32, height scale u32,
-//   corner heights i16 as height * scale, (size + 1)^2 of them in corner order,
-//   tile types u8 as indexes into TYPE_IDS, size^2 of them in tile order,
-//   prop count u32, then per prop: kind u8 as an index into PROP_KINDS, x, y, r and yaw as f32, group and step as u16.
-// The hash is FNV-1a over every byte, so any change to the file changes it.
-
-// Kinds of baked props, in their stored order: the map file keeps a kind as its index here.
-// New kinds go last, so older files keep their kinds.
 export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck'] as const;
 export type PropKind = (typeof PROP_KINDS)[number];
-// A prop the bake placed. yaw is in radians from map +x toward +y. group and step order the poles of one
-// power line, and are 0 for other props. A fence prop is one straight segment along its yaw, and r is half its length.
 export type BakedProp = { kind: PropKind; pos: Vec; r: number; yaw: number; group: number; step: number };
 export type BakedMap = { hash: string; seed: number; terrain: Terrain; props: BakedProp[] };
-// What the map file stores of a bake: corner heights, tile type indexes into TYPE_IDS and props.
 export type MapGrid = { size: number; heights: Float32Array; types: Uint8Array; props: BakedProp[] };
 
-// Ground types in their stored order: the map file keeps a type as its index here.
 export const TYPE_IDS = Object.keys(TERRAIN_TYPES) as TerrainTypeId[];
 
 const MAGIC = 'KMAP';

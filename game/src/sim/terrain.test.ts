@@ -17,15 +17,12 @@ import { newWorld } from "./world";
 import type { World } from "./types";
 import { TEST_MAP } from "../test/map";
 
-// Several tests below read the start world without changing it (destinations, canyon shape,
-// cliff checks), so they share one.
 let startWorld: World | undefined;
 function worldOnMap(): World {
   startWorld ??= newWorld(1337, START_KITS.standard, TEST_MAP);
   return startWorld;
 }
 
-// Flat terrain with a raised block of cliff tiles over x in [cx0, cx1).
 function flatWith(
   size: number,
   lift: (i: number, j: number) => number,
@@ -51,7 +48,6 @@ describe("road index", () => {
 
 describe('terrain variety', () => {
   it('has every type with a bake rule on the baked map, with road/site priority', () => {
-    // Ash has no bake rule yet.
     const unruled = ['ash'];
     const ruled = Object.keys(TERRAIN_TYPES).filter((id) => !unruled.includes(id));
     const t = TEST_MAP.terrain;
@@ -106,7 +102,6 @@ describe("terrain grid", () => {
   it('links both towns by northern and southern canyon crossings', () => {
     const connects = (a: string, b: string) => {
       const sites = [...REGION.towns, ...REGION.locations];
-      // A location beside a road joins it at the first point of its spur. A town lies on its roads.
       const access = (id: string) => {
         const pos = sites.find((site) => site.id === id)!.pos;
         return REGION.roads.find((road) => dist(road.at(-1)!, pos) < 0.01 && road.length === 2)?.[0] ?? pos;
@@ -178,7 +173,6 @@ describe("terrain grid", () => {
 
   it("routes go around cliffs", () => {
     const w = emptyWorld({ x: 20, y: 30 });
-    // A cliff wall at x = 25..26, from y = 20 to 40.
     w.terrain = flatWith(60, (i, j) =>
       i === 26 && j >= 20 && j <= 41 ? 5 : 0,
     );

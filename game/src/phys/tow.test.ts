@@ -1,7 +1,6 @@
 // Tow approaches and hitched towers (src/sim/tow.ts), played through real physics.
 // These race a driving approach against the NPC's own threat and detection checks, or check that trucks get
 // past each other without a crash, so they need the game's real driving, not the generic test stand-in in
-// src/sim/testkit.ts.
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { canVehicleSee } from '../sim/vision';
@@ -27,7 +26,6 @@ beforeAll(async () => {
   await initPhysics();
 });
 
-// Plays n turns through the real turn pipeline with physics movement.
 function play(w: World, n: number): { w: World } {
   let d = buildDrive(w);
   for (let i = 0; i < n; i++) {
@@ -48,8 +46,6 @@ function withTower(w: World, templateId: string, faction: Vehicle['faction'], ch
 
 const onlyCore = (v: Vehicle) => { v.items = v.items.filter((it) => it.kind === 'part' && partDef(it.part.defId).kind === 'core'); };
 
-// A stranded, unarmed player with an empty tank and a trader in sight: unarmed, so a towing trait
-// never flees it as a threat before it can offer to help.
 function stranded(playerPos: Vec = { x: 30, y: 30 }, traderPos: Vec = { x: 40, y: 30 }) {
   const w = emptyWorld(playerPos);
   w.player.fuel = 0;
@@ -71,8 +67,6 @@ function runUntil(w: World, max: number, done: (w: World) => boolean): { w: Worl
 const find = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
 
 describe('hitched tower traffic', () => {
-  // A hitched tower on its way to town, a point `ahead` tiles along its way and `side` tiles to its left, and how
-  // far along its way a point lies.
   function underWay(): { w: World; tower: Vehicle; along: (ahead: number, side: number) => Vec; progress: (p: Vec) => number } {
     const s = stranded();
     forceOption('strandedSeen', 'tow');
@@ -121,7 +115,6 @@ describe('emergency beacon', () => {
 
   it('a trader out of sight but in range drives over and offers', () => {
     const s = stranded(player, { x: 130, y: 30 });
-    // The trader's first goal is the answer, not an idle roll of its own.
     forceOption('idle', 'wait');
     forceOption('strandedSeen', 'tow');
     const w = setBeacon(s.w, true);

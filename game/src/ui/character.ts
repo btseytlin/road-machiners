@@ -28,7 +28,6 @@ export class CharacterScreen {
     this.render();
   }
 
-  // Closed windows drop their contents, so hidden copies never answer clicks or drops.
   close(): void {
     this.root.style.display = 'none';
     this.root.replaceChildren();
@@ -69,7 +68,6 @@ export class CharacterScreen {
     );
   }
 
-  // One line per perk pair the skill has reached: the picked perk, or both perks as buttons.
   private perks(world: World, skill: SkillId): HTMLElement[] {
     const open = pendingPerkPairs(world);
     return PERK_LEVELS.map((level) => perkPair(skill, level)).flatMap((pair) => {

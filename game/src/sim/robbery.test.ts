@@ -20,11 +20,8 @@ import { REGION } from '../data/region';
 import { siteGates } from './sites';
 import { startEscort } from './tow';
 
-// A gate of Bowl. The robbery spots below lie outside Bowl's wall, north of the gate: one within guard range and one
-// past it.
 const BOWL = REGION.towns[0];
 const GATE = siteGates(BOWL)[0];
-// A point d tiles out from the Bowl gate, away from the town.
 function outFromGate(d: number): Vec {
   const k = d / BOWL.radius;
   return { x: GATE.x + (GATE.x - BOWL.pos.x) * k, y: GATE.y + (GATE.y - BOWL.pos.y) * k };
@@ -38,14 +35,11 @@ function addScumbag(w: World, pos: Vec, parts = ['mg', 'stockEngine'], traits: T
   return v;
 }
 
-// The lowest danger a sighting can perceive.
 const lowest = (w: World, v: Vehicle) => vehicleDanger(w, v) * (1 - NPC_BEHAVIOR.dangerSpread);
 
-// A truck with no gun and goods on its grid.
 function addPrey(w: World, pos: Vec, parts: string[] = [], goods = 2): Vehicle {
   const v = addVehicle(w, 'traders', 'scout', parts, pos);
   if (goods > 0 && addGoods(w, v, 'scrap', goods) < goods) throw new Error('No room for prey goods');
-  // A load worth at least the rob appeal's rich mark, so the rob weight is unscaled.
   if (goods > 0 && addGoods(w, v, 'electronics', 4) < 4) throw new Error('No room for prey cargo');
   return v;
 }
@@ -58,7 +52,6 @@ function isRob(goal: NpcActivity | undefined, target: string): boolean {
 
 type Setup = () => { w: World; robber: Vehicle; target: Vehicle };
 
-// A scumbag leader with loot in sight away from towns, and a scumbag merc escorting it.
 function escorted() {
   const w = emptyWorld({ x: 200, y: 200 });
   const leader = addScumbag(w, { x: 10, y: 10 });
@@ -67,7 +60,6 @@ function escorted() {
   return { w, leader, merc, target: addPrey(w, { x: 15, y: 10 }) };
 }
 
-// A scumbag robber of a template whose trait forbids robbing.
 function forbidden(templateId: string, trait: TraitId): Setup {
   return () => {
     const w = emptyWorld({ x: 200, y: 200 });
@@ -77,7 +69,6 @@ function forbidden(templateId: string, trait: TraitId): Setup {
   };
 }
 
-// Worlds where rob is unavailable for one reason, and everything else would allow it.
 const UNAVAILABLE: Record<string, Setup> = {
   supplier: forbidden('convoy', 'supplier'),
   guard: forbidden('convoyGuard', 'guard'),
@@ -131,9 +122,7 @@ const UNAVAILABLE: Record<string, Setup> = {
   },
 };
 
-// Worlds where one robbery judgment fails and the others pass.
 const JUDGED: Record<string, Setup> = {
-  // Heavier guns and far more HP than the robber's scout.
   strong: () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const target = addVehicle(w, 'traders', 'carrier', ['tankGun', 'plates'], { x: 15, y: 10 });
@@ -154,7 +143,6 @@ function passing() {
   return { w, robber: addScumbag(w, { x: 10, y: 10 }), target: addPrey(w, { x: 15, y: 10 }) };
 }
 
-// The rob weight a scumbag gives the target when every judgment passes.
 const FULL_ROB = TRAITS.scumbag.weights.preySeen!.rob!.add!;
 
 const robWeight = (w: World, robber: Vehicle, target: Vehicle, danger: number) => optionWeights(w, robber, 'preySeen', target.id, danger).rob;
@@ -163,7 +151,6 @@ describe('robbery checks', () => {
   it('a weaker truck with loot in sight away from towns gets the full rob weight', () => {
     const { w, robber, target } = passing();
     expect(robWeight(w, robber, target, vehicleDanger(w, target))).toBe(FULL_ROB);
-    // Beside the gate, but both past guard range, passes too.
     const far = emptyWorld({ x: 200, y: 200 });
     expect(robWeight(far, addScumbag(far, outFromGate(UNGUARDED)), addPrey(far, outFromGate(UNGUARDED + 5)), 0)).toBe(FULL_ROB);
   });
@@ -195,7 +182,6 @@ describe('robbery checks', () => {
     addGoods(w, me, 'electronics', 4);
     const robber = addScumbag(w, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
     expect(robWeight(w, robber, me, vehicleDanger(w, me))).toBe(FULL_ROB);
-    // Out of the armed scumbag's group, so the bare one judges by its own guns alone. With none, it cannot rob.
     const bare = addScumbag(w, { x: 15, y: 25 }, ['stockEngine']);
     expect(optionWeights(w, bare, 'preySeen', me.id, lowest(w, me))).not.toHaveProperty('rob');
   });
@@ -327,7 +313,6 @@ describe('scumbag robbery', () => {
     thinkNpc(w, robber);
     expect(robber.brain!.goals.map((g) => g.kind)).toEqual(['scavenge', 'fight']);
     expect(isRob(robber.brain!.goals[1], target.id)).toBe(true);
-    // The target is gone, so the rob goal pops and the scavenge goal is active again.
     w.vehicles = w.vehicles.filter((v) => v.id !== target.id);
     forceOption('resume', 'resume');
     expect(thinkNpc(w, robber)).toMatchObject({ kind: 'scavenge', targetId: 'salvage-yard' });
@@ -337,7 +322,6 @@ describe('scumbag robbery', () => {
     const { w, robber, target } = passing();
     robber.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' }];
     forceOption('preySeen', 'rob');
-    // A hostileSeen roll on the victim would almost surely flee.
     forceOption('hostileSeen', 'flee');
     thinkNpc(w, robber);
     for (let turn = 0; turn < 5; turn++) {
@@ -351,7 +335,6 @@ describe('scumbag robbery', () => {
 
   it('a driver on a tow job robs no one it passes', () => {
     const { w, robber, target } = passing();
-    // An open tow offer to the player, waiting for an answer.
     addState(w, 'tow', robber.id, w.player.vehicleId, { kind: 'tow', site: 'bowl', fee: 10, waived: 0, hitched: false });
     robber.brain!.goals = [{ kind: 'tow', targetId: w.player.vehicleId, destination: null, phase: 'act', reason: 'wait for an answer to a tow offer' }];
     forceOption('preySeen', 'rob');
@@ -409,7 +392,6 @@ describe('scumbag robbery', () => {
     const target = addPrey(w, { x: 80, y: 10 });
     const other = addPrey(w, { x: 10, y: 15 });
     addState(w, 'feud', robber.id, target.id, { kind: 'feud', robbery: true });
-    // Out of sight and with no shots, the feud runs out.
     for (let i = 0; i < STATE_TURNS.feud!; i++) {
       w.turn++;
       w.events = [];
@@ -419,7 +401,6 @@ describe('scumbag robbery', () => {
     expect(w.events).toContainEqual(expect.objectContaining({ t: 'stateEnded', ending: 'expired' }));
     const backedOff = stateOf(w, 'backedOff', robber.id, target.id);
     expect(backedOff).not.toBeNull();
-    // A state added by a hook waits a turn before it counts down.
     w.turn++;
     advanceStates(w);
     expect(stateOf(w, 'backedOff', robber.id, target.id)?.turnsLeft).toBe(STATE_TURNS.backedOff! - 1);
@@ -446,7 +427,6 @@ describe('prey rolls', () => {
 describe('looting', () => {
   const SCAVENGE: NpcActivity = { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' };
 
-  // Runs the part of a turn that ends states after a kill.
   function killTurn(w: World): void {
     w.turn++;
     w.events = [];
@@ -459,7 +439,6 @@ describe('looting', () => {
     target.brain = npcBrain('trader', target.pos, ['trader']);
     robber.brain!.goals = [{ ...SCAVENGE }];
     forceOption('preySeen', 'rob');
-    // A stranded target offered a way out holds out, so the robbery ends in a knockout.
     forceOption('surrenderOffered', 'refuse');
     thinkNpc(w, robber);
     expect(stateOf(w, 'feud', robber.id, target.id)?.data).toEqual({ kind: 'feud', robbery: true });
@@ -469,8 +448,6 @@ describe('looting', () => {
     expect(target.defeat?.phase).toBe('out');
     expect(robber.brain!.goals.at(-1)).toMatchObject({ kind: 'loot', targetId: target.id });
     expect(robber.brain!.goals[0]).toMatchObject({ kind: 'scavenge', targetId: 'salvage-yard' });
-    // The loot goal drives the robber this turn. Once the truck wakes, the loot goal pops, and the scavenge goal
-    // is active again.
     expect(thinkNpc(w, robber)).toMatchObject({ kind: 'loot', targetId: target.id });
     target.defeat = { ...target.defeat!, phase: 'retreat' };
     forceOption('resume', 'resume');
@@ -510,7 +487,6 @@ describe('looting', () => {
 });
 
 describe('social on robbery danger', () => {
-  // A danger just under what the robber judges stronger than itself, and just over it once raised by level 5.
   function nearThreshold(w: World, robber: Vehicle): number {
     const threshold = ownDanger(w, robber) * npcProfile(robber).boldness;
     return threshold / (1 + 2.5 * SKILL_EFFECTS.social.robberyDanger);
@@ -578,7 +554,6 @@ describe('cargo value', () => {
     expect(chance(w, robber, 'preySeen', poor, 'rob')).toBeLessThan(0.025);
     const rich = addPrey(w, { x: 15, y: 12 });
     expect(robWeight(w, robber, rich, vehicleDanger(w, rich))).toBe(FULL_ROB);
-    // A grudge ignores cargo.
     addState(w, 'revenge', robber.id, poor.id, { kind: 'none' });
     expect(robWeight(w, robber, poor, vehicleDanger(w, poor))).toBeGreaterThanOrEqual(FULL_ROB);
   });

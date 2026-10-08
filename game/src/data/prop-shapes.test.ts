@@ -7,7 +7,6 @@ import SHAPES from './prop-shapes.json';
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?url&inline', import: 'default' });
 const DATA_URL = 'data:model/gltf-binary;base64,';
 
-// The same FNV-1a over the file bytes as scripts/prop-shapes.mjs.
 function fnv1a(bytes: Uint8Array): string {
   let h = 0x811c9dc5;
   for (const b of bytes) h = Math.imul(h ^ b, 0x01000193) >>> 0;

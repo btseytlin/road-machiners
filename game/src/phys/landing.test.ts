@@ -16,7 +16,6 @@ beforeAll(async () => {
 const UPRIGHT: Quat = { x: 0, y: 0, z: 0, w: 1 };
 const ROOF_DOWN: Quat = { x: 1, y: 0, z: 0, w: 0 };
 
-// Lifts the player truck by rise meters in the given pose, plays two turns and returns the HP each part lost.
 function drop(rise: number, pose: Quat): { lost: Map<string, number>; wheels: string[] } {
   let w: World = emptyWorld();
   const me = w.vehicles.find((v) => v.id === w.player.vehicleId)!;

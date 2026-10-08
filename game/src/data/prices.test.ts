@@ -41,9 +41,7 @@ describe('item prices', () => {
     expect(PARTS.tankMid.value).toBeLessThan(PARTS.tankHeavy.value);
   });
 
-  // These grids have more rows or columns than their models, so they count more deck cells for the same deck.
   const FINER_GRID = ['buggy', 'courier', 'jeep', 'wagon'];
-  // The carrier is an armored hull. Its price holds what it cost before the cab rules cut its deck to 18 cells.
   const KEPT_PRICE = ['carrier'];
 
   it('never prices a chassis with more deck cells below one of the same tier with fewer', () => {

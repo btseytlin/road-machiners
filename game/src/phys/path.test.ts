@@ -15,11 +15,6 @@ beforeAll(async () => {
   await initPhysics();
 });
 
-// Plays up to `max` turns through the real turn pipeline with physics movement, building the physics
-// world once and reusing the driver's own synced copy every turn after, exactly as the game does:
-// physicsMove() already calls syncDrive() on every turn to add or drop vehicles and obstacles, so
-// rebuilding the whole terrain and obstacle colliders from scratch each turn only duplicates that
-// sync. `afterTurn` runs after each turn on the drafted world and can stop the loop early.
 function play(w: World, max: number, afterTurn: (w: World) => boolean = () => false): World {
   let d = buildDrive(w);
   for (let i = 0; i < max; i++) {
@@ -42,21 +37,17 @@ it('the player drives from Bowl to Nose without a serious hit on a static obstac
   let staticDamage = 0;
   w = play(w, w.size, (world) => {
     world.vehicles = world.vehicles.filter((v) => v.faction === 'player');
-    world.player.engineHeat = 0; // this drive never stops to cool down
+    world.player.engineHeat = 0;
     for (const e of world.events)
-      // A route can graze a site's edge, which the game allows; a rock or building should not touch it.
       if (e.t === 'collision' && e.a === me && !e.b.startsWith('v') && !e.b.startsWith('site-'))
         staticDamage += e.hitsA.reduce((sum, h) => sum + h.damage, 0);
     return dist(world.vehicles[0].pos, nose.pos) <= nose.radius + 1.5;
   });
   expect(staticDamage).toBeLessThan(5);
-  // Physics brakes for corners a little differently turn to turn than the deleted 2D model did, so
-  // give the arrival distance some slack instead of the tight tolerance that model allowed.
   expect(dist(w.vehicles[0].pos, nose.pos)).toBeGreaterThanOrEqual(nose.radius + 0.4);
   expect(dist(w.vehicles[0].pos, nose.pos)).toBeLessThanOrEqual(nose.radius + 1.5);
 }, 120_000);
 
-// Flat hardpan with one road of the given center line and the map's road width.
 function roadWorld(road: Vec[]) {
   const w = emptyWorld();
   const t = editableTerrain(w);
@@ -66,7 +57,6 @@ function roadWorld(road: Vec[]) {
 }
 
 it('a truck following a road into a blocking rock stops on the corner without a serious hit', () => {
-  // Two roads meet at the center of a big rock, like roads meeting at a site.
   const rock = { x: 60, y: 30 };
   let w = roadWorld([{ x: 20, y: 30 }, rock, { x: 60, y: 0 }]);
   w.obstacles = [{ id: 'r', pos: rock, r: 6, kind: 'rock' }];

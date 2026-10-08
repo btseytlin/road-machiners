@@ -14,7 +14,6 @@ function defaults(): Settings {
   return { muted: false, volume: { ...MIX.busVolume } };
 }
 
-// Invalid stored settings stop the boot, like an invalid save.
 export function parseSettings(raw: string | null): Settings {
   if (raw === null) return defaults();
   const s = JSON.parse(raw);
@@ -66,7 +65,6 @@ export class SoundSettings {
     this.muteButton.textContent = this.settings.muted ? "Unmute [M]" : "Mute [M]";
   }
 
-  // Only the player's own changes are stored, so untouched groups follow new mix defaults.
   private save(): void {
     this.storage.setItem(KEY, JSON.stringify(this.settings));
   }

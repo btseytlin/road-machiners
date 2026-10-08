@@ -1,8 +1,6 @@
 // Economy harness: plays the real sim economy with simple bot policies. Travel is abstract (the bot
 // teleports to a site's gate and the clock advances by estimated turns) and fights are abstract (a
 // sampled raider loadout stands in for the shot-by-shot fight), but every trade, repair, contract,
-// wear, XP and skill change goes through the real sim functions in src/sim and src/data. The game
-// never imports this module (PC3): it exists only to measure the economy the game already runs.
 
 import { chassisDef, PLAYER_CHASSIS } from '../data/chassis';
 import { CONTRACTS } from '../data/market';
@@ -64,12 +62,8 @@ import { TEST_MAP } from '../test/map';
 
 export type PolicyName = 'idle' | 'haulOnly' | 'salvageOnly' | 'contractsOnly' | 'greedy';
 
-// Monotonous baselines the balance skill's exploratory_ratio compares greedy against: a policy
-// that does nothing, and the simple repeat-haul policy.
 const MONOTONOUS_POLICIES: PolicyName[] = ['idle', 'haulOnly'];
 
-// Money the greedy policy always keeps unspent for fuel, supplies and repairs before it will
-// spend on an upgrade. A harness assumption (Design > Economy harness), not a game rule.
 const GREEDY_RESERVE = 400;
 
 export type Telemetry = {
@@ -96,8 +90,6 @@ export type EffortRow = {
   effort: number;
   band: [number, number];
   inBand: boolean;
-  // False when this run never held that tier of gear, so wage is EFFORT.wage's reference value,
-  // not something the run measured.
   measured: boolean;
 };
 
@@ -115,8 +107,6 @@ export type RunReport = {
   finalNetWorth: number;
 };
 
-// ---- Money and worth.
-
 function nonCoreMountedValue(v: Vehicle): number {
   return mountedParts(v)
     .filter((p) => partDef(p.defId).kind !== 'core')
@@ -131,8 +121,6 @@ function cargoValue(v: Vehicle): number {
   return Object.entries(goodsCount(v)).reduce((a, [good, n]) => a + goodValue(good) * n, 0);
 }
 
-// Cash plus every part, good and truck the player holds. Core parts and the chassis are valued
-// together by chassisTradeIn, so they are not added again through mountedParts.
 function netWorth(world: World): number {
   const v = playerVehicle(world);
   return world.player.money + storageValue(world) + cargoValue(v) + nonCoreMountedValue(v) + chassisTradeIn(world);
@@ -144,10 +132,6 @@ function currentTier(v: Vehicle): Tier {
     .map((p) => partDef(p.defId).tier);
   return (tiers.length ? Math.max(...tiers) : 1) as Tier;
 }
-
-// ---- Turn stepping. No physics, no NPC movement or thinking: only the per-turn economy updates
-// the design calls out (world.turn, shop drift and restock, contracts, salvage regrowth,
-// supply and fuel burn, drive wear). These are the same functions endTurn calls.
 
 function passTurns(world: World, telemetry: Telemetry, turns: number, tilesPerTurn: number): void {
   for (let i = 0; i < turns; i++) stepOneTurn(world, telemetry, tilesPerTurn);
@@ -163,17 +147,12 @@ function stepOneTurn(world: World, telemetry: Telemetry, tilesPerTurn: number): 
   telemetry.contractsDone += world.events.filter((e) => e.t === 'contract' && e.outcome === 'done' && e.contract.kind === 'bounty').length;
   const v = playerVehicle(world);
   consumeVehicleSupplies(world, v);
-  // A strip job only advances on a turn the truck is not driving (tilesPerTurn <= 0 marks a
-  // parked or in-fight turn); this mirrors "cancelled on any turn its truck ends above parked
-  // speed" (src/sim/jobs.ts) without the harness tracking a real physical speed during travel.
   if (tilesPerTurn <= 0) advanceJobs(world);
   if (tilesPerTurn <= 0) return;
   burnFuel(world, v, tilesPerTurn);
   driveWear(world, v, tilesPerTurn, telemetry);
 }
 
-// Mirrors src/sim/wear.ts's per-tile wear roll, since that file reads a vehicle's physics trail,
-// which the harness has none of. Same constants (src/data/wear.ts WEAR), same damagePart.
 function driveWear(world: World, v: Vehicle, tiles: number, telemetry: Telemetry): void {
   const speedFactor = 1 + WEAR.speedWeight * vehicleStats(world, v).maxSpeed;
   const cabId = corePart(v, 'cab').id;
@@ -198,9 +177,6 @@ function hitPart(part: PartInstance, amount: number, floor: number, telemetry: T
   if (!wasJunk && isJunk(part)) telemetry.partsJunked++;
 }
 
-// ---- Travel. Teleports to a gate or a point and burns the estimated turns, tile by tile, so
-// encounters and fights land mid-trip rather than all at once.
-
 function nearestGate(pos: Vec, siteId: string): Vec {
   const gates = sitePads(siteOf(siteId));
   return [...gates].sort((a, b) => dist(pos, a) - dist(pos, b))[0];
@@ -214,8 +190,6 @@ function driveTo(world: World, telemetry: Telemetry, siteId: string): void {
   driveToPoint(world, telemetry, nearestGate(playerVehicle(world).pos, siteId));
 }
 
-// Straight-line distance stretched by EFFORT.routeFactor, the same road-over-straight-line
-// allowance the effort model and contract estimates use (src/data/market.ts EFFORT, HARNESS).
 function driveToPoint(world: World, telemetry: Telemetry, dest: Vec): void {
   let remaining = dist(playerVehicle(world).pos, dest) * EFFORT.routeFactor;
   while (remaining > 0) {
@@ -229,16 +203,10 @@ function driveToPoint(world: World, telemetry: Telemetry, dest: Vec): void {
   v.speed = 0;
 }
 
-// ---- Encounters. A sampled raider loadout stands in for a real fight (Design > Economy harness).
-
 function fight(world: World, telemetry: Telemetry): void {
   resolveEncounter(world, telemetry, null);
 }
 
-// Resolves one abstract fight. With a `target` (a bounty's named raider), a win removes it from
-// world.vehicles and pushes the `destroyed` event advanceContracts reads to pay the bounty
-// (src/sim/market.ts bountyFulfilled). With no target, a win loots a sampled raider template
-// instead, same as a random road encounter.
 function resolveEncounter(world: World, telemetry: Telemetry, target: Vehicle | null): void {
   telemetry.fights++;
   const v = playerVehicle(world);
@@ -252,9 +220,6 @@ function resolveEncounter(world: World, telemetry: Telemetry, target: Vehicle | 
   else lootRaider(world);
 }
 
-// Wrecks and loots a specific, already-spawned vehicle (a bounty's target), instead of a sampled
-// template. Mirrors lootRaider's abstraction (PC3): the harness never runs the real fight or
-// destruction pipeline, only its salvage outcome.
 function killTarget(world: World, target: Vehicle): void {
   world.vehicles = world.vehicles.filter((v) => v.id !== target.id);
   world.events.push({ t: 'destroyed', vehicle: target.id, by: world.player.vehicleId });
@@ -276,8 +241,6 @@ function damagePlayerInFight(world: World, v: Vehicle, telemetry: Telemetry): vo
   }
 }
 
-// Materializes a sampled raider loadout as wreck salvage the bot then collects. The raider vehicle
-// never joins world.vehicles: it is only a source of loot, like a wreck the player finds already made.
 const RAIDER_TEMPLATES = ['buggy', 'gunwagon'];
 
 function lootRaider(world: World): void {
@@ -291,14 +254,11 @@ function lootRaider(world: World): void {
   collectSalvage(world, playerVehicle(world), stockId, salvageUnits(stock));
 }
 
-// ---- Bot memory. Policies see only shops they are at or have visited (PC3), plus their own truck
-// and the boards of shops they are at. Salvage sites are map locations, not shop knowledge.
-
 type Memory = {
   visited: Set<string>;
   prices: Record<string, Record<string, { buy: number; sell: number }>>;
   haul: { good: string; sellShop: string } | null;
-  full: Set<string>; // stocks whose leftovers did not fit the truck, skipped until the next sale empties it
+  full: Set<string>;
 };
 
 function newMemory(): Memory {
@@ -314,7 +274,6 @@ function recordShopVisit(world: World, mem: Memory, shopId: string): void {
 
 const SHOP_IDS = Object.keys(SHOPS);
 
-// The nearest shop not yet visited, so scouting for haul and contract pairs costs the least travel.
 function unvisitedShop(world: World, mem: Memory): string | null {
   const unvisited = SHOP_IDS.filter((id) => !mem.visited.has(id));
   if (unvisited.length === 0) return null;
@@ -322,16 +281,11 @@ function unvisitedShop(world: World, mem: Memory): string | null {
   return [...unvisited].sort((a, b) => dist(pos, siteOf(a).pos) - dist(pos, siteOf(b).pos))[0];
 }
 
-// ---- Salvage sites the harness can search: every convoy or landmark site, plus road wrecks, all
-// carrying finite stock rolled at world creation (src/sim/salvage.ts initializeSalvage).
-
 function hasLoot(id: string, world: World): boolean {
   const stock = world.salvage.find((s) => s.id === id);
   return !!stock && (stock.parts.length > 0 || Object.values(stock.goods).some((n) => n > 0));
 }
 
-// A walled site with no road generated to it (a road-generation gap, not a rule the harness owns
-// to fix) has no gate a bot can path to; excluded here so one such site does not stop every run.
 function salvageReachable(stockId: string): boolean {
   const site = REGION.locations.find((l) => l.id === stockId);
   if (!site) return true;
@@ -351,8 +305,6 @@ function nearestStock(world: World, mem: Memory): string | null {
   return [...stocks].sort((a, b) => dist(pos, a.pos) - dist(pos, b.pos))[0].id;
 }
 
-// A site's salvage stock is reached the same way a shop is, from its gate (canReachSalvage checks
-// canUseSite for a site id); a wreck's stock has no site, so it is reached by distance to its point.
 function driveToSalvage(world: World, telemetry: Telemetry, stockId: string): void {
   const isSite = REGION.locations.some((l) => l.id === stockId);
   if (isSite) driveTo(world, telemetry, stockId);
@@ -369,8 +321,6 @@ function searchStock(world: World, telemetry: Telemetry, mem: Memory, stockId: s
     return;
   }
 }
-
-// ---- Selling whatever the truck carries, goods and spare parts alike, at the shop it is parked at.
 
 function sellEverything(world: World, telemetry: Telemetry): World {
   const shopId = shopAt(world);
@@ -390,7 +340,6 @@ function sellGoodsHeld(world: World, telemetry: Telemetry, shopId: string): Worl
   return world;
 }
 
-// Stored parts wait in garage storage, so only a garage can sell them.
 function sellSpareParts(world: World, telemetry: Telemetry, shopId: string): World {
   const stored = shopDef(shopId).kind === 'garage' ? world.player.storage.map((p) => p.id) : [];
   const ids = spareParts(playerVehicle(world))
@@ -403,18 +352,10 @@ function sellSpareParts(world: World, telemetry: Telemetry, shopId: string): Wor
   return world;
 }
 
-// ---- Policies. Each returns the next site to drive to (or null to stay put) and the action to run
-// once there. Actions that trade or spend a contract must return the resulting world.
-
 type Action = { site: string | null; run: (world: World, telemetry: Telemetry, mem: Memory) => World };
 
-// Exploits a known-profitable pair as soon as it has one; only scouts a new, nearest shop when no
-// pair among the shops it already knows pays. This is what keeps a haul possible inside one day:
-// visiting all five shops first, farthest one included, would burn the day on the road.
 function haulOnlyAction(world: World, mem: Memory): Action {
   if (mem.haul) return { site: mem.haul.sellShop, run: runSell };
-  // A fight's loot can fill the grid with no room left to buy a haul; sell it off at a known shop
-  // first, or this and every trip after it would try and fail the same buy forever.
   if (freeCells(playerVehicle(world)) <= 0) return clearRoomAction(mem);
   const best = bestHaul(mem);
   if (best) return { site: best.buyShop, run: (w, t, m) => runBuy(w, t, m, best) };
@@ -488,16 +429,7 @@ function salvageOnlyAction(world: World, mem: Memory): Action {
   return { site: SHOP_IDS[0], run: (w, t, m) => { recordShopVisit(w, m, SHOP_IDS[0]); m.full.clear(); return sellEverything(w, t); } };
 }
 
-// contractsOnly pursues whichever contract it already holds: a haul drives to its drop, a fetch
-// buys a matching part from a known shop's live stock (or scouts one) then delivers it, and a
-// bounty drives to the named raider and fights it (abstract encounter, HARNESS odds). It only
-// takes a fresh contract, haul, fetch or bounty, when it holds none; a bounty is only ever taken
-// while armed (fittingOffers), matching the design's "when the bot is armed" scope.
 function contractsOnlyAction(world: World, mem: Memory): Action {
-  // Picks the first *actionable* held contract, not just the first accepted: a fetch with nothing
-  // left to scout, or a bounty whose target the bot has not found, would otherwise block the slot
-  // and freeze every other action until its deadline (the contract itself keeps ticking toward
-  // that deadline either way, via advanceContracts on any turn that passes).
   const actionable = world.player.contracts.find((c) => contractIsActionable(world, mem, c));
   if (actionable) return contractAction(actionable);
   const known = bestContractShop(world, mem);
@@ -522,8 +454,6 @@ function contractAction(c: Contract): Action {
   return fetchAction(c);
 }
 
-// A fetch contract's part can come from any shop's live stock, not only a shop the harness has
-// priced goods at, since it is a one-off part purchase rather than a haul route.
 function fetchAction(c: Extract<Contract, { kind: 'fetch' }>): Action {
   return { site: null, run: (w, t, m) => runFetch(w, t, m, c) };
 }
@@ -574,9 +504,6 @@ function buyFetchPart(world: World, c: Fetch): World {
   const shopId = shopAt(world);
   const part = shopId ? affordableStockPart(world, shopId, c) : null;
   if (!part) return world;
-  // A stall has no storage fallback for a part that does not fit the grid (only a garage does,
-  // src/sim/economy.ts buyStockPart); skip the buy there and let the bot look for room elsewhere.
-  // Any other failure (a real invariant break) still throws.
   try {
     return buyStockPart(world, part.id);
   } catch (e) {
@@ -585,8 +512,6 @@ function buyFetchPart(world: World, c: Fetch): World {
   }
 }
 
-// Drives to a raider of the bounty's template, if one is still in the world, and fights it. With
-// none left, advanceContracts lapses the contract on its own; the bot does nothing then.
 function pursueBounty(world: World, telemetry: Telemetry, c: Extract<Contract, { kind: 'bounty' }>): void {
   const target = world.vehicles.find((v) => v.brain?.templateId === c.template);
   if (!target) return;
@@ -598,9 +523,6 @@ function haulScore(world: World, shopId: string, c: { to: string; reward: number
   return c.reward / Math.max(1, estimateTurns(siteOf(shopId).pos, siteOf(c.to).pos));
 }
 
-// A haul's score is reward per turn of known travel. A fetch or bounty has no travel the shop can
-// name yet, so its score is the reward itself; the two scales are not equal, but both grow with
-// how well a contract pays, which is enough to rank a shop's board.
 function offerScore(world: World, shopId: string, c: Contract): number {
   return c.kind === 'haul' ? haulScore(world, shopId, c) : c.reward;
 }
@@ -638,19 +560,12 @@ function runAccept(world: World, telemetry: Telemetry, shopId: string): World {
 
 function runDeliver(world: World, telemetry: Telemetry, mem: Memory, contractId: string): World {
   recordShopVisit(world, mem, shopAt(world) ?? SHOP_IDS[0]);
-  // Travel to get here can expire or fulfil the contract along the way (advanceContracts), so it
-  // may already be gone from world.player.contracts by the time the trip arrives.
   if (!world.player.contracts.some((c) => c.id === contractId)) return world;
   const before = world.player.contracts.length;
   world = deliverContract(world, contractId);
   if (world.player.contracts.length < before) telemetry.contractsDone++;
   return world;
 }
-
-// ---- Greedy: repairs and spends skill points when parked, tracks the upgrade wishlist, and each
-// trip follows a fixed priority: finish a haul or a contract in progress, else take a fresh
-// contract if the shops it knows post one, else haul, else fall back to salvage. This is a simple
-// stand-in for a computed money-per-turn score, not the full mix the design calls for (see report).
 
 function greedyAction(world: World, mem: Memory, wishlist: WishlistHit[], day: number): Action {
   return withMaintenance(chooseGreedy(world, mem), wishlist, day);
@@ -699,7 +614,6 @@ function maybeRepairAndUpgrade(world: World, telemetry: Telemetry): World {
   return maybeUpgrade(world, shopId, telemetry);
 }
 
-// Skills grow by practice, so the report tracks the sum of skill levels as the player's level.
 function playerLevel(world: World): number {
   return (Object.keys(world.player.skills) as SkillId[]).reduce((sum, skill) => sum + skillLevel(world, skill), 0);
 }
@@ -710,8 +624,6 @@ function haveTier(v: Vehicle, kind: ItemKind): Tier {
   return (parts.length ? Math.max(...parts.map((p) => partDef(p.defId).tier)) : 1) as Tier;
 }
 
-// Records the day and turn each wishlist upgrade or level is first reached, so the report can show
-// a progression timeline per policy (Design > Economy harness).
 function recordWishlist(world: World, wishlist: WishlistHit[], day: number): void {
   const v = playerVehicle(world);
   for (const entry of WISHLIST_ORDER) {
@@ -723,9 +635,6 @@ function recordWishlist(world: World, wishlist: WishlistHit[], day: number): voi
     if (!wishlist.some((h) => h.item === item)) wishlist.push({ item, day, turn: world.turn });
   }
 }
-
-// ---- Greedy upgrade shopping: at a garage, spends down the same wishlist recordWishlist reports
-// on, one purchase per visit, keeping GREEDY_RESERVE unspent for fuel, supplies and repairs.
 
 function maybeUpgrade(world: World, shopId: string, telemetry: Telemetry): World {
   if (shopDef(shopId).kind !== 'garage') return world;
@@ -767,12 +676,6 @@ function tryUpgradePart(world: World, shopId: string, kind: Exclude<ItemKind, 'c
   return swapMount(world, shopId, pick, kind);
 }
 
-// Buys `stockPart` from the shop's live stock and mounts it, selling the worst currently mounted
-// part of the same kind (if any) back into the same stock. Both trades use the real price and
-// stock functions (partTradePrice, takeStockPart, addStockPart); only the grid placement is raw,
-// since the UI's refit flow needs a manually chosen cell a bot cannot compute (PC3). Money and
-// stock only change once the new part is confirmed to fit: a cargo swap can still fail to remount
-// if goods sit on the rows the old cargo part added, and that must not cost the bot anything.
 function swapMount(world: World, shopId: string, stockPart: PartInstance, kind: PartKind): World | null {
   const v = playerVehicle(world);
   const old = [...mountedParts(v, kind)].sort((a, b) => partDef(a.defId).tier - partDef(b.defId).tier)[0];
@@ -790,9 +693,6 @@ function swapMount(world: World, shopId: string, stockPart: PartInstance, kind: 
   }
   return world;
 }
-
-// ---- Stripping: turns a broken or junk spare part into units of the parts good instead of
-// selling it for scrap, when stripping is worth more (Design > Broken parts, PH2 strip.ts).
 
 function shouldStrip(part: PartInstance, world: World, v: Vehicle): boolean {
   if (part.hp > 0) return false;
@@ -816,8 +716,6 @@ const POLICIES: Record<PolicyName, (world: World, mem: Memory, wishlist: Wishlis
   contractsOnly: (w, m) => contractsOnlyAction(w, m),
   greedy: (w, m, wl, d) => greedyAction(w, m, wl, d),
 };
-
-// ---- The run.
 
 function zeroTelemetry(): Telemetry {
   return {
@@ -883,8 +781,6 @@ export function runPolicy(seed: number, policy: PolicyName, days: number): RunRe
 }
 
 function takeOneTrip(world: World, policy: PolicyName, telemetry: Telemetry, mem: Memory, wishlist: WishlistHit[], day: number): World {
-  // A running strip job (Design > Broken parts) only finishes if the bot stays put; per stepOneTurn,
-  // it advances on any turn tilesPerTurn <= 0, so a plain parked turn is enough.
   if (playerVehicle(world).job) {
     passTurns(world, telemetry, 1, 0);
     return world;
@@ -894,15 +790,11 @@ function takeOneTrip(world: World, policy: PolicyName, telemetry: Telemetry, mem
   return action.run(world, telemetry, mem);
 }
 
-// Runs every policy at every seed, seeds outer so a report reads one policy's seeds together.
 export function runMany(seeds: number[], policies: PolicyName[], days: number): RunReport[] {
   const reports: RunReport[] = [];
   for (const policy of policies) for (const seed of seeds) reports.push(runPolicy(seed, policy, days));
   return reports;
 }
-
-// ---- Effort table: every part, chassis and good, valued against a wage per tier, falling back to
-// EFFORT.wage and marking `measured: false` where no run held that tier.
 
 function effortRow(id: string, kind: ItemKind, tier: Tier, value: number, wagePerTier: Record<Tier, number | null>): EffortRow {
   const measured = wagePerTier[tier];
@@ -919,9 +811,6 @@ function effortTable(wagePerTier: Record<Tier, number | null>): EffortRow[] {
   for (const id of GOOD_IDS) rows.push(effortRow(id, 'good', GOODS[id].tier, GOODS[id].value, wagePerTier));
   return rows;
 }
-
-// ---- Cross-seed aggregation (evaluating-gameplay-balance skill: n >= 3 seeds, mean and min-max
-// band, never a point estimate).
 
 type PolicyGroup = { policy: PolicyName; runs: RunReport[] };
 type WageBand = { mean: number; min: number; max: number } | null;
@@ -952,7 +841,6 @@ function groupEffortTable(bands: Record<Tier, WageBand>): EffortRow[] {
   return effortTable(wagePerTier);
 }
 
-// Milestones in a fixed, meaningful order: the wishlist's own order, then levels reached, sorted.
 function orderedMilestones(g: PolicyGroup): string[] {
   const fixed = WISHLIST_ORDER.map((e) => e.item);
   const levels = new Set<string>();
@@ -961,8 +849,6 @@ function orderedMilestones(g: PolicyGroup): string[] {
   return [...fixed, ...levelOrder];
 }
 
-// The best net worth any greedy seed reached over the best any monotonous (idle, haulOnly) seed
-// reached, per the balance skill's exploratory_ratio. Null when either side has no run.
 export function exploratoryRatio(reports: RunReport[]): number | null {
   const greedy = reports.filter((r) => r.policy === 'greedy').map((r) => r.finalNetWorth);
   const monotonous = reports.filter((r) => MONOTONOUS_POLICIES.includes(r.policy)).map((r) => r.finalNetWorth);
@@ -971,8 +857,6 @@ export function exploratoryRatio(reports: RunReport[]): number | null {
   if (monoBest <= 0) return null;
   return Math.max(...greedy) / monoBest;
 }
-
-// ---- Markdown report.
 
 export function formatReport(reports: RunReport[]): string {
   const ratio = exploratoryRatio(reports);

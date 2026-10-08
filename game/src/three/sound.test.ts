@@ -201,7 +201,6 @@ describe("CombatScore", () => {
       beatLoop: (id: BaseId, file: string, when: number, offset: number) => {
         const call: Call = { id, file, when, offset, gains: [], tones: [], ducks: [] };
         loops.push(call);
-        // One second per beat for every base.
         const duration = SOUNDS[id].beat!.bars * 4;
         return {
           duration,
@@ -260,7 +259,7 @@ describe("CombatScore", () => {
     const score = new CombatScore(player, () => 0);
     score.setCombat(true, 3);
     expect(score.accent("accent-sighted", 1000)).toMatchObject({ cue: "accent-sighted", offer: "played" });
-    expect(plays[0][2]).toBeCloseTo(900); // peak 0.1 s into the take, event 1 s ahead
+    expect(plays[0][2]).toBeCloseTo(900);
     expect(plays[0][3]).toEqual({ file: "accent-sighted-1.ogg", rate: 1 });
     run(score, clock, 6);
     expect(plays.length).toBeGreaterThan(0);
@@ -273,7 +272,7 @@ describe("CombatScore", () => {
     clock.now = 0.05;
     const score = new CombatScore(player, () => 0);
     score.setCombat(true, 3);
-    score.accent("accent-sighted", 0); // peak 0.1 s into the take, so its ideal start is already past
+    score.accent("accent-sighted", 0);
     expect(loops[0].ducks[0]).toBeCloseTo(clock.now + plays[0][2] / 1000);
   });
 

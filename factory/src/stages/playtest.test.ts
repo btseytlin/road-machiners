@@ -24,7 +24,6 @@ const review = (over: Partial<Review> = {}): string => JSON.stringify({
 const fixed = (commit: string): Turn => ({ review: review({ verdict: 'fixed', findings: [releaseBug], fixes: ['end the raid goal after a lost target'] }), commit });
 const clean: Turn = { review: review(), report: '## Run\nAll good.' };
 
-// One agent call: the review it writes, and the commit it leaves in the clone, if any.
 type Turn = { review?: string; report?: string; commit?: string };
 type Run = {
   f: Fake; shells: { clone: string; script: string; env: Record<string, string> }[]; prompts: string[]; sessions: AgentRun['session'][];
@@ -35,7 +34,6 @@ const harnessRuns = (run: Run) => run.shells.filter((shell) => shell.script.incl
 const checkRuns = (run: Run) => run.shells.filter((shell) => shell.script.includes('[checks]'));
 const SUITE = 'npm ci && npm test';
 
-// The fake harness writes the log the command asks for into the clone it ran in. The fake agent writes its review and may commit.
 function setup(state: Partial<ReleaseState> = {}, start = 'abc1234'): Run {
   const f = fake();
   f.ctx.cfg = { ...f.ctx.cfg, designModel: 'opus', playtestTurns: 100, playtestRuns: 3, gpu: true };

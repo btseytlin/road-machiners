@@ -10,7 +10,6 @@ export type GameMenuActions = SavePanelActions & {
   requestBoot: (request: BootRequest) => void;
 };
 
-// A new game is a page reload with a boot request. Boot deletes the autosaves and keeps the manual slots.
 export function startNewGame(requestBoot: (request: "new") => void): void {
   requestBoot("new");
   window.location.reload();

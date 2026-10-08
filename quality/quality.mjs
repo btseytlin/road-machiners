@@ -2,13 +2,13 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SEPARATOR, checkFragmentation, checkSeparators, collectComponents, inspectSource } from './quality-policy.mjs';
+import { SEPARATOR, checkComments, checkFragmentation, checkSeparators, collectComponents, inspectSource } from './quality-policy.mjs';
 
 const root = process.cwd();
 const sourcePattern = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const ignoredPattern = /(?:^|\/)(?:node_modules|dist|tmp|\.worktrees|\.pi|\.playtest|\.agents|\.claude)\//;
 const typeProjects = ['game', 'factory'];
-const maxBuffer = 64 * 1024 * 1024; // Bounds captured Git and linter output, including the repo-wide baseline.
+const maxBuffer = 64 * 1024 * 1024;
 
 function runGit(...args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer });
@@ -35,7 +35,6 @@ function readSources(directory, files) {
   return new Map(files.map(file => [file, readFileSync(path.join(directory, file), 'utf8')]));
 }
 
-// Text files holding the separator, found by git grep, which skips binary files. Staged mode searches the index.
 function readSeparatorFiles(directory, staged) {
   const result = spawnSync('git', ['grep', staged ? '--cached' : '--untracked', '-lzIF', '-e', SEPARATOR], { cwd: root, encoding: 'utf8', maxBuffer });
   if (result.status !== 0 && result.status !== 1) throw new Error(result.stderr || 'git grep failed.');
@@ -67,9 +66,9 @@ function readLintReport(result) {
   return report.diagnostics;
 }
 
-function collectFindings(directory, sources, config) {
+function collectFindings(directory, sources, config, maxDocstringLines) {
   const findings = runLint(directory, [...sources.keys()], config);
-  for (const [file, source] of sources) findings.push(...inspectSource(file, source).findings);
+  for (const [file, source] of sources) findings.push(...inspectSource(file, source).findings, ...checkComments(file, source, maxDocstringLines));
   return findings;
 }
 
@@ -113,8 +112,8 @@ function checkQuality(directory, baseline, files, headFiles, staged) {
   const config = path.join(directory, '.oxlintrc.json');
   const baselineConfig = path.join(baseline, '.oxlintrc.json');
   copyFileSync(config, baselineConfig);
-  const findings = findRegressions(collectFindings(directory, current, config), collectFindings(baseline, previous, baselineConfig));
-  const { maxFilesPerKloc } = JSON.parse(readFileSync(path.join(directory, '.quality.json'), 'utf8'));
+  const { maxFilesPerKloc, maxDocstringLines } = JSON.parse(readFileSync(path.join(directory, '.quality.json'), 'utf8'));
+  const findings = findRegressions(collectFindings(directory, current, config, maxDocstringLines), collectFindings(baseline, previous, baselineConfig, maxDocstringLines));
   const failures = checkFragmentation(current, collectComponents(previous), maxFilesPerKloc);
   failures.push(...checkSeparators(readSeparatorFiles(directory, staged)));
   for (const finding of findings) console.error(`${finding.filename}: ${finding.code} ${finding.message}`);

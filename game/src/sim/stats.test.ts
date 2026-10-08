@@ -112,8 +112,6 @@ describe('a stalled engine', () => {
     expect(vehicleStats(w, v).maxSpeed).toBe(fresh);
   });
 
-  // A ram stalls through world.turn + stallTurns. The pipeline counts the turn up before it moves, so that is the
-  // next turn's drive, and the one after runs free.
   it('stalls the drive of exactly the turn after the ram', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'scout', ['stockEngine'], { x: 40, y: 40 });

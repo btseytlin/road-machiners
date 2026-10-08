@@ -31,7 +31,6 @@ function withTower(w: World, templateId: string, faction: Vehicle['faction'], ch
   return v;
 }
 
-// A player with an empty tank and a trader in sight.
 function stranded(playerPos: Vec = { x: 30, y: 30 }, traderPos: Vec = { x: 40, y: 30 }): Setup {
   const w = emptyWorld(playerPos);
   w.player.fuel = 0;
@@ -39,7 +38,6 @@ function stranded(playerPos: Vec = { x: 30, y: 30 }, traderPos: Vec = { x: 40, y
   return { w, trader };
 }
 
-// Runs turns until the check passes, and returns the world with the turn's events.
 function runUntil(w: World, max: number, done: (w: World) => boolean): { w: World; turns: number; events: GameEvent[] } {
   const events: GameEvent[] = [];
   for (let i = 1; i <= max; i++) {
@@ -54,7 +52,6 @@ const onlyCore = (v: Vehicle) => { v.items = v.items.filter((it) => it.kind === 
 const find = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
 const feeOf = (w: World) => towData(playerTow(w)!).fee;
 
-// Runs turns until the tower makes its offer, which it then calls in by radio.
 function offered(s: Setup): World {
   const r = runUntil(s.w, 30, (w) => playerTow(w) !== null);
   expect(playerTow(r.w)).not.toBeNull();
@@ -126,7 +123,6 @@ describe('tow offer', () => {
     expect(later.events.some((e) => e.t === 'towOffer')).toBe(false);
   });
 
-  // A truck of the player's own faction in a feud with the player: a hostile in sight that fights nobody.
   function startFight(w: World): string {
     const foe = addVehicle(w, 'traders', 'scout', [], { x: 24, y: 30 });
     addState(w, 'feud', w.player.vehicleId, foe.id, { kind: 'feud', robbery: false });
@@ -161,7 +157,6 @@ describe('tow offer', () => {
     const s = stranded();
     const setOut = runUntil(s.w, 30, (w) => topGoal(find(w, s.trader.id))?.kind === 'tow');
     const foe = startFight(setOut.w);
-    // The foe keeps shooting, so the combat lasts while the tower waits.
     const r = runUntil(setOut.w, 30, (w) => {
       startCombat(w, find(w, foe), playerVehicle(w));
       return playerTow(w) !== null || w.player.call !== null;
@@ -196,7 +191,6 @@ describe('tow offer', () => {
   it('raiders never tow', () => {
     const w = emptyWorld();
     w.player.fuel = 0;
-    // Nothing to take, so the raider leaves the player alone.
     const me = w.vehicles[0];
     me.items = me.items.filter((it) => it.kind === 'part' && partDef(it.part.defId).kind === 'core');
     const raider = withTower(w, 'buggy', 'raiders', 'buggy', { x: 40, y: 30 });
@@ -257,7 +251,6 @@ describe('towing', () => {
     const tower = find(w, s.trader.id);
     expect(dist(me.pos, start)).toBeGreaterThan(10);
     expect(dist(me.pos, tower.pos)).toBeGreaterThan(TOW.gap * 0.9);
-    // The tower drives slower while towing, and the towed player burns no fuel.
     const free = structuredClone(w);
     free.states = [];
     expect(vehicleStats(w, tower).maxSpeed).toBeCloseTo(vehicleStats(free, find(free, s.trader.id)).maxSpeed * TOW.speedShare);
@@ -320,7 +313,6 @@ describe('towing', () => {
     expect(playerTow(w)).toBeNull();
     expect(w.events).toContainEqual({ t: 'towDropped', by: s.trader.id, client: w.player.vehicleId, reason: 'stranded' });
     expect(isOnRope(w, w.player.vehicleId)).toBe(false);
-    // The deal is off: no fee changes hands, and no state of the deal outlives it.
     expect(w.player.money).toBe(money);
     expect(getResources(w, find(w, s.trader.id)).money).toBe(traderMoney);
     expect(w.states.filter((x) => ['tow', 'towPromise', 'answering'].includes(x.kind))).toEqual([]);
@@ -345,7 +337,6 @@ describe('towing', () => {
     const at = (d: number) => ({ x: gate.x + out.x * d, y: gate.y + out.y * d });
     const s = stranded(at(20), at(30));
     forceOption('strandedSeen', 'tow');
-    // A raider spawning near the gate would scare the tower off, and this test is about arrival.
     for (const id of Object.keys(NPCS)) s.w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     forceOption('idle', 'wait');
     forceOption('strandedSeen', 'tow');
@@ -365,8 +356,6 @@ describe('towing', () => {
     const me = playerVehicle(w);
     expect(me.speed).toBe(0);
     expect(dist(me.pos, find(w, s.trader.id).pos)).toBeLessThanOrEqual(TOW.gap + 1e-6);
-    // The tower stops inward of the pad center, so the truck it trails stands well on the pad and not at its edge.
-    // Drivers keep their own spots across the pad width, so only the offset along the pad length counts.
     const pad = nearestPad(town, me.pos);
     const outward = Math.atan2(pad.y - town.pos.y, pad.x - town.pos.x);
     const along = (me.pos.x - pad.x) * Math.cos(outward) + (me.pos.y - pad.y) * Math.sin(outward);
@@ -381,7 +370,6 @@ describe('towing', () => {
 describe('answering a stranded truck', () => {
   const answering = (w: World) => w.states.filter((st) => st.kind === 'answering');
 
-  // Five towers around a stranded player far from any town, all in sight of it.
   function crowd(): { w: World; towers: Vehicle[] } {
     const w = emptyWorld({ x: 30, y: 30 });
     w.player.fuel = 0;
@@ -460,12 +448,10 @@ describe('tow deals', () => {
     forceOption('strandedSeen', 'tow');
     let w = acceptTow(offered(s));
     const deal = { holder: playerTow(w)!.holder, ...towData(playerTow(w)!) };
-    // A few turns of towing shorten the way, so a new price would be lower.
     for (let i = 0; i < 5; i++) w = endTurn(w, testDrive);
     expect(isTowed(w)).toBe(true);
     dropTow(w, playerTow(w)!, 'danger');
     expect(stateOf(w, 'towPromise', deal.holder, w.player.vehicleId)).not.toBeNull();
-    // A forced option still leaves keep its minimum chance, so pin the tower's fresh strandedSeen roll mid-range.
     w.rngState = rngStateWhere((roll) => roll > 0.4 && roll < 0.6);
     thinkNpc(w, find(w, deal.holder));
     const r = runUntil(w, 30, (x) => playerTow(x) !== null);
@@ -510,7 +496,6 @@ describe('emergency beacon', () => {
     trader.brain!.traits = ['trader', 'scumbag'];
     expect(hasLoot(playerVehicle(w))).toBe(true);
     forceOption('strandedSeen', 'tow');
-    // A preySeen roll on the client would almost surely rob.
     forceOption('preySeen', 'rob');
     thinkNpc(w, trader);
     expect(topGoal(trader)?.kind).toBe('tow');
@@ -535,7 +520,6 @@ describe('emergency beacon', () => {
   it('only the first tower to hear a beacon answers it, and its claim ends with the offer', () => {
     const s = stranded(player, { x: 100, y: 30 });
     const late = withTower(s.w, 'trader', 'traders', 'hauler', { x: 30, y: 150 });
-    // Only the two towers placed here may answer, and both mean to tow.
     for (const id of Object.keys(NPCS)) s.w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     forceOption('strandedSeen', 'tow');
     const r = runUntil(setBeacon(s.w, true), 150, (x) => playerTow(x) !== null);
@@ -549,7 +533,6 @@ describe('emergency beacon', () => {
     w.player.fuel = 0;
     onlyCore(w.vehicles[0]);
     const raider = withTower(w, 'buggy', 'raiders', 'buggy', { x: 130, y: 30 });
-    // Spawned NPCs may draw the raider, so only goals aimed at the player count.
     runUntil(setBeacon(w, true), 30, (x) => {
       const goal = topGoal(find(x, raider.id));
       expect(goal?.targetId === x.player.vehicleId && ['investigate', 'fight'].includes(goal.kind)).toBe(false);
@@ -627,7 +610,6 @@ describe('the player towing an NPC', () => {
   const out = { x: (gate.x - bowl.pos.x) / bowl.radius, y: (gate.y - bowl.pos.y) / bowl.radius };
   const at = (d: number) => ({ x: gate.x + out.x * d, y: gate.y + out.y * d });
 
-  // A scavenger with an empty tank parks 3 tiles behind the player, 25 tiles out from the Bowl gate.
   function strandedNpc(): { w: World; npc: Vehicle } {
     const w = emptyWorld(at(25));
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -763,7 +745,6 @@ describe('the player towing an NPC', () => {
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     const raider = withTower(w, 'buggy', 'raiders', 'buggy', outKiln(28));
     raider.resources!.fuel = 0;
-    // The player's engine is loot to a raider, so only a truce keeps the two at peace.
     addState(w, 'truce', raider.id, w.player.vehicleId, { kind: 'none' });
     const offered = pick(callVehicle(w, raider.id), OFFER);
     expect(offered.player.call?.vars.site).toEqual({ kind: 'site', id: 'kiln' });
@@ -794,7 +775,6 @@ describe('NPCs towing each other', () => {
   const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
   const kiln = REGION.locations.find((l) => l.id === 'kiln')!;
 
-  // A point `d` tiles out from the site's first gate, away from the site.
   function outFrom(site: Site, d: number): Vec {
     const gate = siteGates(site)[0];
     const len = dist(gate, site.pos);
@@ -806,9 +786,6 @@ describe('NPCs towing each other', () => {
   const SCAVENGER: Driver = ['scavenger', 'scavengers', 'scout'];
   const RAIDER: Driver = ['buggy', 'raiders', 'buggy'];
 
-  // A client with an empty tank and a tower 8 tiles further out, both 30 tiles out from the site. The player drives
-  // and watches from 10 tiles closer in, or stays at the Bowl, out of sight of raiders it carries loot past. Idle
-  // drivers wait, the tower chooses to tow, and nobody spawns.
   function roadside(site: Site, client: Driver, tower: Driver): { w: World; client: Vehicle; tower: Vehicle } {
     const raiders = client[1] === 'raiders' || tower[1] === 'raiders';
     const w = emptyWorld(raiders ? bowl.pos : outFrom(site, 20));

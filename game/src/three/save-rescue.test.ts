@@ -26,7 +26,6 @@ function makeStorage(): Storage {
 
 type SavedWorld = { mapHash: string; player: { vehicleId: string; money: number }; vehicles: { id: string; items: { x: number }[] }[] };
 
-// A current save of a played world, as JSON.
 function currentSave(): { format: unknown; world: SavedWorld } {
   const world = newWorld(1337, KIT, TEST_MAP);
   world.player.money = 4321;

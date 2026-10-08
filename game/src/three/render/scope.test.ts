@@ -32,7 +32,6 @@ function attached(obj: THREE.Object3D, root: THREE.Object3D): boolean {
   return false;
 }
 
-// True when any sample point of the object's box projects inside the camera view.
 function inView(obj: THREE.Object3D, camera: THREE.Camera): boolean {
   const box = new THREE.Box3().setFromObject(obj);
   const steps = 6;
@@ -48,7 +47,6 @@ function inView(obj: THREE.Object3D, camera: THREE.Camera): boolean {
   return false;
 }
 
-// Small props on hills of up to 60 m, plus wide objects that span many chunks.
 function populate(scope: RenderScope): THREE.Object3D[] {
   const rnd = random(7);
   const objects: THREE.Object3D[] = [];

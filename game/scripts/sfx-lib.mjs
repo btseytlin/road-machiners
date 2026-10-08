@@ -1,42 +1,33 @@
 // Shared sound import: every file, whatever its source, gets the same treatment before the game uses it.
 // 1. Free music loses its quiet intro and outro and loops through a crossfade. A beat loop is stretched to its exact
 //    bar length, so layers stay locked.
-// 2. One-shots lose silence at both ends and get short fades. Score stingers are cut to STINGER_MAX_S with soft edges,
-//    so they sit in the music instead of cutting in, and get a warmer top end.
-// 3. One-shots and the engine become mono, since the game pans them; beds keep stereo with even sides.
-//    Then one EQ for all: rumble and harsh top cut.
-// 4. Tone matched to the cue's first file, so variants sound like one sound. Families of different sounds skip it.
-// 5. Loudness set by the ear-weighted meter, with a gentle limiter on peaks.
-// Output is 48 kHz Ogg Opus with the source path in its comment tag.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { beatLoopSeconds } from '../src/data/sounds.ts';
 
 export const SFX_DIR = 'public/sfx';
-const PEAK_DB = -1; // limiter ceiling
-const MAX_LIMIT_DB = 6; // most gain reduction the limiter may do; beyond it the clip is left quieter
-const SILENCE_DB = -60; // quieter than this at either end counts as silence
-const KEEP_S = 0.02; // silence kept at each trimmed end, so soft attacks and tails survive
-const FADE_IN_S = 0.005; // de-click only; keeps the attack
+const PEAK_DB = -1;
+const MAX_LIMIT_DB = 6;
+const SILENCE_DB = -60;
+const KEEP_S = 0.02;
+const FADE_IN_S = 0.005;
 const FADE_OUT_S = 0.03;
-const EQ = 'highpass=f=40,lowpass=f=14000'; // shared tone curtain
-const BANDS = { low: 'lowpass=f=250', high: 'highpass=f=4000' }; // compared against the mid band
+const EQ = 'highpass=f=40,lowpass=f=14000';
+const BANDS = { low: 'lowpass=f=250', high: 'highpass=f=4000' };
 const MID = 'highpass=f=250,lowpass=f=4000';
-const MAX_MATCH_DB = 6; // largest tone correction toward the reference variant
-const METER_S = 0.4; // the loudness meter's window; shorter clips are padded to it
+const MAX_MATCH_DB = 6;
+const METER_S = 0.4;
 const OPUS_KBPS = 96;
-const MUSIC_EDGE_DB = 15; // music quieter than its loudest moment by this much counts as intro or outro
-const MUSIC_XFADE_S = 2; // loop seam crossfade for music
-const SILENT_PEAK_DB = -40; // a source this quiet is a failed generation, not a sound
+const MUSIC_EDGE_DB = 15;
+const MUSIC_XFADE_S = 2;
+const SILENT_PEAK_DB = -40;
 
-// Catalog cue by id, or a loud stop naming the id.
 export function cueOf(sounds, id) {
   const cue = sounds[id];
   if (!cue) throw new Error(`No cue "${id}" in src/data/sounds.ts. Add it first.`);
   return cue;
 }
 
-// Next unused public/sfx/<id>-<n>.ogg; never an existing name.
 export function nextName(id) {
   const taken = new Set(readdirSync(SFX_DIR));
   for (let n = 1; ; n++) {
@@ -64,13 +55,11 @@ export function importFile(source, id, cue, level) {
   return name;
 }
 
-// Free music loops through a crossfade first; other sources are used as they are.
 function playable(source, name, cue) {
   const freeMusic = cue.bus === 'music' && cue.loop && !cue.beat;
   return freeMusic ? musicLoop(source, name) : source;
 }
 
-// Length and edges: one-shots lose silence and get fades, beat loops are fitted to their bars, other loops stay.
 function shapeFilters(src, cue) {
   if (cue.beat) return fitBeat(src, beatLoopSeconds(cue.beat));
   if (cue.loop) return [];
@@ -80,13 +69,11 @@ function shapeFilters(src, cue) {
   return [trim, 'areverse', trim, 'areverse', ...cap, 'areverse', `afade=t=in:d=${edges[1]}`, 'areverse', `afade=t=in:d=${edges[0]}`];
 }
 
-const STINGER_MAX_S = 1.5; // longest score stinger; longer ones drag past the moment they answer
-const STINGER_TONE = 'lowpass=f=5000,treble=g=-4:f=3000'; // distorted stingers are harsh up top; this warms them
-const STINGER_EDGES = [0.02, 0.6]; // fade in and fade out seconds for stingers; a long fade-out lets them melt into the base
+const STINGER_MAX_S = 1.5;
+const STINGER_TONE = 'lowpass=f=5000,treble=g=-4:f=3000';
+const STINGER_EDGES = [0.02, 0.6];
 
-// Generated loops miss their requested length by a few milliseconds. A tiny tempo change fits the loop, and the
-// pad and trim make the sample count exact.
-const MAX_FIT = 0.01; // largest tempo change share; a bigger miss means the wrong source
+const MAX_FIT = 0.01;
 
 function fitBeat(src, seconds) {
   const have = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'default=nw=1:nk=1', src], { encoding: 'utf8' }));
@@ -95,7 +82,6 @@ function fitBeat(src, seconds) {
   return [`atempo=${ratio.toFixed(6)}`, `apad=whole_dur=${seconds.toFixed(6)}`, `atrim=end=${seconds.toFixed(6)}`];
 }
 
-// Generated clips often sit far to one side. Beds keep stereo with both sides at the same level.
 function channels(src, cue) {
   if (cue.bus !== 'ambient' && cue.bus !== 'music') return 'pan=mono|c0=0.5*c0+0.5*c1';
   const log = ffmpegLog(src, `${EQ},astats=measure_overall=none:measure_perchannel=RMS_level`);
@@ -109,7 +95,6 @@ function dbToLinear(db) {
   return Math.pow(10, db / 20);
 }
 
-// Shelf EQ that moves this file's low and high bands, relative to its mids, toward the cue's first file.
 function toneMatch(src, shaped, id) {
   const ref = readdirSync(SFX_DIR).filter((f) => new RegExp(`^${id}-\\d+\\.ogg$`).test(f)).sort((a, b) => variantNumber(a) - variantNumber(b))[0];
   if (!ref) return [];
@@ -126,14 +111,12 @@ function variantNumber(file) {
   return Number(file.match(/-(\d+)\.ogg$/)[1]);
 }
 
-// Low and high band RMS relative to the mid band, in dB.
 function bandBalance(src, shaped) {
   const rms = (band) => statValue(ffmpegLog(src, `${shaped},${band},astats=measure_perchannel=0:measure_overall=RMS_level`), 'RMS level dB');
   const mid = rms(MID);
   return { low: rms(BANDS.low) - mid, high: rms(BANDS.high) - mid };
 }
 
-// Loudest 400 ms momentary loudness, which tracks how loud a sound feels, and sample peak.
 function measure(src, shaped) {
   const log = ffmpegLog(src, `${shaped},apad=whole_dur=${METER_S},ebur128=peak=sample`);
   const momentary = [...log.matchAll(/ M: *(-?[\d.]+)/g)].map((m) => Number(m[1]));
@@ -144,7 +127,7 @@ function measure(src, shaped) {
 function ffmpegLog(src, filters) {
   const r = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-i', src, '-af', filters, '-f', 'null', '-'], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error(`ffmpeg failed on ${src}: ${r.stderr.slice(-400)}`);
-  return r.stderr; // meters print to stderr
+  return r.stderr;
 }
 
 function statValue(log, key) {
@@ -153,8 +136,6 @@ function statValue(log, key) {
   return Number(m[1]);
 }
 
-// Generated music starts with a quiet intro and ends with a fade. Cut both, then crossfade the end into the
-// start, so the track loops without a gap. Writes a wav next to the raw file and returns its path.
 function musicLoop(src, name) {
   const { start, end } = loudSpan(src);
   const len = end - start;
@@ -172,7 +153,6 @@ function musicLoop(src, name) {
   return out;
 }
 
-// First and last moment the short-term loudness is within MUSIC_EDGE_DB of the loudest moment.
 function loudSpan(src) {
   const r = spawnSync('ffmpeg', ['-hide_banner', '-nostats', '-i', src, '-af', 'ebur128', '-f', 'null', '-'], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error(`ffmpeg could not meter ${src}`);

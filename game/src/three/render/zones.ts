@@ -11,9 +11,9 @@ import type { Vec } from '../../sim/vec';
 
 const S = PHYSICS.metersPerTile;
 const ZONE_ALPHA: Record<Throttle, number> = { brake: 0.16, hold: 0.28, accelerate: 0.18 };
-const SAMPLE_TILES = 0.5; // most tiles between ground samples, so a band follows the per-tile ground mesh
-const LIFT = 0.1; // meters above the ground, so bumps between samples do not swallow a band
-const HOVER_RADIUS_TILES = 0.6; // matches the 2D hover ring radius
+const SAMPLE_TILES = 0.5;
+const LIFT = 0.1;
+const HOVER_RADIUS_TILES = 0.6;
 const HOVER_WIDTH_TILES = 0.08;
 const HOVER_SEGMENTS = 32;
 
@@ -39,7 +39,6 @@ export class ZonesView {
   }
 
   private makeBand(color: number, opacity: number): THREE.Mesh {
-    // Depth test keeps the zones under trucks. Polygon offset keeps them above the ground between arc points.
     const material = new THREE.MeshBasicMaterial({
       color, transparent: true, opacity, depthWrite: false, side: THREE.DoubleSide,
       polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
@@ -50,8 +49,6 @@ export class ZonesView {
     return mesh;
   }
 
-  // halfAngle: the zones fan out over half of the truck's turn limit on each side of its heading.
-  // At rest there is no hold zone: red covers the first third of reach and green the rest.
   update(terrain: Terrain, pos: Vec, heading: number, speed: number, halfAngle: number): void {
     const z = zoneEdges();
     const brakeEnd = speed === 0 ? z.restBrakeEnd : z.brakeEnd;
@@ -99,7 +96,6 @@ function pushPoint(out: number[], terrain: Terrain, pos: Vec, a: number, r: numb
   out.push(x * S, h, y * S);
 }
 
-// Two triangles per grid cell. Points run outward along each arc step.
 function gridIndices(arcSteps: number, radialSteps: number): number[] {
   const idx: number[] = [];
   const row = radialSteps + 1;

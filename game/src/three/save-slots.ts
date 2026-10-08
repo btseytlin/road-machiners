@@ -21,7 +21,6 @@ export function slotLabel(slot: SlotId): string {
   return `Slot ${slot.slice('slot'.length)}`;
 }
 
-// A filled slot. The turn is null when the save's JSON or its world turn does not read.
 export type SlotInfo = { slot: SlotId; savedAt: number; turn: number | null };
 
 function numberOr(value: unknown, fallback: number | null): number | null {
@@ -37,7 +36,6 @@ function infoOf(slot: SlotId, raw: string): SlotInfo {
   }
 }
 
-// The filled slots, newest first. Slots saved at the same time keep the slot order.
 export function listSaves(storage: Storage, base: string, count: number): SlotInfo[] {
   const infos = allSlots(count).flatMap((slot) => {
     const raw = storage.getItem(slotKey(base, slot));
@@ -50,7 +48,6 @@ export function newestSlot(storage: Storage, base: string, count: number): SlotI
   return listSaves(storage, base, count)[0]?.slot ?? null;
 }
 
-// What the next boot does. The page reloads between the menu click and boot, so the request waits in session storage.
 export type BootRequest = SlotId | 'new';
 
 function requestKey(base: string): string {
@@ -65,7 +62,6 @@ function isBootRequest(value: string): value is BootRequest {
   return value === 'new' || value === 'auto' || value === 'day' || /^slot[1-9]\d*$/.test(value);
 }
 
-// Reads the request and removes it, so a later plain reload loads the newest save.
 export function takeBootRequest(session: Storage, base: string): BootRequest | null {
   const value = session.getItem(requestKey(base));
   if (value === null) return null;

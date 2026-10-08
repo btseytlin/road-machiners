@@ -6,7 +6,6 @@ import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
 import { siteGates } from '../../sim/sites';
 
-// The model files as base64 data URLs, since tests run without a server.
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
 await loadModels(async (name) => {
   const url = FILES[`/public/models/${name}.glb`];
@@ -21,7 +20,6 @@ function measureSite(id: string): Vector3 {
   return new Box3().setFromObject(site).getSize(new Vector3());
 }
 
-// Pieces marked outsideEdge, like Canyon Bridge, lie outside their site on purpose.
 function outsideEdge(o: Object3D): boolean {
   for (let p: Object3D | null = o; p; p = p.parent) if (p.userData.outsideEdge) return true;
   return false;
@@ -65,7 +63,7 @@ describe('landmark scale', () => {
 
   it('keeps everything a truck could touch inside the site edge', () => {
     const S = PHYSICS.metersPerTile;
-    const reach = 1; // tiles above the ground a truck body reaches
+    const reach = 1;
     const v = new Vector3();
     const m = new Matrix4();
     for (const site of [...REGION.towns, ...REGION.locations]) {

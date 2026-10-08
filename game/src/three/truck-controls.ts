@@ -9,14 +9,13 @@ export type ControlsHost = {
   world: () => World;
   apply: (next: World) => void;
   refreshPlan: () => void;
-  doused: () => void; // plays the steam cloud and logs the douse
-  revved: () => void; // plays the engine rev when overdrive comes on
+  doused: () => void;
+  revved: () => void;
 };
 
 export class TruckControls {
   constructor(private host: ControlsHost) {}
 
-  // Manual mode drives straight at the click, so the preview must rerun with the new driver.
   toggleManual(): void {
     const w = this.host.world();
     if (!playerCanAct(w)) return;
@@ -29,7 +28,6 @@ export class TruckControls {
     this.host.apply(setAutoRepair(w, !w.player.autoRepair));
   }
 
-  // Overdrive changes speed, so the preview must rerun.
   toggleOverdrive(): void {
     const w = this.host.world();
     if (!playerCanAct(w)) return;

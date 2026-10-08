@@ -16,7 +16,6 @@ export function isTownGuarded(pos: Vec): boolean {
 }
 
 export function fireGuards(world: World): void {
-  // A raider destroyed by this turn's shots is already off the map.
   const raider = (id: string) => {
     const target = world.vehicles.find((v) => v.id === id) ?? world.removed.find((v) => v.id === id);
     if (!target) throw new Error(`Shot at unknown vehicle ${id}`);
@@ -27,7 +26,6 @@ export function fireGuards(world: World): void {
   for (const camp of REGION.locations) if (camp.kind === 'camp') fireSite(world, camp, (v) => v.faction !== 'raiders');
 }
 
-// Guards spare a knocked-out driver. A player fighting through on a broken cab is still awake.
 function isAwake(world: World, v: Vehicle): boolean {
   if (v.id === world.player.vehicleId) return world.player.state === 'active';
   return corePart(v, 'cab').hp > 0;

@@ -46,7 +46,6 @@ function getRepairCandidates(world: World, vehicle: Vehicle): Vec[] {
   return candidates.sort((a, b) => dist(vehicle.pos, a) - dist(vehicle.pos, b));
 }
 
-// Reachable shade nearby, or null to repair wherever the driver stops.
 function chooseRepairSpot(world: World, vehicle: Vehicle): Vec | null {
   if (!canSearchForShade(world, vehicle)) return null;
   const sun = sunAt(world.turn);
@@ -60,7 +59,6 @@ function chooseRepairSpot(world: World, vehicle: Vehicle): Vec | null {
   return shaded ?? null;
 }
 
-// A repair goal when the most damaged part carried parts can patch is at or below `condition`. Null otherwise.
 export function chooseNpcRepair(world: World, vehicle: Vehicle, condition: number): NpcActivity | null {
   const part = chooseRepairPart(world, vehicle);
   if (!part) return null;
@@ -75,18 +73,14 @@ export function chooseNpcRepair(world: World, vehicle: Vehicle, condition: numbe
   };
 }
 
-// A driver out of fuel repairs where it stopped.
 export function continueNpcRepair(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   if (getResources(world, vehicle).fuel === 0) activity.destination = null;
 }
 
-// A driver repairs where it stands with no spot, or within the goal reach rule of its spot, so a drift after a
-// patch does not send it circling back.
 export function repairsHere(vehicle: Vehicle, activity: NpcActivity): boolean {
   return activity.destination === null || withinReach(vehicle, activity);
 }
 
-// Starts the next repair job once parked where it repairs. True when nothing is left to patch.
 export function resolveNpcRepair(world: World, vehicle: Vehicle, activity: NpcActivity): boolean {
   if (!repairsHere(vehicle, activity)) return false;
   activity.phase = 'act';

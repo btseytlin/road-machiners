@@ -5,16 +5,14 @@ import type { Weighted } from './npcs';
 export type LootRange = [number, number];
 
 export type LootTable = {
-  goods: Record<string, LootRange>; // units rolled per good
-  parts: LootRange; // units of the parts good
-  sparePartChance: number; // odds the site also holds one mountable spare part
-  spareParts: string[]; // part def ids the spare part is drawn from
-  fuel: LootRange; // fuel units left in tanks and cans
-  supplies: LootRange; // supply units left in crates
+  goods: Record<string, LootRange>;
+  parts: LootRange;
+  sparePartChance: number;
+  spareParts: string[];
+  fuel: LootRange;
+  supplies: LootRange;
 };
 
-// Wear steps a spare part found in the field rolls, from the market stream. Parts left out in the
-// waste have mostly broken and been rebuilt, so a pristine find is the rare prize.
 export const FIELD_SPARE_WEAR: Weighted<number>[] = [
   { value: 0, weight: 1 },
   { value: 1, weight: 3 },
@@ -24,20 +22,12 @@ export const FIELD_SPARE_WEAR: Weighted<number>[] = [
 ];
 
 export const SALVAGE = {
-  unitsPerTurn: 2, // stock units, goods or parts, a search gets through per turn
-  pileTurns: 400, // two days a dropped pile lies on the ground, time for a road crossing and back
-  claimTurns: 60, // the claimant's time to reach and search a handed-over pile, the same span as a handover truce
-  pileSearchTurns: 1, // loot lying loose takes one look, whatever its size
-  // Share of a wrecked chassis's value that its destroyed built-in parts leave as the parts good, scaled by
-  // their remaining HP share. Keeps a wreck's loot well under the truck's own value, so a kill is not a windfall.
+  unitsPerTurn: 2,
+  pileTurns: 400,
+  claimTurns: 60,
+  pileSearchTurns: 1,
   coreValueShare: 0.03,
-  // Each day a site regains this share of a fresh roll from its loot table, up to the table's highs. An emptied
-  // site takes about two weeks to fill back up: a slow trickle, not a reset.
   restockShare: 0.08,
-  // Goods and parts ranges sit at about a third of what the map once held. The whole map's loot used to sell
-  // for far more than the upgrade ladder costs. Fuel and supplies stay, since they are spent, not resold.
-  // Days a looted road wreck lies empty before it goes. It goes only beyond the player's gray vision, and a new
-  // road wreck appears elsewhere, also beyond it, so the road wreck count stays constant.
   wreckClearDays: 3,
   landmark: {
     goods: { scrap: [1, 2], salt: [0, 1], meds: [0, 1] },
@@ -48,7 +38,6 @@ export const SALVAGE = {
     supplies: [0, 3],
   } as LootTable,
   roadWreck: {
-    // Scrap never rolls to 0, so a road wreck always has something to search for.
     goods: { scrap: [1, 1] },
     parts: [0, 1],
     sparePartChance: 0.1,
@@ -66,8 +55,7 @@ export const SALVAGE = {
   } as LootTable,
 };
 
-// Stripping a spare part in the field for units of the parts good. See src/sim/jobs.ts.
 export const STRIP = {
-  yieldShare: 0.5, // share of the part's value paid out in parts-good units
-  turns: 3, // turns the job takes, flat regardless of the part
+  yieldShare: 0.5,
+  turns: 3,
 };

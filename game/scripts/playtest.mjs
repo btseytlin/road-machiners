@@ -1,8 +1,6 @@
 // Boots the game in headless Chromium on the Metal GPU, plays turns, and fails on page errors, the crash screen,
 // a blank canvas or a low frame rate. Screenshots go to .playtest/.
 // With --cpu, Chromium draws in software and the frame rate is printed but not checked.
-// With --no-fps-gate, the GPU run prints the frame rate but does not check it, for hosts shared with other jobs.
-// Usage: npm run playtest -- [--url http://localhost:5173] [--turns 12, or 4 with --cpu] [--cpu] [--no-fps-gate]
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
 
@@ -12,12 +10,9 @@ const arg = (name, fallback) => {
 };
 const url = arg('url', 'http://localhost:5173');
 const cpu = process.argv.includes('--cpu');
-// --cpu checks that the game boots and plays, not its speed. Software drawing is slow, so it plays fewer turns.
 const turns = Number(arg('turns', cpu ? '4' : '12'));
 const fpsGate = !cpu && !process.argv.includes('--no-fps-gate');
-const MIN_FPS = 50; // headless Chromium caps frames at 60 Hz
-// A turn plays in about 1.3 s on the GPU, and the first, while the game warms up, in about 3.2 s.
-// Software drawing on a 2 vCPU server runs near 1.5 fps, and turns there took over 10 s, so --cpu waits longer.
+const MIN_FPS = 50;
 const TURN_LIMIT_MS = cpu ? 60000 : 10000;
 
 mkdirSync('.playtest', { recursive: true });
@@ -41,8 +36,6 @@ for (let i = 0; i < turns; i++) {
     g.apply({ ...w, vehicles: w.vehicles.map((x) => (x.id === v.id ? { ...x, order: { kind: 'through', dest: { x: clamp(v.pos.x + Math.cos(a) * 9.5), y: clamp(v.pos.y + Math.sin(a) * 9.5) } } } : x)) });
     g.endTurn();
   }, i);
-  // The turn counts once it is committed and has played back, since endTurn() ignores requests during playback.
-  // travel and anim are private in TypeScript, and endTurn() checks the same call.
   await page.waitForFunction((turn) => {
     const g = window.__ROAM__;
     return g.state.turn === turn && !g.travel.isPlaying(g.anim);

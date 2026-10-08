@@ -36,7 +36,6 @@ describe('NPC knockout in physics', () => {
     buggy.brain.attackers[w.player.vehicleId] = true;
     buggy.lastHitBy = w.player.vehicleId;
     buggy.order = { kind: 'through', dest: { x: 70, y: 30 } };
-    // It opens fire unwarned, so no cargo demand opens a call and stops the turns.
     forceOption('mugging', 'attack');
     refreshVision(w);
     let d = buildDrive(w);
@@ -46,7 +45,7 @@ describe('NPC knockout in physics', () => {
     w.rngState = rngStateWhere((roll) => roll >= RULES.npcDeathChance);
     ({ w, d } = turn(w, d));
     expect(raider(w).defeat?.phase).toBe('out');
-    ({ w, d } = turn(w, d)); // it may roll to a stop over one turn
+    ({ w, d } = turn(w, d));
     const rest = { ...raider(w).pos };
     for (let i = 0; i < 10; i++) ({ w, d } = turn(w, d));
     expect(raider(w).defeat?.phase).toBe('out');

@@ -1,8 +1,6 @@
 // The activity log of a progression run: everything the bot and the NPCs did, turn by turn, for a reader who checks a
 // whole run for bugs and dull stretches. The record trace keeps only XP. This log keeps every game event, a snapshot of
 // the player and every NPC at a fixed interval, how the run ended and a summary of counts.
-// The run uses the recorder, so every truck travels far and a scripted bot drives the player. Close-range driving,
-// physics crashes and choices the bot never makes do not happen in it, and the header says so.
 
 import { SKILL_IDS } from '../../data/skills';
 import { playerVehicle } from '../damage';
@@ -30,9 +28,7 @@ export type PlayerSnapshot = {
   xp: Record<string, number>; levels: Record<string, number>; contracts: number; discovered: number;
 };
 export type SnapshotLine = { k: 'snapshot'; turn: number; player: PlayerSnapshot; npcs: NpcSnapshot[] };
-// complete: every turn ran. death: the player died. error: the turn pipeline threw or the player truck stalled.
 export type EndLine = { k: 'end'; turn: number; reason: 'complete' | 'death' | 'error'; message: string | null };
-// moneyIn and moneyOut sum the player's money gained and spent turn by turn. hits counts the rounds that hit.
 export type SummaryLine = {
   k: 'summary'; turns: number; events: Record<string, number>; npcGoals: Record<string, number>; npcsSeen: number;
   shots: number; hits: number; destroyed: number; knockouts: number; deaths: number; stalls: number;
@@ -44,8 +40,6 @@ export type ActivityOptions = { seed: number; archetype: Archetype; turns: numbe
 
 const round = (n: number): number => Math.round(n * 10) / 10;
 
-// Plays the run from start and yields the log lines as they happen: the header, then events and snapshots, then the
-// end and the summary. A thrown turn ends the log with an error line instead of throwing, since the error is a finding.
 export function* activityFrom(start: World, options: ActivityOptions): Generator<ActivityLine> {
   if (!Number.isInteger(options.every) || options.every <= 0) throw new Error(`The snapshot interval must be a positive whole number, got ${options.every}`);
   const play = new Play(start, options.every);
@@ -59,7 +53,6 @@ export function* activityFrom(start: World, options: ActivityOptions): Generator
   yield* play.close();
 }
 
-// The state of a run between turns: the last world, the turn of the last snapshot, how it ended and the counts.
 class Play {
   private world: World;
   private snapped: number;
@@ -106,7 +99,6 @@ class Play {
   }
 }
 
-// Debug info lines only show with the full log flag, so they stay out.
 function eventLines(events: TurnEvent[]): EventLine[] {
   return events.filter(({ event }) => !(event.t === 'info' && event.debug)).map(({ turn, event }) => ({ k: 'event', turn, e: event }));
 }
@@ -147,14 +139,12 @@ function resourcesOf(r: DriverResources | null): ResourceFields {
   return { money: round(r.money), fuel: round(r.fuel), supplies: round(r.supplies), health: round(r.health) };
 }
 
-// What each event adds to the counts beyond its own type count.
 const TALLIES: Partial<Record<GameEvent['t'], (tally: Tally, e: GameEvent) => void>> = {
   activity: (tally, e) => { if (e.t === 'activity' && e.activity) tally.count(tally.npcGoals, e.activity); },
   spawn: (tally, e) => { if (e.t === 'spawn') tally.seen.add(e.vehicle); },
   shot: (tally, e) => { if (e.t === 'shot') tally.shoot(e.rounds.filter((r) => r.hit).length); },
 };
 
-// Counts the run for the summary line, so a reader sees a quiet run or a missing kind of activity at a glance.
 class Tally {
   readonly events: Record<string, number> = {};
   readonly npcGoals: Record<string, number> = {};
@@ -187,7 +177,6 @@ class Tally {
     this.hits += hits;
   }
 
-  // Trade, repairs and fees change the player's money without a money event, so the summary counts the change itself.
   move(world: World): void {
     const pos = playerVehicle(world).pos;
     this.tiles += dist(pos, this.last);

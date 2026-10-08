@@ -3,9 +3,6 @@ import { exploratoryRatio, runPolicy, type PolicyName, type RunReport } from './
 
 const POLICIES: PolicyName[] = ['idle', 'haulOnly', 'salvageOnly', 'contractsOnly', 'greedy'];
 
-// runPolicy is deterministic for a given (seed, policy, days) triple, and several tests below only read a
-// different field off the same combination another test already ran. This cache lets each combination run once.
-// The one place two independent runs matter, the determinism test right below, calls runPolicy directly instead.
 const cache = new Map<string, RunReport>();
 function run(seed: number, policy: PolicyName, days: number): RunReport {
   const key = `${seed}:${policy}:${days}`;
@@ -44,7 +41,6 @@ describe('runPolicy', () => {
     expect(r.telemetry.trades).toBeGreaterThan(0);
   });
 
-  // Map loot is thin, so a load worth selling takes more than one day to gather.
   it('salvageOnly searches and sells over two days', () => {
     const r = run(1, 'salvageOnly', 2);
     expect(r.telemetry.trades).toBeGreaterThan(0);

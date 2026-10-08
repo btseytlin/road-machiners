@@ -32,7 +32,6 @@ export const KIND_CLASS: Record<PartKind, string> = {
   store: "k-cargo",
 };
 
-// The item a garage storage chip stands for. Its id starts with store- so it never clashes with a grid item.
 export function storageItem(part: PartInstance): GridItem {
   return { id: `store-${part.id}`, x: 0, y: 0, rot: 0, kind: "part", part };
 }
@@ -45,7 +44,6 @@ export function lootGoodItem(good: string): GridItem {
   return { id: `loot-${good}`, x: 0, y: 0, rot: 0, kind: "good", good };
 }
 
-// An empty inventory grid of mount cells. Items go on top.
 export function gridEl(g: Grid, cell: number): HTMLElement {
   const grid = el("div", { class: "inv-grid", style: `width:${g.w * cell}px;height:${g.h * cell}px` });
   grid.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -61,7 +59,6 @@ export function cellEl(c: Cell, x: number, y: number, cell: number): HTMLElement
   return el("div", { class: `inv-cell c-${c === "." ? "plain" : c}`, style: pos(x, y, 1, 1, cell), title: CELL_TITLE[c] }, c === "." || c === "X" ? "" : c);
 }
 
-// The box an item draws on a grid: its kind color, icon, name and condition bar.
 export function itemBox(it: GridItem, mounted: boolean, cell: number): HTMLElement {
   const cells = itemCells(it);
   const x = Math.min(...cells.map((c) => c.x));
@@ -80,7 +77,6 @@ export function itemBox(it: GridItem, mounted: boolean, cell: number): HTMLEleme
   return node;
 }
 
-// Items on a knocked-out truck that a running player refit is taking off it.
 export function removalIds(w: World, target: Vehicle): Set<string> {
   const job = playerVehicle(w).job;
   if (job?.kind !== "refit" || job.pickup?.from !== "truck" || job.pickup.vehicleId !== target.id) return new Set();
@@ -92,7 +88,6 @@ function pos(x: number, y: number, w: number, h: number, cell: number): string {
   return `left:${x * cell}px;top:${y * cell}px;width:${w * cell}px;height:${h * cell}px`;
 }
 
-// The parts a running refit moves, at the spots they go to.
 export function refitItems(w: World, v: Vehicle): GridItem[] {
   if (v.job?.kind !== "refit") return [];
   return [...v.job.moves.map((move) => movedItem(v, move)), ...pickupItem(w, v.job)];
@@ -104,7 +99,6 @@ function movedItem(v: Vehicle, move: RefitMove): GridItem {
   return { ...item, ...move.to };
 }
 
-// The salvage part a refit mounts, at its target. A part gone from the stock is not drawn.
 function pickupItem(w: World, job: RefitJob): GridItem[] {
   const pickup = job.pickup;
   if (!pickup) return [];
@@ -134,7 +128,6 @@ export function itemTitle(it: GridItem, mounted: boolean): string {
   return `${partTitle(it.part)}\n${mounted ? "Mounted" : "Spare"}`;
 }
 
-// Thin bar along the bottom of a part: its width is hp over max hp. A broken part shows a red bar.
 export function conditionBar(p: PartInstance): HTMLElement {
   const max = maxHp(p);
   return el(
@@ -163,9 +156,6 @@ export function getItemIcon(item: GridItem): IconName {
   return item.kind === "good" ? goodIcon(item.good) : partIcon(item.part);
 }
 
-// Fire view: where a mounted gun can fire, shown on the grid as a fan from the gun, the same shape as its range
-// on the ground, with the parts in its way outlined.
-
 const SVG = "http://www.w3.org/2000/svg";
 
 export function weaponDefOf(it: GridItem): WeaponDef | null {
@@ -174,7 +164,6 @@ export function weaponDefOf(it: GridItem): WeaponDef | null {
   return def.kind === "weapon" ? def : null;
 }
 
-// The ids of the tall parts that block this gun, for outlining them on the grid.
 export function blockerIds(v: Vehicle, it: GridItem, def: WeaponDef): string[] {
   const blockers = sideBlockers(v, it);
   return reachedSides(def).flatMap((side) => {
@@ -183,7 +172,6 @@ export function blockerIds(v: Vehicle, it: GridItem, def: WeaponDef): string[] {
   });
 }
 
-// The fan over the grid, nose up. radius is in pixels, cell is the grid cell size in pixels.
 export function fanSvg(v: Vehicle, it: GridItem, def: WeaponDef, size: { w: number; h: number }, cell: number): SVGSVGElement {
   const { w, h } = itemSize(it);
   const cx = (it.x + w / 2) * cell;
@@ -202,7 +190,6 @@ export function fanSvg(v: Vehicle, it: GridItem, def: WeaponDef, size: { w: numb
   return svg;
 }
 
-// 0 degrees points to the nose, up on the grid, and positive angles turn right.
 function spanPath(cx: number, cy: number, r: number, span: FireSpan): string {
   const at = (deg: number) => {
     const a = (deg * Math.PI) / 180;

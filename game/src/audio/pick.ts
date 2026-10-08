@@ -9,13 +9,11 @@ export function pickVariant(n: number, last: number | null, roll: number): numbe
   return i >= last ? i + 1 : i;
 }
 
-// Pan from the screen x position and gain from the distance to the camera focus.
 export function spatial(screenX: number, width: number, distance: number, halfGainMeters: number, panWidth: number): { pan: number; gain: number } {
   const side = Math.min(1, Math.max(-1, (screenX / width) * 2 - 1));
   return { pan: side * panWidth, gain: 1 / (1 + distance / halfGainMeters) };
 }
 
-// Counts sounding plays per cue by their end times.
 export class VoiceLimiter {
   private ends = new Map<string, number[]>();
 
@@ -28,8 +26,6 @@ export class VoiceLimiter {
   }
 }
 
-// Seconds from the start to the middle of the loudest window, by mean square level. Accents use it to put their
-// peak on the moment they answer.
 export function loudestAt(samples: Float32Array, sampleRate: number, windowSeconds: number): number {
   const n = Math.max(1, Math.round(windowSeconds * sampleRate));
   let best = 0;

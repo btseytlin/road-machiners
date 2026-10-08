@@ -1,7 +1,6 @@
 // Roads and site pads are drawn by the ground shader, so they lie exactly on the ground that wheels touch.
 // The shader splits the ground into road pixels a third the size of the ground paint pixels. A road pixel
 // takes the road look where the road mask covers its center, and the slow tone and a per-pixel dither fray
-// the edge. A pad is a paler floor of the same dirt inside a worn orange outline, where the road ends.
 
 import * as THREE from "three";
 import { PHYSICS } from "../../data/physics";
@@ -13,13 +12,10 @@ import { mix, PAL } from "../../render/palette";
 import { paintRoadDetail, paintRoadMask, paintRoadTone, ROAD_DETAIL_SIDE, ROAD_TONE_PIXELS, ROAD_TONE_SIDE, type RoadImage } from "../../render/roadPaint";
 
 const S = PHYSICS.metersPerTile;
-const PIXEL_SPLIT = 3; // road pixels across one ground paint pixel
-// The ground paint under a road, before hillshade. The road takes the ground's shade relative to it.
+const PIXEL_SPLIT = 3;
 const GROUND_UNDER = mix(TERRAIN_TYPES.hardpan.color, PAL.sand[3], 0.1);
-const PAD_BORDER = 2; // road pixels across the pad outline
+const PAD_BORDER = 2;
 
-// Paints the road mask on `mask`, which must map the map like the ground canvas, and draws roads and
-// pads on the ground material.
 export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas): void {
   paintRoadMask(mask);
   const pixel = S / mask.res / PIXEL_SPLIT;
@@ -68,9 +64,6 @@ uniform float padBorder;
 uniform vec3 padDust;
 uniform vec3 padMark;`;
 
-// Samples everything at the road pixel center, so edges step in whole road pixels like the ground
-// paint. Under 0.5 the mask is off the road. The tone moves that line by meters and the dither frays it.
-// A pad covers the road under it. Its outline skips a few pixels, like worn paint.
 const ROAD_FRAGMENT = `{
   vec2 roadAt = roadOrigin + (floor((vRoadXZ - roadOrigin) / roadPixel) + 0.5) * roadPixel;
   float roadCover = texture2D(roadMask, (roadAt - roadOrigin) / roadMaskMeters).r;
@@ -90,7 +83,6 @@ const ROAD_FRAGMENT = `{
   }
 }`;
 
-// Pad centers and their axes out from the site, in meters. Pads are the same size everywhere.
 function padUniforms(pixel: number) {
   const centers: THREE.Vector2[] = [];
   const axes: THREE.Vector2[] = [];

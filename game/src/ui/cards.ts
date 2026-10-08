@@ -180,7 +180,6 @@ export function partIcon(part: PartInstance): IconName {
   return def.kind;
 }
 
-// One row per stat: icon, name, value, and the change against the player's own, colored by whether it helps.
 export function statGrid(diffs: StatDiff[]): HTMLElement {
   return el(
     "div",
@@ -198,7 +197,6 @@ export function statGrid(diffs: StatDiff[]): HTMLElement {
   );
 }
 
-// The part's cells before rotation, drawn small.
 export function footprint(w: number, h: number): HTMLElement {
   return el(
     "div",
@@ -217,7 +215,6 @@ export function conditionMeter(part: PartInstance): HTMLElement {
   );
 }
 
-// The line under a part's name: its wear and whether it works.
 function partNote(part: PartInstance): string {
   if (isJunk(part)) return "junk, scrap only";
   if (part.hp === 0) return `broken, ${wearLabel(part)}`;
@@ -226,7 +223,7 @@ function partNote(part: PartInstance): string {
 
 export type PartCardOptions = {
   part: PartInstance;
-  base: PartInstance | null; // the part it is weighed against, or null for plain stats
+  base: PartInstance | null;
   action: HTMLElement | null;
   onHover?: (on: boolean) => void;
 };
@@ -257,18 +254,14 @@ export function partCard(o: PartCardOptions): HTMLElement {
   return card;
 }
 
-// The part a shop card is weighed against: the item the player selected. With nothing selected, or the card
-// showing that same part, the card shows plain stats.
 export function compareBase(selected: PartInstance | null, part: PartInstance): PartInstance | null {
   return selected && selected.id !== part.id ? selected : null;
 }
 
-// What the changes in the stat table are against.
 function compareLine(base: PartInstance): HTMLElement {
   return el("div", { class: "card-compare" }, `Compared with ${partDef(base.defId).name}`);
 }
 
-// A truck's grid seen from above, nose up, one colored square per cell.
 export function chassisMap(chassisId: string): HTMLElement {
   const g = baseGrid(chassisId);
   return el(
@@ -282,8 +275,6 @@ function cellClass(c: Cell | null): string {
   if (c === null) return "hole";
   return `c-${c === "." ? "plain" : c}`;
 }
-
-// ---- Stats.
 
 export type StatIcon =
   | "damage"
@@ -315,7 +306,6 @@ export type StatIcon =
   | "patch"
   | "tall";
 
-// better is the direction that helps the player. null marks a stat with no better side.
 export type Stat = {
   icon: StatIcon;
   label: string;
@@ -342,8 +332,6 @@ function signed(value: number, decimals: number): string {
   return `${value < 0 ? "−" : "+"}${formatNumber(Math.abs(value), decimals)}`;
 }
 
-// The few stats that decide a part's job and weakness, most important first, with its wear applied.
-// The condition meter already shows HP.
 export function partStats(part: PartInstance): Stat[] {
   const def = partDef(part.defId);
   return [...KIND_STATS[def.kind](part), stat("mass", "Mass", def.mass, "kg", "less")];
@@ -370,12 +358,10 @@ function cargoStats(part: PartInstance): Stat[] {
   return [{ ...stat("rows", "Extra cargo rows", d.extraRows, d.extraRows === 1 ? "row" : "rows", "more"), text: `+${d.extraRows}` }, tallStat(d)];
 }
 
-// Blast rounds meet an armor part's blast armor instead of its plain armor.
 function penStat(d: WeaponDef): Stat {
   return { ...stat("pen", "Penetration", d.round.pen, "", "more"), unit: d.round.blast ? "blast" : "" };
 }
 
-// Tall parts stand higher than a gun, so guns cannot fire across them.
 function tallStat(d: PartDef): Stat {
   return { ...stat("tall", "Height", d.tall ? 1 : 0, "", "less"), text: d.tall ? "tall" : "low" };
 }
@@ -434,7 +420,6 @@ function fieldRepairStat(repair: FieldRepair): Stat {
   return { ...stat("patch", r.label, r.rank, "", "more"), text: r.text };
 }
 
-// A truck's own numbers, without parts.
 export function chassisStats(chassisId: string): Stat[] {
   const c = chassisDef(chassisId);
   const turning = stat("turning", "Turning",(c.turnFast + c.turnSlow) / 2, "°", "more");
@@ -449,7 +434,6 @@ export function chassisStats(chassisId: string): Stat[] {
   ];
 }
 
-// Each stat against the stat with the same icon in base. With no base, or no such stat, delta is null.
 export function diffStats(stats: Stat[], base: Stat[] | null): StatDiff[] {
   return stats.map((s) => {
     const b = base?.find((x) => x.icon === s.icon);
@@ -464,7 +448,6 @@ function verdictOf(delta: number, better: Stat["better"]): Verdict {
   return (delta > 0) === (better === "more") ? "better" : "worse";
 }
 
-// The mounted part a spare of this kind is weighed against: the most valuable one on the truck.
 export function baselinePart(v: Vehicle, kind: PartKind): PartInstance | null {
   return [...mountedParts(v, kind)].sort((a, b) => partValue(b) - partValue(a))[0] ?? null;
 }

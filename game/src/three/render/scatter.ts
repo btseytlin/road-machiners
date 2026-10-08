@@ -15,15 +15,13 @@ import type { RenderScope } from './scope';
 import { TERRAIN_CHUNK } from './terrain';
 
 const S = PHYSICS.metersPerTile;
-const ROAD_GAP = REGION.roadWidth / 2 + 0.3; // tiles from a road center line kept free of scatter
-const OBSTACLE_GAP = 0.5; // tiles past an obstacle's radius kept free of scatter
-const PEBBLE_CHANCE = 0.3; // share of tiles with a pebble cluster
-// Share of scrub tiles with a scrub tuft. Dense, so scrub ground reads as brush at the default zoom.
+const ROAD_GAP = REGION.roadWidth / 2 + 0.3;
+const OBSTACLE_GAP = 0.5;
+const PEBBLE_CHANCE = 0.3;
 const SCRUB_ON_SCRUB = 0.45;
-// Share of other open tiles with a scrub tuft. Sparse, so bare ground still shows a stray bush.
 const SCRUB_ELSEWHERE = 0.04;
-const PEBBLE_RADIUS = { min: 0.025, max: 0.045 }; // tiles
-const SCRUB_RADIUS = { min: 0.07, max: 0.12 }; // tiles
+const PEBBLE_RADIUS = { min: 0.025, max: 0.045 };
+const SCRUB_RADIUS = { min: 0.07, max: 0.12 };
 const TINT = { min: 0.85, max: 1.15 };
 
 type Placed = { matrix: THREE.Matrix4; tint: number };
@@ -61,12 +59,10 @@ export function addScatter(t: Terrain, obstacles: Obstacle[], scope: RenderScope
   }
 }
 
-// Share of tiles of a ground type with a scrub tuft.
 function scrubChance(type: TerrainTypeId): number {
   return type === 'scrub' ? SCRUB_ON_SCRUB : SCRUB_ELSEWHERE;
 }
 
-// Tiles whose center lies within an obstacle's radius plus the gap.
 function blockedTiles(size: number, obstacles: Obstacle[]): Uint8Array {
   const out = new Uint8Array(size * size);
   for (const o of obstacles) {

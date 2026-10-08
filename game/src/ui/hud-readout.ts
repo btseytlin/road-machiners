@@ -32,7 +32,6 @@ import { combatTurnsLeft } from '../sim/combat';
 import { isBusy } from '../sim/jobs';
 import { npcName } from '../sim/spawn';
 
-// The shop in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
 function shopNear(world: World): { id: string; name: string } | null {
   const pos = playerVehicle(world).pos;
   const sites = [...REGION.towns, ...REGION.locations].filter((s) => s.id in SHOPS);
@@ -42,12 +41,10 @@ function shopNear(world: World): { id: string; name: string } | null {
 
 export function getContextAction(world: World, playing: boolean): ContextAction | null {
   if (playing || !playerCanAct(world)) return null;
-  // An aid handover or a trade the player arranged wins over the place once both trucks are parked side by side.
   const deals = [getAidAction(world), getTradeAction(world)].filter((d) => d !== null);
   return deals.find((d) => d.ready) ?? getPlaceAction(world) ?? deals[0] ?? null;
 }
 
-// An agreed aid deal the player has not started yet.
 function getAidAction(world: World): ContextAction | null {
   const s = playerAid(world);
   if (!s || !aidData(s).agreed || aidData(s).started) return null;
@@ -64,7 +61,6 @@ function getTradeAction(world: World): ContextAction | null {
 function getPlaceAction(world: World): ContextAction | null {
   const shop = shopNear(world);
   if (shop) return { label: `Enter ${shop.name}`, ready: shopAt(world) === shop.id };
-  // A knocked-out truck stays open to looting while a removal from it runs.
   const downed = downedNear(world);
   if (downed) return { label: `Loot ${npcName(downed)}`, ready: downedHere(world) !== null };
   if (isBusy(playerVehicle(world))) return null;
@@ -83,7 +79,6 @@ function getSiteAction(world: World): ContextAction | null {
   return getStockAction(world, stock);
 }
 
-// A search needs no combat. Looting a searched stock does not. Neither starts while another truck loots it.
 function getStockAction(world: World, stock: SalvageStock): ContextAction {
   const searched = world.player.scavenged.includes(stock.id);
   const blocker = lootBlockerHere(world);
@@ -110,7 +105,6 @@ function getConditionState(ratio: number): string {
   return ratio < 1 ? "damaged" : "healthy";
 }
 
-// Armor edge cells with no armor mounted on them: the stripped spots of a truck.
 export function openArmorSlots(vehicle: Vehicle): { x: number; y: number }[] {
   const covered = new Set<string>();
   for (const item of mountedItems(vehicle, "armor")) {
@@ -125,7 +119,6 @@ export function openArmorSlots(vehicle: Vehicle): { x: number; y: number }[] {
   return open;
 }
 
-// The tooltip of a part tile: the part's name and condition.
 export function conditionLabel(part: { name: string; percent: number }): string {
   return part.percent === 0 ? `${part.name}: broken` : `${part.name}: ${part.percent}%`;
 }
@@ -169,9 +162,8 @@ const REGION_WEATHER: Record<"heatwave" | "overcast", string> = {
   heatwave: "Heat wave",
   overcast: "Overcast",
 };
-const HOT = 2; // heat at or above this shows as a warning
+const HOT = 2;
 
-// Storms are local: one shows only when the truck is inside it, or when its edge is within sight.
 function weatherLabel(w: World, pos: Vec): string {
   const names: string[] = [];
   for (const e of w.weather) {
@@ -183,15 +175,12 @@ function weatherLabel(w: World, pos: Vec): string {
   return names.length ? [...new Set(names)].join(", ") : "Clear";
 }
 
-// Negative money is debt. It shows as a positive amount owed.
 export function moneyLabel(money: number): string {
   return money < 0
     ? `Debt ${(-money).toLocaleString("en-US")}`
     : money.toLocaleString("en-US");
 }
 
-// What the rescue panel shows: the knockout, the tow in progress, or a stranded truck with its beacon switch. Null
-// when none applies, and for a dead player, whom the death screen covers. A tow offer comes as a radio call.
 export type RescueReadout =
   | { kind: "knockedOut" }
   | { kind: "towed"; tower: string; town: string; fee: number }
@@ -211,7 +200,6 @@ export function getRescueReadout(w: World): RescueReadout | null {
   return null;
 }
 
-// What stops the truck, and what the player can do about it.
 function strandedReason(w: World): string {
   const me = playerVehicle(w);
   if (!hasWorkingEngine(me)) {
@@ -287,7 +275,6 @@ export function getHudReadout(w: World) {
   };
 }
 
-// The issue forms in .github/ISSUE_TEMPLATE/.
 const NEW_ISSUE_URL = "https://github.com/btseytlin/road-machiners/issues/new";
 
 function issueFormUrl(template: string, fields: Record<string, string>): string {
@@ -297,17 +284,14 @@ function issueFormUrl(template: string, fields: Record<string, string>): string 
   return url.href;
 }
 
-// The text the ? menu shows.
 export function versionLabel(): string {
   return `v${GAME_VERSION}`;
 }
 
-// The form field id is `version`, so GitHub prefills that field.
 export function bugReportUrl(version: string): string {
   return issueFormUrl("bug.yml", { version });
 }
 
-// The feature form has no version field.
 export function featureRequestUrl(): string {
   return issueFormUrl("feature-request.yml", {});
 }

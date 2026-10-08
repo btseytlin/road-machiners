@@ -13,7 +13,6 @@ let calls: string[] = [];
 let comments: string[] = [];
 let runs: AgentRun[] = [];
 let cards: Card[] = [];
-// What merging each branch into the clone gives, in order. A branch with no entry left merges cleanly.
 let merges: Record<string, { commit: string | null; conflicts: string[] }[]> = {};
 let shellFailures: string[] = [];
 let pushFailures = 0;
@@ -89,7 +88,6 @@ describe('merge queue', () => {
       'fetch', 'clone dev dev', 'merge factory/issue-5', 'merge factory/issue-6', 'checks', 'push head1 dev',
     ]);
     expect(runs).toEqual([]);
-    // The release changelog and Remove find each feature by this merge message.
     expect(messages).toEqual(['Merge issue #5: Card 5', 'Merge issue #6: Card 6']);
     expect(comments).toEqual([
       '5 Approved by Ann and merged into dev. It merged together with #6, and the checks passed on the result. It closes when its release ships.',

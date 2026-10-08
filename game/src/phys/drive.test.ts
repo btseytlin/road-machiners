@@ -26,8 +26,6 @@ beforeAll(async () => {
   await initPhysics();
 });
 
-// Plays n turns through the real turn pipeline with physics movement, carrying one Drive from turn
-// to turn as the game does, so the body keeps its speed.
 function play(w: World, n: number): { w: World; d: Drive } {
   let d = buildDrive(w);
   for (let i = 0; i < n; i++) {
@@ -73,12 +71,11 @@ function ordered(order: MoveOrder, speed = 0, heading = 0): World {
 }
 
 const me = (w: World) => w.vehicles[0];
-const HILL_GRADE = 0.2; // height per tile, steeper than 90% of the generated map's slopes
-const LIMP_GRADE = 0.35; // height per tile, a steep bank beside a road
+const HILL_GRADE = 0.2;
+const LIMP_GRADE = 0.35;
 
 describe('physics turns', () => {
   it('a truck knocked out while driving brakes to a stop', () => {
-    // One drive carried from turn to turn, as in the game, so the body keeps its speed.
     let w = ordered({ kind: 'stopAt', dest: { x: 200, y: 30 } });
     let d = buildDrive(w);
     const turn = () => {
@@ -92,7 +89,6 @@ describe('physics turns', () => {
     corePart(me(w), 'cab').hp = 0;
     turn();
     expect(w.player.state).toBe('knockedOut');
-    // A few turns of braking, then the truck stands still.
     for (let i = 0; i < 3; i++) turn();
     const at = { ...me(w).pos };
     turn();
@@ -106,25 +102,21 @@ describe('physics turns', () => {
     const toNose = bearing(bowl.pos, nose.pos);
     const mid = { x: (bowl.pos.x + nose.pos.x) / 2, y: (bowl.pos.y + nose.pos.y) / 2 };
     const at = (d: number) => ({ x: mid.x + Math.cos(toNose) * d, y: mid.y + Math.sin(toNose) * d });
-    // The player watches from the side, so both traders drive in physics.
     const w = emptyWorld({ x: mid.x + Math.cos(toNose + Math.PI / 2) * 12, y: mid.y + Math.sin(toNose + Math.PI / 2) * 12 });
     const east = addVehicle(w, 'traders', 'hauler', ['stockEngine'], at(-1.5), toNose);
     const west = addVehicle(w, 'traders', 'hauler', ['stockEngine'], at(1.5), toNose + Math.PI);
     east.brain = { ...npcBrain('trader', east.pos, ['trader']), goals: [{ kind: 'sell', targetId: 'nose', destination: { ...nose.pos }, reason: 'test', phase: 'travel' }] };
     west.brain = { ...npcBrain('trader', west.pos, ['trader']), goals: [{ kind: 'sell', targetId: 'bowl', destination: { ...bowl.pos }, reason: 'test', phase: 'travel' }] };
     const along = (p: Vec) => (p.x - mid.x) * Math.cos(toNose) + (p.y - mid.y) * Math.sin(toNose);
-    // Ten turns cover a stop, a detour around the stopped truck and the drive past it.
     const { w: after } = play(w, 10);
     expect(along(after.vehicles.find((v) => v.id === east.id)!.pos)).toBeGreaterThan(5);
     expect(along(after.vehicles.find((v) => v.id === west.id)!.pos)).toBeLessThan(-5);
   });
 
   it('turns an NPC around for a destination behind it', () => {
-    // The player stands within the live radius of the whole drive, so the NPC keeps its physics body.
     const w = emptyWorld({ x: 20, y: 50 });
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 30, y: 30 });
     npc.order = { kind: 'stopAt', dest: { x: 10, y: 30 } };
-    // Four seconds turn a pickup around nose first on flat ground, and it is driving toward the point.
     const result = play(w, 4);
     const actor = result.w.vehicles.find((v) => v.id === npc.id)!;
     expect(Math.abs(angleDiff(actor.heading, Math.PI))).toBeLessThan(Math.PI / 2);
@@ -158,17 +150,14 @@ describe('physics turns', () => {
     w.terrain = structuredClone(w.terrain);
     const n = w.terrain.size;
     for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) w.terrain.heights[j * (n + 1) + i] = i * HILL_GRADE;
-    me(w).heading = Math.PI; // facing downhill
+    me(w).heading = Math.PI;
     const { w: after, d } = play(w, 8);
     freeDrive(d);
-    // Brakes slip a little on this steep grade, but the truck never picks up speed.
     expect(me(after).speed).toBeLessThan(0.05);
     expect(dist(me(after).pos, { x: 40, y: 30 })).toBeLessThan(0.6);
   });
 
   describe('mud driving', () => {
-    // The mud-at-skill-0 run backs both tests below, so it is simulated once and read twice
-    // instead of twice over independently.
     const order: MoveOrder = { kind: 'through', dest: { x: 60, y: 30 } };
     let mudSkill0: World;
     let roadSkill0: World;
@@ -187,7 +176,7 @@ describe('physics turns', () => {
       const skilled = play(setMoveOrder(w, order), 3);
       mudSkill5 = skilled.w;
       freeDrive(skilled.d);
-    }, 30_000); // three physics runs share this hook; the default 10s hook timeout is too tight under load
+    }, 30_000);
 
     it('mud covers less ground than road at the same order', () => {
       expect(me(mudSkill0).pos.x - 30).toBeLessThan(me(roadSkill0).pos.x - 30);
@@ -245,7 +234,6 @@ describe('physics turns', () => {
 
   it('a fast truck brakes before a sharp route corner instead of running into the wall past it', () => {
     let w = ordered({ kind: 'stopAt', dest: { x: 45, y: 48 } }, 7.8);
-    // A wall on the right forces the route east to a corner, and a wall past the corner catches overshoot.
     for (let x = 26; x <= 43; x += 1.2) w.obstacles.push({ id: `s${x}`, pos: { x, y: 32 }, r: 0.7, kind: 'rock' });
     for (let y = 20; y <= 55; y += 1.2) w.obstacles.push({ id: `e${y}`, pos: { x: 48, y }, r: 0.7, kind: 'rock' });
     let d = buildDrive(w);
@@ -287,8 +275,6 @@ describe('physics turns', () => {
   });
 
   it('a click behind outside the reverse cone turns the truck around nose first', () => {
-    // One continuous drive: the truck first steps forward (still nose-first outbound), then over
-    // the rest of the turns comes fully around onto the point behind it.
     const dest = { x: 26, y: 33 };
     let w = ordered({ kind: 'through', dest });
     let d = buildDrive(w);
@@ -307,7 +293,6 @@ describe('physics turns', () => {
     const w = ordered({ kind: 'through', dest: { x: 28, y: 27 } });
     const at = me(w).pos;
     w.obstacles = [-3, -2, -1, 0, 1, 2, 3].map((i) => ({ id: `r${i}`, pos: { x: at.x + 1.8, y: at.y + i * 1.2 }, r: 0.7, kind: 'rock' as const }));
-    // The truck rolls forward one or two turns until a rock stops it, then backs out; a rock's turn decides which.
     const { w: after, d } = play(w, 14);
     expect(me(after).order).toBeNull();
     freeDrive(d);
@@ -387,7 +372,6 @@ describe('physics turns', () => {
     freeDrive(d);
     const speed = (i: number) => Math.hypot(frames[i + 1].pos.x - frames[i].pos.x, frames[i + 1].pos.z - frames[i].pos.z) * PHYSICS.stepsPerSecond;
     const along = frames.map((f) => Math.hypot(f.acc.x, f.acc.z));
-    // A truck starting from rest speeds up, so early frames carry forward acceleration and speed grows.
     expect(speed(20)).toBeGreaterThan(speed(5));
     expect(Math.max(...along.slice(0, 30))).toBeGreaterThan(1);
   });
@@ -406,7 +390,7 @@ describe('physics turns', () => {
       w = endTurn(w, physicsMove(d, (x) => (r = x)));
       for (const f of r!.frames[me(w).id]) {
         const q = f.rot;
-        expect(1 - 2 * (q.x * q.x + q.z * q.z)).toBeGreaterThan(Math.cos(Math.PI / 6)); // tilt under 30 degrees
+        expect(1 - 2 * (q.x * q.x + q.z * q.z)).toBeGreaterThan(Math.cos(Math.PI / 6));
         expect(f.wheels.some((wh) => wh.suspension < PHYSICS.truck.suspensionRest + PHYSICS.truck.suspensionTravel)).toBe(true);
       }
       freeDrive(d);
@@ -427,7 +411,7 @@ describe('physics turns', () => {
     let w = emptyWorld();
     w.obstacles = [{ id: 'rock1', pos: { x: 36, y: 30 }, r: 0.8, kind: 'rock' }];
     w.vehicles[0].speed = 5;
-    w.vehicles[0].direct = true; // a careless driver skips the route planner
+    w.vehicles[0].direct = true;
     w = setMoveOrder(w, { kind: 'through', dest: { x: 45, y: 30 } });
     const hp = partHp(me(w));
     let crashes = 0;
@@ -490,7 +474,7 @@ describe('physics turns', () => {
       { id: 'site-test', pos: { x: 40, y: 30 }, r: 3, kind: 'site' },
       { id: 'bld-test-0', pos: { x: 35.5, y: 30 }, r: 0.6, kind: 'building' },
     ];
-    w.vehicles[0].direct = true; // drive straight at the site instead of around it
+    w.vehicles[0].direct = true;
     let d = buildDrive(w);
     expect(d.obstacles['bld-test-0']).toBeUndefined();
     const hits: string[] = [];
@@ -528,7 +512,7 @@ describe('physics turns', () => {
 
   it('low fuel halves the top speed', () => {
     const w0 = ordered({ kind: 'through', dest: { x: 59, y: 30 } }, 5);
-    w0.player.fuel = 2; // under the low-fuel share of the tank, enough to drive
+    w0.player.fuel = 2;
     const { w } = play(w0, 2);
     expect(me(w).speed).toBeLessThan(5);
   });
@@ -566,7 +550,6 @@ describe('physics turns', () => {
     expect(loadFactor(me(w0))).toBeLessThan(1);
     w0.player.fuel = 999;
     const { w } = play(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 6);
-    // Up the slope, which starts at x 28, and still moving rather than stalling. Overload slows it hard.
     expect(me(w).pos.x).toBeGreaterThan(30);
     expect(me(w).speed).toBeGreaterThan(0.5);
   });
@@ -592,7 +575,6 @@ describe('physics turns', () => {
     let d = buildDrive(w);
     const speeds: number[] = [];
     for (let i = 0; i < 8; i++) {
-      // Each turn the player clicks the middle of the hold zone again.
       w = setMoveOrder(w, { kind: 'through', dest: { x: me(w).pos.x + RULES.throttleZones.reach / 2, y: 30 } });
       let next: Drive | null = null;
       w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
@@ -620,7 +602,6 @@ describe('physics turns', () => {
   it('a hitched player leaves physics and returns on unhitch', () => {
     let w = emptyWorld();
     w.player.fuel = 0;
-    // A spawned driver could open its own call and hold the turns.
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
     trader.brain = npcBrain('trader', trader.pos, ['trader']);
@@ -685,7 +666,6 @@ describe('physics turns', () => {
 });
 
 describe('stranded trucks', () => {
-  // Plays turns from d and collects each turn's strandedTurns of the player truck.
   function strandedRun(w: World, d: Drive, turns: number): { w: World; counts: number[] } {
     const counts: number[] = [];
     for (let i = 0; i < turns; i++) {
@@ -704,7 +684,7 @@ describe('stranded trucks', () => {
   it('sets a truck back on its wheels after it ends the stranded turns flipped', () => {
     const w = emptyWorld();
     const d = buildDrive(w);
-    d.world.getRigidBody(d.bodies[w.vehicles[0].id]).setRotation({ x: 1, y: 0, z: 0, w: 0 }, true); // upside down
+    d.world.getRigidBody(d.bodies[w.vehicles[0].id]).setRotation({ x: 1, y: 0, z: 0, w: 0 }, true);
     expect(strandedRun(w, d, RULES.stranded.turns + 1).counts).toEqual(expected);
   });
 
@@ -712,7 +692,6 @@ describe('stranded trucks', () => {
     const w = emptyWorld();
     const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 30, y: 30 });
     const d = buildDrive(w);
-    // The player truck rests level on the hauler's roof, with its wheels in the air.
     const under = d.world.getRigidBody(d.bodies[npc.id]).translation();
     const top = d.world.getRigidBody(d.bodies[w.vehicles[0].id]);
     top.setTranslation({ x: under.x, y: under.y + bodyOf('hauler').half.y + bodyOf(w.vehicles[0].chassisId).half.y * 2, z: under.z }, true);

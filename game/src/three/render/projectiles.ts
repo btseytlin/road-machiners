@@ -8,10 +8,8 @@ import { computeRoundPoint, type V3 } from '../../phys/frames';
 import { PAL } from '../../render/palette';
 import type { ShotRound } from '../../sim/types';
 
-// Where a round leaves the gun and the unit direction it leaves in, read when the round fires.
 export type Muzzle = { pos: V3; dir: V3 };
 
-// A muzzle at a fixed gun point, like a guard tower, facing its target.
 export function towardFrom(from: V3, target: V3): Muzzle {
   return { pos: from, dir: { x: target.x - from.x, y: target.y - from.y, z: target.z - from.z } };
 }
@@ -20,21 +18,18 @@ type Look = 'tracer' | 'shell' | 'missile' | 'grenade';
 
 export type ProjectileSpec = {
   look: Look;
-  speed: number; // m/s; a flight longer than the rest of the shot window is cut to fit it
-  stagger: number; // share of the shot window over which a burst's rounds leave the gun
-  length: number; // meters, of the drawn round or streak
-  width: number; // meters
+  speed: number;
+  stagger: number;
+  length: number;
+  width: number;
   color: number;
-  flash: number; // muzzle flash length, meters
-  wobble: number; // meters of side swing at mid flight
+  flash: number;
+  wobble: number;
 };
 
-// The shot window is CONFIG.combatShotMs, so slow rounds mostly fly the whole window and fast ones a part of it.
-// Keys are weapon part def ids, plus guard for town and camp guns.
 export const PROJECTILES: Record<string, ProjectileSpec> = {
   mg: { look: 'tracer', speed: 220, stagger: 0.5, length: 1.4, width: 0.05, color: PAL.flash, flash: 0.6, wobble: 0 },
   guard: { look: 'tracer', speed: 220, stagger: 0.5, length: 1.4, width: 0.05, color: PAL.flash, flash: 0.6, wobble: 0 },
-  // Buckshot leaves almost at once, as a cloud of short streaks.
   shotgun: { look: 'tracer', speed: 160, stagger: 0.1, length: 0.6, width: 0.04, color: PAL.flash, flash: 0.8, wobble: 0 },
   autocannon: { look: 'tracer', speed: 140, stagger: 0.45, length: 1.2, width: 0.1, color: 0xffad50, flash: 0.9, wobble: 0 },
   cannon: { look: 'shell', speed: 60, stagger: 0, length: 0.6, width: 0.22, color: 0xffad50, flash: 1.4, wobble: 0 },
@@ -42,12 +37,10 @@ export const PROJECTILES: Record<string, ProjectileSpec> = {
   sniperCannon: { look: 'shell', speed: 110, stagger: 0, length: 0.7, width: 0.16, color: 0xffd080, flash: 1.2, wobble: 0 },
   heavyMg: { look: 'tracer', speed: 200, stagger: 0.5, length: 1.4, width: 0.07, color: PAL.flash, flash: 0.7, wobble: 0 },
   gatling: { look: 'tracer', speed: 220, stagger: 0.6, length: 1.2, width: 0.05, color: PAL.flash, flash: 0.7, wobble: 0 },
-  // Rifle rounds are one fast bright streak.
   longRifle: { look: 'tracer', speed: 260, stagger: 0, length: 2, width: 0.05, color: 0xffd080, flash: 0.8, wobble: 0 },
   amRifle: { look: 'tracer', speed: 260, stagger: 0, length: 2.2, width: 0.08, color: 0xffd080, flash: 1.1, wobble: 0 },
   battleRifle: { look: 'tracer', speed: 240, stagger: 0.35, length: 1.6, width: 0.06, color: 0xffd080, flash: 0.8, wobble: 0 },
   flechette: { look: 'tracer', speed: 280, stagger: 0.3, length: 1.8, width: 0.04, color: 0xd8e0e8, flash: 0.8, wobble: 0 },
-  // Burning fuel crawls out in short fat orange gouts.
   flamer: { look: 'tracer', speed: 30, stagger: 0.4, length: 0.8, width: 0.3, color: 0xff7a20, flash: 1, wobble: 0.3 },
   pneumobolter: { look: 'shell', speed: 90, stagger: 0, length: 0.9, width: 0.08, color: 0xb8b0a0, flash: 0.4, wobble: 0 },
   slugCannon: { look: 'shell', speed: 100, stagger: 0.3, length: 0.4, width: 0.14, color: 0xffad50, flash: 1, wobble: 0 },
@@ -56,7 +49,6 @@ export const PROJECTILES: Record<string, ProjectileSpec> = {
   rocketRack: { look: 'missile', speed: 40, stagger: 0.5, length: 0.9, width: 0.16, color: 0x6a6a64, flash: 0.9, wobble: 0.5 },
 };
 
-// The blast radius in meters of a weapon's rounds, or 0 for rounds that do not explode. Guard guns fire bullets.
 export function blastRadiusOf(key: string): number {
   if (key === 'guard') return 0;
   const def = PARTS[key];
@@ -70,26 +62,20 @@ export function projectileOf(key: string): ProjectileSpec {
   return spec;
 }
 
-// Hits land below the gun point on the truck body, scattered over a band of its height.
-const HIT = { drop: 0.8, band: 0.7 }; // meters
-// A stray round flies on past the target and hits the ground this many meters beyond it.
+const HIT = { drop: 0.8, band: 0.7 };
 const MISS = { minPast: 3, maxPast: 9 };
-const GRENADE_ARC = 3; // meters a grenade climbs above the straight line at mid flight
-const SHELL_TAIL = 3; // a shell's glowing trail, as a multiple of its length
+const GRENADE_ARC = 3;
+const SHELL_TAIL = 3;
 const MISSILE = {
-  swings: 1.5, // side swings over one flight
-  smokePerSecond: 90, // trail puffs
-  nose: 0x9a3a2a, // warhead, palette rust top family
+  swings: 1.5,
+  smokePerSecond: 90,
+  nose: 0x9a3a2a,
   flame: 0xffc060,
 };
 
 export type RoundPlan = { land: V3; struck: boolean; delayMs: number; flightMs: number };
-// Where one round flies: point b of the truck it struck, or of its target when it struck none, and its offset
-// across the line of fire.
 export type RoundAim = { b: V3; struck: boolean; offset: number };
 
-// A round that struck a truck other than its target flies to that truck when it shows, else past the target.
-// pointOf gives the point of a truck that shows.
 export function roundAims(b: V3, targetId: string, rounds: ShotRound[], pointOf: (id: string) => V3 | null): RoundAim[] {
   return rounds.map((r) => {
     if (r.struck === null || r.struck === targetId) return { b, struck: r.struck !== null, offset: r.offset };
@@ -98,7 +84,6 @@ export function roundAims(b: V3, targetId: string, rounds: ShotRound[], pointOf:
   });
 }
 
-// Where and when each round of a volley from gun point a lands. groundY gives the ground height under a point.
 export function planVolley(spec: ProjectileSpec, a: V3, rounds: RoundAim[], windowMs: number, groundY: (p: V3) => number): RoundPlan[] {
   return rounds.map((r, k) => {
     const struck = r.struck;
@@ -124,18 +109,15 @@ function missPoint(a: V3, b: V3, offset: number, groundY: (p: V3) => number): V3
   return { ...end, y: groundY(end) };
 }
 
-// ---- Flights.
-
-// A round waiting for its delay, then flying from the muzzle to its landing point over its life.
 type Flight = {
   spec: ProjectileSpec;
   obj: THREE.Object3D;
   muzzle: () => Muzzle;
   from: THREE.Vector3;
   to: THREE.Vector3;
-  side: THREE.Vector3; // unit horizontal direction the wobble swings along
+  side: THREE.Vector3;
   phase: number;
-  age: number; // seconds; negative while waiting
+  age: number;
   life: number;
   onFire: (m: Muzzle) => void;
   onLand: () => void;
@@ -145,7 +127,6 @@ export type Launch = { spec: ProjectileSpec; muzzle: () => Muzzle; plan: RoundPl
 
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 
-// Builds meshes from shared geometry and materials, which live as long as the scene.
 class ProjectileKit {
   private box = new THREE.BoxGeometry(1, 1, 1);
   private solid = new Map<number, THREE.MeshBasicMaterial>();
@@ -163,7 +144,6 @@ class ProjectileKit {
     return this.missile(spec);
   }
 
-  // A streak whose front is the round. It is stretched each frame, so its x scale is set by the flight.
   private tracer(spec: ProjectileSpec): THREE.Object3D {
     const streak = new THREE.Mesh(this.box, this.glowOf(spec.color, 1));
     streak.position.x = -0.5;
@@ -173,7 +153,6 @@ class ProjectileKit {
     return g;
   }
 
-  // A hot slug with a fading glow trail behind it.
   private shell(spec: ProjectileSpec): THREE.Object3D {
     const g = new THREE.Group();
     const core = new THREE.Mesh(this.shellCore, this.glowOf(0xfff0c0, 1));
@@ -185,14 +164,12 @@ class ProjectileKit {
     return g;
   }
 
-  // A dull round grenade with no glow, lobbed on an arc.
   private grenade(spec: ProjectileSpec): THREE.Object3D {
     const body = new THREE.Mesh(this.shellCore, this.solidOf(spec.color));
     body.scale.set(spec.length, spec.width, spec.width);
     return body;
   }
 
-  // A finned rocket: body, warhead cone and a flame at the tail.
   private missile(spec: ProjectileSpec): THREE.Object3D {
     const g = new THREE.Group();
     const L = spec.length;
@@ -254,7 +231,6 @@ export class Projectiles {
   private ahead = new THREE.Vector3();
   private dir = new THREE.Vector3();
 
-  // smoke puffs one trail puff at a point behind a missile.
   constructor(private scene: THREE.Scene, private smoke: (p: V3) => void) {}
 
   launch(l: Launch): void {
@@ -283,7 +259,7 @@ export class Projectiles {
       const before = f.age;
       f.age += dt;
       if (f.age < 0) continue;
-      if (before <= 0) this.fire(f); // the delay ran out this frame
+      if (before <= 0) this.fire(f);
       if (f.age >= f.life) {
         this.scene.remove(f.obj);
         this.flights.splice(i, 1);
@@ -309,12 +285,10 @@ export class Projectiles {
     this.dir.subVectors(this.ahead, this.at).normalize();
     f.obj.position.copy(this.at);
     f.obj.quaternion.setFromUnitVectors(X_AXIS, this.dir);
-    // A streak never reaches back past the muzzle.
     if (f.spec.look === 'tracer') f.obj.scale.x = Math.min(f.spec.length, this.at.distanceTo(f.from));
     if (f.spec.look === 'missile') this.trail(f, dt);
   }
 
-  // Straight from the muzzle to the landing point, plus a swing that is zero at both ends. A grenade also arcs up.
   private pointAt(f: Flight, t: number, out: THREE.Vector3): THREE.Vector3 {
     out.lerpVectors(f.from, f.to, t);
     const swing = f.spec.wobble * Math.sin(Math.PI * t) * Math.sin(MISSILE.swings * 2 * Math.PI * t + f.phase);

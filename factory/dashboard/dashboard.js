@@ -25,7 +25,6 @@ function formatDuration(ms) {
   const minutes = Math.floor(Math.max(0, ms) / 60000);
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
-// The average number of cards waiting at once, over the clock time the scheduler was measured.
 function formatAverageWaiting(summary) {
   if (summary.waitingMs === null || !summary.waitingSpanMs) return '—';
   return `${(summary.waitingMs / summary.waitingSpanMs).toFixed(1)} cards`;
@@ -339,12 +338,10 @@ function clearCounters() {
   for (const id of ['usage-tokens', 'usage-input', 'usage-output', 'usage-time', 'usage-cost', 'usage-wasted-cost', 'usage-wasted-tokens', 'usage-wait']) setCounter(id, '—', null);
   setText('coverage', 'Measurements unavailable');
 }
-// The 24-hour range draws one bar per UTC hour, longer ranges one bar per UTC day. A slot with no runs has no bar rather than a zero.
 function readUsageSlots(summary) {
   const hourly = summary.days === 1;
   const end = new Date(snapshot.generatedAt);
   if (hourly) end.setUTCMinutes(0, 0, 0); else end.setUTCHours(0, 0, 0, 0);
-  // The range starts inside the first slot, so it spans one slot more than its length.
   const count = hourly ? 25 : summary.days + 1;
   return Array.from({ length: count }, (_, index) => {
     const start = new Date(end.getTime() - (count - 1 - index) * (hourly ? 3600000 : 86400000)).toISOString().slice(0, hourly ? 13 : 10);
@@ -367,7 +364,6 @@ function readSegmentLabel(key) {
 }
 function formatUsageValue(value) { return metric === 'tokens' ? formatNumber(value) : formatCost(value); }
 const segmentColors = ['#dac7a2', '#9db482', '#edbf78', '#e99a85', '#8fb3c4', '#b49ac4', '#c4b06a', '#7d9164', '#a5aaa7', '#c48f6a'];
-// Matches the #full-text detail popup: dark panel, gold border, readable body text. Lists every segment of the hovered bar, largest first, then the total.
 const usageTooltip = {
   backgroundColor: '#171c1f', borderColor: '#dac7a2', borderWidth: 1, cornerRadius: 0, padding: 12, boxPadding: 6,
   titleColor: '#dac7a2', titleFont: { family: 'Plex', size: 12 }, bodyColor: '#e0d8ca', bodyFont: { family: 'Barlow', size: 15 }, footerColor: '#e0d8ca', footerFont: { family: 'Barlow', size: 15, weight: 'bold' },
@@ -455,7 +451,6 @@ function readStageModelNames(rows) {
   return [...totals.keys()].sort((a, b) => totals.get(b) - totals.get(a));
 }
 function renderStageModels(summary) {
-  // Two model columns fit beside stage names at the narrowest desktop width.
   const models = summary ? [...summary.models].sort((a, b) => countTokens(b) - countTokens(a)).map((item) => item.model) : [];
   const visible = selectPage('model-column', models, 2);
   const stageHeader = createNode('th', 'Stage');
@@ -543,7 +538,6 @@ function readPauseNotice() {
 function renderFreshness() {
   if (!snapshot) return;
   if (renderFailed) return setText('connection', 'Invalid data');
-  // Stale sources are listed in source-status, so a healthy connection needs no ticking age.
   setText('connection', connected ? 'Live' : 'Reconnecting');
   const sources = [['State', snapshot.operations], ['GitHub', snapshot.github], ['Usage', snapshot.analytics], ['Host', snapshot.host], ['Activity', snapshot.live]];
   const failures = sources.filter(([, source]) => source?.status !== 'ok').map(([name, source]) => `${name} ${source?.status ?? 'unavailable'}`);

@@ -29,8 +29,6 @@ function createNpc(templateId = 'scavenger') {
 
 const scavengeGoal: NpcActivity = { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' };
 
-// Runs `check` on a copy of the world for each seed and returns the share of seeds where it holds. Seeds are
-// spread over the RNG state, since neighboring states give correlated first draws.
 function shareOfSeeds(world: World, npcId: string, check: (x: World, npc: Vehicle) => boolean, seeds = 200): number {
   let held = 0;
   for (let seed = 0; seed < seeds; seed++) {
@@ -43,7 +41,6 @@ function shareOfSeeds(world: World, npcId: string, check: (x: World, npc: Vehicl
 
 describe('NPC restraint', () => {
   it('preserves normal raider cargo alongside available repair supplies', () => {
-    // Loadouts are random, so look across a few spawns.
     const raiders = [0, 1, 2, 3, 4].flatMap((seed) => {
       const world = emptyWorld();
       world.rngState = seed;
@@ -142,7 +139,6 @@ describe('NPC field repairs', () => {
   it('keeps repairing where it stands after drifting off its shade spot', () => {
     const { world, npc } = createNpc();
     addGoods(world, npc, 'parts', 2);
-    // Each part is one carried part short of the field cap.
     const cab = corePart(npc, 'cab');
     cab.hp = partDef(cab.defId).hp * 0.4;
     const engine = mountedParts(npc, 'engine')[0];
@@ -232,7 +228,6 @@ describe('NPC field repairs', () => {
     expect(npc.job?.kind).toBe('repair');
     addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
 
-    // Exercise both movement outcomes at the public turn boundary, without depending on steering startup.
     const turn = (seed: number) => {
       const start = cloneWorld(world);
       start.rngState = seed;
@@ -246,7 +241,6 @@ describe('NPC field repairs', () => {
       });
     };
     const actorIn = (w: World) => w.vehicles.find((vehicle) => vehicle.id === npc.id)!;
-    // The escape is a weighted choice, so take the first seed on which the driver flees.
     const seed = Array.from({ length: 20 }, (_, i) => i).find((s) => topGoal(actorIn(turn(s)))?.kind === 'flee');
     if (seed === undefined) throw new Error('No seed in 20 flees');
     const next = turn(seed);
@@ -254,7 +248,6 @@ describe('NPC field repairs', () => {
     expect(actor.brain!.goals.map((g) => g.kind)).toEqual(['repair', 'flee']);
     expect(actor.order?.kind).toBe('stopAt');
     expect(goodsCount(actor).parts).toBe(2);
-    // A hostile that only passes by does not stop the repair, so a parked truck keeps at it and a moving one loses it.
     if (pinned) {
       expect(actor.speed).toBe(0);
       expect(actor.job?.kind).toBe('repair');
@@ -284,7 +277,6 @@ describe('NPC field repairs', () => {
   it('preserves repair supplies during a town service visit', () => {
     const { world, npc } = createNpc();
     addGoods(world, npc, 'parts', 2);
-    // A dry tank strands the truck, and a stranded driver at a town gets a fresh loadout. A low tank only needs a visit.
     npc.resources!.fuel = 0.5;
     npc.resources!.money = 500;
     npc.pos = { ...sitePads(REGION.towns[0])[0] };

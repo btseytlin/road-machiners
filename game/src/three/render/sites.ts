@@ -16,16 +16,11 @@ import type { RenderScope } from './scope';
 
 const S = PHYSICS.metersPerTile;
 type Site = TownDef | LocationDef;
-// The Fallen Sun hull model fits a 20 m radius around its origin, so it scales to fill the site edge.
 const HULL_RADIUS = 20;
-// Nose's 48 m bow from the 12 m cone.
 const NOSE_SCALE = 4;
-// The bridge model's 32 m by 7 m deck is stretched to the sim deck. Its trusses stand 2.4 m over the
-// deck before this height scale.
 const BRIDGE_RISE = 1.5;
-const BRIDGE_DECK_TOP = 0.8; // meters from the model origin up to its deck top, before scaling
+const BRIDGE_DECK_TOP = 0.8;
 
-// Site props stay within the site's collision footprint. Every prop is grounded independently.
 class SiteBuilder {
   readonly root = new THREE.Group();
   private readonly materials = new Map<number, THREE.MeshLambertMaterial>();
@@ -54,8 +49,6 @@ class SiteBuilder {
     this.root.add(mesh);
     return mesh;
   }
-  // A door leaf hinged at site offset (x, z) that reaches length tiles toward yaw. The group named `door`
-  // stands at the hinge, so turning it about y swings the leaf.
   addDoor(x: number, z: number, length: number, height: number, thickness: number, color: number, yaw: number): THREE.Group {
     const wx = this.site.pos.x + x;
     const wz = this.site.pos.y + z;
@@ -77,7 +70,6 @@ class SiteBuilder {
   addTank(x: number, z: number, radius: number, height: number, color: number, lift = 0): void {
     this.addShape(new THREE.CylinderGeometry(radius * S, radius * S, height * S, 10), color, x, z, lift + height / 2);
   }
-  // A Blender model standing on the ground at site offset (x, z), turned by yaw radians.
   addModel(name: ModelName, x: number, z: number, yaw = 0, scale: number | THREE.Vector3 = 1, lift = 0): THREE.Object3D {
     const wx = this.site.pos.x + x;
     const wz = this.site.pos.y + z;
@@ -89,7 +81,6 @@ class SiteBuilder {
     this.root.add(obj);
     return obj;
   }
-  // Many copies of one Blender model, each on the ground at its site offset, as instanced meshes.
   addInstances(name: ModelName, spots: { x: number; z: number; yaw: number }[]): void {
     const placements = spots.map(({ x, z, yaw }) => {
       const wx = this.site.pos.x + x;
@@ -99,14 +90,12 @@ class SiteBuilder {
     });
     this.root.add(instancedModel(name, placements, placements.map(() => 1)));
   }
-  // A site offset that must stay off every road, or the model would stand in traffic.
   offRoad(x: number, z: number, clearance: number): void {
     const pos = { x: this.site.pos.x + x, y: this.site.pos.y + z };
     if (REGION.roads.some((road) => road.some((point, i) => i > 0 && segmentDist(pos, road[i - 1], point) < REGION.roadWidth / 2 + clearance))) {
       throw new Error(`Site prop at ${x},${z} of ${this.site.id} stands on a road`);
     }
   }
-  // A dead orchard tree: bare trunk, two branches and a fallen limb.
   addDeadTree(x: number, z: number, index: number): void {
     const lean = (hash2(index, 19) - 0.5) * 0.35;
     const trunk = this.addBox(x, z, 0.16, 1.5, 0.18, PAL.trunk);
@@ -191,7 +180,6 @@ function buildSettlement(b: SiteBuilder, site: Site): void {
     }
   }
   b.root.userData.homes = homes;
-  // The water tower stands in the open center, clear of the pond, the hull and the roads.
   const tower = site.id === 'bowl' ? { x: -6, z: -6 } : { x: -18, z: 6 };
   b.offRoad(tower.x, tower.z, 1);
   b.addModel('water_tower', tower.x, tower.z);
@@ -207,14 +195,14 @@ function buildSettlement(b: SiteBuilder, site: Site): void {
 type WallStyle = {
   height: number;
   thickness: number;
-  segment: number; // tiles per straight section around the curve
-  towerEvery: number | null; // sections between wall towers
-  ragged: boolean; // sections vary in height, like scrap and posts
-  fence: boolean; // posts and two rails instead of solid sections
-  colors: number[]; // section colors, one picked per section
+  segment: number;
+  towerEvery: number | null;
+  ragged: boolean;
+  fence: boolean;
+  colors: number[];
   postColor: number;
   doorColor: number;
-  guarded: boolean; // a guard tower on each gate side and a banner pole at each gate
+  guarded: boolean;
 };
 
 const SET = REGION.settlement;
@@ -222,21 +210,18 @@ const PALISADE: WallStyle = { height: SET.palisadeHeight, thickness: SET.palisad
 const EDGE_STYLES: Record<SiteEdge | 'town', WallStyle> = {
   town: { height: SET.wallHeight, thickness: SET.wallThickness, segment: SET.wallSegment, towerEvery: SET.wallTowerEvery, ragged: false, fence: false, colors: [PAL.wall.side], postColor: PAL.wall.top, doorColor: PAL.rust.side, guarded: true },
   palisade: PALISADE,
-  // Raider camps hide behind rusted scrap, with a gun tower on each side of every gate.
   camp: { ...PALISADE, colors: [PAL.rust.side], postColor: PAL.rust.dark, doorColor: PAL.rust.dark, guarded: true },
   stone: { height: SET.stoneHeight, thickness: SET.stoneThickness, segment: SET.stoneSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.rock.side, PAL.rock.top], postColor: PAL.rock.dark, doorColor: PAL.trunk, guarded: false },
   fence: { height: SET.fenceHeight, thickness: SET.fenceThickness, segment: SET.fenceSegment, towerEvery: null, ragged: false, fence: true, colors: [PAL.trunk], postColor: PAL.trunk, doorColor: PAL.metal, guarded: false },
   wrecks: { height: SET.wreckHeight, thickness: SET.wreckThickness, segment: SET.wreckSegment, towerEvery: null, ragged: true, fence: false, colors: [PAL.rust.side, PAL.metal, PAL.rust.dark], postColor: PAL.rust.dark, doorColor: PAL.metal, guarded: false },
 };
-const SINK = 0.3; // tiles each edge piece reaches below the ground, so slopes leave no gap under it
-const DOOR_THICKNESS = 0.4; // door leaves as a share of the wall thickness
+const SINK = 0.3;
+const DOOR_THICKNESS = 0.4;
 
 function edgeStyle(site: Site): WallStyle {
   return EDGE_STYLES['kind' in site ? site.edge : 'town'];
 }
 
-// The edge circle cut into straight sections whose outer corners lie on the collision edge. Sections near a
-// gate stay open for the doors.
 type Ring = { radius: number; count: number; step: number; open: boolean[]; mid: number; length: number };
 
 function edgeRing(site: Site, style: WallStyle): Ring {
@@ -249,14 +234,11 @@ function edgeRing(site: Site, style: WallStyle): Ring {
   return { radius, count, step, open, mid: radius * Math.cos(step / 2) - style.thickness / 2, length: 2 * radius * Math.sin(step / 2) };
 }
 
-// Where square boxes of a given width stand at angle a with their outer corners on the edge.
 function onEdge(ring: Ring, a: number, width: number): { x: number; z: number } {
   const r = Math.sqrt(ring.radius * ring.radius - (width / 2) ** 2) - width / 2;
   return { x: Math.cos(a) * r, z: Math.sin(a) * r };
 }
 
-// Closes the site on its collision edge, with shut doors at each gate. Box depth runs along the edge, so a
-// yaw of -a turns it onto the tangent at angle a, and box width then runs outward.
 function addWall(b: SiteBuilder, site: Site, style: WallStyle): void {
   const ring = edgeRing(site, style);
   const runs = gateRuns(ring.open);
@@ -283,7 +265,6 @@ function addSections(b: SiteBuilder, ring: Ring, style: WallStyle, seed: number)
   return sections;
 }
 
-// Two rails between posts. The post stands at the section start.
 function addFenceSection(b: SiteBuilder, ring: Ring, style: WallStyle, p: { x: number; z: number }, a: number, i: number): void {
   for (const lift of [0.45, 0.85]) b.addBox(p.x, p.z, style.thickness, 0.06, ring.length, style.colors[0], style.height * lift, -a);
   addPost(b, ring, i * ring.step, 0.12, style.height, style.postColor);
@@ -298,7 +279,6 @@ function addPost(b: SiteBuilder, ring: Ring, a: number, width: number, height: n
   b.addBox(q.x, q.z, width, height + SINK, width, color, -SINK, -a);
 }
 
-// Runs of open sections as [first, past last] section indices. A run may wrap past the last section.
 function gateRuns(open: boolean[]): [number, number][] {
   const n = open.length;
   const runs: [number, number][] = [];
@@ -311,7 +291,6 @@ function gateRuns(open: boolean[]): [number, number][] {
   return runs;
 }
 
-// Posts or guard towers on both sides, and two door leaves hinged at the posts that meet in the middle.
 function addGate(b: SiteBuilder, ring: Ring, style: WallStyle, from: number, to: number): void {
   for (const a of [from, to]) {
     if (style.guarded) addGuardTower(b, ring, style, a);
@@ -325,7 +304,6 @@ function addGate(b: SiteBuilder, ring: Ring, style: WallStyle, from: number, to:
   addLeaf(b, ring, style, to, middle, doorHeight);
 }
 
-// A leaf hinged on the edge at angle hinge that reaches the edge point at angle tip.
 function addLeaf(b: SiteBuilder, ring: Ring, style: WallStyle, hinge: number, tip: number, height: number): void {
   const r = ring.radius - style.thickness / 2;
   const h = { x: Math.cos(hinge) * r, z: Math.sin(hinge) * r };
@@ -334,7 +312,6 @@ function addLeaf(b: SiteBuilder, ring: Ring, style: WallStyle, hinge: number, ti
   b.addDoor(h.x, h.z, length, height, style.thickness * DOOR_THICKNESS, style.doorColor, -Math.atan2(t.z - h.z, t.x - h.x));
 }
 
-// A lamp on a post, or on the tower top, beside each gate, so a stop shows from far away.
 function addLamp(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void {
   const top = style.guarded ? SET.guardTowerHeight : Math.max(SET.lampHeight, style.height * 1.4);
   const q = onEdge(ring, a, style.thickness);
@@ -354,7 +331,6 @@ function addGuardTower(b: SiteBuilder, ring: Ring, style: WallStyle, a: number):
   b.addBox(gun.x, gun.z, 0.9, 0.12, 0.12, PAL.metal, tower + 0.2, -a);
 }
 
-// The pole rises from the gate's first tower. Its banner hangs across the tangent, so it faces the road.
 function addBanner(b: SiteBuilder, ring: Ring, a: number): void {
   const tower = SET.guardTowerHeight;
   const q = onEdge(ring, a, 1);
@@ -364,7 +340,6 @@ function addBanner(b: SiteBuilder, ring: Ring, a: number): void {
 }
 
 function buildGranary(b: SiteBuilder): void {
-  // Silos at the 1.1-tile radius of the old tanks. Their sheds face the loading ruin.
   for (let x = -3; x <= 3; x += 3) b.addModel('silo', x, -1, -Math.PI / 2, (1.1 * S) / 2.5);
   b.addRuin(0, 2.8, 6, 2.2);
   for (let i = 0; i < 8; i++) b.addBox(-2.5 + (i % 4) * 0.65, 2 + Math.floor(i / 4) * 0.65, 0.5, 0.45, 0.5, PAL.crate);
@@ -379,22 +354,18 @@ function buildPump(b: SiteBuilder): void {
 function buildLock(b: SiteBuilder): void {
   for (const x of [-2, 2]) b.addBox(x, 0, 0.6, 1.1, 8, PAL.wall.side);
   b.addBox(0, 0, 3.6, 0.05, 8, PAL.water);
-  // The gate wall runs along the model's Y, so a quarter turn sets it across the channel.
   b.addModel('lock_gate', 0, 0, Math.PI / 2);
   b.addRuin(3.7, 0, 1.7, 2);
 }
 
-// The deck top follows the sim deck line from sim/terrain.ts, which the physics deck also follows.
 function buildBridge(b: SiteBuilder, terrain: Terrain): void {
   const { from, width } = TERRAIN.features.bridge;
   const [h0, h1] = deckEnds(terrain);
   const pitch = Math.atan2((h1 - h0) * S, BRIDGE_LENGTH * S);
   const mid = { x: from.x + (BRIDGE_AXIS.x * BRIDGE_LENGTH) / 2, y: from.y + (BRIDGE_AXIS.y * BRIDGE_LENGTH) / 2 };
   const bridge = b.addModel('bridge', mid.x - b.site.pos.x, mid.y - b.site.pos.y, 0, new THREE.Vector3((BRIDGE_LENGTH * S) / 32, BRIDGE_RISE, (width * S) / 7));
-  // Trucks cross the bridge, which lies outside the site edge.
   bridge.userData.outsideEdge = true;
   bridge.position.y = ((h0 + h1) / 2) * S - BRIDGE_DECK_TOP * BRIDGE_RISE;
-  // YXZ applies the pitch about the model's own z first, then the yaw.
   bridge.rotation.set(0, -Math.atan2(BRIDGE_AXIS.y, BRIDGE_AXIS.x), pitch, 'YXZ');
   b.addRuin(0, 0, 3, 2);
 }
@@ -406,7 +377,6 @@ function buildOasis(b: SiteBuilder, well: boolean): void {
     for (const x of [-1.5, 1.5]) b.addBox(x, 0, 0.18, 2.6, 0.18, PAL.trunk);
     b.addBox(0, 0, 3.3, 0.2, 0.25, PAL.trunk, 2.5);
     b.addRuin(2.7, 2.7, 2.3, 2);
-    // The palm model leans, so yaw varies the lean.
     for (let i = 0; i < 4; i++) {
       const a = i * 1.7 + 0.4;
       b.addModel('palm', Math.cos(a) * 4.8, Math.sin(a) * 4.8, a * 2.3);
@@ -445,7 +415,6 @@ function buildWrecks(b: SiteBuilder, id: string): void {
   }
 }
 
-// Scrap shacks ring a fire pit. Fuel tanks and a stripped hull fill the gaps.
 function buildCamp(b: SiteBuilder, id: string): void {
   const turn = id === 'kiln' ? 1.3 : 0;
   for (let i = 0; i < 3; i++) {
@@ -483,7 +452,6 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
     default: throw new Error(`Missing landmark model for ${site.id}`);
   }
   addWall(b, site, edgeStyle(site));
-  // Site models never move after they are built.
   b.root.traverse((o) => {
     o.updateMatrix();
     o.matrixAutoUpdate = false;
@@ -493,14 +461,12 @@ function buildSite(t: Terrain, site: Site): THREE.Group {
 
 const UP = new THREE.Vector3(0, 1, 0);
 
-// Every site model under one group, for inspection.
 export function buildSites(t: Terrain): THREE.Group {
   const group = new THREE.Group();
   for (const site of [...REGION.towns, ...REGION.locations]) group.add(buildSite(t, site));
   return group;
 }
 
-// Registers every site model with the scope at its site.
 export function addSites(t: Terrain, scope: RenderScope): void {
   for (const site of [...REGION.towns, ...REGION.locations]) scope.add(buildSite(t, site), site.pos, site.radius);
 }

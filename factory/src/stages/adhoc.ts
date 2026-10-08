@@ -7,11 +7,9 @@ import { readState, updateState } from '../state';
 import { GAME_DIR, OUT_DIR, type Ctx } from '../types';
 import { RESUME_NOTE, agentHome, fillPrompt, isResuming, playtestCommand, prepareOutputs, readOutput, useOpenNetwork } from './common';
 
-// The agent reads the factory's own records here, so it can answer questions about the factory too.
 export const FACTORY_STATE_MOUNT = '/factory/state';
 export const FACTORY_LOGS_MOUNT = '/factory/logs';
 
-// Runs one committee request as a read-only investigation. Nothing is pushed. The report goes back to the chat and the issue.
 export async function adhoc(ctx: Ctx, issue: number): Promise<void> {
   const reply = readState(ctx.statePath).adhocReplies[String(issue)];
   if (!reply) throw new Error(`No chat message recorded to answer for ad hoc issue #${issue}`);
@@ -25,8 +23,6 @@ export async function adhoc(ctx: Ctx, issue: number): Promise<void> {
   await runAdhocAgent(ctx, issue, dir);
   const report = readOutput(home, 'report.md')?.trim();
   if (!report) throw new Error(`The agent wrote no ${OUT_DIR}/report.md`);
-  // Files go to the requesting chat as Telegram documents and nowhere else. They never reach the web root or GitHub.
-  // A bad file or a failed upload fails the stage. The report is not sent first, so a retry does not repeat it.
   const files = await deliverable(ctx, issue, home, reply);
   const messageId = await ctx.telegram.sendMessage(reply.chat, report, reply.messageId);
   for (const file of files) {
@@ -50,7 +46,6 @@ export async function adhoc(ctx: Ctx, issue: number): Promise<void> {
   ctx.log('adhoc', issue, `report and ${files.length} files posted, issue closed`);
 }
 
-// A resumed agent continues in the clone it left. Any other run starts from a fresh clone of dev.
 async function prepareClone(ctx: Ctx, issue: number, dir: string): Promise<void> {
   if (!isResuming(ctx, issue)) rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone('dev', 'dev', dir);
@@ -79,7 +74,6 @@ async function deliverable(ctx: Ctx, issue: number, home: string, reply: Reply) 
   return holdArtifacts(ctx.cfg.home, issue, files);
 }
 
-// Best effort, since the stage already fails with the real error.
 async function tell(ctx: Ctx, issue: number, reply: Reply, text: string): Promise<void> {
   try {
     await ctx.telegram.sendMessage(reply.chat, text, reply.messageId);

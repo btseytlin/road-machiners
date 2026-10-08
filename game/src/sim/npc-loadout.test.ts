@@ -22,7 +22,6 @@ import type { Vehicle, World } from './types';
 import { TEST_MAP } from '../test/map';
 import TRUCK_SHAPES from '../data/truck-shapes.json';
 
-// A scout with one deck cell, where a cannon or a heavy frame cannot mount. It borrows the scout's collision boxes.
 const TINY = {
   ...CHASSIS.scout,
   id: 'tiny',
@@ -54,7 +53,7 @@ describe('NPC equipment generation', () => {
       }
     }
     for (const [role, variants] of Object.entries(seen)) expect(variants.size, role).toBeGreaterThanOrEqual(5);
-  }, 180_000); // 40 full spawns, each trying every engine and gun pair of every template
+  }, 180_000);
 
   it.each(Object.values(NPCS))('fits $id equipment and cargo within its budget and rated mass', (template) => {
     for (let seed = 1; seed <= 32; seed++) {
@@ -71,7 +70,7 @@ describe('NPC equipment generation', () => {
       expect(goodsCount(v)).toEqual(loadout.cargo);
       expect(vehicleMass(v)).toBeLessThanOrEqual(CHASSIS[v.chassisId].ratedMass);
       const cost = CHASSIS[v.chassisId].value + loadout.parts.reduce((sum, p) => sum + PARTS[p.defId].value, 0);
-      expect(cost).toBeLessThanOrEqual(template.loadout.budget * Math.max(1, GEAR_LEVELS[loadout.level].budget)); // the required build may pass a poor level's budget
+      expect(cost).toBeLessThanOrEqual(template.loadout.budget * Math.max(1, GEAR_LEVELS[loadout.level].budget));
       expect(v.resources?.money).toBe(fixture.player.money);
     }
   });
@@ -91,7 +90,6 @@ describe('NPC equipment generation', () => {
 
     it('more fill chance gives more guns, and a loaded truck reaches many', () => {
       const [light, standard, heavy, loaded] = (['light', 'standard', 'heavy', 'loaded'] as const).map(gunsAt);
-      // The gunwagon decks are small, so the higher levels can fill every deck spot and tie.
       expect(light).toBeLessThan(standard);
       expect(standard).toBeLessThanOrEqual(heavy);
       expect(heavy).toBeLessThanOrEqual(loaded);
@@ -162,7 +160,7 @@ describe('NPC equipment generation', () => {
     template.loadout.chassis = [{ value: 'hauler', weight: 1 }];
     template.loadout.engine = [{ value: 'turbine', weight: 1000 }, { value: 'stockEngine', weight: 1 }];
     template.loadout.weapon = [{ value: 'mg', weight: 1 }];
-    const loadout = generateNpcLoadout({ ...fixture }, template, null, 'poor'); // a poor roll adds nothing past the required build
+    const loadout = generateNpcLoadout({ ...fixture }, template, null, 'poor');
     expect(loadout.parts.map((p) => p.defId)).toEqual(['stockEngine', 'mg']);
   });
 
@@ -204,7 +202,6 @@ describe('NPC equipment generation', () => {
     for (let attempt = 0; attempt < Math.max(...Object.values(NPCS).map((t) => t.cap)) + 2; attempt++) {
       for (const template of Object.values(NPCS)) world.spawnTimer[template.id] = 1;
       spawnNpcs(world);
-      // Spawned drivers leave the gates before the next round, as they drive off in play.
       world.vehicles.filter((v) => v.brain).forEach((v, i) => { v.pos = { x: 5 + (i % 40) * 4, y: world.size - 5 - Math.floor(i / 40) * 4 }; });
     }
     for (const template of Object.values(NPCS)) {

@@ -24,7 +24,6 @@ type Terms = Parameters<typeof agreeAid>[2];
 
 const HANDOVER = { started: false, work: 1, workLeft: 1 };
 
-// A driver with full tanks and 500 money, the given distance east of a parked player. No other trucks spawn.
 function withDriver(x: number, traits: TraitId[] = ['trader']): { w: World; npc: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -38,11 +37,10 @@ function withDriver(x: number, traits: TraitId[] = ['trader']): { w: World; npc:
 
 const find = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
 
-// Plays turns like a player who presses [E] the moment a handover is ready, unless `press` is false.
 function runUntil(w: World, max: number, done: (w: World) => boolean, press = true): { w: World; events: GameEvent[] } {
   const events: GameEvent[] = [];
   for (let i = 0; i < max && !done(w); i++) {
-    if (w.player.call) w = update(w, (d) => { d.player.call = null; }); // a hail on arrival is dismissed
+    if (w.player.call) w = update(w, (d) => { d.player.call = null; });
     const ready = press ? readyAid(w) : null;
     if (ready) {
       w = startAid(w, ready.holder);
@@ -63,7 +61,6 @@ function agreed(start: World, npcId: string, terms: Terms): World {
 
 const playerGift = (fuel: number, price = 0): Terms => ({ giver: 'player', fuel, supplies: 0, price, free: price === 0 });
 
-// The player's truck worn below the poor condition, low on fuel.
 function poorLowPlayer(w: World): void {
   for (const p of mountedParts(playerVehicle(w))) p.hp = Math.floor(maxHp(p) * 0.4);
   w.player.fuel = Math.floor(fuelCap(playerVehicle(w)) * RULES.lowFuelThreshold);
@@ -207,7 +204,6 @@ describe('aid deal', () => {
   it('a deal that never comes together expires with nothing moved', () => {
     const { w: start, npc } = withDriver(80);
     const fuel0 = start.player.fuel;
-    // The state alone, with no meet goal, so the driver never comes.
     const w0 = update(start, (w) => { addState(w, 'aid', npc.id, w.player.vehicleId, { kind: 'aid', ...playerGift(5), agreed: true, ...HANDOVER }); });
     const run = runUntil(w0, STATE_TURNS.aid! + 2, (x) => !aidOpen(x, npc.id));
     expect(run.events).toContainEqual(expect.objectContaining({ t: 'stateEnded', ending: 'expired' }));
@@ -249,7 +245,6 @@ describe('meeting for aid', () => {
 });
 
 describe('unprompted aid offer', () => {
-  // A poor, low player and a trader with full tanks in sight. The roll lands on aid whenever it happens.
   function needyScene(): { w: World; npc: Vehicle } {
     const { w, npc } = withDriver(40);
     poorLowPlayer(w);
@@ -352,7 +347,6 @@ describe('what a low driver asks for', () => {
 });
 
 describe('aid handover', () => {
-  // An agreed player gift with both trucks parked side by side.
   function parkedDeal(): { w: World; npc: Vehicle } {
     const { w: start, npc } = withDriver(34);
     find(start, npc.id).resources!.fuel = 1;
