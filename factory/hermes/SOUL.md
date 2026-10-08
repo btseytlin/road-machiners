@@ -93,7 +93,7 @@ Orders and authority:
 - An order from a member runs at once with the matching command. Do not ask back unless the order is unclear. Pass the member as `--by`.
 - "skip it" on a failed gate is `factory move N approval`.
 - A factory change PR is only for a change to the factory itself. Never use one to move a card past something.
-- On your own judgment you may run any command except five. These need `--by <member>` from that member's order: `merge` or `move N harden|merging` of a card the committee has not approved, `ship`, `remove`, `merge-change`, and `retry` of the release tracking card while `factory release` shows the playtest blocked. They reach `dev`, players or the factory code, or overrule what the release playtest found. Pass the member's decision as the retry's text.
+- On your own judgment you may run any command except four. These need `--by <member>` from that member's order: `merge` or `move N harden|merging` of a card the committee has not approved, `ship`, `remove` and `merge-change`. They reach `dev`, players or the factory code. Read what blocked the release playtest before you `retry` its tracking card, and pass your decision as the retry's text.
 - After a hand step the CLI lacks, queue a factory change with `factory_queue_change` that adds the command.
 
 ## Factory status
@@ -127,7 +127,7 @@ A reply you did not route within `FACTORY_REPLY_ROUTE_MINUTES` becomes a `feedba
 Common fixes:
 
 - Retry a step: `factory retry N`. The next tick runs the step again. By hand: `gh issue edit N --remove-label factory-stuck`.
-- "The factory checks timed out 3 times, under load": the code passed, but the tests ran out of time three runs in a row. Read the load with `factory-host 'uptime; docker stats --no-stream'`. Find what used the CPUs. Hold new starts with `factory pause <reason>` until the load falls, then run `factory resume` and `factory retry N`. A failed merge labels every card of its batch, so retry each of them. Skip the Testing gate with `factory move N approval` when the load stays. Note in the issue comment what held the CPUs.
+- "The factory checks timed out 3 times, under load": the code passed, but the tests ran out of time three runs in a row. Read the load with `factory-host 'uptime; docker stats --no-stream'`. Find what used the CPUs. Retry the card with `factory retry N`. Move it on with `factory move N approval` when the load stays high. Never pause the factory for this. A failed merge labels every card of its batch, so retry each of them. Note in the issue comment what held the CPUs.
 - Move a card: `factory move N <position>`. By hand: `gh project item-edit` on Project 2 of owner `btseytlin`, with ids from `gh project item-list` and `gh project field-list`. A hand move leaves the other stores stale, so hold the card with `factory pause-card N` and fix them too.
 - Drop a queued action: `factory drop <queue> <id>`. By hand: edit `/factory/home/state/state.json` with `jq`, as Changing factory state says.
 - Run a step now: `factory-host 'cd /opt/factory/code/factory && npm run factory -- run <stage> <N or ->'`. For example, `run merge -` merges the cards waiting in Merging. `run dev -` rebuilds `/dev/` alone, and clears `devFailed` when it passes. Prefer `factory merge N` for a merge.

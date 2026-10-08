@@ -198,9 +198,20 @@ describe('testing in one job', () => {
     await expect(runVerify(fakeCtx((run) => writeFileSync(`${out(run)}/needs-committee.md`, 'A major save bump.')), 7)).rejects.toThrow('committee decision');
   });
 
-  it('fails the stage when the agent leaves the base merge unfinished', async () => {
+  it('hands an unfinished base merge back to the same session, then posts', async () => {
     merged = false;
-    await expect(runVerify(fakeCtx(posts), 7)).rejects.toThrow('left the merge of dev');
+    await runVerify(fakeCtx((run, index) => { posts(run); if (index > 0) merged = true; }), 7);
+    expect(runs).toHaveLength(2);
+    expect(runs[1]!.session).toEqual({ ...runs[0]!.session, resume: true });
+    expect(runs[1]!.prompt).toContain('merge of dev at base000 into factory/issue-7 is unfinished');
+    expect(runs[1]!.prompt).toContain('git commit --no-edit');
+    expect(shellScripts).toHaveLength(1);
+    expect(calls.at(-1)).toBe('move 7 Approval');
+  });
+
+  it('stops with a BudgetError when the merge stays unfinished past the budget', async () => {
+    merged = false;
+    await expect(runVerify(fakeCtx(posts, [], 3), 7)).rejects.toThrow(BudgetError);
   });
 
   it('merges dev first and lists conflicts for the agent', async () => {
@@ -271,15 +282,16 @@ describe('testing in one job', () => {
     expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 100: 7 });
   });
 
-  it('retracts the primary when the album fails', async () => {
+  it('keeps the primary post when the album fails', async () => {
     albumFails = true;
     const ctx = fakeCtx((run) => {
       posts(run);
       writeFileSync(`${out(run)}/view1.png`, pngBytes(1));
       writeFileSync(`${out(run)}/evidence.json`, JSON.stringify({ images: [{ file: 'view1.png', description: 'One' }] }));
     });
-    await expect(runVerify(ctx, 7)).rejects.toThrow('sendMediaGroup failed');
-    expect(readState(`${home}/state.json`).approvalPosts).toEqual({});
+    await runVerify(ctx, 7);
+    expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 100: 7 });
+    expect(calls.at(-1)).toBe('move 7 Approval');
   });
 });
 
@@ -337,9 +349,19 @@ describe('hardening in one session', () => {
     expect(calls.at(-1)).toBe('move 7 Merging');
   });
 
-  it('fails when the agent leaves the base merge unfinished', async () => {
+  it('sends an unfinished base merge back to the same session once', async () => {
     merged = false;
-    await expect(runHarden(fakeCtx(() => undefined), 7)).rejects.toThrow('left the merge of dev');
+    await runHarden(fakeCtx((_run, index) => { if (index > 0) merged = true; }), 7);
+    expect(runs).toHaveLength(2);
+    expect(runs[1]!.session).toEqual({ ...runs[0]!.session, resume: true });
+    expect(runs[1]!.prompt).toContain('git commit --no-edit');
+    expect(calls.at(-1)).toBe('move 7 Merging');
+  });
+
+  it('fails when the merge stays unfinished after the second round', async () => {
+    merged = false;
+    await expect(runHarden(fakeCtx(() => undefined), 7)).rejects.toThrow('is unfinished');
+    expect(runs).toHaveLength(2);
   });
 });
 

@@ -248,7 +248,8 @@ export async function mergeBase(ctx: Ctx, issue: number, base: string, home: str
   return { commit, note };
 }
 
-export async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: string | null): Promise<void> {
-  if (commit === null) return;
-  if (!(await ctx.repo.isMerged(commit, BRANCH(issue)))) throw new Error(`The agent left the merge of ${base} at ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
+export async function unfinishedBaseMerge(ctx: Ctx, issue: number, base: string, commit: string | null): Promise<string | null> {
+  if (commit === null) return null;
+  if (await ctx.repo.isMerged(commit, BRANCH(issue))) return null;
+  return `The merge of ${base} at ${commit.slice(0, 7)} into ${BRANCH(issue)} is unfinished. Finish it with \`git commit --no-edit\`, then end again.`;
 }

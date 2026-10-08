@@ -2,6 +2,7 @@ import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFi
 import { join, relative } from 'node:path';
 import { withLock } from './lock';
 import { readState, updateState } from './state';
+import { clearStuck } from './stuck';
 import { BRANCH, CLONE_LOCK_MS, MEDIA_DIR, OUT_DIR, TASK_DIR, WORK_DIR, WORK_LOCK, type Ctx, type FactoryState, type Hold } from './types';
 
 export type RepairOrder = { issue: number; by: string; reason: string; backupMerge: boolean };
@@ -27,7 +28,9 @@ export async function repairClone(ctx: Ctx, order: RepairOrder, fs: RepairFs = R
 async function repairHeld(ctx: Ctx, order: RepairOrder, fs: RepairFs): Promise<string[]> {
   const placed = placeHold(ctx, order);
   try {
-    return await repairOnce(ctx, order, fs);
+    const done = await repairOnce(ctx, order, fs);
+    await clearStuck(ctx, order.issue);
+    return done;
   } finally {
     if (placed !== null) liftHold(ctx, order.issue, placed);
   }
@@ -105,7 +108,7 @@ async function replace(steps: Steps, git: Git, fs: RepairFs): Promise<string[]> 
     ...(manifest.unpushed.length === 0 ? [] : [`The old clone holds ${manifest.unpushed.length} commits on no GitHub branch it knew. They stay in the backup.`]),
     `${dir} is a fresh clone of ${manifest.remoteBranch} at ${manifest.remoteHead.slice(0, 7)}, clean.`,
     `Copied ${copied.length === 0 ? 'no factory folders' : copied.join(', ')} from the old clone.`,
-    `The stuck label and the failures stay. Check the clone, then run factory retry ${manifest.issue}.`,
+    `The stuck label and the failures of #${manifest.issue} are cleared. The next tick continues the card.`,
   ];
 }
 

@@ -12,16 +12,16 @@ export const CLONE_SHA = 'abc1234'.padEnd(40, '0');
 export type Photo = { chat: string; path: string; caption: string; buttons?: InlineButton[][] };
 export type Album = { chat: string; paths: string[]; captions: string[]; replyTo?: number };
 export type Text = { chat: string; text: string; buttons: InlineButton[][] };
-export type Fake = { ctx: Ctx; texts: Text[]; calls: string[]; agentWrites: Record<string, string>; changelog: string[]; diff: string; cards: Card[]; photos: Photo[]; albums: Album[]; albumFails: boolean; prBodies: string[]; created: { title: string; body: string; labels: string[] }[]; mergeConflicts: string[]; revertConflicts: string[]; agentRuns: AgentRun[] };
+export type Fake = { ctx: Ctx; texts: Text[]; calls: string[]; agentWrites: Record<string, string>; changelog: string[]; diff: string; cards: Card[]; photos: Photo[]; albums: Album[]; albumFails: boolean; logs: string[]; prBodies: string[]; created: { title: string; body: string; labels: string[] }[]; mergeConflicts: string[]; revertConflicts: string[]; agentRuns: AgentRun[] };
 
 export function fake(): Fake {
-  const f: Fake = { texts: [], ctx: null as unknown as Ctx, calls: [], agentWrites: {}, changelog: [], diff: '', cards: [], photos: [], albums: [], albumFails: false, prBodies: [], created: [], mergeConflicts: [], revertConflicts: [], agentRuns: [] };
+  const f: Fake = { texts: [], ctx: null as unknown as Ctx, calls: [], agentWrites: {}, changelog: [], diff: '', cards: [], photos: [], albums: [], albumFails: false, logs: [], prBodies: [], created: [], mergeConflicts: [], revertConflicts: [], agentRuns: [] };
   const note = (text: string) => { f.calls.push(text); };
   f.ctx = {
     cfg,
     statePath: join(ROOT, 'state.json'),
     now: () => new Date('2026-09-29T10:00:00Z'),
-    log: () => undefined,
+    log: (stage: string, issue: number | null, msg: string) => { f.logs.push(`${stage} ${issue} ${msg}`); },
     run: async (cmd: string, args: string[]) => { note(`run ${cmd} ${args.join(' ')}`); return { code: 0, stdout: cmd === 'git' && args[0] === 'rev-parse' ? `${CLONE_SHA}\n` : '', stderr: '' }; },
     github: {
       createIssue: async (title: string, body: string, labels: string[]) => { note(`createIssue ${title}`); f.created.push({ title, body, labels }); return 10 + f.created.length; },

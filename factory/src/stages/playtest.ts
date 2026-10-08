@@ -200,7 +200,7 @@ function countPlay(ctx: Ctx): { run: number } {
 
 async function block(ctx: Ctx, session: Session, plays: RunMeta[], end: Ending): Promise<void> {
   setPlaytest(ctx, (playtest) => ({ ...playtest, blocked: { sha: end.head, reason: end.reason } }));
-  const next = `The release is blocked: ${end.reason} A member decides with factory retry on this issue.`;
+  const next = `The release is blocked: ${end.reason} Hermes decides with factory retry on this issue.`;
   await ctx.github.comment(session.release.issue, comment(session, plays, end, next, report(session)));
   throw new Error(`Release playtest blocked: ${end.reason}`);
 }

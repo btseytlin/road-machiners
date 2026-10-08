@@ -13,7 +13,7 @@ If `.factory/merge-conflicts.md` exists, that merge stopped on conflicts in the 
 Resolve them first.
 Keep what both sides meant, not just one side.
 Then commit the merge with `git commit --no-edit`.
-The factory fails the stage if the merge is left unfinished.
+If the merge is left unfinished, the factory sends you back to finish it.
 
 You own this stage, and no review runs after you.
 Find what is broken and fix it yourself, in this session.
