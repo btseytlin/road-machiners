@@ -17,7 +17,7 @@ const LETTER_SIDE: Record<string, Side> = { F: 'front', B: 'rear', L: 'left', R:
 // The threats a driver gears against when it does not know its foe: the average round of the weakest, middle and
 // strongest third of all weapons by penetration. Light armor stops the first, and only the last reaches deep into a
 // big truck.
-const THREATS: Round[] = threatRounds(Object.values(PARTS).filter((d): d is WeaponDef => d.kind === 'weapon'), 3);
+export const THREATS: Round[] = threatRounds(Object.values(PARTS).filter((d): d is WeaponDef => d.kind === 'weapon'), 3);
 
 function threatRounds(weapons: WeaponDef[], groups: number): Round[] {
   const sorted = [...weapons].sort((a, b) => a.round.pen - b.round.pen);

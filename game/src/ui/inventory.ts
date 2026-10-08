@@ -22,8 +22,11 @@ import {
   dumpItem,
   moveItem,
   planItemMove,
+  plannedRefitTurns,
+  startRefit,
   storePart,
   takeFromStorage,
+  type RefitLayout,
 } from "../sim/inventory";
 import { cancelRefit, isParkedForWork, startRepair, startStrip, startWeld, stripYield } from "../sim/jobs";
 import { vehicleHasPerk } from "../sim/progress";
@@ -69,6 +72,8 @@ import { maxSpeedSteps } from "../sim/stats";
 import { moneyLabel, powerChip } from "./hud-readout";
 import {
   doubleClickCommand,
+  planAfterMove,
+  plannedVehicle,
   HOLD_TO_DRAG_MS,
   isDoubleClick,
   needsHold,
@@ -109,6 +114,9 @@ export class InventoryView {
   private loot: string | null = null; // salvage stock shown beside the grid, after a finished search
   private truck: string | null = null; // knocked-out truck whose grid shows on the right, for looting
   private cell = CELL_PX; // grid cell size in pixels, shrunk by fitTo()
+  // The field refit being planned: the spot of each own part that moved or turned, by item id. The world keeps the
+  // original layout until commitPlan() starts the one job.
+  private plan: RefitLayout = {};
 
   // instant: parts move at once anywhere, in combat too, as in the full shop (src/ui/full-shop.ts), instead of by
   // garage or field refit rules.
@@ -146,7 +154,7 @@ export class InventoryView {
     if (!truck) throw new Error("Inventory view is not rendered");
     const over = truck.getBoundingClientRect().bottom - box.getBoundingClientRect().bottom;
     if (over <= 0) return;
-    const rows = gridOf(playerVehicle(this.host.world())).h;
+    const rows = gridOf(this.shown(this.host.world())).h;
     this.cell = Math.max(MIN_CELL_PX, Math.floor(this.cell - over / rows));
     this.render();
   }
@@ -165,7 +173,7 @@ export class InventoryView {
 
   render(): HTMLElement {
     const w = this.host.world();
-    const me = playerVehicle(w);
+    const me = this.shown(w);
     const g = gridOf(me);
     this.showSelection(w);
     const grid = gridEl(g, me.chassisId, this.cell);
@@ -184,7 +192,7 @@ export class InventoryView {
         el(
           "div",
           { class: "inv-side" },
-          ...this.refitBanner(me),
+          ...this.refitBanner(w),
           this.sideList(w),
           ...(this.dumpZone ? [el("div", { class: "inv-dump", "data-drop": "dump" }, "Drop here to dump")] : []),
           // Below the lists, so selecting an item never moves the chips a second click aims at.
@@ -198,7 +206,7 @@ export class InventoryView {
   }
 
   private itemEl(w: World, it: GridItem): HTMLElement {
-    const me = playerVehicle(w);
+    const me = this.shown(w);
     const mounted = it.kind === "part" && isMounted(me.chassisId, it);
     const core = it.kind === "part" && partDef(it.part.defId).kind === "core";
     const node = itemBox(it, me.chassisId, mounted, this.cell);
@@ -228,9 +236,14 @@ export class InventoryView {
     return node;
   }
 
-  // Every item on the grid. Parts in a running refit show at the spots they go to.
+  // The player's truck with the planned spots applied, which is the layout the grid shows.
+  private shown(w: World): Vehicle {
+    return plannedVehicle(playerVehicle(w), this.plan);
+  }
+
+  // Every item on the grid. Parts in a running refit or in the plan show at the spots they go to.
   private gridItems(w: World, v: Vehicle): HTMLElement[] {
-    const moving = refitItems(w, v);
+    const moving = v.job?.kind === "refit" ? refitItems(w, v) : v.items.filter((it) => this.plan[it.id]);
     const staying = v.items.filter((it) => !moving.some((m) => m.id === it.id));
     return [...staying.map((it) => this.itemEl(w, it)), ...moving.map((it) => this.refittingEl(w, v, it))];
   }
@@ -238,9 +251,8 @@ export class InventoryView {
   // A part in a running refit, drawn where it goes with a dashed outline. Hover shows the turns left.
   private refittingEl(w: World, v: Vehicle, item: GridItem): HTMLElement {
     const node = this.itemEl(w, item);
-    const left = v.job?.kind === "refit" ? v.job.turnsLeft : 0;
     node.classList.add("refitting");
-    node.title = `Refit: ${left === 1 ? "1 turn" : `${left} turns`} left`;
+    if (v.job?.kind === "refit") node.title = `Refit: ${turnsText(v.job.turnsLeft)} left`;
     return node;
   }
 
@@ -275,7 +287,7 @@ export class InventoryView {
   private selection(w: World): { item: GridItem; mounted: boolean; own: boolean } | null {
     const id = this.selectedItem;
     if (id === null) return null;
-    const me = playerVehicle(w);
+    const me = this.shown(w);
     const own = me.items.find((it) => it.id === id);
     if (own) return { item: own, mounted: own.kind === "part" && isMounted(me.chassisId, own), own: true };
     const item = this.otherItems(w).find((it) => it.id === id);
@@ -341,26 +353,37 @@ export class InventoryView {
     return { source, id, item, stockId: this.loot, truckId: this.truck };
   }
 
-  // The running refit with a button that abandons it. Nothing changes until a refit finishes, so cancelling
-  // leaves every part where it stood.
-  private refitBanner(me: Vehicle): HTMLElement[] {
-    if (me.job?.kind !== "refit") return [];
-    const left = me.job.turnsLeft;
-    return [
-      el(
-        "div",
-        { class: "inv-refit" },
-        el("span", {}, `Refit: ${left === 1 ? "1 turn" : `${left} turns`} left`),
-        el("button", { title: "Stop the refit and leave every part where it was", onclick: () => this.run(cancelRefit) }, "Cancel refit"),
-      ),
-    ];
+  // A plan shows its turns with a button that drops it. A running refit shows its turns left with a button that
+  // abandons it. Nothing changes until a refit finishes, so cancelling leaves every part where it stood.
+  private refitBanner(w: World): HTMLElement[] {
+    const me = playerVehicle(w);
+    if (me.job?.kind === "refit") return [this.bannerEl(`Refit: ${turnsText(me.job.turnsLeft)} left`, "Cancel refit", () => this.run(cancelRefit), "Stop the refit and leave every part where it was")];
+    if (Object.keys(this.plan).length === 0) return [];
+    return [this.bannerEl(`Refit: ${turnsText(plannedRefitTurns(w, me, this.plan))}`, "Cancel", () => this.cancelPlan())];
+  }
+
+  private bannerEl(text: string, label: string, onclick: () => void, title?: string): HTMLElement {
+    return el("div", { class: "inv-refit" }, el("span", {}, text), el("button", { title, onclick }, label));
+  }
+
+  private cancelPlan(): void {
+    this.plan = {};
+    this.onChange();
+  }
+
+  // Starts the one refit job for the plan. The inventory calls it as it closes.
+  commitPlan(): void {
+    if (Object.keys(this.plan).length === 0) return;
+    const layout = this.plan;
+    this.plan = {};
+    this.host.apply(startRefit(this.host.world(), layout));
   }
 
   // Beside the grid: a searched stock to loot, the garage storage at a shop, or how parts move here.
   private sideList(w: World): HTMLElement {
     if (this.loot) return this.lootEl(w, this.loot);
     if (this.instant) return el("div", { class: "dim" }, "Parts fit at once: drag them onto a mount or off it.");
-    return shopAt(w) ? this.storageEl(w) : el("div", { class: "dim" }, "Park at a shop to use garage storage. Drag onto a mount to start a refit.");
+    return shopAt(w) ? this.storageEl(w) : el("div", { class: "dim" }, "Park at a shop to use garage storage.");
   }
 
   // The actions come right under the name, so Patch stays on screen when a short window cuts off the stats.
@@ -369,7 +392,6 @@ export class InventoryView {
       el("div", { class: "card-head" }, itemIconEl(item), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
       ...(item.kind === "part" ? partDetails(w, playerVehicle(w), item.part, mounted) : []),
-      ...(item.kind === "part" && !this.instant && !shopAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
     );
   }
 
@@ -733,7 +755,7 @@ export class InventoryView {
   // R on a selected grid item turns it in place, keeping its top left cell.
   private rotateSelected(): void {
     if (!this.gridEl?.isConnected || this.selectedItem === null) return;
-    const item = playerVehicle(this.host.world()).items.find(
+    const item = this.shown(this.host.world()).items.find(
       (it) => it.id === this.selectedItem,
     );
     if (!item || item.kind !== "part") return;
@@ -784,7 +806,7 @@ export class InventoryView {
   private ghostFan(d: Drag, onGrid: boolean): void {
     if (!this.gridEl) return;
     clearFan(this.gridEl);
-    if (onGrid) this.drawFan(this.gridEl, playerVehicle(this.host.world()), d.item);
+    if (onGrid) this.drawFan(this.gridEl, this.shown(this.host.world()), d.item);
   }
 
   // Snapped to its grid spot over the grid, centered under the pointer elsewhere.
@@ -797,7 +819,7 @@ export class InventoryView {
   private placementProblem(d: Drag): string | null {
     const me = playerVehicle(this.host.world());
     if (d.source === "grid")
-      return planItemMove(me, d.id, {
+      return planItemMove(this.shown(this.host.world()), d.id, {
         x: d.item.x,
         y: d.item.y,
         rot: d.item.rot,
@@ -828,7 +850,8 @@ export class InventoryView {
     if (!d) return;
     this.drag = null;
     d.ghost.remove();
-    this.showFan(playerVehicle(this.host.world()), this.selectedGun(playerVehicle(this.host.world())));
+    const shown = this.shown(this.host.world());
+    this.showFan(shown, this.selectedGun(shown));
     if (this.finishSelection(d)) return;
     // A drop the sim refuses leaves the item where it was and shows no error.
     this.run(this.dropCommand(e, d), true);
@@ -859,7 +882,7 @@ export class InventoryView {
   // A drag released without moving is a click on the item.
   private finishSelection(drag: Drag): boolean {
     if (drag.moved) return false;
-    const item = drag.source === "grid" ? playerVehicle(this.host.world()).items.find((entry) => entry.id === drag.id) : drag.item;
+    const item = drag.source === "grid" ? this.shown(this.host.world()).items.find((entry) => entry.id === drag.id) : drag.item;
     if (item) this.clickItem(this.clicked(drag.source, drag.id, item));
     return true;
   }
@@ -874,21 +897,42 @@ export class InventoryView {
     );
   }
 
-  // With quiet set, a command the sim refuses changes nothing and shows no error, like a drop on an invalid spot.
+  // Instant views and shops move parts at once. In the field a move or turn only edits the plan.
   private moveGridItem(w: World, itemId: string, to: Spot): World {
-    return this.instant ? instantMoveItem(w, itemId, to) : moveItem(w, itemId, to);
+    if (this.instant) return instantMoveItem(w, itemId, to);
+    if (shopAt(w)) return moveItem(w, itemId, to);
+    this.planMove(w, itemId, to);
+    return w;
   }
 
+  // A dry run of the whole plan through the sim throws when the refit could not start now.
+  private planMove(w: World, itemId: string, to: Spot): void {
+    const next = planAfterMove(playerVehicle(w), this.plan, itemId, to);
+    if (Object.keys(next).length > 0) startRefit(w, next);
+    this.plan = next;
+  }
+
+  // With quiet set, a command the sim refuses changes nothing and shows no error, like a drop on an invalid spot.
+  // A command that changes the world ends the plan: the sim checks it against the original layout, so the plan could no
+  // longer be trusted, and a refit started first would make the command fail.
   private run(cmd: (w: World) => World, quiet = false): void {
     try {
-      const next = cmd(this.host.world());
-      if (next !== this.host.world()) this.host.apply(next);
+      const w = this.host.world();
+      const next = cmd(w);
+      if (next !== w) {
+        this.plan = {};
+        this.host.apply(next);
+      }
       this.error = "";
     } catch (err) {
       this.error = quiet ? "" : (err as Error).message;
     }
     this.onChange();
   }
+}
+
+function turnsText(n: number): string {
+  return n === 1 ? "1 turn" : `${n} turns`;
 }
 
 // Dropping a grid item on the garage storage stores it and on the dump pile throws it away. Anywhere else changes nothing.
@@ -939,10 +983,12 @@ export class InventoryScreen {
   }
 
   // Closed windows drop their contents, so hidden copies never answer clicks or drops.
+  // Closing starts the planned field refit, if any.
   close(): void {
     this.view.clearSelection();
     this.root.style.display = "none";
     this.root.replaceChildren();
+    this.view.commitPlan();
   }
 
   render(): void {

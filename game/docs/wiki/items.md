@@ -34,7 +34,7 @@ Parts are defined in `src/data/parts.ts`, chassis in `src/data/chassis.ts` and g
 <!-- wiki:weapons -->
 | id | name | tier | value (M) | cells (w x h) | mass (kg) | hp | armor | tall | range (tiles) | cooldown (turns) | magazine (shots) | reload (turns) | arc (deg) | spread (deg) | rounds per shot | recoil (deg) | shake | line (turns) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| mg | MG turret | 1 | 49 | 1 x 1 | 110 | 40 | 3 | false | 12 | 1 | 5 | 2 | 270 | 5 | 6 | 0.5 | 0.5 |  |
+| mg | MG turret | 1 | 49 | 1 x 2 | 110 | 40 | 3 | false | 12 | 1 | 5 | 2 | 270 | 5 | 6 | 0.5 | 0.5 |  |
 | shotgun | Shotgun | 1 | 60 | 1 x 2 | 100 | 36 | 2 | false | 10 | 1 | 2 | 2 | 90 | 12 | 10 | 1.5 | 0.6 |  |
 | longRifle | Long rifle | 1 | 54 | 1 x 2 | 120 | 30 | 2 | false | 18 | 1 | 3 | 2 | 60 | 1 | 1 | 0.8 | 1 |  |
 | flamer | Flamer | 1 | 69 | 1 x 2 | 100 | 34 | 2 | false | 8 | 1 | 3 | 2 | 90 | 7 | 8 | 0.3 | 0.6 |  |
@@ -169,7 +169,7 @@ Yellow deck parts with one job each. An active utility acts once on an order and
 <!-- wiki:core -->
 | id | name | tier | value (M) | cells (w x h) | mass (kg) | hp | armor | tall | role |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| cab | Driver seat | 1 | 67 | 1 x 2 | 80 | 120 | 3 | false | cab |
+| cab | Driver seat | 1 | 67 | 1 x 2 | 80 | 120 | 3 | true | cab |
 | cabPickup | Cab | 1 | 67 | 3 x 2 | 80 | 120 | 3 | true | cab |
 | cabHardtop | Hardtop cab | 1 | 67 | 3 x 2 | 80 | 120 | 3 | true | cab |
 | transmission | Transmission | 1 | 50 | 2 x 2 | 60 | 40 | 3 | false | transmission |

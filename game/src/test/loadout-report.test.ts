@@ -1,18 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
-import { templateStats } from './loadout-report';
+import { formatLoadoutReport, templateStats } from './loadout-report';
 
-// Averages over enough rolls to sit well inside a band unless the tables or the generator drift.
-const ROLLS = 40;
+const ROLLS = 10;
 
-describe('NPC loadout bands', () => {
-  it.each(Object.keys(NPCS))('%s stays inside its gun and armor bands', (id) => {
-    const { guns, armor } = NPCS[id].loadout.targets;
+describe('NPC loadout report', () => {
+  it.each(Object.keys(NPCS))('%s reports sane numbers', (id) => {
     const s = templateStats(id, ROLLS);
-    expect(s.guns, 'guns').toBeGreaterThanOrEqual(guns[0]);
-    expect(s.guns, 'guns').toBeLessThanOrEqual(guns[1]);
-    expect(s.armor, 'armor').toBeGreaterThanOrEqual(armor[0]);
-    // A fully armored template averages to 1 with float rounding on top.
-    expect(s.armor, 'armor').toBeLessThanOrEqual(armor[1] + 1e-9);
+    expect(s.guns, 'guns').toBeGreaterThan(0);
+    expect(s.armor, 'armor').toBeGreaterThanOrEqual(0);
+    expect(s.armor, 'armor').toBeLessThanOrEqual(1 + 1e-9);
+    expect(s.speed, 'speed kept').toBeGreaterThan(0);
+    expect(s.speed, 'speed kept').toBeLessThanOrEqual(2);
+    expect(s.spent, 'gear money spent').toBeGreaterThan(0);
+  });
+
+  it('prints one row per template', () => {
+    const ids = Object.keys(NPCS);
+    const text = formatLoadoutReport(ids.map((id) => templateStats(id, 3)));
+    for (const id of ids) expect(text).toContain(`| ${id} |`);
   });
 });

@@ -137,14 +137,51 @@ export function moveItem(world: World, itemId: string, to: Spot): World {
     const me = playerVehicle(w);
     const result = planItemMove(me, itemId, to);
     if (result.error !== null) throw new Error(result.error);
-    const moving = findItem(me, itemId);
-    if (moving.kind === 'part') disarm(moving.part);
-    const { moves, items, turns } = result.plan;
-    if (turns > 0 && !shopAt(w)) {
-      const work = refitTurns(w, me, turns);
-      startJob(w, me, { kind: 'refit', moves, pickup: null, turnsLeft: work, total: work });
-    } else applyRefitLayout(w, me, items);
+    commitRefit(w, me, result.plan);
   });
+}
+
+// The spots a field refit plan wants, by item id. Items the plan leaves out stay where they are.
+export type RefitLayout = Record<string, Spot>;
+
+// Starts one refit from the current grid to the planned layout, however many parts it moves. The turns come from the
+// original spots, so a part the plan puts back where it stood costs nothing. At a shop, and for moves that cost no
+// turns, the grid changes at once.
+export function startRefit(world: World, layout: RefitLayout): World {
+  return playerCommand(world, (w) => {
+    const me = playerVehicle(w);
+    commitRefit(w, me, layoutPlan(me, layout));
+  });
+}
+
+// Turns a field refit to this layout takes, or 0 when it changes the grid at once.
+export function plannedRefitTurns(world: World, v: Vehicle, layout: RefitLayout): number {
+  const { turns } = layoutPlan(v, layout);
+  return turns > 0 && !shopAt(world) ? refitTurns(world, v, turns) : 0;
+}
+
+function layoutPlan(v: Vehicle, layout: RefitLayout): RefitPlan {
+  requireIdleRefit(v);
+  const moves: RefitMove[] = [];
+  for (const [itemId, to] of Object.entries(layout)) {
+    const item = findItem(v, itemId);
+    if (!matchesSpot(item, to)) moves.push({ itemId, from: getSpot(item), to: getSpot(to) });
+  }
+  if (moves.length === 0) throw new Error('The layout changes nothing');
+  const result = planMoves(v, moves);
+  if (result.error !== null) throw new Error(result.error);
+  return result.plan;
+}
+
+function commitRefit(w: World, me: Vehicle, plan: RefitPlan): void {
+  for (const move of plan.moves) {
+    const moving = findItem(me, move.itemId);
+    if (moving.kind === 'part') disarm(moving.part);
+  }
+  if (plan.turns > 0 && !shopAt(w)) {
+    const work = refitTurns(w, me, plan.turns);
+    startJob(w, me, { kind: 'refit', moves: plan.moves, pickup: null, turnsLeft: work, total: work });
+  } else applyRefitLayout(w, me, plan.items);
 }
 
 // Turns a field refit takes: the planned turns times the truck's work time (src/sim/utility.ts), cut by the player's
@@ -247,7 +284,8 @@ export function planItemMove(v: Vehicle, itemId: string, to: Spot): PlanResult {
   if (targets.length > 1) return { plan: null, error: 'More than one item is in the way' };
   const moves: RefitMove[] = [{ itemId, from: getSpot(item), to: getSpot(to) }];
   const target = targets[0];
-  if (target) moves.push({ itemId: target.id, from: getSpot(target), to: { x: item.x, y: item.y, rot: target.rot } });
+  // The two trade places, turn included, so a long part fits the slot the other long part left.
+  if (target) moves.push({ itemId: target.id, from: getSpot(target), to: getSpot(item) });
   return planMoves(v, moves);
 }
 

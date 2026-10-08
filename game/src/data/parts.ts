@@ -718,10 +718,10 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     holds: "supplies",
     amount: 10, // half the base supplies
   },
-  // Each chassis has one cab. A closed cab is tall, so guns cannot fire across it. An open seat is not.
+  // Each chassis has one cab. Every cab is tall, so guns cannot fire across it.
   // The open seat of the buggy, courier, jeep and gunwagon.
   cab: {
-    id: "cab", kind: "core", name: "Driver seat", hp: 120, base: 2667, tier: 1, w: 1, h: 2, mass: 80, armor: 3, tall: false, role: "cab",
+    id: "cab", kind: "core", name: "Driver seat", hp: 120, base: 2667, tier: 1, w: 1, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
   },
   // The closed cab of every regular chassis.
   cabPickup: {

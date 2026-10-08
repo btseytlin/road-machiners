@@ -3,12 +3,12 @@
 import { partDef } from "../data/parts";
 import { playerVehicle } from "../sim/damage";
 import { instantMoveItem } from "../sim/cheats";
-import { isMounted } from "../sim/grid";
-import { installSpot, moveItem, storePart, stowSpot, takeFromStorage } from "../sim/inventory";
+import { isMounted, type Spot } from "../sim/grid";
+import { installSpot, moveItem, planItemMove, storePart, stowSpot, takeFromStorage, type RefitLayout } from "../sim/inventory";
 import { takeFromTruck } from "../sim/salvage";
 import { takeLoot } from "../sim/locations";
 import { shopAt } from "../sim/market";
-import type { GridItem, World } from "../sim/types";
+import type { GridItem, Vehicle, World } from "../sim/types";
 
 // A mounted part must be held this long before a drag starts. A plain press or click only selects it, so a
 // slip of the mouse cannot start a refit by tearing a working part out of the truck.
@@ -88,4 +88,30 @@ function instantGridCommand(w: World, c: ClickedItem): ((w: World) => World) | n
   if (!item || item.kind !== "part" || partDef(item.part.defId).kind === "core") return null;
   const spot = isMounted(me.chassisId, item) ? stowSpot(me, item) : installSpot(me, item);
   return spot ? (next) => instantMoveItem(next, item.id, spot) : null;
+}
+
+// The truck with the planned spots applied, which is the layout the grid shows.
+export function plannedVehicle(v: Vehicle, plan: RefitLayout): Vehicle {
+  if (Object.keys(plan).length === 0) return v;
+  return { ...v, items: v.items.map((it) => (plan[it.id] ? { ...it, ...plan[it.id] } : it)) };
+}
+
+// The plan after dropping an own item at a spot, checked against the layout the plan shows. A part back on its original
+// spot leaves the plan, and so does the part swapped out of its way. Throws the sim's reason when the move is invalid.
+export function planAfterMove(v: Vehicle, plan: RefitLayout, itemId: string, to: Spot): RefitLayout {
+  const result = planItemMove(plannedVehicle(v, plan), itemId, to);
+  if (result.error !== null) throw new Error(result.error);
+  const next = { ...plan };
+  for (const move of result.plan.moves) {
+    if (isAtStart(v, move.itemId, move.to)) delete next[move.itemId];
+    else next[move.itemId] = move.to;
+  }
+  return next;
+}
+
+// Whether a spot is where the item sits on the real truck.
+function isAtStart(v: Vehicle, itemId: string, to: Spot): boolean {
+  const start = v.items.find((it) => it.id === itemId);
+  if (!start) throw new Error(`No item ${itemId}`);
+  return start.x === to.x && start.y === to.y && start.rot === to.rot;
 }

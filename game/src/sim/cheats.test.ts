@@ -216,8 +216,10 @@ describe('frozen NPCs', () => {
   });
 
   it('keeps a hostile NPC from raising a radio call', () => {
-    // A hostile that judges the fight lost flees without a call, so it always fights back here.
+    // A hostile that judges the fight lost flees without a call, so it always fights back here. A mugger that
+    // attacks at once starts combat, which holds the demand call, so it always demands.
     forceOption('attacked', 'fightBack');
+    forceOption('mugging', 'demand');
     const called = (frozen: boolean): boolean => {
       const start = frozen ? toggleFrozen(emptyWorld()) : emptyWorld();
       const { w } = withSpawned(start, 'buggy', true);

@@ -258,7 +258,7 @@ describe('gun power draw', () => {
   it('draw at or past the capacity caps the loss at 60 percent', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x: 40, y: 40 });
-    for (let i = 0; i < 16; i++) expect(mountPart(w, v, makePart(w, 'mg', 0))).toBe(true);
+    for (let i = 0; i < 6; i++) expect(mountPart(w, v, makePart(w, 'mg', 0))).toBe(true);
     expect(gunDrag(v, 7)).toBeCloseTo(1 - RULES.gunDragMax);
   });
 
@@ -386,7 +386,7 @@ describe('max speed steps', () => {
 
   // Values measured before maxSpeed moved into maxSpeedSteps. The storm one is the stock speed times the full storm share.
   const FROZEN: Record<string, number> = {
-    bare: 1.04, stock: 9.875716226804332, manyGuns: 5.641376805946041, brokenGun: 8.901316579936632, overload: 2.877966295841562,
+    bare: 1.04, stock: 9.875716226804332, manyGuns: 4.906412009420447, brokenGun: 8.703054785359077, overload: 3.046229250680652,
     heavy: 1, worn: 9.217335145017376, wheels: 7.135204973866129, overdrive: 13.134702581649762, transmission: 1.04,
     brokenEngine: 1.04, stalled: 1.04, storm: 5.925429736082600, towing: 5.9254297360826,
   };

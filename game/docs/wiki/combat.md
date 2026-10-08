@@ -35,7 +35,7 @@ Patrols of the Bowl Farmers and the Nose Army are hostile to raiders. `callLawme
 <!-- wiki:numbers -->
 | path | value |
 | --- | --- |
-| `RULES.weaponDamage` | 1.98 |
+| `RULES.weaponDamage` | 1.60875 |
 | `RULES.crashDamage` | 1.125 |
 | `RULES.leadError` | 4.5 |
 | `RULES.shake` | 0.002 |

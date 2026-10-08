@@ -145,27 +145,27 @@ A timed state between two vehicles, like a feud or a tow, is owned by `src/sim/s
 
 ## Gear levels
 
-`src/sim/npc-loadout.ts` rolls each NPC a level, then its chassis and its engine with the engine's wear, then the main gun among those that keep the truck at `MIN_NPC_SPEED`, twice a crawl. The level sets the money, the wear and the cargo. The gear money is the level's share of what the template budget leaves past this base build. The driver then adds one gun, or covers one side with one armor type, at a time, by the fight model in `src/sim/npc-gear-score.ts`. It expects a fight with a truck like its own and counts each side's guns and the rounds that side takes before the truck stops. A faster attacker picks the weakest side, and a faster driver gets away if its rear holds. The template's priorities weigh firepower, armor, the speed it keeps and the room for its biggest load.
+`src/sim/npc-loadout.ts` rolls each NPC a level and a chassis. The level sets the gear money past the chassis, the wear and the cargo. The driver then buys one part at a time from every part in the game. Each step looks at `GEAR_DRAWS` random offers and takes the best gain for the money, or with `GEAR_WHIM` odds a random offer. The gain is the change in the score in `src/sim/npc-gear-score.ts`, which adds armor, guns and speed. The template's priorities weigh each part of the score and the room for its biggest load. Armor counts the quality on each side. Guns count by arc and facing on each side, and each side saturates. `GEAR_SCORE` holds the scales.
 
 <!-- wiki:gear-levels -->
-| level | budget mult | wear shift | cargo mult |
+| level | gear money M | wear step odds | cargo mult |
 | --- | --- | --- | --- |
-| poor | 0.6 | 1 | 0.5 |
-| light | 0.85 | 0 | 0.75 |
-| standard | 1.15 | 0 | 1 |
-| heavy | 1.6 | 0 | 1 |
-| loaded | 2.4 | 0 | 1.5 |
+| poor | 1,250 | 3:1 4:15 | 0.5 |
+| light | 1,460 | 2:1 3:3 4:12 | 0.75 |
+| standard | 1,710 | 2:1 3:3 4:12 | 1 |
+| heavy | 2,080 | 2:1 3:3 4:12 | 1 |
+| loaded | 2,750 | 2:1 3:3 4:12 | 1.5 |
 <!-- /wiki:gear-levels -->
 
 <!-- wiki:loadout-priorities -->
 | template | speed | firepower | armor | cargo |
 | --- | --- | --- | --- | --- |
 | buggy | 3 | 3 | 3 | 1 |
-| gunwagon | 0 | 3 | 3 | 0 |
+| gunwagon | 0.1 | 3 | 3 | 0 |
 | trader | 1 | 1 | 3 | 3 |
 | scavenger | 1 | 1 | 3 | 3 |
-| bowlFarmer | 0 | 3 | 3 | 0 |
-| noseArmy | 0 | 3 | 3 | 0 |
+| bowlFarmer | 0.1 | 3 | 3 | 0 |
+| noseArmy | 0.1 | 3 | 3 | 0 |
 | courier | 3 | 1 | 3 | 2 |
 | roamer | 2 | 1 | 3 | 2 |
 | vulture | 1 | 1 | 3 | 3 |
