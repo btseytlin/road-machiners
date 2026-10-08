@@ -455,6 +455,17 @@ function withFreeze_25_26(world: SavedJson): SavedJson {
   return { ...world, player: { ...(world.player as SavedJson), frozen: false } };
 }
 
+// Step 26 to 27: a bounty records whether the player beat its target, and pays only when claimed at its shop. A saved bounty
+// paid on the kill, so every one still held or posted has not been beaten yet.
+function withFulfilledFlag_26_27(world: SavedJson): SavedJson {
+  const flagged = (c: SavedJson): SavedJson => (c.kind === 'bounty' ? { ...c, fulfilled: false } : c);
+  const player = world.player as SavedJson;
+  const shops = Object.fromEntries(
+    Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(flagged) }]),
+  );
+  return { ...world, player: { ...player, contracts: (player.contracts as SavedJson[]).map(flagged) }, shops };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -548,6 +559,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   // 25 to 26: utility orders and effects, the search stream, hidden salvage in every unsearched rolled stock and the
   // debug freeze switch.
   (world) => withFreeze_25_26(withHiddenStock_25_26(withUtilities_25_26(world))),
+  // 26 to 27: every saved bounty starts unfulfilled.
+  withFulfilledFlag_26_27,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

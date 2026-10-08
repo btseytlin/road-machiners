@@ -9,7 +9,7 @@ import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, to
 import { LogPanel } from "./log";
 import { ERROR_REPORT_URL } from "../config";
 import {
-  contractDue,
+  heldContractDue,
   contractSummary,
   eventText,
   formatNpcActivity,
@@ -374,7 +374,7 @@ export class Hud {
         el(
           "div",
           { class: "contract-line" },
-          `${contractSummary(c)} — ${contractDue(c)}`,
+          `${contractSummary(c)} — ${heldContractDue(c)}`,
         ),
       ),
     );

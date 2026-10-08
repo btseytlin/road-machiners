@@ -32,6 +32,7 @@ import FORMAT_2_22 from './save-fixtures/format-2-22.json';
 import FORMAT_2_23 from './save-fixtures/format-2-23.json';
 import FORMAT_2_24 from './save-fixtures/format-2-24.json';
 import FORMAT_2_25 from './save-fixtures/format-2-25.json';
+import FORMAT_2_26 from './save-fixtures/format-2-26.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -570,5 +571,22 @@ describe('save migration 25 to 26', () => {
   it('keeps the loot total of every stock', () => {
     const total = (s: Loot) => Object.values(s.goods).reduce((a: number, b) => a + (b ?? 0), 0) + s.parts.length + (s.fuel ?? 0) + (s.supplies ?? 0);
     for (const s of next.salvage) expect(total(s) + total(s.hidden), s.id).toBe(total(before(s.id)));
+  });
+});
+
+describe('save migration 26 to 27', () => {
+  type Contracts = { contracts: Record<string, unknown>[] };
+  const next = MIGRATIONS[26](FORMAT_2_26) as { turn: number; player: Contracts & { money: number }; shops: Record<string, Contracts> };
+
+  it('starts every held and posted bounty unfulfilled', () => {
+    expect(next.player.contracts[0]).toEqual({ ...FORMAT_2_26.player.contracts[0], fulfilled: false });
+    expect(next.shops.bowl.contracts[0]).toEqual({ ...FORMAT_2_26.shops.bowl.contracts[0], fulfilled: false });
+  });
+
+  it('keeps every other contract and field', () => {
+    expect(next.player.contracts[1]).toEqual(FORMAT_2_26.player.contracts[1]);
+    expect(next.shops.bowl.contracts[1]).toEqual(FORMAT_2_26.shops.bowl.contracts[1]);
+    expect(next.shops.nose).toEqual(FORMAT_2_26.shops.nose);
+    expect({ ...next, player: { ...next.player, contracts: [] }, shops: {} }).toEqual({ ...FORMAT_2_26, player: { ...FORMAT_2_26.player, contracts: [] }, shops: {} });
   });
 });

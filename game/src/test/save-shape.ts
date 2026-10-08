@@ -14,7 +14,7 @@ import { TEST_MAP } from './map';
 const CONTRACT_KINDS: Contract[] = [
   { id: 'c', shop: 's', kind: 'haul', good: 'g', units: 1, to: 't', reward: 1, deadline: 1, window: 1, rush: false, tier: 1 },
   { id: 'c', shop: 's', kind: 'fetch', defId: 'p', reward: 1, deadline: 1, window: 1, tier: 1 },
-  { id: 'c', shop: 's', kind: 'bounty', template: 't', targetName: 'n', reward: 1, deadline: 1, window: 1, tier: 1 },
+  { id: 'c', shop: 's', kind: 'bounty', template: 't', targetName: 'n', reward: 1, deadline: 1, window: 1, tier: 1, fulfilled: false },
 ];
 
 // One part with gun state and one without, so the shape does not depend on which parts the shops rolled.
