@@ -5,8 +5,8 @@ import {
   TERRAIN_MARGIN,
   type PaintCanvas,
 } from "../../render/groundPaint";
-import { DECKS, railOffset, type Deck } from "../../sim/bridge";
-import { deckSegments, type DeckSegment, type Terrain } from "../../sim/terrain";
+import { deckAt, DECKS, railOffset, type Deck } from "../../sim/bridge";
+import { deckHeight, deckSegments, type DeckSegment, type Terrain } from "../../sim/terrain";
 import type { World } from "../../sim/types";
 import { drawRoads } from "./roads";
 import type { RenderScope } from "./scope";
@@ -69,6 +69,41 @@ export type TerrainChunk = {
   mesh: THREE.Mesh;
 };
 
+// Meters the drawn ground stays under a deck inside its outline. Near a deck's ends the abutment lies within
+// centimeters of the deck line, and the drawn triangles, split along one diagonal, would poke through the plates.
+const DECK_FLOOR_GAP = 0.5;
+
+// The highest the ground is drawn at a map point inside a deck outline, in tiles, or null off every deck.
+// Render only: groundAt, physics, nav and sight keep the baked ground.
+export function deckFloorCap(t: Terrain, x: number, y: number): number | null {
+  const on = deckAt(x, y);
+  return on === null ? null : deckHeight(t, on.deck, on.along) - DECK_FLOOR_GAP / S;
+}
+
+// The drawn height of a terrain corner in tiles: its baked height, kept under any deck above it.
+function drawnHeight(t: Terrain, x: number, y: number): number {
+  const h = t.heights[y * (t.size + 1) + x];
+  const cap = deckFloorCap(t, x, y);
+  return cap === null ? h : Math.min(h, cap);
+}
+
+// The ground mesh geometry of one chunk, in world meters, from map corner (x, y) over width by depth tiles.
+export function chunkGeometry(t: Terrain, x: number, y: number, width: number, depth: number): THREE.PlaneGeometry {
+  const geo = new THREE.PlaneGeometry(width * S, depth * S, width, depth).rotateX(-Math.PI / 2);
+  const pos = geo.getAttribute("position");
+  const uv = geo.getAttribute("uv");
+  const span = t.size + TERRAIN_MARGIN * 2;
+  for (let j = 0; j <= depth; j++)
+    for (let i = 0; i <= width; i++) {
+      const k = j * (width + 1) + i;
+      pos.setXYZ(k, (x + i) * S, drawnHeight(t, x + i, y + j) * S, (y + j) * S);
+      uv.setXY(k, (x + i + TERRAIN_MARGIN) / span, (y + j + TERRAIN_MARGIN) / span);
+    }
+  geo.computeVertexNormals();
+  geo.computeBoundingSphere();
+  return geo;
+}
+
 // Terrain chunks register with the scope, so only chunks near the view are drawn. Returned for the fog,
 // which greys out the ground per corner. Roads are part of the ground material.
 export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
@@ -81,32 +116,7 @@ export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
     for (let x = 0; x < w.size; x += TERRAIN_CHUNK) {
       const width = Math.min(TERRAIN_CHUNK, w.size - x);
       const depth = Math.min(TERRAIN_CHUNK, w.size - y);
-      const geo = new THREE.PlaneGeometry(
-        width * S,
-        depth * S,
-        width,
-        depth,
-      ).rotateX(-Math.PI / 2);
-      const pos = geo.getAttribute("position");
-      const uv = geo.getAttribute("uv");
-      for (let j = 0; j <= depth; j++)
-        for (let i = 0; i <= width; i++) {
-          const k = j * (width + 1) + i;
-          pos.setXYZ(
-            k,
-            (x + i) * S,
-            w.terrain.heights[(y + j) * (w.size + 1) + x + i] * S,
-            (y + j) * S,
-          );
-          uv.setXY(
-            k,
-            (x + i + TERRAIN_MARGIN) / (w.size + TERRAIN_MARGIN * 2),
-            (y + j + TERRAIN_MARGIN) / (w.size + TERRAIN_MARGIN * 2),
-          );
-        }
-      geo.computeVertexNormals();
-      geo.computeBoundingSphere();
-      const mesh = new THREE.Mesh(geo, material);
+      const mesh = new THREE.Mesh(chunkGeometry(w.terrain, x, y, width, depth), material);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       mesh.matrixAutoUpdate = false;
