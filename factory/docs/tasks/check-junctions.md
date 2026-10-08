@@ -1,6 +1,6 @@
 # The game suite runs once per card, before the merge
 
-**Status:** planning
+**Status:** done
 **Branch:** check-junctions
 **Worktree:** .worktrees/check-junctions
 **Mode:** interactive
@@ -36,3 +36,9 @@ The checks job runs at two junctions only.
 - Run the touched factory test files, then the full factory suite and tsc.
 - Manual try, positive: render both scripts and confirm only the merge script holds `test:cached`.
 - Manual try, negative: a hardened card whose head equals its build still gets phase `checks`.
+
+## Result
+- The preview checks run npm ci, the typecheck, the playtest and the build, with no game suite. The merge checks in Hardening and a hotfix's checks run the cached suite too.
+- Hardening always runs the checks, even when the head is still the played build.
+- Factory suite: 1077 passed, tsc clean, quality hook passed.
+- Not yet seen on the server. The first preview and Hardening checks after deploy show it.
