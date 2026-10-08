@@ -73,7 +73,8 @@ function cardStage(state: FactoryState, card: Card): JobStage {
 }
 
 function mergeJob(state: FactoryState, cards: Card[]): JobPick | null {
-  return openCards(state, cards).some((card) => card.column === 'Merging') ? { stage: 'merge', issue: null } : null;
+  const shipping = state.jobs.some((job) => job.stage === 'ship');
+  return openCards(state, cards).some((card) => card.column === 'Merging' && !(shipping && card.labels.includes(RELEASE_TASK_LABEL))) ? { stage: 'merge', issue: null } : null;
 }
 
 const has =
@@ -171,10 +172,11 @@ function findCapacityReasons(state: FactoryState, pick: JobPick, running: JobPic
   const reasons: WaitReason[] = isHeld(state, pick.issue) ? ['held'] : [];
   if (running.filter((job) => QUEUE_OF[job.stage] === queue).length >= limits(cfg)[queue]) reasons.push('queue-full');
   if (running.some((job) => job.issue === pick.issue && (pick.issue !== null || job.stage === pick.stage))) reasons.push('issue-running');
-  if (RELEASE_WRITERS.includes(pick.stage) && running.some((job) => RELEASE_WRITERS.includes(job.stage))) reasons.push('issue-running');
+  const group = ONE_AT_A_TIME.find((stages) => stages.includes(pick.stage));
+  if (group !== undefined && running.some((job) => group.includes(job.stage))) reasons.push('issue-running');
   return reasons;
 }
-const RELEASE_WRITERS: JobStage[] = ['ship', 'remove'];
+const ONE_AT_A_TIME: JobStage[][] = [['ship', 'remove'], ['incident']];
 function readCardWait(state: FactoryState, card: Card): ScheduleDecision[] {
   const reasons: WaitReason[] = [];
   if (card.labels.includes(STUCK_LABEL)) reasons.push('failed');
@@ -265,6 +267,7 @@ async function failJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Prom
   if (alive) await deps.kill(ctx.run, job.pid, job.id);
   recordJob(ctx.cfg.home, ctx.cfg.tokenPrices, ctx.now(), job, alive ? 'timeout' : 'died');
   dropJob(ctx, job);
+  for (const issue of job.batch ?? []) await ctx.github.addLabel(issue, STUCK_LABEL);
   forgetResume(ctx, job);
   const reason = alive ? `timed out after ${timeoutOf(ctx.cfg, job.stage)} minutes` : 'job process died without finishing';
   await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), reason, job.log);

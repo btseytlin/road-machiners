@@ -62,11 +62,17 @@ describe('chooseJobs with no daily cap', () => {
     expect(chooseJobs(busy, [card(6, 'Implementation', ['adhoc'])], NOW, CFG)).toEqual([{ stage: 'release', issue: null }, { stage: 'adhoc', issue: 6 }]);
   });
 
-  it('runs every queued incident job, beside a queued ship', () => {
+  it('runs one incident job at a time, since each appends to the same incident log, beside a queued ship', () => {
     const capped = { ...busy, lastRelease: FRESH.lastRelease };
     const queuedIncident = { ...capped, pendingIncidents: [7, 8] };
-    expect(chooseJobs(queuedIncident, [], NOW, CFG)).toEqual([{ stage: 'incident', issue: 7 }, { stage: 'incident', issue: 8 }]);
-    expect(chooseJobs({ ...queuedIncident, pendingShip: 'u', release: { issue: 3, branch: 'release/x', day: 'x', postId: 1, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } } }, [], NOW, CFG)).toEqual([{ stage: 'ship', issue: 3 }, { stage: 'incident', issue: 7 }, { stage: 'incident', issue: 8 }]);
+    expect(chooseJobs(queuedIncident, [], NOW, CFG)).toEqual([{ stage: 'incident', issue: 7 }]);
+    expect(chooseJobs({ ...queuedIncident, pendingShip: 'u', release: { issue: 3, branch: 'release/x', day: 'x', postId: 1, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } } }, [], NOW, CFG)).toEqual([{ stage: 'ship', issue: 3 }, { stage: 'incident', issue: 7 }]);
+  });
+
+  it('starts no merge for release task cards while a ship runs, and one for a dev card', () => {
+    const shipping = { ...busy, lastRelease: FRESH.lastRelease, jobs: [{ id: 'ship-3-x', stage: 'ship' as const, issue: 3, pid: 1, startedAt: NOW.toISOString(), log: '' }] };
+    expect(chooseJobs(shipping, [card(7, 'Merging', ['release-task'])], NOW, CFG)).toEqual([]);
+    expect(chooseJobs(shipping, [card(7, 'Merging', ['release-task']), card(8, 'Merging')], NOW, CFG)).toEqual([{ stage: 'merge', issue: null }]);
   });
 
   it('runs factory changes in the implement queue after ad hoc tasks and before cards', () => {
@@ -311,6 +317,14 @@ describe('tick', () => {
     await checkJobs(h.ctx, h.deps);
     expect(h.killed).toEqual(['42 ship-job']);
     expect(readState(h.ctx.statePath).pendingShip).toBeNull();
+  });
+
+  it('labels the batch of a merge job past its timeout stuck, so it does not start again', async () => {
+    const merge = { ...job('2026-01-10T06:00:00Z', 'merge', null), batch: [6, 7] };
+    const h = harness(merge, true);
+    writeState(h.ctx.statePath, state({ jobs: [merge] }));
+    await checkJobs(h.ctx, h.deps);
+    expect(h.labels).toEqual([`6:${STUCK_LABEL}`, `7:${STUCK_LABEL}`]);
   });
 
   it('kills a job past the timeout by its id, clears it and reports, when it already resumed once', async () => {
