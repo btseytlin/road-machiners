@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ghClient } from './github';
-import type { FactoryConfig, Run, RunResult } from './types';
+import { COLUMNS, type FactoryConfig, type Run, type RunResult } from './types';
 
 const CFG = { repo: 'o/r', projectOwner: 'o', projectNumber: 3, githubRetries: 3, githubRetryBaseSeconds: 15, githubTimeoutSeconds: 60 } as FactoryConfig;
 const ok = (stdout: string): RunResult => ({ code: 0, stdout, stderr: '' });
@@ -20,7 +20,7 @@ function project(options: string[]): string {
   return JSON.stringify({ data: { user: { projectV2: { id: 'P1', field } } } });
 }
 
-const ALL = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Done'];
+const ALL = [...COLUMNS];
 
 function fake(calls: string[][], projectJson: string): Run {
   return async (_cmd, args) => {
@@ -145,6 +145,11 @@ describe('ghClient', () => {
   it('names a missing Status option', async () => {
     const client = ghClient(fake([], project(['Triage', 'Design', 'Done'])), CFG);
     await expect(client.cards()).rejects.toThrow('"Implementation"');
+  });
+
+  it('names a missing Merging option', async () => {
+    const client = ghClient(fake([], project(ALL.filter((name) => name !== 'Merging'))), CFG);
+    await expect(client.cards()).rejects.toThrow('"Merging"');
   });
 
   it('shows the real error when the project lookup fails for another reason', async () => {
