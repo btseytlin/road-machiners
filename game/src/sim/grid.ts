@@ -128,6 +128,14 @@ export function gridOf(v: Vehicle): Grid {
   return grid;
 }
 
+// Net cells a working mounted cargo part adds on this chassis: its full-width rows, less the deck cells it sits on,
+// which would otherwise hold cargo. Throws for a part that is not cargo.
+export function cargoCellsGained(chassisId: string, defId: string): number {
+  const def = partDef(defId);
+  if (def.kind !== 'cargo') throw new Error(`${defId} is not a cargo part`);
+  return def.extraRows * baseGrid(chassisId).w - def.w * def.h;
+}
+
 // True when any cell of the item lies on a broken cargo part's dead row.
 export function onDeadRow(g: Grid, item: GridItem): boolean {
   return itemCells(item).some((c) => c.y >= g.deadFrom && c.y < g.h);

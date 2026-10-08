@@ -352,6 +352,52 @@ describe("part weight by tier", () => {
   });
 });
 
+describe("cargo tier curve", () => {
+  const cargo = Object.values(PARTS).filter((p): p is Extract<PartDef, { kind: "cargo" }> => p.kind === "cargo");
+  const perCell = (p: { extraRows: number; w: number; h: number }): number => p.extraRows / (p.w * p.h);
+  const frames = cargo.filter((p) => p.w === 2 && p.h === 2);
+
+  it.each(frames.map((p) => p.id))("%s beats any stack of lower-tier carriers on the same cells", (id) => {
+    const frame = PARTS[id] as (typeof cargo)[number];
+    const small = cargo.filter((p) => p.tier < frame.tier && p.w * p.h < 4);
+    const best = small.reduce((a, p) => (perCell(p) > perCell(a) ? p : a));
+    const stack = 4 * perCell(best);
+    expect(frame.extraRows, `${id} gives ${frame.extraRows} rows, a stack of ${best.id} gives ${stack} on the same cells`).toBeGreaterThan(stack);
+  });
+
+  it("rows per deck cell rise with tier and the heavy frame beats every tier 2 part", () => {
+    const mean = (tier: number): number => {
+      const xs = cargo.filter((p) => p.tier === tier).map(perCell);
+      return xs.reduce((a, b) => a + b, 0) / xs.length;
+    };
+    expect(mean(2)).toBeGreaterThan(mean(1));
+    expect(mean(3)).toBeGreaterThan(mean(2));
+    const tier2 = cargo.filter((p) => p.tier === 2).map((p) => p.extraRows);
+    expect(PARTS.heavyFrame).toMatchObject({ kind: "cargo" });
+    expect((PARTS.heavyFrame as (typeof cargo)[number]).extraRows).toBeGreaterThan(Math.max(...tier2));
+  });
+
+  // Guards old saves (docs/architecture/saves.md): a saved item keeps its x, y and rot, so a cargo part may not shrink its rows, grow its footprint or lose HP.
+  const DEV_CARGO: Record<string, { w: number; h: number; hp: number; extraRows: number }> = {
+    panniers: { w: 1, h: 1, hp: 20, extraRows: 1 },
+    rack: { w: 2, h: 1, hp: 30, extraRows: 1 },
+    flatbed: { w: 2, h: 1, hp: 50, extraRows: 2 },
+    trailerBox: { w: 2, h: 2, hp: 60, extraRows: 3 },
+    lightFrame: { w: 2, h: 2, hp: 24, extraRows: 3 },
+    enclosedFrame: { w: 2, h: 2, hp: 110, extraRows: 3 },
+    heavyFrame: { w: 2, h: 2, hp: 90, extraRows: 5 },
+  };
+
+  it("keeps every cargo part's footprint and HP and never lowers its rows", () => {
+    expect(cargo.map((p) => p.id).sort()).toEqual(Object.keys(DEV_CARGO).sort());
+    for (const p of cargo) {
+      const old = DEV_CARGO[p.id];
+      expect([p.w, p.h, p.hp]).toEqual([old.w, old.h, old.hp]);
+      expect(p.extraRows).toBeGreaterThanOrEqual(old.extraRows);
+    }
+  });
+});
+
 describe("part trade-offs", () => {
   it("no part matches or beats another of its kind on every stat but price", () => {
     const parts = Object.values(PARTS).filter((p) => p.kind !== "core");

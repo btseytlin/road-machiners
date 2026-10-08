@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { START_KITS } from "../data/start";
 import { mountedParts } from "../sim/grid";
 import { playerVehicle } from "../sim/damage";
+import { addVehicle } from "../sim/testkit";
 import { newWorld } from "../sim/world";
 import type { PartInstance } from "../sim/types";
 import { baselinePart, chassisPortraitCell, chassisStats, compareBase, dialShare, diffStats, headlineStat, itemIconCell, partStats, toneStyle } from "./cards";
@@ -56,6 +57,22 @@ describe("part stats and their change against the player's part", () => {
   it("compares trucks stat by stat", () => {
     const speed = diffStats(chassisStats("courier"), chassisStats("hauler")).find((d) => d.stat.icon === "speed");
     expect(speed).toMatchObject({ verdict: "better" });
+  });
+});
+
+describe("cargo cards", () => {
+  const courierWorld = emptyWorld();
+  courierWorld.player.vehicleId = addVehicle(courierWorld, "player", "courier", [], { x: 40, y: 40 }).id;
+  const head = (defId: string) => headlineStat(courierWorld, part(defId), null).stat;
+
+  it("headline the net cargo cells on the player's chassis", () => {
+    expect(head("panniers")).toMatchObject({ label: "Cargo cells", text: "+5" });
+    expect(head("heavyFrame")).toMatchObject({ label: "Cargo cells", text: "+32" });
+  });
+
+  it("marks a heavy frame better than panniers", () => {
+    const diff = diffStats(partStats(courierWorld, part("heavyFrame")), partStats(courierWorld, part("panniers")))[0];
+    expect(diff).toMatchObject({ verdict: "better" });
   });
 });
 

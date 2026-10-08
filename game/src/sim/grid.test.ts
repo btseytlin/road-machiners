@@ -6,8 +6,8 @@ import { REGION } from '../data/region';
 import { buyChassis } from './economy';
 import { partDef } from '../data/parts';
 import { makePart, makeVehicle } from './factory';
-import { baseGrid, cellCount, freeCells, gridOf, isMounted, onDeadRow, placementError, itemCells, mountedItems, mountedParts, plateSide, sideOf, type Cell } from './grid';
-import { moveItem, storePart } from './inventory';
+import { baseGrid, cargoCellsGained, cellCount, freeCells, gridOf, isMounted, onDeadRow, placementError, itemCells, mountedItems, mountedParts, plateSide, sideOf, type Cell } from './grid';
+import { moveItem, mountPart, storePart } from './inventory';
 import { generateNpcLoadout } from './npc-loadout';
 import { addVehicle, emptyWorld } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
@@ -99,6 +99,8 @@ describe('cargo rows', () => {
 });
 
 describe('broken cargo rows', () => {
+  const boxRows = (PARTS.trailerBox as { extraRows: number }).extraRows;
+  const rackRows = (PARTS.rack as { extraRows: number }).extraRows;
   function boxTruck(parts: string[]) {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'hauler', parts, { x: 40, y: 40 });
@@ -113,18 +115,18 @@ describe('broken cargo rows', () => {
     box.hp = 0;
     const g = gridOf(v);
     expect(g.h).toBe(working.h);
-    expect(g.deadFrom).toBe(g.h - 3);
+    expect(g.deadFrom).toBe(g.h - boxRows);
     expect(g.cells.slice(g.deadFrom).every((row) => row.every((c) => c === null))).toBe(true);
-    expect(freeCells(v)).toBe(free - 3 * g.w);
+    expect(freeCells(v)).toBe(free - boxRows * g.w);
   });
 
   it('working cargo rows come before the dead rows', () => {
     const { v, box } = boxTruck(['rack', 'trailerBox']);
     box.hp = 0;
     const g = gridOf(v);
-    expect(g.deadFrom).toBe(g.chassisH + 1);
+    expect(g.deadFrom).toBe(g.chassisH + rackRows);
     expect(g.cells[g.chassisH].every((c) => c === '.')).toBe(true);
-    expect(g.h - g.deadFrom).toBe(3);
+    expect(g.h - g.deadFrom).toBe(boxRows);
   });
 
   it('rejects an item on a dead row', () => {
@@ -145,6 +147,24 @@ describe('broken cargo rows', () => {
     const g = gridOf(v);
     expect(g.deadFrom).toBe(g.h);
     expect(g.cells.slice(g.chassisH).every((row) => row.every((c) => c === '.'))).toBe(true);
+  });
+});
+
+describe('cargoCellsGained', () => {
+  const cargoIds = Object.values(PARTS).filter((p) => p.kind === 'cargo').map((p) => p.id);
+
+  it.each(['hauler', 'courier', 'scout'])('matches the free cells a working %s gains by mounting each cargo part', (chassisId) => {
+    for (const defId of cargoIds) {
+      const w = emptyWorld();
+      const v = addVehicle(w, 'raiders', chassisId, [], { x: 40, y: 40 });
+      const before = freeCells(v);
+      if (!mountPart(w, v, makePart(w, defId, 0))) continue;
+      expect(freeCells(v) - before, `${defId} on ${chassisId}`).toBe(cargoCellsGained(chassisId, defId));
+    }
+  });
+
+  it('throws for a part that is not cargo', () => {
+    expect(() => cargoCellsGained('hauler', 'mg')).toThrow();
   });
 });
 
