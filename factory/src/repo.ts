@@ -26,6 +26,9 @@ function mergeToRevert(log: string, issue: number): string | null {
 
 const lines = (text: string): string[] => text.split('\n').filter(Boolean);
 
+// A message makes a merge commit that carries it. Without one, git's own message stands and a fast-forward is fine.
+const mergeFlags = (message: string | undefined): string[] => (message === undefined ? ['--no-edit'] : ['--no-ff', '-m', message]);
+
 // GitHub holds every branch. The host clone is a cache of it: it keeps GitHub's branches as origin/* refs and no local branch.
 // A write merges in a throwaway worktree and pushes the result. A failed merge or push leaves nothing behind, so a retry starts from GitHub.
 export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = null): HostRepo {
@@ -269,12 +272,12 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       if (conflicts.length === 0) throw new Error(`merge of ${base} into ${dir} failed without a conflict: ${(result.stderr || result.stdout).trim()}`);
       return { commit, conflicts };
     },
-    async mergeBranchIntoWork(dir, branch) {
+    async mergeBranchIntoWork(dir, branch, message) {
       await gitIn(dir, ['fetch', 'origin']);
       if (!(await hasRef(dir, `refs/remotes/origin/${branch}`))) return { commit: null, conflicts: [] };
       const commit = (await gitIn(dir, ['rev-parse', `origin/${branch}`])).trim();
       if ((await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', commit, 'HEAD'], { cwd: dir })).code === 0) return { commit: null, conflicts: [] };
-      const result = await run('git', [...NO_HOOKS, 'merge', '--no-edit', commit], { cwd: dir });
+      const result = await run('git', [...NO_HOOKS, 'merge', ...mergeFlags(message), commit], { cwd: dir });
       if (result.code === 0) return { commit, conflicts: [] };
       const conflicts = await conflictedFiles(dir);
       if (conflicts.length === 0) throw new Error(`merge of ${branch} into ${dir} failed without a conflict: ${(result.stderr || result.stdout).trim()}`);

@@ -35,12 +35,15 @@ async function mergeBatch(ctx: Ctx, base: string, cards: Card[]): Promise<void> 
   const session = newSession(ctx);
   const agent = (prompt: string): Promise<string> => runMergeAgent(ctx, dir, base, session, prompt);
   let spent = 0;
-  for (const card of cards) spent += await mergeIn(ctx, dir, base, BRANCH(card.issue), `issue #${card.issue} was approved`, agent);
+  for (const card of cards) {
+    const message = `Merge issue #${card.issue}: ${(await ctx.github.issue(card.issue)).title}`;
+    spent += await mergeIn(ctx, dir, base, { branch: BRANCH(card.issue), message, reason: `issue #${card.issue} was approved` }, agent);
+  }
   const fixList = cards.map((card) => `- #${card.issue} on ${BRANCH(card.issue)}`).join('\n');
   for (;;) {
     await untilPasses(ctx.cfg.mergingBudgetUsd, spent, () => mergedChecks(ctx, dir, base), (failure) => agent(fillPrompt('merge-fix', { into: base, cards: fixList, failure })));
     if (await pushed(ctx, dir, base)) break;
-    spent += await mergeIn(ctx, dir, base, base, `${base} moved on GitHub while the checks ran`, agent);
+    spent += await mergeIn(ctx, dir, base, { branch: base, message: undefined, reason: `${base} moved on GitHub while the checks ran` }, agent);
   }
   await settle(ctx, base, cards);
 }
@@ -67,9 +70,12 @@ async function runMergeAgent(ctx: Ctx, dir: string, base: string, session: Agent
   return ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt, log: releaseLog(ctx, `merge-${base.replaceAll('/', '-')}`), session: run });
 }
 
+// A card's merge commit carries "Merge issue #N: title", since the release changelog and Remove find features by it. A moved base merges with git's message.
+type Incoming = { branch: string; message: string | undefined; reason: string };
+
 // Merges a branch into the clone. A conflict goes to the agent, and an unfinished merge fails the job. Returns what the agent cost.
-async function mergeIn(ctx: Ctx, dir: string, base: string, branch: string, reason: string, agent: (prompt: string) => Promise<string>): Promise<number> {
-  const { commit, conflicts } = await ctx.repo.mergeBranchIntoWork(dir, branch);
+async function mergeIn(ctx: Ctx, dir: string, base: string, { branch, message, reason }: Incoming, agent: (prompt: string) => Promise<string>): Promise<number> {
+  const { commit, conflicts } = await ctx.repo.mergeBranchIntoWork(dir, branch, message);
   if (commit === null || conflicts.length === 0) return 0;
   ctx.log('merge', null, `${branch} conflicts with ${base} in ${conflicts.join(', ')}, an agent resolves it`);
   const cost = runCost(await agent(fillPrompt('merge-branches', { into: base, branch, reason, files: conflicts.map((file) => `- ${file}`).join('\n') })));

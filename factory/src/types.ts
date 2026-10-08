@@ -297,8 +297,9 @@ export interface HostRepo {
   // Parallel jobs move `base` on, so a later check names the returned commit, not the branch.
   mergeBaseIntoWork(dir: string, base: string): Promise<{ commit: string; conflicts: string[] }>;
   // Merges GitHub's copy of `branch` into the work clone when it holds commits the clone lacks, like a member's push. A null commit means nothing to merge.
-  // A conflicted merge stays open, like in mergeBaseIntoWork.
-  mergeBranchIntoWork(dir: string, branch: string): Promise<{ commit: string | null; conflicts: string[] }>;
+  // A conflicted merge stays open, like in mergeBaseIntoWork. A `message` makes a merge commit with it, never a fast-forward, as the merge queue
+  // needs: the release changelog and Remove find a feature by its "Merge issue #N: title" commit.
+  mergeBranchIntoWork(dir: string, branch: string, message?: string): Promise<{ commit: string | null; conflicts: string[] }>;
   isMerged(base: string, branch: string): Promise<boolean>; // whether `branch` holds every commit of `base`, a branch or a commit
   headHash(branch: string): Promise<string>; // short hash
   diff(base: string, branch: string): Promise<string>;

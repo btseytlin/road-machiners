@@ -254,6 +254,17 @@ describe('work clones', () => {
     expect(await repo.isMerged(commit, 'factory/issue-8')).toBe(true);
   });
 
+  it('merges an issue branch into a work clone with its feature message and never fast-forwards', async () => {
+    const { home, repo, commit } = await setup();
+    await commit('factory/issue-12', 'f.txt', 'twelve\n');
+    await repo.fetch();
+    const work = join(home, 'work', 'merge-queue');
+    await repo.prepareWorkClone('dev', 'dev', work);
+    expect(await repo.mergeBranchIntoWork(work, 'factory/issue-12', 'Merge issue #12: Horn')).toMatchObject({ conflicts: [] });
+    expect((await git(work, 'log', '-1', '--format=%P')).trim().split(' ')).toHaveLength(2);
+    expect((await git(work, 'log', '-1', '--format=%s')).trim()).toBe('Merge issue #12: Horn');
+  });
+
   it('gives a new and an existing work clone the guard as an executable pre-commit hook that passes on the host', async () => {
     const { home, repo } = await setup();
     const work = join(home, 'work', 'issue-9');

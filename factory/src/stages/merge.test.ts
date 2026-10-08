@@ -18,6 +18,7 @@ let merges: Record<string, { commit: string | null; conflicts: string[] }[]> = {
 let shellFailures: string[] = [];
 let pushFailures = 0;
 let diff = '';
+let messages: string[] = [];
 
 const card = (issue: number, labels: string[] = []): Card => ({ itemId: `i${issue}`, issue, column: 'Merging', labels });
 const result = `${JSON.stringify({ type: 'result', total_cost_usd: 1, duration_ms: 1000 })}\n`;
@@ -33,6 +34,7 @@ beforeEach(() => {
   shellFailures = [];
   pushFailures = 0;
   diff = '';
+  messages = [];
   deployed.length = 0;
   writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), approvedResolving: { 5: 'Ann', 6: 'Bob' }, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [9], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } }, pendingShip: 'ann' });
 });
@@ -63,8 +65,9 @@ function fakeCtx(budget = 5): Ctx {
     repo: {
       fetch: async () => { calls.push('fetch'); },
       prepareWorkClone: async (branch: string, base: string, dir: string) => { calls.push(`clone ${branch} ${base}`); mkdirSync(dir, { recursive: true }); },
-      mergeBranchIntoWork: async (_dir: string, branch: string) => {
+      mergeBranchIntoWork: async (_dir: string, branch: string, message?: string) => {
         calls.push(`merge ${branch}`);
+        if (message !== undefined) messages.push(message);
         return merges[branch]?.shift() ?? { commit: null, conflicts: [] };
       },
       fetchFromWork: async () => 'head1',
@@ -86,6 +89,8 @@ describe('merge queue', () => {
       'fetch', 'clone dev dev', 'merge factory/issue-5', 'merge factory/issue-6', 'checks', 'push head1 dev',
     ]);
     expect(runs).toEqual([]);
+    // The release changelog and Remove find each feature by this merge message.
+    expect(messages).toEqual(['Merge issue #5: Card 5', 'Merge issue #6: Card 6']);
     expect(comments).toEqual([
       '5 Approved by Ann and merged into dev. It merged together with #6, and the checks passed on the result. It closes when its release ships.',
       '6 Approved by Bob and merged into dev. It merged together with #5, and the checks passed on the result. It closes when its release ships.',
