@@ -1,8 +1,7 @@
 import { must } from './exec';
-import { ERROR_REPORT_LABEL, FACTORY_MARK, fingerprintLine } from './types';
+import { COLUMNS, ERROR_REPORT_LABEL, FACTORY_MARK, fingerprintLine } from './types';
 import type { Card, Column, FactoryConfig, FingerprintIssue, GitHub, Issue, IssueComment, Run, RunResult } from './types';
 
-const COLUMNS: Column[] = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Done'];
 const ISSUE_FIELDS = 'number,title,body,labels,createdAt,state,author';
 
 type Board = { projectId: string; fieldId: string; options: Record<string, string> };

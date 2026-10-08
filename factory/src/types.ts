@@ -1,6 +1,8 @@
 // Shared types of the game factory. Every module codes against these, so stages, wrappers and tests agree.
 
-export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Approval' | 'Hardening' | 'Merging' | 'Done';
+// The Status options of the Project board, in board order. Code that checks a column name reads this list.
+export const COLUMNS = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Merging', 'Done'] as const;
+export type Column = typeof COLUMNS[number];
 
 // Stages that run agents on a card. Verify runs the Testing column, and harden the Hardening column.
 export type CardStage = 'triage' | 'design' | 'implement' | 'verify' | 'harden';

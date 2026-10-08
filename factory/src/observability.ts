@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { appendLedger } from './ledger';
 import { withLockSync } from './lock';
 import type { ScheduleReport } from './tick';
-import { ADHOC_LABEL, QUEUE_OF, type Card, type Column, type JobStage } from './types';
+import { ADHOC_LABEL, COLUMNS, QUEUE_OF, type Card, type Column, type JobStage } from './types';
 import type { JobOutcome } from './ledger';
 
 export const ACTIVITIES = ['starting', 'model', 'reading', 'editing', 'command', 'tests', 'typecheck', 'playtest', 'build', 'publish', 'install', 'git', 'lock', 'review', 'design', 'investigate', 'waiting', 'finished'] as const;
@@ -59,7 +59,7 @@ function validateScheduler(data: SchedulerData): void {
   validateReleaseReport(data.report);
 }
 function validateFunnelCount(column: string, count: number): void {
-  if (!['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Done'].includes(column)) throw new Error('Invalid funnel column');
+  if (!(COLUMNS as readonly string[]).includes(column)) throw new Error('Invalid funnel column');
   if (!Number.isSafeInteger(count) || count < 0) throw new Error('Invalid funnel count');
 }
 function validateDecision(decision: ScheduleReport['decisions'][number]): void {
