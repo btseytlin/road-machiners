@@ -1,10 +1,10 @@
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 import { must, realRun } from './exec';
 import { backupRoot, repairClone, type RepairFs } from './repair-clone';
 import { hostRepo } from './repo';
-import { EMPTY_STATE, writeState } from './state';
+import { EMPTY_STATE, readState, writeState } from './state';
 import type { Ctx, FactoryConfig, FactoryState } from './types';
 
 vi.setConfig({ testTimeout: 60_000 });
@@ -36,7 +36,6 @@ async function setup() {
   const work = join(home, 'work', 'issue-5');
   await repo.prepareWorkClone('factory/issue-5', 'dev', work);
   writeState(statePath, structuredClone(EMPTY_STATE));
-  writeFileSync(join(home, 'paused'), 'Paused with factory pause: repair\n');
   const push = async (branch: string, files: Record<string, string>) => {
     await git(author, 'fetch', 'origin');
     await git(author, 'checkout', '-q', '-B', branch, `origin/${branch}`);
@@ -160,18 +159,62 @@ describe('repairClone', () => {
     expect(backups(home)).toEqual([]);
   });
 
-  it.each([
-    ['no pause', (env: Env) => env.unpause(), 'needs a paused factory'],
-    ['a job of the card', (env: Env) => env.setState({ jobs: [job(5)] }), 'A verify job of #5 is running'],
-    ['a job of another card', (env: Env) => env.setState({ jobs: [job(9)] }), '1 jobs are running'],
-    ['an interrupted job of the card', (env: Env) => env.setState({ interrupted: [5] }), 'continues in this clone'],
-  ])('refuses with %s and changes nothing', async (_name, arrange, error) => {
+  it('refuses a running job of the card, changes nothing and places no hold', async () => {
     const env = await setup();
     writeFileSync(join(env.work, 'f.txt'), 'dirty\n');
-    arrange({ ...env, unpause: () => renameSync(join(env.home, 'paused'), join(env.home, 'was-paused')) });
-    await expect(repairClone(env.ctx, ORDER)).rejects.toThrow(error);
+    env.setState({ jobs: [job(5)] });
+    await expect(repairClone(env.ctx, ORDER)).rejects.toThrow('A verify job of #5 is running');
     expect(readFileSync(join(env.work, 'f.txt'), 'utf8')).toBe('dirty\n');
     expect(backups(env.home)).toEqual([]);
+    expect(readState(env.ctx.statePath).held).toEqual({});
+  });
+
+  it('repairs while a job of another card runs and the factory is not paused, then lifts its own hold', async () => {
+    const env = await setup();
+    writeFileSync(join(env.work, 'f.txt'), 'dirty\n');
+    env.setState({ jobs: [job(9)] });
+    await repairClone(env.ctx, ORDER);
+    expect(existsSync(join(env.home, 'paused'))).toBe(false);
+    expect(await env.git(env.work, 'status', '--porcelain')).toBe('');
+    const state = readState(env.ctx.statePath);
+    expect(state.held).toEqual({});
+    expect(state.jobs).toHaveLength(1);
+  });
+
+  it('holds the card during the repair', async () => {
+    const env = await setup();
+    let during: FactoryState['held'] = {};
+    const fs: RepairFs = { move: (from, to) => { during = readState(env.ctx.statePath).held; renameSync(from, to); }, copy: () => undefined };
+    await repairClone(env.ctx, ORDER, fs);
+    expect(during['5']).toMatchObject({ by: 'hermes', stage: null });
+  });
+
+  it('lifts its hold when the repair fails', async () => {
+    const env = await setup();
+    const fs: RepairFs = { move: () => { throw new Error('disk gone'); }, copy: () => undefined };
+    await expect(repairClone(env.ctx, ORDER, fs)).rejects.toThrow('disk gone');
+    expect(readState(env.ctx.statePath).held).toEqual({});
+  });
+
+  it('keeps a hold someone else placed and an interrupted mark', async () => {
+    const env = await setup();
+    const held = { by: 'member', reason: 'looking', at: '2026-10-07T08:00:00Z', stage: 'verify' as const };
+    env.setState({ held: { '5': held }, interrupted: [5] });
+    await repairClone(env.ctx, ORDER);
+    const state = readState(env.ctx.statePath);
+    expect(state.held).toEqual({ '5': held });
+    expect(state.interrupted).toEqual([5]);
+  });
+
+  it('waits for the clone lock of the card', async () => {
+    const env = await setup();
+    const lock = join(env.home, 'locks', 'issue-5');
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(join(lock, 'owner'), String(process.pid));
+    const done = repairClone(env.ctx, ORDER).then(() => 'done');
+    expect(await Promise.race([done, new Promise((resolve) => setTimeout(() => resolve('waiting'), 400))])).toBe('waiting');
+    rmSync(lock, { recursive: true });
+    await done;
   });
 
   it('refuses a card with no clone', async () => {
@@ -214,8 +257,6 @@ describe('repairClone', () => {
     expect(backups(home).sort()).toEqual(['issue-5-2026-10-07T10-00-00-000Z', 'issue-5-2026-10-07T10-00-00-000Z-1']);
   });
 });
-
-type Env = Awaited<ReturnType<typeof setup>> & { unpause: () => void };
 
 const job = (issue: number) => ({ id: `j${issue}`, stage: 'verify', issue, pid: 1, startedAt: '2026-10-07T09:00:00Z', log: 'l' }) as FactoryState['jobs'][number];
 

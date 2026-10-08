@@ -243,6 +243,20 @@ describe('reverting an issue merge', () => {
 describe('work clones', () => {
   const git = async (cwd: string, ...a: string[]) => must(await realRun('git', [...ID, ...a], { cwd }), `git ${a.join(' ')}`);
 
+  it('waits for the clone lock of an issue clone before it prepares the clone', async () => {
+    const { home, repo } = await setup();
+    const work = join(home, 'work', 'issue-8');
+    const lock = join(home, 'locks', 'issue-8');
+    mkdirSync(lock, { recursive: true });
+    writeFileSync(join(lock, 'owner'), String(process.pid));
+    const done = repo.prepareWorkClone('factory/issue-8', 'dev', work).then(() => 'done');
+    expect(await Promise.race([done, new Promise((resolve) => setTimeout(() => resolve('waiting'), 400))])).toBe('waiting');
+    expect(existsSync(work)).toBe(false);
+    rmSync(lock, { recursive: true });
+    await done;
+    expect(existsSync(join(work, '.git'))).toBe(true);
+  });
+
   it('starts a new branch from the base, and fetches work without pushing it until asked', async () => {
     const { home, repo, show, head } = await setup();
     const work = join(home, 'work', 'issue-8');

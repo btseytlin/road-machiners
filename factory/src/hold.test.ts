@@ -135,10 +135,18 @@ describe('pause-card refusals', () => {
     expect(readState(statePath).jobs).toHaveLength(1);
   });
 
-  it('refuses a Merging card while the merge job, which has no issue, runs', async () => {
+  it('refuses a Merging card in the batch of the running merge job', async () => {
     cards = [card(4, 'Merging')];
-    seed({ jobs: [{ ...JOB, stage: 'merge', issue: null }] });
+    seed({ jobs: [{ ...JOB, stage: 'merge', issue: null, batch: [4, 6] }] });
     await expect(order('hold')).rejects.toThrow('runs a merge job');
+    expect(killed).toEqual([]);
+  });
+
+  it('holds a Merging card outside the batch of the running merge job', async () => {
+    cards = [card(4, 'Merging')];
+    seed({ jobs: [{ ...JOB, stage: 'merge', issue: null, batch: [6] }] });
+    await order('hold');
+    expect(Object.keys(readState(statePath).held)).toEqual(['4']);
     expect(killed).toEqual([]);
   });
 

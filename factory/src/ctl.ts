@@ -31,7 +31,7 @@ const IMMEDIATE: Record<string, { usage: string; help: string; run: Handler }> =
   retry: { usage: 'retry N [decision]', help: 'remove the stuck label and the failures of a card. On the release tracking card it also lifts a playtest block, so a new playtest job runs, and keeps the decision for its next review', run: retry },
   pause: { usage: 'pause <reason>', help: 'pause the factory', run: pause },
   resume: { usage: 'resume', help: 'remove the pause', run: resume },
-  'repair-clone': { usage: 'repair-clone N --by <who> --reason <why> [--backup-merge]', help: "replace a card's broken work clone with a fresh clone of its GitHub branch. Needs a pause and no running job. The old clone moves whole to $FACTORY_HOME/clone-backups, and only its .factory, .factory-tasks and .factory-media folders are copied over. --backup-merge also takes a clone with an open merge or conflicts. The stuck label stays for retry", run: repairCloneCommand },
+  'repair-clone': { usage: 'repair-clone N --by <who> --reason <why> [--backup-merge]', help: "replace a card's broken work clone with a fresh clone of its GitHub branch. Needs no running job of the card, and holds the card while it works. The old clone moves whole to $FACTORY_HOME/clone-backups, and only its .factory, .factory-tasks and .factory-media folders are copied over. --backup-merge also takes a clone with an open merge or conflicts. The stuck label stays for retry", run: repairCloneCommand },
 };
 
 const WRITE: Record<string, { usage: string; help: string; build: Builder }> = {
@@ -173,7 +173,7 @@ function printRows(rows: string[]): void {
 }
 
 function jobs(ctx: Ctx): void {
-  printRows(readState(ctx.statePath).jobs.map((job) => `${job.stage} ${job.issue === null ? '-' : `#${job.issue}`} pid ${job.pid} since ${job.startedAt} log ${job.log}`));
+  printRows(readState(ctx.statePath).jobs.map((job) => `${job.stage} ${job.issue === null ? '-' : `#${job.issue}`} pid ${job.pid} since ${job.startedAt} log ${job.log}${job.batch === undefined ? '' : ` batch ${job.batch.map((issue) => `#${issue}`).join(',')}`}`));
 }
 
 function queues(ctx: Ctx): void {

@@ -2,7 +2,7 @@
 // and the tick starts no job on the issue until `resume-card` lifts the hold. The stopped stage then continues in its sessions.
 import { killJob } from './jobs';
 import { recordJob } from './ledger';
-import { CARD_JOBS } from './position';
+import { CARD_JOBS, inMergeBatch } from './position';
 import { markResumed } from './sessions';
 import { readState, updateState } from './state';
 import { interruptJob } from './tick';
@@ -19,7 +19,7 @@ function requireHoldable(state: FactoryState, card: Card | undefined, issue: num
 }
 
 function branchJobOf(state: FactoryState, card: Card): Job | undefined {
-  return state.jobs.find((job) => (job.issue === card.issue && !CARD_JOBS.includes(job.stage)) || (job.stage === 'merge' && card.column === 'Merging'));
+  return state.jobs.find((job) => (job.issue === card.issue && !CARD_JOBS.includes(job.stage)) || inMergeBatch(job, card));
 }
 
 export async function holdCard(ctx: Ctx, issue: number, by: string, reason: string): Promise<string> {

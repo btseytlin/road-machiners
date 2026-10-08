@@ -289,10 +289,19 @@ describe('move', () => {
     expect(calls).toEqual([]);
   });
 
-  it('changes nothing for a Merging card while the merge job runs, though that job has no issue (IV4)', async () => {
+  it('moves a Merging card that is outside the batch of the running merge job', async () => {
     cards = [card(4, 'Merging')];
     const state = readState(statePath);
-    writeState(statePath, { ...state, jobs: [{ ...JOB, id: 'merge---x', stage: 'merge', issue: null }] });
+    writeState(statePath, { ...state, jobs: [{ ...JOB, id: 'merge---x', stage: 'merge', issue: null, batch: [6] }] });
+    await applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'design' }));
+    expect(killed).toEqual([]);
+    expect(calls).toContain('move 4 Design');
+  });
+
+  it('changes nothing for a Merging card in the batch of the running merge job, though that job has no issue (IV4)', async () => {
+    cards = [card(4, 'Merging')];
+    const state = readState(statePath);
+    writeState(statePath, { ...state, jobs: [{ ...JOB, id: 'merge---x', stage: 'merge', issue: null, batch: [4] }] });
     const before = readState(statePath);
     await expect(applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'design' }))).rejects.toThrow('merging now');
     expect(readState(statePath)).toEqual(before);

@@ -1,8 +1,8 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import { pausedReason } from './pause';
-import { readState } from './state';
-import { BRANCH, MEDIA_DIR, OUT_DIR, TASK_DIR, WORK_DIR, type Ctx } from './types';
+import { withLock } from './lock';
+import { readState, updateState } from './state';
+import { BRANCH, CLONE_LOCK_MS, MEDIA_DIR, OUT_DIR, TASK_DIR, WORK_DIR, WORK_LOCK, type Ctx, type FactoryState, type Hold } from './types';
 
 export type RepairOrder = { issue: number; by: string; reason: string; backupMerge: boolean };
 export type RepairFs = { move: (from: string, to: string) => void; copy: (from: string, to: string) => void };
@@ -21,8 +21,40 @@ type Manifest = OldClone & { issue: number; by: string; reason: string; at: stri
 const lines = (text: string): string[] => text.split('\n').filter(Boolean);
 
 export async function repairClone(ctx: Ctx, order: RepairOrder, fs: RepairFs = REAL_FS): Promise<string[]> {
+  return withLock(WORK_LOCK(ctx.cfg.home, `issue-${order.issue}`), CLONE_LOCK_MS, () => repairHeld(ctx, order, fs));
+}
+
+async function repairHeld(ctx: Ctx, order: RepairOrder, fs: RepairFs): Promise<string[]> {
+  const placed = placeHold(ctx, order);
+  try {
+    return await repairOnce(ctx, order, fs);
+  } finally {
+    if (placed !== null) liftHold(ctx, order.issue, placed);
+  }
+}
+
+function placeHold(ctx: Ctx, order: RepairOrder): Hold | null {
+  const { issue } = order;
+  let placed: Hold | null = null;
+  updateState(ctx.statePath, (state) => {
+    requireNoJob(state, issue);
+    if (String(issue) in state.held) return state;
+    placed = { by: order.by, reason: `repair-clone: ${order.reason}`, at: ctx.now().toISOString(), stage: null };
+    return { ...state, held: { ...state.held, [issue]: placed } };
+  });
+  return placed;
+}
+
+function liftHold(ctx: Ctx, issue: number, placed: Hold): void {
+  updateState(ctx.statePath, (state) => {
+    const hold = state.held[String(issue)];
+    if (hold === undefined || hold.at !== placed.at || hold.by !== placed.by || hold.reason !== placed.reason) return state;
+    return { ...state, held: Object.fromEntries(Object.entries(state.held).filter(([key]) => key !== String(issue))) };
+  });
+}
+
+async function repairOnce(ctx: Ctx, order: RepairOrder, fs: RepairFs): Promise<string[]> {
   const dir = WORK_DIR(ctx.cfg.home, order.issue);
-  requireQuiet(ctx, order.issue);
   const git = gitIn(ctx);
   const old = await inspect(git, dir, order.issue);
   if ((old.open.length > 0 || old.conflicts.length > 0) && !order.backupMerge) {
@@ -35,7 +67,7 @@ export async function repairClone(ctx: Ctx, order: RepairOrder, fs: RepairFs = R
   let remoteHead: string;
   try {
     remoteHead = await ctx.repo.cloneBranch(remoteBranch, fresh);
-    requireQuiet(ctx, order.issue);
+    requireNoJob(readState(ctx.statePath), order.issue);
   } catch (error) {
     rmSync(backup, { recursive: true, force: true });
     throw new Error(`Refused, ${dir} is unchanged: ${message(error)}`);
@@ -99,13 +131,9 @@ async function must(git: Git, dir: string, args: string[]): Promise<string> {
   return result.stdout;
 }
 
-function requireQuiet(ctx: Ctx, issue: number): void {
-  if (pausedReason(ctx.cfg.home) === null) throw new Error('repair-clone needs a paused factory. Run factory pause <reason> first.');
-  const state = readState(ctx.statePath);
+function requireNoJob(state: FactoryState, issue: number): void {
   const own = state.jobs.find((job) => job.issue === issue);
   if (own !== undefined) throw new Error(`A ${own.stage} job of #${issue} is running, pid ${own.pid}. Wait until it ends.`);
-  if (state.jobs.length > 0) throw new Error(`${state.jobs.length} jobs are running. repair-clone needs none, so wait until they end.`);
-  if (state.interrupted.includes(issue)) throw new Error(`#${issue} has an interrupted or held job, which continues in this clone. Resume the card and let its job end first.`);
 }
 
 async function inspect(git: Git, dir: string, issue: number): Promise<OldClone> {

@@ -60,13 +60,12 @@ When `dev` moves past the commit `/dev/` serves, the next tick rebuilds `/dev/`,
 
 A failed merge can leave a card's work clone with an open merge, conflicts or thousands of dirty files. The next job reuses any clone with a commit, so it fails again. `factory repair-clone N --by <who> --reason <why>` swaps the clone for a fresh one and keeps the old one.
 
-1. Pause the factory with `factory pause <reason>`, and wait until `factory jobs` prints `none`.
-2. Run `factory repair-clone N --by hermes --reason <why>`. Add `--backup-merge` when the clone has an open merge, revert, cherry-pick or rebase, or conflicted files. Without it the command refuses such a clone.
-3. Check the new clone, run `factory resume`, then `factory retry N`.
+1. Run `factory repair-clone N --by hermes --reason <why>`. Add `--backup-merge` when the clone has an open merge, revert, cherry-pick or rebase, or conflicted files. Without it the command refuses such a clone.
+2. Check the new clone, then run `factory retry N`.
 
-The command acts at once. It refuses, and changes nothing in `work/`, when:
+The command needs no pause and no other idle card. It holds the card for its duration, takes the clone lock `$FACTORY_HOME/locks/issue-N`, and lifts only the hold it placed. A hold that was there before stays, and so does the `interrupted` mark, so a held card resumes in the new clone after `resume-card`. A job start, `prepareWorkClone` and the tick sweep of `work/issue-N` wait for that lock or skip the clone. The command acts at once. It refuses, and changes nothing in `work/`, when:
 
-- the factory is not paused, any job runs, or the card has an interrupted or held job, which continues in its clone;
+- a job of the card runs;
 - `--by` is no member and not `hermes`;
 - `work/issue-N` holds no clone with a commit, since the next job clones that again;
 - the clone has an open operation or conflicts and no `--backup-merge`;
@@ -88,7 +87,7 @@ Hermes manages the factory. Its incident watch wakes it on a stuck issue, a fail
 
 Hermes uses the `factory` CLI for every look at the factory and every change. Read commands print the state and change nothing. Write commands become inbox commands, and the next tick applies each one before it picks jobs. A write that cannot apply changes nothing and becomes a failure that names the reason. Each write names who ordered it and why, on the issue and in the ledger. Only a member's order runs `merge` or `move N harden` of a card the committee has not approved, `ship` and `merge-change`. `factory help` lists every command. [state.md](state.md) lists the commands.
 
-While Hermes edits state, it pauses the factory with the file `$FACTORY_HOME/paused`, and every tick skips. A paused tick also skips its job checks, so a dead job stays in `jobs` until the pause ends. A line `pid: N` in that file ties the pause to a process, and the tick lifts the pause once that process ends.
+While Hermes edits state, it pauses the factory with the file `$FACTORY_HOME/paused`, and every tick starts no job, applies no order, runs no cleanup and takes no intake. A paused tick still checks the running jobs, so a dead or timed-out job leaves `jobs` also during a pause. A line `pid: N` in that file ties the pause to a process, and the tick lifts the pause once that process ends.
 
 ## Activity and status
 

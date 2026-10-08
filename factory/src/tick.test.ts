@@ -6,7 +6,7 @@ import { parseStage } from './jobs';
 import { readLedger } from './ledger';
 import { readObservation, type SchedulerData } from './observability';
 import { resumedStage } from './sessions';
-import { chooseJobs, evaluateSchedule, tick, timeoutOf, type TickDeps } from './tick';
+import { checkJobs, chooseJobs, evaluateSchedule, tick, timeoutOf, type TickDeps } from './tick';
 import { EMPTY_STATE, readState, writeState } from './state';
 import { FACTORY_MARK, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type ReleaseState, type Ctx, type IssueComment, type FactoryConfig, type FactoryState, type Job } from './types';
 
@@ -594,6 +594,16 @@ describe('tick', () => {
       expect(h.labels).toEqual([]);
       expect(after.jobs.map((j) => j.pid)).toEqual([77]);
       expect(readLedger(h.ctx.cfg.home, new Date(0)).filter((line) => line.kind === 'job')).toMatchObject([{ id: 'design-job', outcome: 'died' }]);
+    });
+
+    it('is reaped by a paused tick, which starts nothing', async () => {
+      const h = harness(job(IN_TIME), false, [card(5, 'Design'), card(6, 'Design')]);
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME)], interrupted: [5] }));
+      await checkJobs(h.ctx, h.deps);
+      expect(h.spawned).toEqual([]);
+      const after = readState(h.ctx.statePath);
+      expect(after.jobs).toEqual([]);
+      expect(after.failures).toMatchObject([{ stage: 'design', issue: 5, error: 'job process died without finishing' }]);
     });
 
     it('resumes a test job too', async () => {
