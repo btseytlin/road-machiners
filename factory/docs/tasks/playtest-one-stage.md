@@ -1,6 +1,6 @@
 # Release playtest in one stage
 
-**Status:** executing
+**Status:** reviewing
 **Branch:** playtest-one-stage
 **Worktree:** .worktrees/playtest-one-stage
 **Goal:** One playtest job takes a release from a fresh head to a passed head, or to a block for a member, with no release task in between. Findings that the release did not cause become bug issues for dev instead of blocking it. Confirming it needs the next real release on the server, since only the server runs the harness on the release.
@@ -133,3 +133,29 @@ Approach: keep the job's entry, audit and comment code in `src/stages/playtest.t
 - RK1 — An agent sorts real release bugs as old to pass. The prompt asks for evidence per sort, the report lists every sort for the committee, and the committee still plays the candidate.
 - RK2 — A long job holds one of the two verify workers for hours. The total time is about what the old runs and fix tasks took, now in one slot.
 - RK3 — The release 2026-10-07 is mid-loop with #371 and #372 open. The new code waits for them, then runs one job. Rollback is a revert of the merge on main.
+
+## Verify
+
+Result: passed
+
+Happy-path:
+- CK1 — real git: a commit in the work clone, `fetchFromWork`, `headHash` of the full hash, `diff` from the start head and a fast-forward `push` leave the release head at the reviewed short hash — held, probed against a bare origin.
+- CK2 — the harness on `main` takes `--sha` and writes a log `logFacts` reads — held: 60 turns, ending complete, 442 events.
+
+Negative:
+- CK3 — a push to a release that moved goes through and overwrites it — held: rejected, and the merge path kept both commits.
+- CK4 — harness output, factory files, `tmp/`, `dist/` or `node_modules` make the clone look dirty and block every landing — held: `git status --porcelain` stays empty.
+- CK5 — a replay that lists an old finding again opens a second bug issue — broke, fixed in 1e0e812f with a per-job title record and a `known` note in the replay prompt.
+
+Invariants / assumptions:
+- CK6 (IV1) — any path in `playtest.ts` opens a release task — held: no use of the label, tests check `created`.
+- CK7 (IV2) — a recorded task the board does not list lets the playtest start — held by the gate test and the job test.
+- CK8 (IV4, IV5) — fixes reach the release without checks, or a moved release gets a pass — held by the job tests for factory paths, failed checks, dirty clones and a moved release.
+- CK9 (AS1) — resume of one session id — deferred: only the server's agent image can show it. The tests check the id and the resume flag.
+- CK10 (AS2, AS3) — two harness runs side by side and four plays fit the pool and 330 minutes — deferred to the first real job.
+
+Interfaces:
+- CK11 — Hermes, the dashboard or other code read `streak`, the fix task or the old `factory release` line — held: no reader outside the changed files.
+
+Smoke: `npm run progression:playthrough -- --seed 20261007 --turns 60 --sha main001` on this branch, then `logFacts` on its log — passed.
+Goal: proxy only. The full job needs the server's containers and Opus. The next release playtest on the server confirms it.
