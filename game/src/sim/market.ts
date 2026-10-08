@@ -307,11 +307,15 @@ export function isExpired(world: World, c: Contract): boolean {
 export function bountyFulfilled(world: World, c: Contract): boolean {
   if (c.kind !== 'bounty') throw new Error(`${c.kind} contract has no bounty target`);
   const beaten = world.events.flatMap((e) => ((e.t === 'destroyed' || e.t === 'npcKnockout') && e.by === world.player.vehicleId ? [e.vehicle] : []));
-  return [...world.removed, ...world.vehicles].some((v) => v.brain?.templateId === c.template && beaten.includes(v.id));
+  // A surrendered truck also counts as beaten if it gave up to the player.
+  const surrendered = [...world.removed, ...world.vehicles].filter(
+    (v) => v.brain?.templateId === c.template && v.lastHitBy === world.player.vehicleId && gaveUp(v)
+  );
+  return [...world.removed, ...world.vehicles].some((v) => v.brain?.templateId === c.template && (beaten.includes(v.id) || surrendered.includes(v)));
 }
 
 // A truck that gives up to the player counts as beaten: it finishes one held bounty on its template, as a knockout
-// does. Called outside the turn's event scan, since a dialogue command clears the events.
+// does.
 export function creditBounty(world: World, npc: Vehicle): void {
   if (!npc.brain) throw new Error(`${npc.id} has no driver to name in a bounty`);
   const template = npc.brain.templateId;
