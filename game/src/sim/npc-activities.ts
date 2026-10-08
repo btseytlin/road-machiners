@@ -17,7 +17,7 @@ import { bodyStop } from './meeting-stop';
 import {
   tradeOffers, tradeSpend, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolPoints, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, npcSenses, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition,
+  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, noteStripped, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -25,7 +25,7 @@ import { standingPressures } from './market';
 import { remember } from './memory';
 import { hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
-import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn } from './salvage';
+import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn, STRIPPED } from './salvage';
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
@@ -344,11 +344,17 @@ export function idleGoal(world: World, vehicle: Vehicle): NpcActivity {
 
 // ---- Popping goals.
 
+// A loot that ends on a full hold is remembered, and so is a goal that ends on an empty stock.
+function noteLootEnd(world: World, vehicle: Vehicle, reason: string, targetId: string | null): void {
+  if (reason === CANNOT_HOLD) noteCannotHold(world, vehicle, targetId);
+  if (reason === STRIPPED) noteStripped(world, vehicle, targetId);
+}
+
 // Pops the top goal. An interruption that uncovers the long-term goal fires the resume decision, and `new` drops
-// that goal too, so the empty stack rolls idle. A loot that ends on a full hold is remembered.
+// that goal too, so the empty stack rolls idle. What the goal learned about its loot is remembered.
 export function finishGoal(world: World, vehicle: Vehicle, reason: string): void {
   const done = popGoal(world, vehicle, reason);
-  if (reason === CANNOT_HOLD) noteCannotHold(world, vehicle, done.targetId);
+  noteLootEnd(world, vehicle, reason, done.targetId);
   const goals = vehicle.brain!.goals;
   if (!INTERRUPTIONS.includes(done.kind) || goals.length !== 1 || INTERRUPTIONS.includes(goals[0].kind)) return;
   if (decide(world, vehicle, 'resume', null, null) === 'new') popGoal(world, vehicle, 'chose something new');
@@ -1194,7 +1200,7 @@ function resolveTruckLoot(world: World, vehicle: Vehicle, activity: NpcActivity,
 }
 
 function searchStock(world: World, vehicle: Vehicle, stock: SalvageStock): void {
-  if (!hasSalvage(stock)) return void finishGoal(world, vehicle, 'salvage exhausted');
+  if (!hasSalvage(stock)) return void finishGoal(world, vehicle, STRIPPED);
   if (!canTakeAny(world, vehicle, stock)) return void finishGoal(world, vehicle, CANNOT_HOLD);
   if (vehicle.job) return;
   // No search starts in combat, so the driver gives the salvage up rather than park beside it for good.

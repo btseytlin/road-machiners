@@ -23,6 +23,15 @@ describe('driver memory', () => {
     expect(subjectOf(prices('bowl'))).toBe('prices:bowl');
   });
 
+  it('keeps a price and a stripped memory of one id apart', () => {
+    const w = emptyWorld();
+    const v = driver(w);
+    expect(subjectOf({ kind: 'stripped', stock: 'bowl' })).toBe('stripped:bowl');
+    remember(w, v, prices('bowl'));
+    remember(w, v, { kind: 'stripped', stock: 'bowl' });
+    expect(v.brain!.memories).toHaveLength(2);
+  });
+
   it('appends new memories in turn order', () => {
     const w = emptyWorld();
     const v = driver(w);

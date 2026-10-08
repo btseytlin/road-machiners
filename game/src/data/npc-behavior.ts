@@ -216,9 +216,10 @@ export const HUNT = {
 };
 
 // Driver memories; see src/sim/memory.ts. Each kind's lifetime in turns is explicit. One game day is the default:
-// long enough to tell of a town on the road away from it, short enough that the facts still hold.
+// long enough to tell of a town on the road away from it, short enough that the facts still hold. A stripped
+// wreck is forgotten after a day, when a site has regained a share.
 export const MEMORY = {
-  turns: { prices: TIME.turnsPerDay } satisfies Record<MemoryFact['kind'], number>,
+  turns: { prices: TIME.turnsPerDay, stripped: TIME.turnsPerDay } satisfies Record<MemoryFact['kind'], number>,
 };
 
 // Trade tips; see tradeTip() in src/sim/dialogue-rules.ts. A remembered price at least this share off a good's value
