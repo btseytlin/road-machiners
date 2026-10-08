@@ -64,7 +64,7 @@ describe('playtest', () => {
     const { f, shells, prompts, models } = setup();
     f.agentWrites = { 'playtest.json': review(), 'playtest.md': '## Run\nAll good.' };
     await playtest(f.ctx, 11);
-    expect(shells).toEqual([`npm ci && npm test && npm run progression:playthrough -- --seed ${SEED} --turns 100 --sha abc1234 --out .factory/playtest/log.jsonl`]);
+    expect(shells).toEqual(['npm ci && npm test', `npm ci && npm run progression:playthrough -- --seed ${SEED} --turns 100 --sha abc1234 --out .factory/playtest/log.jsonl`]);
     expect(models).toEqual(['opus']);
     expect(prompts[0]).toContain(`seed ${SEED}, 100 turns`);
     expect(prompts[0]).toContain('commit abc1234');
@@ -107,7 +107,7 @@ describe('playtest', () => {
     const second = setup(['def5678'], { playtest: release(first.f).playtest });
     second.f.agentWrites = { 'playtest.json': review() };
     await playtest(second.f.ctx, 11);
-    expect(second.shells[0]).toContain(`--seed ${SEED} --turns 100 --sha def5678`);
+    expect(second.shells[1]).toContain(`--seed ${SEED} --turns 100 --sha def5678`);
     const history = readFileSync(join(ROOT, 'work', 'release-playtest', 'game', '.factory', 'playtest-history.md'), 'utf8');
     expect(history).toContain('- run 1 at abc1234: fix, 2 planned fixes, fix task #11');
     expect(release(second.f).playtest).toMatchObject({ runs: 2, streak: 0, passed: 'def5678' });
@@ -171,6 +171,17 @@ describe('playtest', () => {
     const blocked = setup(['abc1234'], { playtest: { ...RELEASE.playtest, blocked: { sha: 'abc1234', reason: 'r' } } });
     await expect(playtest(blocked.f.ctx, 11)).rejects.toThrow('blocked at abc1234');
     expect([...open.shells, ...blocked.shells]).toEqual([]);
+  });
+
+  it('fails on a failing suite before the run starts, so it spends no playtest run', async () => {
+    const { f, shells } = setup();
+    f.ctx.container.shell = async (_clone: string, script: string) => {
+      shells.push(script);
+      throw new Error('shell failed');
+    };
+    await expect(playtest(f.ctx, 11)).rejects.toThrow('shell failed');
+    expect(shells).toEqual(['npm ci && npm test']);
+    expect(release(f).playtest).toMatchObject({ runs: 0, streak: 0, passed: null, blocked: null });
   });
 
   it('spends the run and fails when the harness or the agent wrote nothing', async () => {

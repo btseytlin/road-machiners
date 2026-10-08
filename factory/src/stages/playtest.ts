@@ -30,7 +30,16 @@ export async function playtest(ctx: Ctx, issue: number): Promise<void> {
   const dir = join(ctx.cfg.home, 'work', 'release-playtest');
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone(release.branch, release.branch, dir);
-  if (await cloneAt(ctx, dir, sha)) await play(ctx, release, sha, dir);
+  if (!(await cloneAt(ctx, dir, sha))) return;
+  requireRunLeft(ctx, release, sha);
+  await fullSuite(ctx, dir);
+  await play(ctx, release, sha, dir);
+}
+
+// The full game suite runs with no cache, since the cache could hide an input its fingerprint misses. The candidate builds only a commit this job passed.
+// It runs before the run starts, so a failing suite fails the job for Hermes and spends none of the release's playtest runs.
+async function fullSuite(ctx: Ctx, dir: string): Promise<void> {
+  await ctx.container.shell(dir, 'npm ci && npm test', releaseLog(ctx, 'playtest'));
 }
 
 // Plays and reviews one run in the clone at sha, keeps its audit record and settles the outcome.
@@ -43,8 +52,7 @@ async function play(ctx: Ctx, release: ReleaseState, sha: string, dir: string): 
   const log = releaseLog(ctx, 'playtest');
   const { seed } = release.playtest;
   const turns = ctx.cfg.playtestTurns;
-  // The full game suite runs here with no cache, since the cache could hide an input its fingerprint misses. The candidate builds only a commit this run passed.
-  await ctx.container.shell(dir, `npm ci && npm test && npm run progression:playthrough -- --seed ${seed} --turns ${turns} --sha ${sha} --out ${LOG}`, log);
+  await ctx.container.shell(dir, `npm ci && npm run progression:playthrough -- --seed ${seed} --turns ${turns} --sha ${sha} --out ${LOG}`, log);
   if (!existsSync(join(home, LOG))) throw new Error('The progression harness wrote no playtest log');
   const facts = logFacts(readFileSync(join(home, LOG), 'utf8'), { seed, turns, sha });
   writeFileSync(join(home, OUT_DIR, 'playtest-facts.json'), `${JSON.stringify(facts, null, 2)}\n`);
@@ -72,13 +80,17 @@ async function cloneAt(ctx: Ctx, dir: string, sha: string): Promise<boolean> {
 
 // The run is counted before it starts, so a run that times out or crashes still spends its budget. The limit holds the
 // runs since the last pass, so a fix loop ends, while a committee change after a pass gets a fresh budget.
-function startRun(ctx: Ctx, release: ReleaseState, sha: string): PlaytestState {
+function requireRunLeft(ctx: Ctx, release: ReleaseState, sha: string): void {
   if (release.playtest.blocked) throw new Error(`The release playtest is blocked at ${release.playtest.blocked.sha}: ${release.playtest.blocked.reason}`);
   if (release.playtest.streak >= ctx.cfg.playtestRuns) {
     const reason = `The release spent all ${ctx.cfg.playtestRuns} playtest runs since its last pass.`;
     setPlaytest(ctx, (playtest) => ({ ...playtest, blocked: { sha, reason } }));
     throw new Error(reason);
   }
+}
+
+function startRun(ctx: Ctx, release: ReleaseState, sha: string): PlaytestState {
+  requireRunLeft(ctx, release, sha);
   return setPlaytest(ctx, (playtest) => ({ ...playtest, runs: playtest.runs + 1, streak: playtest.streak + 1 }));
 }
 

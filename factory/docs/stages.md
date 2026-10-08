@@ -92,7 +92,7 @@ The release cut opens two cleanup issues, for optimization and code janitor work
 
 The playtest checks that the merged features hold up together over a long run before the committee sees a candidate. It runs when no release task is open and the release head is not the commit it last passed. It runs on the tracking issue in the verify queue and counts against the daily cap.
 
-- The factory clones the release head and runs the full game suite with no cache, so the checks' test cache cannot hide a broken release. A failing suite fails the job.
+- The factory clones the release head and runs the full game suite with no cache, so the checks' test cache cannot hide a broken release. A failing suite fails the job before the run starts, so it spends none of the release's playtest runs.
 - Then it runs the game's `progression:playthrough` with one seed per release, the cut day as `YYYYMMDD`, for `FACTORY_PLAYTEST_TURNS` turns. 2250 turns are 5 in-game days, so the mixed bot plays its trader, scavenger and fighter days among the NPC traffic. The log holds every game event, snapshots of the player and every NPC, how the run ended and a summary.
 - Every truck travels in far mode and a scripted bot drives, so physics, close driving and choices the bot never makes do not happen. The log header, the prompt and the report say so.
 - The factory reads the facts from the log: its seed, turns and commit, how it ended, and which kinds of activity never happened. A log of another run fails the job.
