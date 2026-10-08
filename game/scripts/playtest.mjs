@@ -14,7 +14,7 @@ const arg = (name, fallback) => {
 };
 const url = arg('url', 'http://localhost:5173');
 const cpu = process.argv.includes('--cpu');
-const noFpsGate = process.argv.includes('--no-fps-gate');
+const fpsGate = !cpu && !process.argv.includes('--no-fps-gate');
 // --cpu checks that the game boots and plays, not its speed. Software drawing is slow, so it plays fewer turns.
 const turns = Number(arg('turns', cpu ? '4' : '12'));
 const MIN_FPS = 50; // headless Chromium caps frames at 60 Hz
@@ -125,7 +125,7 @@ const problems = [...errors, ...hitProblems];
 if (state.crashed) problems.push('crash screen shown');
 if (state.turn !== turns + 1) problems.push(`expected turn ${turns + 1}, got ${state.turn}`);
 if (blank) problems.push('no WebGL canvas');
-if (!cpu && !noFpsGate && fps < MIN_FPS) problems.push(`fps ${fps} under ${MIN_FPS}`);
+if (fpsGate && fps < MIN_FPS) problems.push(`fps ${fps} under ${MIN_FPS}`);
 console.log(`turns ${state.turn - 1}, fps ${fps}`);
 if (problems.length > 0) {
   console.error(`FAIL\n${problems.join('\n')}`);
