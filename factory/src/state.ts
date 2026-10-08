@@ -22,13 +22,19 @@ export function readState(path: string): FactoryState {
 
 // The seed of a release is its cut day as YYYYMMDD, so each release plays a seed of its own and every run of it plays the same one.
 export function newPlaytest(day: string): PlaytestState {
-  return { seed: Number(day.replaceAll('-', '')), runs: 0, streak: 0, passed: null, blocked: null, notes: [] };
+  return { seed: Number(day.replaceAll('-', '')), runs: 0, passed: null, blocked: null, notes: [] };
 }
 
 // A release cut before the playtest has no playtest yet and no candidate commit. Its post, if any, stays, and the next tick drops it, since it names no commit.
 // A release cut before the factory recorded its tasks has none recorded, and the board alone holds its playtest.
 function fillRelease(release: Partial<ReleaseState> & Pick<ReleaseState, 'day'>): ReleaseState {
-  return { ...release, candidateSha: release.candidateSha ?? null, tasks: release.tasks ?? [], playtest: release.playtest ?? newPlaytest(release.day) } as ReleaseState;
+  return { ...release, candidateSha: release.candidateSha ?? null, tasks: release.tasks ?? [], playtest: release.playtest ? dropStreak(release.playtest) : newPlaytest(release.day) } as ReleaseState;
+}
+
+// The playtest counted runs since the last pass before one job did all its plays. The count means nothing now.
+function dropStreak(playtest: PlaytestState & { streak?: number }): PlaytestState {
+  const { streak: _streak, ...rest } = playtest;
+  return rest;
 }
 
 // Testing split into verify and checks. A testing job saved before the split ran the agent half first, so the tick checks and resumes it as verify.

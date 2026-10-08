@@ -32,7 +32,7 @@ describe('hotfix fan-out', () => {
 
   it('has an agent resolve a conflict of main into the open release', async () => {
     const f = hotfixable();
-    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } } });
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } } });
     f.mergeConflicts = ['main release/2026-09-29'];
     await shipHotfix(f.ctx, 7, 'Big horn', 'Ann');
     expect(f.calls).toContain('open release/2026-09-29');

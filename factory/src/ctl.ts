@@ -32,7 +32,7 @@ const READ: Record<string, { usage: string; help: string; run: Handler }> = {
 };
 
 const IMMEDIATE: Record<string, { usage: string; help: string; run: Handler }> = {
-  retry: { usage: 'retry N [decision]', help: 'remove the stuck label and the failures of a card. On the release tracking card it also lifts a playtest block, gives the playtest its runs back and keeps the decision for its next review', run: retry },
+  retry: { usage: 'retry N [decision]', help: 'remove the stuck label and the failures of a card. On the release tracking card it also lifts a playtest block, so a new playtest job runs, and keeps the decision for its next review', run: retry },
   pause: { usage: 'pause <reason>', help: 'pause the factory', run: pause },
   resume: { usage: 'resume', help: 'remove the pause', run: resume },
   'repair-clone': { usage: 'repair-clone N --by <who> --reason <why> [--backup-merge]', help: "replace a card's broken work clone with a fresh clone of its GitHub branch. Needs a pause and no running job. The old clone moves whole to $FACTORY_HOME/clone-backups, and only its .factory, .factory-tasks and .factory-media folders are copied over. --backup-merge also takes a clone with an open merge or conflicts. The stuck label stays for retry", run: repairCloneCommand },
@@ -223,7 +223,7 @@ function candidatePost(release: ReleaseState): string {
 }
 
 function playtestLines(playtest: PlaytestState, runs: number): string[] {
-  const lines = [`playtest: seed ${playtest.seed}, ${playtest.runs} runs, ${playtest.streak} of ${runs} since the last pass, passed ${playtest.passed ?? 'none'}`];
+  const lines = [`playtest: seed ${playtest.seed}, ${playtest.runs} plays, at most ${runs} per job, passed ${playtest.passed ?? 'none'}`];
   if (playtest.blocked) lines.push(`playtest blocked at ${playtest.blocked.sha}: ${playtest.blocked.reason}`);
   return [...lines, ...playtest.notes.map((note) => `playtest decision: ${note}`)];
 }
@@ -262,15 +262,15 @@ async function retry(ctx: Ctx, args: string[]): Promise<void> {
   if (readState(ctx.statePath).release?.issue === issue) console.log(retryPlaytest(ctx, decision));
 }
 
-// A member decided on a blocked playtest. The playtest runs again with a fresh budget of runs, and its review reads the decision.
+// A member decided on a blocked playtest. A new playtest job runs with its full plays, and its review reads the decision.
 function retryPlaytest(ctx: Ctx, decision: string): string {
   updateState(ctx.statePath, (state: FactoryState) => {
     if (state.release === null) return state;
     const playtest = state.release.playtest;
     const notes = decision === '' ? playtest.notes : [...playtest.notes, decision];
-    return { ...state, release: { ...state.release, playtest: { ...playtest, streak: 0, blocked: null, notes } } };
+    return { ...state, release: { ...state.release, playtest: { ...playtest, blocked: null, notes } } };
   });
-  return `Lifted the playtest block of the release. It plays again with ${ctx.cfg.playtestRuns} runs${decision === '' ? '' : ' and reads the decision'}.`;
+  return `Lifted the playtest block of the release. A new playtest job plays up to ${ctx.cfg.playtestRuns} times${decision === '' ? '' : ' and reads the decision'}.`;
 }
 
 function pause(ctx: Ctx, args: string[]): void {

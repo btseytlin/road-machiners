@@ -98,7 +98,7 @@ describe('CARD_JOBS', () => {
 });
 
 describe('releaseDrift', () => {
-  const release = { issue: 300, branch: 'release/x', day: '2026-01-01', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 1, streak: 0, passed: 'abc1234', blocked: null, notes: [] } };
+  const release = { issue: 300, branch: 'release/x', day: '2026-01-01', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 1, passed: 'abc1234', blocked: null, notes: [] } };
   it('prints nothing with no release or a healthy one', () => {
     expect(releaseDrift(EMPTY_STATE, [])).toEqual([]);
     expect(releaseDrift(withState({ release }), [card('Approval', 300)])).toEqual([]);

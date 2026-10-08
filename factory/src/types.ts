@@ -134,12 +134,11 @@ export type Failure = { stage: Stage; issue: number | null; error: string; log: 
 export type ChangeRequest ={ id: number; text: string; by: string };
 export type Removal = { issue: number; by: string; text: string };
 
-// The release playtest. Every run of one release plays the same seed, so a rerun after a fix replays what found the bug.
+// The release playtest. Every play of one release plays the same seed, so a replay after a fix replays what found the bug.
 export type PlaytestState = {
   seed: number;
-  runs: number; // runs started for this release. It names each run's audit folder and never goes back.
-  streak: number; // runs since the last clean pass or a member's retry, up to FACTORY_PLAYTEST_RUNS
-  passed: string | null; // the release head a clean run approved. The candidate builds only this commit.
+  runs: number; // plays started for this release. It names each play's audit folder and never goes back.
+  passed: string | null; // the release head a clean play approved. The candidate builds only this commit.
   blocked: { sha: string; reason: string } | null; // the gate stopped the release here until a member's retry
   notes: string[]; // members' decisions from `factory retry`, which every later review reads
 };
