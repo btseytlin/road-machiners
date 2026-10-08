@@ -1,3 +1,4 @@
+import { moveCard } from '../card-events';
 import { updateState } from '../state';
 import { BRANCH, GAME_DIR, TASK_FILE, WONT_DO_LABEL, type Ctx } from '../types';
 import { releaseBundle } from './bundle';
@@ -24,21 +25,21 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   requirePlan(home, TASK_FILE(issue));
   await guardAndPush(ctx, issue, base, 'design');
   await postDesign(ctx, issue, readFileSync(`${home}/${TASK_FILE(issue)}`, 'utf8'));
-  await ctx.github.move(issue, 'Implementation');
+  await moveCard(ctx, issue, 'Implementation', 'planned');
 }
 
 async function askBack(ctx: Ctx, issue: number, text: string): Promise<void> {
   const questions = text.split('\n').map((line) => line.trim()).filter((line) => line !== '');
   if (questions.length === 0) throw new Error('The design stage wrote an empty questions.md');
   await askAuthor(ctx, issue, questions, 'design');
-  await ctx.github.move(issue, 'Triage');
+  await moveCard(ctx, issue, 'Triage', 'questions');
 }
 
 async function refuse(ctx: Ctx, issue: number, reason: string): Promise<void> {
   await ctx.github.comment(issue, reason.trim());
   await ctx.github.addLabel(issue, WONT_DO_LABEL);
   await ctx.github.close(issue, 'not planned');
-  await ctx.github.move(issue, 'Done');
+  await moveCard(ctx, issue, 'Done', 'design-wont-do');
   await releaseBundle(ctx, issue, 'will not be built');
 }
 

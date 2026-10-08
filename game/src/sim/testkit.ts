@@ -77,7 +77,7 @@ export function practiceOf(w: World, source: XpSource): Extract<GameEvent, { t: 
 
 // A fresh NPC brain with no goals.
 export function npcBrain(templateId: string, home: Vec, traits: TraitId[]): NpcBrain {
-  return { templateId, driver: 'Test Driver', traits, goals: [], noticed: {}, hurt: 0, attackers: {}, goal: null, home: { ...home }, stepIndex: 0, memories: [] };
+  return { templateId, driver: 'Test Driver', traits, goals: [], noticed: {}, tracks: {}, hurt: 0, attackers: {}, goal: null, home: { ...home }, stepIndex: 0, memories: [] };
 }
 
 // Makes `option` the only option of `decision` that can carry weight until the test ends. Other options lose their

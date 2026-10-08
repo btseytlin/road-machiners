@@ -5,7 +5,7 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { capBoxes, fnv1a, formatShapes, loadTriangles, mergeCells, rasterize, roundBox, shapeOf } from './shape-lib.mjs';
 
-// Every model a static prop view draws: landmark looks, buildings, wrecks, rocks and junk piles.
+// Every model a static prop view draws: landmark looks, fortress pieces, buildings, wrecks, rocks and junk piles.
 // Site decor keeps its circle, so its models are not here.
 const PROP_MODELS = [
   'army_truck',
@@ -19,9 +19,36 @@ const PROP_MODELS = [
   'crates',
   'dead_tree',
   'drums',
+  'engine_frame',
+  'engine_nozzle',
   'farmhouse',
   'fence',
+  'fort_compound_gate',
+  'fort_compound_tower',
+  'fort_compound_wall',
+  'fort_masonry_bastion',
+  'fort_masonry_gate',
+  'fort_masonry_inner',
+  'fort_masonry_tower',
+  'fort_masonry_wall',
+  'fort_patchwork_gate',
+  'fort_patchwork_tower',
+  'fort_patchwork_wall',
+  'fort_ring_gate',
+  'fort_ring_wall',
+  'fort_scrap_bastion',
+  'fort_scrap_gate',
+  'fort_scrap_inner',
+  'fort_scrap_tower',
+  'fort_scrap_wall',
+  'fort_ship_gate',
+  'fort_ship_tower',
+  'fort_ship_wall',
+  'fort_yard_gate',
+  'fort_yard_tower',
+  'fort_yard_wall',
   'gas_station',
+  'glass_spire',
   'guard_post',
   'hull_chunk',
   'hull_drum',
@@ -30,13 +57,17 @@ const PROP_MODELS = [
   'hull_shell',
   'hull_tower',
   'junk',
+  'nose_crag',
+  'nose_rise',
   'power_pole',
   'quonset',
   'reactor',
   'rim_rock',
   'rock',
   'sandbags',
+  'ruin_compound',
   'ruin_house',
+  'scrap_wall',
   'shack',
   'ship_bow',
   'ship_cage',
@@ -45,6 +76,11 @@ const PROP_MODELS = [
   'tank_hulk',
   'tank_trap',
   'ship_wing',
+  'watchtower',
+  'escape_pod',
+  'habitat_cylinder',
+  'wing_shard',
+  'power_cell',
   'water_tower',
   'woodpile',
   'wreck',
@@ -63,9 +99,10 @@ const CFG = {
 };
 
 // Models whose boxes must keep the line at truck clearance: a box that starts at or above it blocks neither driving
-// nor nav, so a dead tree's crown must not merge down into its trunk. CLEARANCE is PHYSICS.truckClearance in
-// src/data/physics.ts, and src/data/prop-shapes.test.ts checks the dead tree's low boxes against it.
-const SPLIT_AT_CLEARANCE = new Set(['dead_tree']);
+// nor nav, so a dead tree's crown must not merge down into its trunk, and the Glass Flats engine nozzle's roof and
+// engine frame's arches must not merge down into their walls and feet. CLEARANCE is PHYSICS.truckClearance in
+// src/data/physics.ts, and src/data/prop-shapes.test.ts checks the low boxes of all three against it.
+const SPLIT_AT_CLEARANCE = new Set(['dead_tree', 'engine_frame', 'engine_nozzle']);
 const CLEARANCE = 2.8; // m
 const LOW_BOXES = 8; // of CFG.maxBoxes, for the boxes that start below clearance
 
@@ -78,11 +115,21 @@ function splitShapeOf(triangles) {
   return [...capBoxes(low, { ...CFG, maxBoxes: lowCap }), ...capBoxes(high, { ...CFG, maxBoxes: CFG.maxBoxes - lowCap })].map(roundBox);
 }
 
+// Nose's rock masses are a few hundred meters across. At CFG's grid they give tens of thousands of cells, too many to
+// merge pair by pair. Their boxes only need to follow the footprint, so cells take a coarser grid and one height band.
+const MASS_CFG = {
+  ...CFG,
+  cell: 2, // m, the grid the footprint is traced on
+  band: 64, // m, over the 56 m mountain top, so every cell merges by footprint alone
+  maxBoxes: 96, // enough boxes to follow the curved foot and the gorge
+};
+const MASSES = new Set(['nose_rise', 'nose_crag']);
+
 const shapes = {};
 for (const name of PROP_MODELS) {
   const bytes = readFileSync(`public/models/${name}.glb`);
   const triangles = await loadTriangles(bytes);
-  const boxes = SPLIT_AT_CLEARANCE.has(name) ? splitShapeOf(triangles) : shapeOf(triangles, CFG);
+  const boxes = SPLIT_AT_CLEARANCE.has(name) ? splitShapeOf(triangles) : shapeOf(triangles, MASSES.has(name) ? MASS_CFG : CFG);
   shapes[name] = { hash: fnv1a(bytes), boxes };
   console.log(`${name}: ${boxes.length} boxes`);
 }

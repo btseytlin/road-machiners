@@ -6,6 +6,7 @@ import { RULES } from '../data/rules';
 import type { Opening } from '../data/start';
 import { makePart } from './factory';
 import { mountedParts } from './grid';
+import { emptyHidden } from './salvage';
 import type { Obstacle, SalvageStock, Vehicle, World } from './types';
 import type { Vec } from './vec';
 import { setStartHp } from './wear';
@@ -49,6 +50,7 @@ function openingStock(world: World, opening: Opening, obstacle: Obstacle): Salva
     parts: opening.stock.parts.map((defId) => makePart(world, defId, 0)),
     fuel: 0,
     supplies: 0,
+    hidden: emptyHidden(),
   };
 }
 

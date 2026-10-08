@@ -118,6 +118,7 @@ describe('a burst throwing casings', () => {
         plan: plan(k),
         onFire: (m) => casings.eject(m, 'small', 0),
         onLand: () => landed.push(k),
+        ground: () => 0,
       });
     }
     const thrown = () => casings.meshes.small.count;

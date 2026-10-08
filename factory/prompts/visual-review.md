@@ -32,4 +32,8 @@ Write `.factory/visual-review.json` last, after the final capture and the final 
 - `decisions` has one entry per feature of `.factory/evidence.json`, or one for the change when there is no manifest.
 - `mismatches` lists only what still differs after your repairs, each with `description` and `scope`. A `wrong` verdict needs a mismatch. A clean review has an empty list and only `correct` verdicts.
 Never write a reading of an image you did not open. Never invent a render.
-When you cannot open or read an image, say so in `.factory/needs-committee.md` and stop. Do not approve a look you did not see.
+When you cannot open or read an image, never write a reading of it and never give it the verdict `correct`.
+Say in its `observations` and in the `notes` of the feature that you could not see it.
+Do not approve a look you did not see.
+Judge the feature only from what you did see and from the text.
+The review goes on. Never write `.factory/needs-committee.md` for it.

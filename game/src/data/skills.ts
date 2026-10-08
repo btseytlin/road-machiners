@@ -81,17 +81,17 @@ export const XP_SOURCES: Record<XpSource, XpSourceDef> = {
   heat: { skill: 'toughness', weight: 0.3, scaled: true, repeat: 0.9 }, // per turn driven in heat above shade; target: map region
   damage: { skill: 'toughness', weight: 1.5, scaled: false, repeat: 0.95 }, // per point of health lost to cab damage; target: the driver
   knockout: { skill: 'toughness', weight: 100, scaled: false, repeat: 0.5 }, // per knockout with a hostile truck in sight; target: the driver
-  profit: { skill: 'social', weight: 0.8, scaled: false, repeat: 0.8 }, // per money unit of profit on a sale; target: town and good
+  profit: { skill: 'social', weight: 0.024, scaled: false, repeat: 0.8 }, // per cent of profit on a sale; target: town and good
   deal: { skill: 'social', weight: 30, scaled: false, repeat: 0.5 }, // per finished patch deal, and per handover or threat that ends agreed; target: the other driver
   call: { skill: 'social', weight: 8, scaled: false, repeat: 0 }, // per topic taken up on a radio call; target: driver and topic
   honk: { skill: 'social', weight: 2, scaled: false, repeat: 0 }, // per driver in sight that honks back; target: that driver
   contract: { skill: 'social', weight: 1, scaled: false, repeat: 0.8 }, // per XP a finished contract names; target: the shop that posted it
-  // Per money unit of tow fee the player waives, paid on arrival. The profit weight, so kindness teaches as much as
+  // Per cent of tow fee the player waives, paid on arrival. The profit weight, so kindness teaches as much as
   // earning that money would. Target: the towed driver.
-  freeTow: { skill: 'social', weight: 0.8, scaled: false, repeat: 0.5 },
-  // Per money unit of fuel and supplies the player gives free, at the town supply price, paid when they change hands.
+  freeTow: { skill: 'social', weight: 0.024, scaled: false, repeat: 0.5 },
+  // Per cent of fuel and supplies the player gives free, at the town supply price, paid when they change hands.
   // The profit weight, like freeTow. Target: the driver who got them.
-  aid: { skill: 'social', weight: 0.8, scaled: false, repeat: 0.5 },
+  aid: { skill: 'social', weight: 0.024, scaled: false, repeat: 0.5 },
 };
 
 export const XP_RULES = {

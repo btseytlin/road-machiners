@@ -2,21 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { NPCS, SPAWN, TRAITS } from '../data/npcs';
 import { TOWN_MARKETS } from '../data/market';
 import { REGION } from '../data/region';
-import { RULES } from '../data/rules';
 import { planNpcOrders } from './ai';
 import { campGoodPrice, sellAtCamp, serviceAtCamp } from './economy';
 import { GOODS } from '../data/goods';
 import { profileOf } from './npc-decisions';
 import { corePart, goodsCount } from './grid';
-import { fireGuards } from './guards';
 import { addGoods } from './inventory';
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { getResources } from './resources';
 import { canUseSite, siteGates, sitePads } from './sites';
 import { spawnInitial } from './spawn';
-import { addVehicle, emptyWorld, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, partHp, testDrive } from './testkit';
 import type { Faction, World } from './types';
 import { dist, type Vec } from './vec';
+import { endTurn } from './world';
 
 const camps = REGION.locations.filter((l) => l.kind === 'camp');
 const kiln = camps.find((c) => c.id === 'kiln')!;
@@ -49,15 +48,12 @@ describe('raider camps', () => {
     }
   });
 
-  it('shoot an outsider near the gate who has not fired, and leave raiders alone', () => {
+  it('have no gate gun: an outsider parked at the gate for a turn takes no damage', () => {
     const w = emptyWorld(outside(3));
-    addVehicle(w, 'raiders', 'buggy', ['mg'], outside(1));
-    fireGuards(w);
-    const shots = w.events.filter((e) => e.t === 'guardShot');
-    expect(shots.map((e) => e.t === 'guardShot' && e.target)).toEqual([w.player.vehicleId]);
-    const far = emptyWorld(outside(RULES.guards.range + 2));
-    fireGuards(far);
-    expect(far.events.some((e) => e.t === 'guardShot')).toBe(false);
+    const before = partHp(w.vehicles[0]);
+    const after = endTurn(w, testDrive);
+    expect(partHp(after.vehicles[0])).toBe(before);
+    expect(after.events.filter((e) => e.t === 'shot' || e.t === 'collision')).toEqual([]);
   });
 
   it('send a damaged raider to the nearest camp, and sell its cargo and repair it there', () => {
@@ -93,7 +89,7 @@ describe('raider camps', () => {
       const w = emptyWorld({ x: 30, y: 30 });
       const v = addNpc(w, template === 'trader' ? 'traders' : 'raiders', template, pos);
       getResources(w, v).fuel = 0;
-      getResources(w, v).money = 500;
+      getResources(w, v).money = 16667;
       corePart(v, 'cab').hp = 1;
       return { w, v };
     };

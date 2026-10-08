@@ -10,12 +10,16 @@ import { createReadStream, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { MAX_RANK, SKILL_IDS } from '../src/data/skills.ts';
 import { TIME } from '../src/data/time.ts';
+import { UNITS } from '../src/data/units.ts';
 import { parseRun, replay, targetMisses, WORTH_KEYS } from '../src/sim/progression/replay.ts';
 import { LEDGER_KEYS } from '../src/sim/progression/orders.ts';
 import { fightTotals, ledgerTotals, TIERS, tierDays, wageByTier } from '../src/sim/progression/record.ts';
 
 const dirs = process.argv.slice(2).filter((a) => a !== '--');
 if (dirs.length > 2) throw new Error('Pass one dir to report on, or two to compare');
+// Traces hold money in the sim's cents. The report prints M.
+const inM = (digits) => (cents) => (cents / UNITS.centsPerM).toFixed(digits);
+
 const sides = [];
 for (const dir of dirs.length > 0 ? dirs : ['tmp/progression']) sides.push(await readDir(dir));
 if (sides.length === 1) printFull(sides[0]);
@@ -40,7 +44,7 @@ function printFull(runs) {
 
 // One line per bot: how its runs ended, what it earned per turn against the trader, and what it lost.
 function printSummary(runs) {
-  const rows = [['bot', 'runs', 'ended early', 'profit/turn', 'net worth/turn', 'vs trader', 'last day', 'knockouts', 'gear lost']];
+  const rows = [['bot', 'runs', 'ended early', 'profit/turn M', 'net worth/turn M', 'vs trader', 'last day', 'knockouts', 'gear lost']];
   for (const a of namesOf(runs)) rows.push(summaryRow(runs, a));
   console.log('\nSummary');
   printTable(rows);
@@ -50,7 +54,7 @@ function printSummary(runs) {
 function printCompare([a, b], [dirA, dirB]) {
   requireSameRuns(a, b);
   console.log(`A is ${dirA}, B is ${dirB}`);
-  const rows = [['bot', 'side', 'runs', 'ended early', 'profit/turn', 'net worth/turn', 'vs trader', 'last day', 'knockouts', 'gear lost']];
+  const rows = [['bot', 'side', 'runs', 'ended early', 'profit/turn M', 'net worth/turn M', 'vs trader', 'last day', 'knockouts', 'gear lost']];
   for (const name of namesOf(a)) {
     const [, ...rowA] = summaryRow(a, name);
     const [, ...rowB] = summaryRow(b, name);
@@ -58,11 +62,11 @@ function printCompare([a, b], [dirA, dirB]) {
   }
   console.log('');
   printTable(rows);
-  const ledger = [['money per day B-A', ...LEDGER_KEYS]];
+  const ledger = [['M per day B-A', ...LEDGER_KEYS]];
   for (const name of namesOf(a)) {
     const perDay = (runs) => ledgerPerDay(runs.filter((r) => r.archetype === name && r.rows.length > 0));
     const [pa, pb] = [perDay(a), perDay(b)];
-    ledger.push([name, ...LEDGER_KEYS.map((key) => (pb[key] - pa[key]).toFixed(0))]);
+    ledger.push([name, ...LEDGER_KEYS.map((key) => inM(2)(pb[key] - pa[key]))]);
   }
   console.log('');
   printTable(ledger);
@@ -103,7 +107,7 @@ function summaryRow(runs, archetype) {
   // A ratio against a trader that lost net worth would read upside down.
   const ratio = trader > 0 && gains.length ? (median(gains) / trader).toFixed(2) : '-';
   const lastDay = spreadOrDash(ends.map((row) => row.day), String);
-  const money = (n) => n.toFixed(2);
+  const money = inM(4);
   return [archetype, String(group.length), String(early), spreadOrDash(profits, money), spreadOrDash(gains, money), ratio, lastDay, spread(totals.map((t) => t.knockouts), String), spread(totals.map((t) => t.gearLost), String)];
 }
 
@@ -174,15 +178,15 @@ function printEconomy(group) {
   if (withRows.length === 0) return console.log('\nNo economy rows in these traces');
   const wages = withRows.map((r) => wageByTier(r.rows));
   const days = withRows.map((r) => tierDays(r.rows));
-  const rows = [['gear tier', 'wage/turn', 'first day']];
-  for (const tier of TIERS) rows.push([`tier ${tier}`, spreadOrNone(wages.map((w) => w[tier]), (n) => n.toFixed(2)), spreadOrNone(days.map((d) => d[tier]), String)]);
+  const rows = [['gear tier', 'wage/turn M', 'first day']];
+  for (const tier of TIERS) rows.push([`tier ${tier}`, spreadOrNone(wages.map((w) => w[tier]), inM(4)), spreadOrNone(days.map((d) => d[tier]), String)]);
   console.log('');
   printTable(rows);
-  const ends = [['seed', 'chassis', 'net worth', 'won', 'knockouts', 'gear lost', 'deaths', 'stalls']];
+  const ends = [['seed', 'chassis', 'net worth M', 'won', 'knockouts', 'gear lost', 'deaths', 'stalls']];
   for (const r of withRows) {
     const last = r.rows[r.rows.length - 1];
     const totals = fightTotals(r.rows);
-    ends.push([String(r.seed), last.chassis, last.netWorth.toFixed(0), ...[totals.fightsWon, totals.knockouts, totals.gearLost, totals.deaths, totals.stalls].map(String)]);
+    ends.push([String(r.seed), last.chassis, inM(0)(last.netWorth), ...[totals.fightsWon, totals.knockouts, totals.gearLost, totals.deaths, totals.stalls].map(String)]);
   }
   console.log('');
   printTable(ends);
@@ -198,8 +202,8 @@ function printNetWorth(group) {
   const cell = (d, pick) => spreadOrNone(group.map((r) => {
     const row = r.rows.find((x) => x.day === d);
     return row ? pick(row) : null;
-  }), (n) => n.toFixed(0));
-  rows.push(['net worth', ...days.map((d) => cell(d, (row) => row.netWorth))]);
+  }), inM(0));
+  rows.push(['net worth M', ...days.map((d) => cell(d, (row) => row.netWorth))]);
   for (const key of WORTH_KEYS) rows.push([`  ${key}`, ...days.map((d) => cell(d, (row) => row.worth[key]))]);
   console.log('');
   printTable(rows);
@@ -208,8 +212,8 @@ function printNetWorth(group) {
 // Money moved per in-game day by key, over seeds. Negative is spent, positive earned.
 function printLedger(group) {
   const totals = group.map((r) => ({ days: r.rows.reduce((sum, row) => sum + row.turns, 0) / TIME.turnsPerDay, ledger: ledgerTotals(r.rows) }));
-  const rows = [['money per day', ...LEDGER_KEYS]];
-  rows.push(['median', ...LEDGER_KEYS.map((key) => spread(totals.map((t) => t.ledger[key] / t.days), (n) => n.toFixed(0)))]);
+  const rows = [['M per day', ...LEDGER_KEYS]];
+  rows.push(['median', ...LEDGER_KEYS.map((key) => spread(totals.map((t) => t.ledger[key] / t.days), inM(2)))]);
   console.log('');
   printTable(rows);
 }

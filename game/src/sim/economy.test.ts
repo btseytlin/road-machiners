@@ -16,15 +16,18 @@ import {
   buyPrice,
   buySupply,
   chassisTradeIn,
+  driveRepairCost,
   getLotTradePrice,
   partRepairCost,
   partTradePrice,
   repairAll,
   repairBasics,
   repairCost,
+  repairDrive,
   repairPart,
   sellGood,
   sellPrice,
+  sellPart,
   serviceVehicle,
 } from "./economy";
 import {
@@ -36,7 +39,7 @@ import {
 } from "./grid";
 import { makePart } from "./factory";
 import { maxHp, partValue } from "./wear";
-import { addGoods, spareParts } from "./inventory";
+import { addGoods, canStowPart, spareParts, stowPart } from "./inventory";
 import { canScavenge, canUseOasis, salvageNear, scavenge, useOasis } from "./locations";
 import { consumeSupplies } from "./supplies";
 import { heatAt } from "./sun";
@@ -61,19 +64,19 @@ const longbedAtBowl = () => {
 describe("trade", () => {
   it("buying moves money into cargo", () => {
     const start = startAtBowl();
-    const price = buyPrice(start, "bowl", "scrap");
+    const price = getLotTradePrice(start, start.vehicles[0], "bowl", "scrap", 3, "buy");
     const w = buyGood(start, "scrap", 3);
     expect(goodsCount(w.vehicles[0]).scrap).toBe(2 + 3);
-    expect(w.player.money).toBe(1000 - 3 * price);
+    expect(w.player.money).toBe(start.player.money - price);
   });
 
   it("enforces cargo capacity and money", () => {
     const w = startAtBowl();
-    w.player.money = 10000;
+    w.player.money = 333333;
     expect(() => buyGood(w, "scrap", freeCells(w.vehicles[0]) + 1)).toThrow(
       /cargo space/,
     );
-    w.player.money = 300;
+    w.player.money = 10000;
     expect(() => buyGood(w, "meds", 10)).toThrow(/money/);
   });
 
@@ -191,13 +194,13 @@ describe("garage", () => {
 
   it.each(STALLS)("sells fuel and supplies at the %s at the town prices", (id) => {
     const w = atSite(id);
-    w.player.money = 1000;
+    w.player.money = 33333;
     w.player.fuel = 0;
     w.player.supplies = 0;
     for (const kind of ["fuel", "supplies"] as const) {
       const r = buySupply(w, kind, 3);
       expect(r.player[kind]).toBe(3);
-      expect(r.player.money).toBe(1000 - 3 * ECONOMY.supplyPrice[kind]);
+      expect(r.player.money).toBe(33333 - 3 * ECONOMY.supplyPrice[kind]);
     }
   });
 
@@ -220,6 +223,21 @@ describe("garage", () => {
     const all = repairAll(w);
     expect(all.player.money).toBe(w.player.money - repairCost(w));
     expect(mountedParts(all.vehicles[0])[0].hp).toBe(maxHp(gun));
+  });
+
+  it("repairs only the broken drive parts for the drive bill", () => {
+    const w = startAtBowl();
+    const cab = corePart(w.vehicles[0], "cab");
+    const transmission = corePart(w.vehicles[0], "transmission");
+    cab.hp = 10;
+    transmission.hp = 0;
+
+    const fixed = repairDrive(w);
+
+    expect(corePart(fixed.vehicles[0], "transmission").hp).toBe(maxHp(transmission));
+    expect(corePart(fixed.vehicles[0], "cab").hp).toBe(10);
+    expect(fixed.player.money).toBe(w.player.money - partRepairCost(w, transmission));
+    expect(driveRepairCost(w)).toBe(partRepairCost(w, transmission));
   });
 
   it("leaves rebuildable junk to a town garage", () => {
@@ -265,7 +283,7 @@ describe("garage", () => {
     const r = repairAll(w);
     expect(corePart(r.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
     expect(mountedParts(r.vehicles[0])[0].hp).toBeGreaterThan(0);
-    expect(r.player.money).toBeLessThan(1000);
+    expect(r.player.money).toBeLessThan(w.player.money);
   });
 
   it("repairs only the built-in parts with repair basics, for the shown price", () => {
@@ -415,7 +433,7 @@ describe("garage", () => {
 
   it("chassis swap keeps fitting parts and stores the rest", () => {
     let w = startAtBowl();
-    w.player.money = 2000;
+    w.player.money = 66667;
     w = buyChassis(w, "hauler");
     const me = w.vehicles[0];
     expect(me.chassisId).toBe("hauler");
@@ -427,7 +445,7 @@ describe("garage", () => {
     ).toEqual(["cage", "mg", "panniers", "stockEngine"]);
     expect(goodsCount(me)).toEqual({ scrap: 2, parts: 2 });
     expect(w.player.money).toBe(
-      2000 -
+      66667 -
         (CHASSIS.hauler.value -
           Math.floor(CHASSIS.scout.value * (1 - ECONOMY.spread))),
     );
@@ -437,7 +455,7 @@ describe("garage", () => {
 
   it("refunds the difference when the trade-in beats the new chassis price", () => {
     let w = startAtBowl();
-    w.player.money = 5000;
+    w.player.money = 166667;
     w = buyChassis(w, "carrier");
     const tradeIn = chassisTradeIn(w);
     expect(tradeIn).toBeGreaterThan(CHASSIS.scout.value);
@@ -684,7 +702,7 @@ describe("locations", () => {
 describe("debt", () => {
   it("a player in debt cannot buy anything", () => {
     const w = startAtBowl();
-    w.player.money = -100;
+    w.player.money = -3333;
     w.player.fuel = CHASSIS.scout.fuelCap - 1;
     expect(() => buyGood(w, "scrap", 1)).toThrow(/money/);
     expect(() => buySupply(w, "fuel", 1)).toThrow(/money/);
@@ -697,21 +715,67 @@ describe("debt", () => {
 
   it("sales pay the debt down", () => {
     const w = startAtBowl();
-    w.player.money = -100;
+    w.player.money = -3333;
     const after = sellGood(w, "scrap", 2);
-    expect(after.player.money).toBe(-100 + 2 * sellPrice(w, "bowl", "scrap"));
+    expect(after.player.money).toBe(-3333 + getLotTradePrice(w, w.vehicles[0], "bowl", "scrap", 2, "sell"));
   });
 
   it("an NPC in debt gets no fuel, supplies or repairs in town", () => {
     const w = startAtBowl();
     const npc = addVehicle(w, "traders", "hauler", ["stockEngine"], { ...sitePads(bowl)[0] });
-    npc.resources!.money = -50;
+    npc.resources!.money = -1667;
     npc.resources!.fuel = 1;
     npc.resources!.supplies = 1;
     const engine = mountedParts(npc, "engine")[0];
     engine.hp = 1;
     serviceVehicle(w, npc, "bowl", 0);
-    expect(npc.resources).toMatchObject({ money: -50, fuel: 1, supplies: 1 });
+    expect(npc.resources).toMatchObject({ money: -1667, fuel: 1, supplies: 1 });
     expect(engine.hp).toBe(1);
+  });
+});
+
+describe("garage storage at a stall", () => {
+  const atPump = () => emptyWorld({ ...sitePads(REGION.locations.find((l) => l.id === "pump-station")!)[0] });
+  const fillGrid = (w: ReturnType<typeof emptyWorld>, defId: string) => {
+    while (canStowPart(w.vehicles[0], makePart(w, defId, 0))) stowPart(w, w.vehicles[0], makePart(w, defId, 0));
+  };
+
+  it("sends a bought part that does not fit to storage, for the quoted price", () => {
+    const w = atPump();
+    w.player.money = 100000;
+    const part = w.shops["pump-station"].stock[0];
+    fillGrid(w, part.defId);
+    const price = partTradePrice(w, w.vehicles[0], part, "buy");
+    const items = w.vehicles[0].items.length;
+    const next = buyStockPart(w, part.id);
+    expect(next.player.money).toBe(100000 - price);
+    expect(next.player.storage.filter((p) => p.id === part.id)).toHaveLength(1);
+    expect(next.shops["pump-station"].stock.some((p) => p.id === part.id)).toBe(false);
+    expect(next.vehicles[0].items).toHaveLength(items);
+  });
+
+  it("still refuses a part the player cannot pay for", () => {
+    const w = atPump();
+    w.player.money = 0;
+    const part = w.shops["pump-station"].stock[0];
+    fillGrid(w, part.defId);
+    expect(() => buyStockPart(w, part.id)).toThrow(/money/);
+  });
+
+  it("buys a stored part into the stall stock", () => {
+    const w = atPump();
+    const stored = makePart(w, "mg", 0);
+    w.player.storage.push(stored);
+    const price = partTradePrice(w, w.vehicles[0], stored, "sell");
+    const next = sellPart(w, stored.id);
+    expect(next.player.money).toBe(w.player.money + price);
+    expect(next.player.storage).toEqual([]);
+    expect(next.shops["pump-station"].stock.some((p) => p.id === stored.id)).toBe(true);
+  });
+
+  it("sells no chassis at a stall", () => {
+    const w = atPump();
+    w.player.money = 100000;
+    expect(() => buyChassis(w, "longbed")).toThrow(/town/);
   });
 });

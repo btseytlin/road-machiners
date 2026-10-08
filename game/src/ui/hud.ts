@@ -8,7 +8,7 @@ import type { SpeedRow } from "./hud-readout";
 import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
 import {
-  contractDue,
+  heldContractDue,
   contractSummary,
   eventText,
   formatNpcActivity,
@@ -20,12 +20,12 @@ import {
   formatNpcTraits,
   type LogLine,
 } from "./format";
-import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, moneyLabel, versionLabel, type RescueReadout } from "./hud-readout";
+import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, overdriveSwitch, versionLabel, type RescueReadout } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
 import { aimMarks } from "./weapons";
 import { createSwitch } from "./switch";
 import { Tips } from "./tips";
-import { kph } from "./units";
+import { kph, moneyText } from "./units";
 import { playerVehicle } from "../sim/damage";
 import { affordableRanks, pendingPerkPairs } from "../sim/progress";
 import { canDouse } from "../sim/engine-heat";
@@ -37,12 +37,13 @@ import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
 // A hint marks an action that can never run here, and says why. combat is the turns of combat left when it blocks the action.
 // target names what the action acts on, so the key runs the shown action and nothing re-decides it.
 export type ContextTarget =
-  | { kind: 'aid' }
-  | { kind: 'trade' }
+  | { kind: 'aid'; id: string }
+  | { kind: 'trade'; id: string }
   | { kind: 'shop' }
   | { kind: 'downed'; id: string }
   | { kind: 'oasis' }
-  | { kind: 'stock'; id: string }
+  | { kind: 'stock'; id: string } // search the stock
+  | { kind: 'loot'; id: string } // take the stock's revealed loot
   | { kind: 'empty' };
 export type ContextAction = { label: string; ready: boolean; target: ContextTarget; hint?: string; combat?: number };
 
@@ -125,7 +126,6 @@ export class Hud {
   private log = new LogPanel();
   private info = panel("info");
   private infoBody = el("div");
-  private help = panel("help", topLeft());
   private feedback = panel("feedback", topLeft());
   private action = panel("action");
   private toastBox = panel("toast");
@@ -169,12 +169,6 @@ export class Hud {
     window.addEventListener("keydown", (e) => {
       if (e.code === "KeyV" && !isBrowserChord(e) && !document.activeElement?.matches("input, select, textarea")) this.toggleCameraMode();
     });
-    const guide = el(
-      "details",
-      {},
-      el("summary", { title: "Driving and combat controls" }, "?"),
-    );
-    this.help.append(guide);
     const feedbackMenu = el("details", {});
     const feedbackLink = (href: string, text: string) =>
       el(
@@ -199,20 +193,8 @@ export class Hud {
     this.feedback.append(feedbackMenu);
     window.addEventListener("keydown", (e) => {
       if (e.code !== "Escape") return;
-      guide.removeAttribute("open");
       feedbackMenu.removeAttribute("open");
     });
-    guide.append(
-      el("div", {}, "Click the ground: drive there by road. Shift-click: stop there."),
-      el("div", {}, "Space: drive on or pause. Hold Space: fast-forward. Click your truck: brake."),
-      el("div", {}, "R: manual driving, straight at the point."),
-      el("div", {}, "Click a town or site: stop at its pad. E on a pad: trade, repair or loot."),
-      el("div", {}, "T: radio the truck under the cursor. 1-9: reply. H: honk."),
-      el("div", {}, "Click a truck: target it. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
-      el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
-      el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
-      el("div", { class: "version" }, versionLabel()),
-    );
   }
 
   private toggleCameraMode(): void {
@@ -329,7 +311,7 @@ export class Hud {
     this.rescue.replaceChildren(
       el("h3", {}, "Under tow"),
       el("div", {}, `${r.tower} tows you to ${r.town}.`),
-      el("div", { class: "dim" }, `Fee ${moneyLabel(r.fee)} on arrival.`),
+      el("div", { class: "dim" }, `Fee ${moneyText(r.fee)} on arrival.`),
       el(
         "div",
         { class: "rescue-buttons" },
@@ -371,7 +353,7 @@ export class Hud {
         el(
           "div",
           { class: "contract-line" },
-          `${contractSummary(c)} — ${contractDue(c)}`,
+          `${contractSummary(c)} — ${heldContractDue(c)}`,
         ),
       ),
     );
@@ -379,6 +361,7 @@ export class Hud {
 
   // The headlight switch, overdrive and engine cooling. The headlights work while a turn plays, so busy never disables them.
   private engineButtons(w: World, busy: boolean): HTMLElement[] {
+    const od = overdriveSwitch(w);
     const headlights = createSwitch({
       on: "Lights on",
       off: "Lights off",
@@ -390,10 +373,10 @@ export class Hud {
     const overdrive = createSwitch({
       on: "Overdrive",
       off: "Normal",
-      checked: w.player.overdrive,
+      checked: od.checked,
       key: "O",
-      disabled: busy,
-      title: "Engine overdrive: faster, but the engine heats fast [O]",
+      disabled: busy || od.blocked,
+      title: od.title,
       onclick: () => this.actions.toggleOverdrive(),
     });
     const douse = el(
@@ -544,6 +527,11 @@ export class Hud {
     }
     this.log.add(w.turn, lines);
     this.radio.hear(w);
+  }
+
+  // The session's log text, newest first, for error reports.
+  logTexts(): string[] {
+    return this.log.texts;
   }
 
   // A log line from the UI itself, not from a sim event.
