@@ -192,7 +192,7 @@ describe('NPC gameplay recovery', () => {
       return perceiveDanger(world, npc, trader);
     };
     const alone = judged();
-    addVehicle(world, 'scavengers', 'scout', ['mg'], { x: 30, y: 42 });
+    addVehicle(world, npc.faction, 'scout', ['mg'], { x: 30, y: 42 });
     expect(judged()).toBe(alone);
     addVehicle(world, 'traders', 'scout', ['mg'], { x: 33, y: 33 });
     expect(judged()).toBeGreaterThan(alone * 1.5);

@@ -102,6 +102,7 @@ export function popGoal(w: World, v: Vehicle, reason: string): NpcActivity {
   const goals = goalsOf(v);
   const popped = goals.pop();
   if (!popped) throw new Error(`${v.id} has no goal to pop`);
+  reconsider(v, popped);
   logChange(w, v, popped, reason);
   return popped;
 }
@@ -110,7 +111,14 @@ export function popGoal(w: World, v: Vehicle, reason: string): NpcActivity {
 export function dropGoal(w: World, v: Vehicle, goal: NpcActivity, reason: string): void {
   const previous = topGoal(v);
   v.brain!.goals = goalsOf(v).filter((g) => g !== goal);
+  reconsider(v, goal);
   logChange(w, v, previous, reason);
+}
+
+// A fight or a flight that ends leaves its hostile unnoticed, so a driver that still sees it decides about it again
+// instead of going back to work beside it.
+function reconsider(v: Vehicle, goal: NpcActivity): void {
+  if ((goal.kind === 'fight' || goal.kind === 'flee') && goal.targetId) delete v.brain!.noticed[`hostileSeen:${goal.targetId}`];
 }
 
 // Swaps the long-term goal at the bottom, keeping any interruptions above it.
@@ -617,6 +625,11 @@ export function react<D extends NoticedDecision>(world: World, vehicle: Vehicle,
   vehicle.brain!.noticed[key] = world.turn;
   const seen = decision === 'preySeen';
   return decide(world, vehicle, decision, id, seen ? perceiveDanger(world, vehicle, vehicleById(world, id)) : null);
+}
+
+// Returns a cornered fighter to combat, replacing its interrupted goal.
+export function fightCornered(world: World, vehicle: Vehicle, foe: Vehicle): void {
+  interrupt(world, vehicle, fightGoal(world, vehicle, foe, 'cornered'));
 }
 
 type HostileDecision = 'hostileSeen' | 'contactHeard';

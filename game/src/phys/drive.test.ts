@@ -575,6 +575,35 @@ describe('physics turns', () => {
     freeDrive(d);
   });
 
+  it('a truck arriving at a stop point never backs out of it', () => {
+    let w = ordered({ kind: 'stopAt', dest: { x: 38, y: 30 } });
+    const dest = { x: 38, y: 30 };
+    let d = buildDrive(w);
+    for (let i = 0; i < 12; i++) {
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      freeDrive(d);
+      d = next!;
+      expect(d.memory[me(w).id].backFrom).toBeNull();
+    }
+    expect(dist(me(w).pos, dest)).toBeLessThan(RULES.arriveRadius * 2);
+    freeDrive(d);
+  });
+
+  it('a truck told to creep slower than pushSpeed is not blocked, however slowly it moves', () => {
+    let w = ordered({ kind: 'through', dest: { x: 60, y: 30 } });
+    let d = buildDrive(w);
+    for (let i = 0; i < 6; i++) {
+      me(w).order = { kind: 'through', dest: { x: 60, y: 30 }, pace: 0.01 };
+      let next: Drive | null = null;
+      w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
+      freeDrive(d);
+      d = next!;
+      expect(d.memory[me(w).id].backFrom).toBeNull();
+    }
+    freeDrive(d);
+  });
+
   it('route aiming drops points the truck has passed, even ones still far away', () => {
     const route = [{ x: 5, y: 0 }, { x: 10, y: 2 }, { x: 20, y: 2 }];
     expect(routeAim(route, { x: 7, y: -1 })).toEqual({ x: 10, y: 2 });
