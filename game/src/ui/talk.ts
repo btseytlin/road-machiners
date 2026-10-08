@@ -9,10 +9,11 @@ import type { World } from "../sim/types";
 import { createIcon } from "./cards";
 import { el } from "./dom";
 import { contractSummary, contractWindow } from "./format";
+import { moneyText } from "./units";
 
 // A local's offer line with the contract's terms in place of `{terms}`.
 export function offerText(line: string, c: Contract): string {
-  return line.replace("{terms}", `${contractSummary(c)}, pays ${c.reward}, within ${contractWindow(c)}.`);
+  return line.replace("{terms}", `${contractSummary(c)}, pays ${moneyText(c.reward)}, within ${contractWindow(c)}.`);
 }
 
 type Said = { topic: LocalTopicId; ask: string; line: string; offer: Contract | null };
