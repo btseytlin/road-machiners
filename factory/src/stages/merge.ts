@@ -8,7 +8,7 @@ import { withWorkFolder } from '../work-lock';
 import { closeMerged } from './approval';
 import { runCost, untilPasses } from './checkpoint';
 import { checkFailure, checkScript, checkUntilReal, testCacheMount } from './checks';
-import { guardDiff } from '../diff-guard';
+import { changedAgainstAll, guardDiff } from '../diff-guard';
 import { BASE_BRANCH, baseBranchFor, fillPrompt, playtestCommand, resetOutputs } from './common';
 import { releaseLog } from './release-common';
 
@@ -29,7 +29,7 @@ async function mergeBatch(ctx: Ctx, base: string, cards: Card[]): Promise<void> 
   await ctx.repo.fetch();
   await ctx.repo.prepareWorkClone(base, base, dir);
   resetOutputs(join(dir, GAME_DIR));
-  const land: Landing = { stage: 'merge', dir, into: base, agent: landingAgent(ctx, 'merge', dir, base) };
+  const land: Landing = { stage: 'merge', dir, into: base, guardAgainst: [base], agent: landingAgent(ctx, 'merge', dir, base) };
   let spent = 0;
   for (const card of cards) {
     const message = `Merge issue #${card.issue}: ${(await ctx.github.issue(card.issue)).title}`;
@@ -40,7 +40,7 @@ async function mergeBatch(ctx: Ctx, base: string, cards: Card[]): Promise<void> 
   await settle(ctx, base, cards);
 }
 
-export type Landing = { stage: 'merge' | 'ship'; dir: string; into: string; agent: (prompt: string) => Promise<string> };
+export type Landing = { stage: 'merge' | 'ship'; dir: string; into: string; guardAgainst: string[]; agent: (prompt: string) => Promise<string> };
 
 export async function checkAndPush(ctx: Ctx, land: Landing, spent: number, fixPrompt: (failure: string) => string): Promise<void> {
   let total = spent;
@@ -109,7 +109,7 @@ async function mergedChecks(ctx: Ctx, land: Landing): Promise<string | null> {
 
 async function pushed(ctx: Ctx, land: Landing): Promise<boolean> {
   const head = await ctx.repo.fetchFromWork(land.dir, land.into);
-  guardDiff(await ctx.repo.diff(land.into, head));
+  guardDiff(changedAgainstAll(await Promise.all(land.guardAgainst.map((branch) => ctx.repo.diff(branch, head)))));
   try {
     await ctx.repo.push(head, land.into);
     return true;

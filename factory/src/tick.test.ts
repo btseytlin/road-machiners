@@ -297,9 +297,9 @@ const job = (startedAt: string, stage: Job['stage'] = 'design', issue: number | 
 const args = (h: Harness): string[][] => h.spawned.map((call) => call.slice(0, 2));
 
 describe('timeoutOf', () => {
-  it('gives the release playtest and the merge their own limits and every other stage its queue limit', () => {
+  it('gives the release playtest its own limit, the merge and ship the merge limit, and every other stage its queue limit', () => {
     const cfg = { verifyTimeoutMinutes: 240, branchTimeoutMinutes: 60, playtestTimeoutMinutes: 330, mergeTimeoutMinutes: 180 } as FactoryConfig;
-    expect([timeoutOf(cfg, 'playtest'), timeoutOf(cfg, 'verify'), timeoutOf(cfg, 'merge'), timeoutOf(cfg, 'approve')]).toEqual([330, 240, 180, 60]);
+    expect([timeoutOf(cfg, 'playtest'), timeoutOf(cfg, 'verify'), timeoutOf(cfg, 'merge'), timeoutOf(cfg, 'ship'), timeoutOf(cfg, 'approve')]).toEqual([330, 240, 180, 180, 60]);
   });
 });
 
@@ -720,12 +720,13 @@ describe('tick', () => {
     expect(readState(h.ctx.statePath).pendingShip).toBe('Ann');
   });
 
-  it('keeps the candidate post and a queued ship when the release head differs from the posted commit, and plays nothing', async () => {
+  it('drops the candidate post and a queued ship once the release moved past the posted commit, and plays the new head', async () => {
     const h = harness(null, false, [card(20, 'Approval', ['release'])]);
     writeState(h.ctx.statePath, state({ release: { ...RELEASE, postId: 7, candidateSha: 'rel0000', playtest: { ...RELEASE.playtest, passed: 'rel0000' } }, pendingShip: 'Ann' }));
     await tick(h.ctx, '/code', h.deps);
     const after = readState(h.ctx.statePath);
-    expect(after.release?.postId).toBe(7);
-    expect(args(h).some(([stage]) => stage === 'playtest')).toBe(false);
+    expect(after.release?.postId).toBeNull();
+    expect(after.pendingShip).toBeNull();
+    expect(args(h)).toEqual([['playtest', '20']]);
   });
 });

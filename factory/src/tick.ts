@@ -272,7 +272,7 @@ async function failJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Prom
 
 export function timeoutOf(cfg: FactoryConfig, stage: JobStage): number {
   if (stage === 'playtest') return cfg.playtestTimeoutMinutes;
-  if (stage === 'merge') return cfg.mergeTimeoutMinutes;
+  if (stage === 'merge' || stage === 'ship') return cfg.mergeTimeoutMinutes;
   const queue = QUEUE_OF[stage];
   const minutes: Record<Queue, number> = {
     triage: cfg.triageTimeoutMinutes,
@@ -415,6 +415,18 @@ async function releaseHead(ctx: Ctx): Promise<string | null> {
   return release === null ? null : ctx.repo.headHash(release.branch);
 }
 
+export function dropStaleCandidate(ctx: Ctx, head: string | null): void {
+  const state = readState(ctx.statePath);
+  const release = state.release;
+  if (release === null || release.postId === null || !movedPast(state, release.candidateSha, head)) return;
+  updateState(ctx.statePath, (state) => ({ ...state, pendingShip: null, release: state.release && { ...state.release, postId: null } }));
+  ctx.log('tick', release.issue, `release moved from ${release.candidateSha ?? 'an unknown commit'} to ${head}, dropped candidate post ${release.postId}`);
+}
+
+function movedPast(state: FactoryState, posted: string | null, head: string | null): boolean {
+  return head !== null && posted !== head && !state.jobs.some((job) => job.stage === 'ship');
+}
+
 async function startJobs(ctx: Ctx, codeDir: string, deps: TickDeps): Promise<void> {
   const cards = await releaseAnswered(ctx, await ctx.github.cards());
   cleanBuilds(ctx, cards);
@@ -428,6 +440,7 @@ async function startJobs(ctx: Ctx, codeDir: string, deps: TickDeps): Promise<voi
   }
   await ctx.repo.fetch();
   const heads = { dev: await ctx.repo.headHash('dev'), release: await releaseHead(ctx) };
+  dropStaleCandidate(ctx, heads.release);
   const report = evaluateSchedule(readState(ctx.statePath), cards, ctx.now(), ctx.cfg, heads);
   reportScheduler(ctx.cfg.home, 'ready', ctx.now(), report, cards);
   if (report.picks.length === 0) return ctx.log('tick', null, 'nothing to start');
