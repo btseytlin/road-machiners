@@ -28,7 +28,6 @@ Design runs Opus, or Sonnet with `design-sonnet`, at `FACTORY_DESIGN_EFFORT`. It
 - `.factory/questions.md` sends the card back to Triage with the questions, as unclear triage does.
 - `.factory/wont-do.md` closes the issue as wont-do.
 - A revision reads the issue comments under "## Committee feedback", "## Review findings" and "## Visual review findings". Comments under "## Committee question" are context only.
-- Design drops a patch queued before the card reached it.
 
 ## Implementation
 
@@ -36,38 +35,45 @@ Implementation runs Sonnet with up:uexecute on the task file. Subagents are off,
 
 ## Testing
 
-[process.md](process.md#testing-column) shows the order of the rounds and their limits. These are the rules behind them.
+[process.md](process.md#testing-column) shows the flow. These are the rules behind it.
 
-- Verify first merges the new commits of the issue branch on GitHub, then the current base, so the committee plays what approve will merge. A conflict with the branch goes to a merge agent at once. The round agent resolves a conflict with the base. An unfinished merge fails the stage.
-- The preview round uses `prompts/test.md`. A hotfix first runs the harden round and the review, as Hardening does.
-- Checks runs `npm ci`, the tests, the typecheck and the playtest with no agent. The tests run through `npm run test:cached -- --cache /test-cache`, which skips every test file whose inputs already passed. The game tool owns the cache and its rules. A branch without that script runs `npm test` and the log says so. Only the checks container mounts the cache. A passing run publishes the build at `/<hash>/`. The playtest prints the frame rate but does not check it, since the host runs other jobs at the same time. Only the release candidate fails under 50 fps. A real failure hands the end of the log to the check-fix round in `.factory/check-failure.md`.
-- The post phase runs `npm ci` and the build only, once, with no tests, playtest or fix round. Hermes starts it with `factory move N approval`. A failed build fails the stage. The post and the issue comment say that no factory checks ran on this build. A card that the committee approved already queues its merge as usual.
-- The post holds the screenshot, the play link, the pull request link and how to try it, with Approve and Deny buttons. With no screenshot it is a text post, and the card still goes on.
+- The job first merges the new commits of the issue branch on GitHub, then the current base, so the committee plays what the merge will take. A conflict with the branch goes to a merge agent at once. The testing session resolves a conflict with the base. An unfinished merge fails the stage.
+- The session runs `prompts/test.md`. It plays the build, fixes every problem it finds, and writes `.factory/approval.json`, the screenshots and the optional `.factory/evidence.json`. A patch reply after the last post is the whole task of the round. A hotfix session runs `prompts/harden.md` first.
+- The session writes `.factory/needs-redesign.md` only when the plan itself contradicts the issue or the game docs. The reason goes on the issue under "## Committee feedback", and the card goes to Design.
+- The post checkpoint pushes the branch and runs `npm ci`, the typecheck, the playtest against the dev server and the build in a fresh clone. A hotfix also runs the full suite through `npm run test:cached -- --cache /test-cache`. A missing `.factory/approval.json` counts as a failure. The playtest prints the frame rate but does not check it, since the host runs other jobs at the same time. Only the release candidate fails under 50 fps.
+- A failure goes back into the testing session as its next message, with the end of the log. Timeouts alone rerun the checks with no agent, up to 3 runs. The loop ends when the checks pass, or when the session's runs cost `FACTORY_TESTING_BUDGET_USD`, which fails the stage for Hermes.
+- A passing run publishes the build at `/<hash>/` and posts it. The post holds the screenshot, the play link, the pull request link and how to try it, with Approve and Deny buttons. With no screenshot it is a text post, and the card still goes on.
+- `factory move N approval` marks the card `postOnly`. A checks job then runs `npm ci` and the build only, once, with no agent. A failed build fails the stage. With no `.factory/approval.json` the post text points to the pull request. The post and the issue comment say that no factory checks ran on this build.
 
 ## Docs changes
 
 A branch whose every changed file since its base is a Markdown file outside `game/docs/wiki/` is a docs change. `docsOnly()` in `src/stages/common.ts` decides it.
 
-- Verify runs no test round. The factory pushes the base merge and writes the approval text itself: the changed files, and to read the diff in the pull request. A conflict with the base still runs the test round, since its agent resolves the conflict.
-- A hotfix gets the review with no harden round and no test round.
-- Hardening runs the review with no harden round.
-- Checks runs `npm ci` and the build only. A failed build gets the check-fix round like a failed check.
+- Testing runs no session. The factory pushes the base merge and writes the approval text itself: the changed files, and to read the diff in the pull request. Its post checkpoint only builds. A conflict with the base still runs the session, since its agent resolves the conflict.
+- Hardening runs no session unless the base merge conflicts.
+- The merge checkpoint checks it like any card.
 
 ## Hardening
 
-[process.md](process.md#hardening-column) shows the order of the rounds. These are the rules behind them.
+[process.md](process.md#hardening-and-merging-columns) shows the flow. These are the rules behind it.
 
-- Harden merges the new commits of the issue branch on GitHub, but not the base. Approve merges the base, and a conflict there comes back here.
-- The harden round uses `prompts/harden.md`. A cleanup task and a docs change skip it and get the review alone.
-- The review runs `/code-review` on Sonnet over the whole branch diff, with `prompts/review.md`, `docs/incident-log.md` and `game/docs/architecture/principles.md` pasted in. The factory reads the findings from the last `ReportFindings` call in the run's output. Any finding of category `correctness`, or with no category, fails the review. Other findings are listed and do not block. A run with no `ReportFindings` call fails the stage.
-- A review FAIL hands the review to the review-fix round in `.factory/review-findings.md`. A second FAIL comments it on the issue under "## Review findings", drops the approval and sends the card to Design.
-- After the review, the branch head is compared with the card's build, the commit Testing checked and the committee played. The same commit moves the card to Approval with its merge queued. Any other commit runs Checks, whose fix round runs in Hardening and leaves no evidence.
-- A conflict at approve merges the base, and a merge agent resolves the conflict with `prompts/branch-merge.md`. Checks runs next, with no harden round or review.
+- The job merges the new commits of the issue branch on GitHub and the current base, so the merge queue meets only the conflicts of cards that harden at the same time.
+- The session runs `prompts/harden.md`, with `docs/incident-log.md` and `game/docs/architecture/principles.md` pasted in from `dev`. It runs up:uverify, then `/code-review`, and fixes every correctness finding and the cleanups that make the code shorter. No review gate follows it.
+- No checks run in Hardening. The card moves to Merging.
+
+## Merging
+
+- A merge job runs in the branch queue when Merging holds a card that is not stuck or held. It takes every such card whose base is the base of the first one, in board order.
+- It clones the base into `$FACTORY_HOME/work/merge-queue` and merges each card's branch. A conflict goes to the merge session with `prompts/merge-branches.md`. An unfinished merge fails the job.
+- The merge checkpoint runs the full suite through the test cache, the typecheck, the playtest and the build on the result. A failure goes to the same session with `prompts/merge-fix.md`, which keeps the behavior the committee approved for each card. The loop ends on a pass, or when the session cost `FACTORY_MERGING_BUDGET_USD`.
+- The diff guard runs on everything the base takes. Then the job pushes the base. When GitHub rejects the push because the base moved, the job merges the new base in and checks again.
+- Each card gets `release-candidate`, a comment that names the cards merged with it, and moves to Done. A `dev` batch rebuilds `/dev/`. A release batch drops the current candidate post, so a new candidate follows.
+- A failed job labels every card of the batch `factory-stuck`.
 
 ## Approval
 
-- Approve on a previewed card records the approver in `approvedResolving` and moves the card to Hardening. The card keeps its build.
-- The merge takes the branch into `dev` and rebuilds `/dev/`.
+- Approve on a previewed card records the approver in `approvedResolving` and moves the card to Hardening.
+- Approve on a hotfix ships it at once. A hotfix that conflicts with `main` goes back to Testing.
 - Deny labels the issue `wont-do` and closes it and its pull request as not planned.
 
 ## Approval replies
@@ -77,7 +83,7 @@ A rerun of design, implementation and testing costs hours, so a reply takes the 
 - A reply that starts with "patch:" or "redesign:" takes that route at once.
 - Any other reply goes to Hermes with a header that names the post and the issue. Hermes routes it with the `factory_route_reply` tool.
 - answer: Hermes answers in the chat. The card and its post stay, and the question goes on the issue under "## Committee question".
-- patch: the card moves to Implementation, and `patching` keeps the commit of the played build. The patch job runs Sonnet with `prompts/patch.md`. It merges the base, applies the reply, checks only the diff since the played build and writes new approval text and evidence. Then the card goes to Testing in phase `checks`. An agent that finds the plan must change writes `.factory/needs-redesign.md`, and the card goes to Design.
+- patch: the card moves to Testing. The testing session takes the reply as its whole task, applies it, writes new approval text and screenshots, and the post checkpoint runs as usual. A session that finds the plan must change writes `.factory/needs-redesign.md`, and the card goes to Design.
 - redesign: the card goes to Design.
 
 Before a patch or a redesign queues, the plugin checks the issue as [process.md](process.md#committee-inputs) says. A refusal queues nothing and names what to get from the member.
@@ -138,7 +144,7 @@ The baseline is triage Sonnet, design Opus, implementation Sonnet and testing So
 
 - `design-sonnet` runs design on Sonnet.
 - `implementation-opus` runs implementation on Opus. Every testing round and the review stay on Sonnet.
-- The release playtest, candidate, incident and factory change agents always run Opus. Triage, patch, ad hoc and waste review agents always run Sonnet.
+- The release playtest, candidate, incident and factory change agents always run Opus. Triage, merge, ad hoc and waste review agents always run Sonnet.
 - The triage prompt aims for about 20% Opus and 80% Sonnet in measured agent tokens. It is a rule of thumb, never a cap.
 
 Triage rates each `ready` issue once and comments the rating under `Model routing from triage:`.

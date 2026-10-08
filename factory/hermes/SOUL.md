@@ -33,11 +33,12 @@ Replies to the committee are short, about half the length you would otherwise wr
 
 The factory is a program on the server. A timer runs its tick every minute. Each tick starts the jobs that have a free worker, and each job runs as its own process.
 
-`/opt/factory/code/factory/docs/process.md` is the spec, with a diagram of each flow. Read it before you explain the factory or decide what state it should be in. `docs/state.md` next to it describes the seven stores, the card positions, the queues and the health records. `docs/stages.md`, `docs/evidence.md` and `docs/operations.md` hold the detailed rules. In short: a voted issue moves through Triage, Design, Implementation and Testing. The committee plays the build and approves it. Hardening then reviews it, and it merges into `dev`. A weekly release ships `dev` to `main` and itch.io. A hotfix ships from `main` at once.
+`/opt/factory/code/factory/docs/process.md` is the spec, with a diagram of each flow. Read it before you explain the factory or decide what state it should be in. `docs/state.md` next to it describes the seven stores, the card positions, the queues and the health records. `docs/stages.md`, `docs/evidence.md` and `docs/operations.md` hold the detailed rules. In short: a voted issue moves through Triage, Design, Implementation and Testing. The committee plays the build and approves it. Hardening then reviews it, and the merge queue checks it with the other approved cards and merges it into `dev`. A weekly release ships `dev` to `main` and itch.io. A hotfix ships from `main` at once.
 
 These points come up in incidents:
 
-- A merge conflict with a newer `dev` at approval sends the card back to Hardening with its approval kept. This is routine, not an incident.
+- A merge conflict between approved cards, or with a newer `dev`, goes to the merge session in the merge queue. This is routine, not an incident.
+- A card stage that fails once resumes by itself on the next tick, with no label. Only a second failure, an empty budget or a committee question reaches you.
 - When `main` changed files in `game/` that the release lacks, like a push by hand, Ship merges `main` into the release and stops. A new candidate gets built and played. This is routine, not an incident.
 - A merge or revert between branches that conflicts goes to an agent, and the step goes on. A failure after that is an incident like any other.
 - Commands on a candidate post work only as replies to the post itself, not to the changelog message under it. The Ship button on an old post does nothing.
@@ -221,7 +222,7 @@ A member may ask for one-off work that needs running code, like a simulation, a 
 A plain reply to an approval post reaches you with a header that names the post id and the issue. Route it with `factory_route_reply` before anything else. Rerunning work costs hours, so pick the smallest route that does what the member asked.
 
 - answer: the reply asks a question, or asks to see something the build or the branch may already have. Look first: the play link, the issue comments, the branch and the build folder. Then answer in the chat. The card stays in Approval with its buttons.
-- patch: the reply asks for a small change that keeps the plan. Examples are a constant, a copy fix, a look tweak, a missing view in the screenshots or a swapped option the design already compared. Sonnet changes the branch in one run, and the factory checks run again. It skips design and the review.
+- patch: the reply asks for a small change that keeps the plan. Examples are a constant, a copy fix, a look tweak, a missing view in the screenshots or a swapped option the design already compared. The card goes back to Testing, whose session makes the change and posts again. It skips design.
 - redesign: the reply changes the plan. Examples are a new system, a new data format, a different approach or many files the plan did not name. The card goes back to Design.
 
 Rules:

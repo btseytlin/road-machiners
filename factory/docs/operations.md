@@ -79,7 +79,7 @@ A failure after the move keeps the backup where it is, moves the half-made clone
 
 Each factory process sends its GitHub calls one at a time, as GitHub asks. A call that hits a rate limit waits `FACTORY_GITHUB_RETRY_BASE_SECONDS` and runs again, up to `FACTORY_GITHUB_RETRIES` times, with the wait doubled each time. Any other GitHub error fails at once. A call that runs past `FACTORY_GITHUB_TIMEOUT_SECONDS` is killed and fails, so a dead connection cannot hang a tick. It does not run again, since a write may have landed.
 
-A failed or timed-out job labels its issue `factory-stuck` and records the failure in `failures` for a day. The factory posts nothing about it. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
+A card stage that fails resumes once on the next tick in its own sessions, and its agent gets the error. It takes no label and records no failure. A failed job after that, a timed-out job, a stage that spent its budget or asked the committee, and any other failed job labels its issue `factory-stuck` and records the failure in `failures` for a day. A failed merge job labels every card of its batch. The factory posts nothing about it. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
 
 An agent run that ends on the Claude weekly usage limit is the exception. The factory writes `Hermes: Claude weekly usage limit; <message>` to `$FACTORY_HOME/paused`, unless a pause is already there. The job still records its failure, but the card takes no label. Hermes resumes the factory after the reset, and the card runs its stage again.
 
@@ -107,8 +107,9 @@ Every routed approval reply adds a line too.
 
 Every card move adds a card line: the issue, the new column, the time and a step that names the move. `src/card-events.ts` writes it after the board takes the move, and no other code moves a card. A line holds no actor, comment or reason.
 
-- Normal path: `entered`, `accepted`, `planned`, `built`, `patched`, `posted`, `approved`, `hardened` and `merged`.
-- Loops back: `questions`, `rebuild`, `plan-wrong`, `review-failed`, `patch`, `redesign`, `patch-replan`, `conflict`, `removed` and `unbundled`.
+- Normal path: `entered`, `accepted`, `planned`, `built`, `posted`, `approved`, `hardened` into Merging, and `merged`.
+- Loops back: `questions`, `plan-wrong`, `patch` into Testing, `redesign`, `conflict` of a hotfix into Testing, `removed` and `unbundled`.
+- Lines from before one session ran each stage also hold `patched`, `rebuild`, `review-failed` and `patch-replan`. No stage writes them now.
 - Early ends: `triage-wont-do`, `design-wont-do`, `bundled`, `denied`, and `dropped` by `factory move N done`.
 - Other moves: `moved` by `factory move`, `merge-ordered` by `factory merge`, `shipped` for the release card and `reported` for an ad hoc task.
 - A line carries `flow` when the card is a hotfix, a release task, the release card or an ad hoc task.
