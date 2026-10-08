@@ -30,7 +30,7 @@ import {
   sellTruckGood,
   sellTruckPart,
   supplyRoom,
-  tradeReady,
+  canTradeWith,
   truckGoodPrice,
   truckPartPrice,
   truckGoodsForSale,
@@ -46,7 +46,7 @@ import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
 import { chassisMap, chassisPortrait, chassisStats, compareBase, createIcon, createItemIcon, diffStats, partCard, statGrid, type IconName } from "./cards";
 import { el, panel } from "./dom";
-import { contractDue, contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
+import { contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, heldContractDue, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
 import { InventoryView, truckChips } from "./inventory";
 import type { UiHost } from "./host";
 import { fuelLiters, moneyAmount, moneyText } from "./units";
@@ -393,15 +393,15 @@ export class TownScreen {
   }
 
   private deliverCell(w: World, shopId: string, c: Contract): HTMLElement {
-    if (c.kind === "bounty") return el("span", { class: "dim" }, bountyPays(w));
     const destination = c.kind === "haul" ? c.to : c.shop;
-    if (destination !== shopId) return el("span", { class: "dim" }, `Deliver at ${siteName(destination)}`);
-    if (!canDeliver(w, c)) return el("span", { class: "dim" }, c.kind === "haul" ? "Not enough cargo yet" : "Needs the part");
-    return this.button("Deliver", (x) => deliverContract(x, c.id));
+    const verb = c.kind === "bounty" ? "Claim" : "Deliver";
+    if (destination !== shopId) return el("span", { class: "dim" }, `${verb} at ${siteName(destination)}`);
+    if (!canDeliver(w, c)) return el("span", { class: "dim" }, c.kind === "bounty" ? bountyPays(w) : NOT_READY[c.kind]);
+    return this.button(verb, (x) => deliverContract(x, c.id));
   }
 }
 
-// What a held bounty pays for. A raider that gives up counts only with Bounty talk.
+// What an unmet bounty needs. A raider that gives up counts only with Bounty talk.
 function bountyPays(w: World): string {
   return vehicleHasPerk(w, playerVehicle(w), "bountyTalk") ? "Pays on knockout, wreck or give-up" : "Pays on knockout or wreck";
 }
@@ -441,6 +441,12 @@ const TAB_ICON: Record<Tab, IconName> = {
   sellParts: "money",
   trucks: "truck",
   contracts: "clock",
+};
+
+const NOT_READY: Record<Contract["kind"], string> = {
+  haul: "Not enough cargo yet",
+  fetch: "Needs the part",
+  bounty: "Not met yet",
 };
 
 const CONTRACT_ICON: Record<Contract["kind"], IconName> = {
@@ -496,11 +502,13 @@ function bar(share: number): HTMLElement {
   return el("div", { class: "meter" }, el("div", { style: `width:${Math.max(0, Math.min(1, share)) * 100}%` }));
 }
 
-// An offer on the board shows how long it gives from acceptance. A held contract shows when it is due.
+// An offer on the board shows how long it gives from acceptance. A held contract shows when it is due,
+// and a met bounty shows that it is ready to claim.
 function contractRow(w: World, c: Contract, action: HTMLElement, posted = false): HTMLElement {
+  const met = c.kind === "bounty" && c.fulfilled;
   const clock = posted
     ? el("span", { class: "price", title: `${c.window} turns from acceptance` }, createIcon("clock"), contractWindow(c))
-    : el("span", { class: "price", title: `${c.deadline - w.turn} turns left` }, createIcon("clock"), contractDue(c));
+    : el("span", { class: "price", ...(met ? {} : { title: `${c.deadline - w.turn} turns left` }) }, createIcon("clock"), heldContractDue(c));
   return el(
     "div",
     { class: "job" },
@@ -524,13 +532,13 @@ function pressureHint(def: ShopDef, state: ShopState, good: string): { text: str
 }
 
 
-// True when the player already holds what a haul or fetch contract needs to hand in.
+// True when the player already holds what a haul or fetch contract needs to hand in, or a bounty is met.
 function canDeliver(w: World, c: Contract): boolean {
   const me = playerVehicle(w);
   if (c.kind === "haul") return (goodsCount(me)[c.good] ?? 0) >= c.units;
   if (c.kind === "fetch")
     return spareParts(me).some((p) => fitsFetch(c, p)) || w.player.storage.some((p) => fitsFetch(c, p));
-  return false;
+  return c.fulfilled;
 }
 
 function siteName(id: string): string {
@@ -568,11 +576,10 @@ export class TruckTradeScreen {
     return this.npcId !== null;
   }
 
-  // Opens on the driver the player can trade with now. False when there is none.
-  openIfReady(): boolean {
-    const npc = tradeReady(this.host.world());
-    if (!npc) return false;
-    this.npcId = npc.id;
+  // Opens on this driver when the player can trade with them now. False otherwise.
+  openWith(npcId: string): boolean {
+    if (!canTradeWith(this.host.world(), npcId)) return false;
+    this.npcId = npcId;
     this.root.style.display = "";
     this.error = "";
     this.render();

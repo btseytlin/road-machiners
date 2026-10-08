@@ -64,6 +64,7 @@ export const PAL = {
   reactorLight: 0x38d6e8, // the reactor's light, bluer than its core so on warm sand and hull it still reads green-teal
   reactorGlow: 0x5cf0b4, // the Fallen Sun reactor core, green-teal as in the level concept
   hull: { light: 0xc4baa6, grey: 0x8e887c, dark: 0x6e6a62, rust: 0x7e5634 }, // the Fallen Sun's off-white and grey hull metal and its rust streaks
+  glass: { top: 0x9cb8ac, side: 0x6f8f88, dark: 0x4c6460 }, // Glass Flats fused teal-grey glass: lit, side and shaded faces of the spires, paler than PAL.water
   scree: 0x8e5e44, // the red-brown scree slope on a crater bank, warm like the level concept's upper-left slope
   dirtRoad: 0x8e7d69, // the Fallen Sun's grey-brown dirt roads: about 0.7 of PAL.sand[0]'s value, as reference 3's #6e5e50 roads over its #a08a70 islands, and greyer than the sand
   shipGlow: 0x6fe4ff, // cold glow of dead ship tech on debris power cells and pod beacons, unlike the reactor's green

@@ -312,7 +312,8 @@ describe('vultures', () => {
         seen++;
         const defs = mountedParts(v).map((p) => partDef(p.defId));
         expect(defs.some((d) => d.kind === 'cargo')).toBe(true);
-        expect(defs.find((d) => d.kind === 'weapon')!.range).toBeGreaterThanOrEqual(15);
+        // A vulture may mount a short side gun beside its main one, so the longest weapon is the main gun.
+        expect(Math.max(...defs.filter((d) => d.kind === 'weapon').map((d) => d.range))).toBeGreaterThanOrEqual(15);
       }
     }
     expect(seen).toBeGreaterThan(10);

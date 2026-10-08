@@ -72,14 +72,14 @@ describe('readCarried', () => {
     expect(readCarried({ format: { major: 99, minor: 0 }, world: FORMAT_2_1 }).money).toBe(FORMAT_2_1.player.money);
   });
 
-  it('turns money and cost basis from before format 2.27 into cents, as the 26 to 27 step does', () => {
+  it('turns money and cost basis from before format 2.29 into cents, as the 28 to 29 step does', () => {
     const world = { player: { money: 1000, costBasis: { scrap: 10.5 } } };
-    for (const format of [undefined, { major: 1, minor: 20 }, { major: 2, minor: 26 }]) {
+    for (const format of [undefined, { major: 1, minor: 20 }, { major: 2, minor: 28 }]) {
       const carried = readCarried({ format, world });
       expect(carried.money, JSON.stringify(format)).toBe(33333);
       expect(carried.costBasis.scrap, JSON.stringify(format)).toBeCloseTo(350);
     }
-    const current = readCarried({ format: { major: 2, minor: 27 }, world });
+    const current = readCarried({ format: { major: 2, minor: 29 }, world });
     expect(current.money).toBe(1000);
     expect(current.costBasis).toEqual({ scrap: 10.5 });
   });

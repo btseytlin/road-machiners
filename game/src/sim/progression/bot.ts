@@ -685,12 +685,18 @@ function scavengeOrHunt(o: Orders): void {
   collectOrHunt(o);
 }
 
-// A raider kill pays its bounty besides the wreck's loot, so the hunter takes each bounty on the board it is parked
-// at, one per raider template, up to the contract limit.
+// A raider kill fulfils its bounty besides the wreck's loot, and the shop pays it on a claim. So the hunter claims each
+// met bounty of the shop it is parked at, then takes each bounty on the board, one per raider template, up to the
+// contract limit.
 function takeBounties(o: Orders): void {
   const shop = shopAt(o.world);
   if (!shop) return;
+  claimBounties(o, shop);
   for (const c of shopState(o.world, shop).contracts) if (wantsBounty(o.world, c)) o.run((w) => acceptContract(w, c.id));
+}
+
+function claimBounties(o: Orders, shop: string): void {
+  for (const c of o.world.player.contracts) if (c.kind === 'bounty' && c.fulfilled && c.shop === shop) o.run((w) => deliverContract(w, c.id), 'contracts');
 }
 
 function wantsBounty(world: World, c: Contract): boolean {

@@ -264,7 +264,7 @@ export class Game {
       apply: (next) => this.apply(next),
       pushEvents: () => this.hud.pushEvents(this.world),
       note: (text) => this.hud.note(this.world, text, "bad"),
-      openTrade: () => this.trade.openIfReady(),
+      openTrade: (id) => this.trade.openWith(id),
       openTown: () => this.town.open(),
       openDowned: (id) => this.inventory.openDowned(this.world, id),
       openLoot: (id) => this.inventory.openLoot(id),
@@ -398,7 +398,7 @@ export class Game {
 
   private modalOpen(): boolean {
     const screens = [this.town, this.fullShop, this.trade, this.character, this.inventory];
-    return screens.some((s) => s.isOpen()) || this.world.player.call !== null || this.menu.isPanelOpen();
+    return screens.some((s) => s.isOpen()) || this.world.player.call !== null || this.menu.isOpen();
   }
 
   // Until a turn's shots land, the panels show the world as it was when the turn began.

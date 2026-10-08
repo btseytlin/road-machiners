@@ -7,9 +7,8 @@ import { isAutoPatch } from "../sim/jobs";
 import type { SpeedRow } from "./hud-readout";
 import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
-import { ERROR_REPORT_URL } from "../config";
 import {
-  contractDue,
+  heldContractDue,
   contractSummary,
   eventText,
   formatNpcActivity,
@@ -38,8 +37,8 @@ import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
 // A hint marks an action that can never run here, and says why. combat is the turns of combat left when it blocks the action.
 // target names what the action acts on, so the key runs the shown action and nothing re-decides it.
 export type ContextTarget =
-  | { kind: 'aid' }
-  | { kind: 'trade' }
+  | { kind: 'aid'; id: string }
+  | { kind: 'trade'; id: string }
   | { kind: 'shop' }
   | { kind: 'downed'; id: string }
   | { kind: 'oasis' }
@@ -127,7 +126,6 @@ export class Hud {
   private log = new LogPanel();
   private info = panel("info");
   private infoBody = el("div");
-  private help = panel("help", topLeft());
   private feedback = panel("feedback", topLeft());
   private action = panel("action");
   private toastBox = panel("toast");
@@ -171,12 +169,6 @@ export class Hud {
     window.addEventListener("keydown", (e) => {
       if (e.code === "KeyV" && !isBrowserChord(e) && !document.activeElement?.matches("input, select, textarea")) this.toggleCameraMode();
     });
-    const guide = el(
-      "details",
-      {},
-      el("summary", { title: "Driving and combat controls" }, "?"),
-    );
-    this.help.append(guide);
     const feedbackMenu = el("details", {});
     const feedbackLink = (href: string, text: string) =>
       el(
@@ -201,21 +193,8 @@ export class Hud {
     this.feedback.append(feedbackMenu);
     window.addEventListener("keydown", (e) => {
       if (e.code !== "Escape") return;
-      guide.removeAttribute("open");
       feedbackMenu.removeAttribute("open");
     });
-    guide.append(
-      el("div", {}, "Click the ground: drive there by road. Shift-click: stop there."),
-      el("div", {}, "Space: drive on or pause. Hold Space: fast-forward. Click your truck: brake."),
-      el("div", {}, "R: manual driving, straight at the point."),
-      el("div", {}, "Click a town or site: stop at its pad. E on a pad: trade, repair or loot."),
-      el("div", {}, "T: radio the truck under the cursor. 1-9: reply. H: honk."),
-      el("div", {}, "Click a truck: target it. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
-      el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
-      el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
-      el("div", { class: "version" }, versionLabel()),
-    );
-    if (ERROR_REPORT_URL) guide.append(el("div", { class: "version" }, "Game errors are sent to the developers with your save."));
   }
 
   private toggleCameraMode(): void {
@@ -374,7 +353,7 @@ export class Hud {
         el(
           "div",
           { class: "contract-line" },
-          `${contractSummary(c)} — ${contractDue(c)}`,
+          `${contractSummary(c)} — ${heldContractDue(c)}`,
         ),
       ),
     );

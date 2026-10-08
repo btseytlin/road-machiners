@@ -395,6 +395,21 @@ function withSeenSince_23_24(world: SavedJson): SavedJson {
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
 }
 
+// Glass Flats became a territory with no stock of its own: its loot lies in baked spots. A search of the old stock
+// ends with it. The step repeats the 8 to 9 one, since a committed step is never edited.
+const RETIRED_STOCK_27_28 = 'glass-flats';
+
+function withoutRetiredStock_27_28(world: SavedJson): SavedJson {
+  const idle = (v: SavedJson): SavedJson => ((v.job as SavedJson | null | undefined)?.stockId === RETIRED_STOCK_27_28 ? { ...v, job: null } : v);
+  const player = world.player as SavedJson;
+  return {
+    ...world,
+    salvage: (world.salvage as SavedJson[]).filter((stock) => stock.id !== RETIRED_STOCK_27_28),
+    player: { ...player, scavenged: (player.scavenged as string[]).filter((id) => id !== RETIRED_STOCK_27_28) },
+    vehicles: (world.vehicles as SavedJson[]).map(idle),
+  };
+}
+
 // Old saves hold a circle for each of these sites and a ring of buildings for Bowl and Nose. The sites are fortresses now:
 // their walls come from the map file, and the town houses from the render. The oasis ponds and the salvage yard's
 // wrecks are gone too. Keep other water obstacles and abandoned-site scenery.
@@ -455,35 +470,46 @@ function withFreeze_25_26(world: SavedJson): SavedJson {
   return { ...world, player: { ...(world.player as SavedJson), frozen: false } };
 }
 
-// Step 26 to 27: money becomes integer cents of M, and 1 M is the price of 5 L of fuel. The old fuel unit of 5 L cost
+// Step 26 to 27: a bounty records whether the player beat its target, and pays only when claimed at its shop. A saved bounty
+// paid on the kill, so every one still held or posted has not been beaten yet.
+function withFulfilledFlag_26_27(world: SavedJson): SavedJson {
+  const flagged = (c: SavedJson): SavedJson => (c.kind === 'bounty' ? { ...c, fulfilled: false } : c);
+  const player = world.player as SavedJson;
+  const shops = Object.fromEntries(
+    Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(flagged) }]),
+  );
+  return { ...world, player: { ...player, contracts: (player.contracts as SavedJson[]).map(flagged) }, shops };
+}
+
+// Step 28 to 29: money becomes integer cents of M, and 1 M is the price of 5 L of fuel. The old fuel unit of 5 L cost
 // 3 money, so every money number grows by 100 / 3. Balances, rewards, fees and prices round to a cent. Cost bases and
 // the money a profit, free tow or aid practice counted are averages or XP inputs, so they scale exactly.
-export const CENTS_PER_MONEY_26_27 = 100 / 3;
-const MONEY_PRACTICE_26_27 = ['profit', 'freeTow', 'aid'];
+export const CENTS_PER_MONEY_28_29 = 100 / 3;
+const MONEY_PRACTICE_28_29 = ['profit', 'freeTow', 'aid'];
 
-function scaled_26_27(value: unknown, what: string): number {
+function scaled_28_29(value: unknown, what: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Saved ${what} is ${String(value)}, not a number`);
-  return value * CENTS_PER_MONEY_26_27;
+  return value * CENTS_PER_MONEY_28_29;
 }
 
-function cents_26_27(value: unknown, what: string): number {
-  return Math.round(scaled_26_27(value, what));
+function cents_28_29(value: unknown, what: string): number {
+  return Math.round(scaled_28_29(value, what));
 }
 
-function scaledRecord_26_27(record: SavedJson, what: string): SavedJson {
-  return Object.fromEntries(Object.entries(record).map(([k, v]) => [k, scaled_26_27(v, `${what} ${k}`)]));
+function scaledRecord_28_29(record: SavedJson, what: string): SavedJson {
+  return Object.fromEntries(Object.entries(record).map(([k, v]) => [k, scaled_28_29(v, `${what} ${k}`)]));
 }
 
-function contractCents_26_27(c: SavedJson): SavedJson {
-  return { ...c, reward: cents_26_27(c.reward, `contract ${String(c.id)} reward`) };
+function contractCents_28_29(c: SavedJson): SavedJson {
+  return { ...c, reward: cents_28_29(c.reward, `contract ${String(c.id)} reward`) };
 }
 
-function callVarsCents_26_27(vars: SavedJson): SavedJson {
+function callVarsCents_28_29(vars: SavedJson): SavedJson {
   const centsVar = (v: SavedJson): SavedJson => {
-    if (v.kind === 'money') return { ...v, amount: cents_26_27(v.amount, 'call money') };
-    if (v.kind === 'deal') return { ...v, price: cents_26_27(v.price, 'call deal price') };
+    if (v.kind === 'money') return { ...v, amount: cents_28_29(v.amount, 'call money') };
+    if (v.kind === 'deal') return { ...v, price: cents_28_29(v.price, 'call deal price') };
     if (v.kind === 'prices') {
-      const goods = (v.goods as SavedJson[]).map((g) => ({ ...g, buy: cents_26_27(g.buy, 'call buy price'), sell: cents_26_27(g.sell, 'call sell price') }));
+      const goods = (v.goods as SavedJson[]).map((g) => ({ ...g, buy: cents_28_29(g.buy, 'call buy price'), sell: cents_28_29(g.sell, 'call sell price') }));
       return { ...v, goods };
     }
     return v;
@@ -491,71 +517,71 @@ function callVarsCents_26_27(vars: SavedJson): SavedJson {
   return Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, centsVar(v as SavedJson)]));
 }
 
-function callCents_26_27(call: SavedJson): SavedJson {
+function callCents_28_29(call: SavedJson): SavedJson {
   const line = call.line as SavedJson;
-  return { ...call, vars: callVarsCents_26_27(call.vars as SavedJson), line: { ...line, vars: callVarsCents_26_27(line.vars as SavedJson) } };
+  return { ...call, vars: callVarsCents_28_29(call.vars as SavedJson), line: { ...line, vars: callVarsCents_28_29(line.vars as SavedJson) } };
 }
 
-function stateCents_26_27(state: SavedJson): SavedJson {
+function stateCents_28_29(state: SavedJson): SavedJson {
   const data = state.data as SavedJson;
   const what = `${String(data.kind)} state ${String(state.id)}`;
-  if (data.kind === 'tow') return { ...state, data: { ...data, fee: cents_26_27(data.fee, `${what} fee`), waived: cents_26_27(data.waived, `${what} waived fee`) } };
-  if (data.kind === 'towPromise' || data.kind === 'escort') return { ...state, data: { ...data, fee: cents_26_27(data.fee, `${what} fee`) } };
-  if (data.kind === 'patch' || data.kind === 'aid') return { ...state, data: { ...data, price: cents_26_27(data.price, `${what} price`) } };
+  if (data.kind === 'tow') return { ...state, data: { ...data, fee: cents_28_29(data.fee, `${what} fee`), waived: cents_28_29(data.waived, `${what} waived fee`) } };
+  if (data.kind === 'towPromise' || data.kind === 'escort') return { ...state, data: { ...data, fee: cents_28_29(data.fee, `${what} fee`) } };
+  if (data.kind === 'patch' || data.kind === 'aid') return { ...state, data: { ...data, price: cents_28_29(data.price, `${what} price`) } };
   return state;
 }
 
-function feeCents_26_27(e: SavedJson): SavedJson {
-  return { ...e, fee: cents_26_27(e.fee, `${String(e.t)} fee`) };
+function feeCents_28_29(e: SavedJson): SavedJson {
+  return { ...e, fee: cents_28_29(e.fee, `${String(e.t)} fee`) };
 }
 
-const EVENT_CENTS_26_27: Record<string, (e: SavedJson) => SavedJson> = {
-  money: (e) => ({ ...e, amount: cents_26_27(e.amount, 'money event') }),
-  practice: (e) => (MONEY_PRACTICE_26_27.includes(e.source as string) ? { ...e, amount: scaled_26_27(e.amount, `${String(e.source)} practice`) } : e),
-  contract: (e) => ({ ...e, contract: contractCents_26_27(e.contract as SavedJson) }),
-  towOffer: feeCents_26_27,
-  towDone: feeCents_26_27,
-  escortPaid: feeCents_26_27,
-  escortHired: feeCents_26_27,
-  aid: (e) => ({ ...e, paid: cents_26_27(e.paid, 'aid paid') }),
-  stateEnded: (e) => ({ ...e, state: stateCents_26_27(e.state as SavedJson) }),
-  say: (e) => ({ ...e, vars: callVarsCents_26_27(e.vars as SavedJson) }),
+const EVENT_CENTS_28_29: Record<string, (e: SavedJson) => SavedJson> = {
+  money: (e) => ({ ...e, amount: cents_28_29(e.amount, 'money event') }),
+  practice: (e) => (MONEY_PRACTICE_28_29.includes(e.source as string) ? { ...e, amount: scaled_28_29(e.amount, `${String(e.source)} practice`) } : e),
+  contract: (e) => ({ ...e, contract: contractCents_28_29(e.contract as SavedJson) }),
+  towOffer: feeCents_28_29,
+  towDone: feeCents_28_29,
+  escortPaid: feeCents_28_29,
+  escortHired: feeCents_28_29,
+  aid: (e) => ({ ...e, paid: cents_28_29(e.paid, 'aid paid') }),
+  stateEnded: (e) => ({ ...e, state: stateCents_28_29(e.state as SavedJson) }),
+  say: (e) => ({ ...e, vars: callVarsCents_28_29(e.vars as SavedJson) }),
 };
 
-function eventCents_26_27(e: SavedJson): SavedJson {
-  const convert = EVENT_CENTS_26_27[e.t as string];
+function eventCents_28_29(e: SavedJson): SavedJson {
+  const convert = EVENT_CENTS_28_29[e.t as string];
   return convert ? convert(e) : e;
 }
 
-function vehicleCents_26_27(v: SavedJson): SavedJson {
+function vehicleCents_28_29(v: SavedJson): SavedJson {
   const resources = v.resources as SavedJson | null;
   if (!resources) return v;
-  return { ...v, resources: { ...resources, money: cents_26_27(resources.money, `vehicle ${String(v.id)} money`) } };
+  return { ...v, resources: { ...resources, money: cents_28_29(resources.money, `vehicle ${String(v.id)} money`) } };
 }
 
-function withCents_26_27(world: SavedJson): SavedJson {
+function withCents_28_29(world: SavedJson): SavedJson {
   const player = world.player as SavedJson;
   const call = player.call as SavedJson | null;
   return {
     ...world,
     player: {
       ...player,
-      money: cents_26_27(player.money, 'player money'),
-      costBasis: scaledRecord_26_27(player.costBasis as SavedJson, 'cost basis'),
-      contracts: (player.contracts as SavedJson[]).map(contractCents_26_27),
-      call: call ? callCents_26_27(call) : null,
+      money: cents_28_29(player.money, 'player money'),
+      costBasis: scaledRecord_28_29(player.costBasis as SavedJson, 'cost basis'),
+      contracts: (player.contracts as SavedJson[]).map(contractCents_28_29),
+      call: call ? callCents_28_29(call) : null,
     },
     shops: Object.fromEntries(
-      Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(contractCents_26_27) }]),
+      Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(contractCents_28_29) }]),
     ),
-    vehicles: (world.vehicles as SavedJson[]).map(vehicleCents_26_27),
-    removed: (world.removed as SavedJson[]).map(vehicleCents_26_27),
+    vehicles: (world.vehicles as SavedJson[]).map(vehicleCents_28_29),
+    removed: (world.removed as SavedJson[]).map(vehicleCents_28_29),
     salvage: (world.salvage as SavedJson[]).map((stock) => {
       const pile = stock.pile as SavedJson | undefined;
-      return pile ? { ...stock, pile: { ...pile, basis: scaledRecord_26_27(pile.basis as SavedJson, `pile ${String(stock.id)} basis`) } } : stock;
+      return pile ? { ...stock, pile: { ...pile, basis: scaledRecord_28_29(pile.basis as SavedJson, `pile ${String(stock.id)} basis`) } } : stock;
     }),
-    states: (world.states as SavedJson[]).map(stateCents_26_27),
-    events: (world.events as SavedJson[]).map(eventCents_26_27),
+    states: (world.states as SavedJson[]).map(stateCents_28_29),
+    events: (world.events as SavedJson[]).map(eventCents_28_29),
   };
 }
 
@@ -652,8 +678,12 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   // 25 to 26: utility orders and effects, the search stream, hidden salvage in every unsearched rolled stock and the
   // debug freeze switch.
   (world) => withFreeze_25_26(withHiddenStock_25_26(withUtilities_25_26(world))),
-  // 26 to 27: money becomes integer cents of M, 1 M per 5 L of fuel.
-  withCents_26_27,
+  // 26 to 27: every saved bounty starts unfulfilled.
+  withFulfilledFlag_26_27,
+  // 27 to 28: Glass Flats is a territory, so its site stock goes.
+  withoutRetiredStock_27_28,
+  // 28 to 29: money becomes integer cents of M, 1 M per 5 L of fuel.
+  withCents_28_29,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

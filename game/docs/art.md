@@ -25,6 +25,8 @@ When a place has a concept image, like Old Orchard's `docs/concepts/old-orchard-
 
 Old Orchard's models were built this way: `farmhouse`, `barn`, `quonset`, `guard_post`, `army_truck`, `barrier`, `drums`, `woodpile`, the `bunker` blockhouse with its sandbag ring, and `dead_tree`. The `sandbags` arc carries no hedgehog. `tank_trap` is its own prop, the steel hedgehog the orchard's emplacements stand ahead of their arcs, with the girders the sandbag model once held. `LANDMARK_MODELS` in `src/sim/mapgen.ts` maps each prop look to its model, and `MODEL_RADIUS` holds the footprint radius from each script's docstring.
 
+Glass Flats' models were built the same way from `docs/concepts/glass-flats-game-style-issue-112.jpg`, sized against its 6 m pickups: `engine_nozzle` 26 m long and 7.9 m tall, `engine_frame` 32 m and 15.6 m, `ruin_compound` 17 m and 6.2 m, `watchtower` 4 m and 9.6 m, `glass_spire` 10 m and 7.5 m, and `scrap_wall` 7.6 m and 3.6 m, pinned by `src/data/prop-shapes.test.ts`. The nozzle's roof and upper ribs start above `PHYSICS.truckClearance`, so trucks drive in; the frame keeps only its feet below it.
+
 The `desert_scrub` and `cactus` scatter models were built the same way from `docs/concepts/wasteland-reference-issue-129.jpg`, sized against the 5.5 m van in it.
 
 Size a building against the 8.1 m army truck, the one size cue a concept and the game share. The orchard's models are measured from the concept in army trucks and pinned by the size table in `src/data/prop-shapes.test.ts`:

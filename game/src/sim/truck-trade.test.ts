@@ -4,7 +4,7 @@ import { ECONOMY, GOODS } from '../data/goods';
 import { NPC_UPKEEP, NPCS, STATE_TURNS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
-import { partTradePrice, truckPartPrice } from './economy';
+import { canTradeWith, inMeetingReach, partTradePrice, playerTrades, truckPartPrice } from './economy';
 import { makePart } from './factory';
 import { freeCells, goodsCount } from './grid';
 import { addGoods, spareParts, stowPart } from './inventory';
@@ -199,5 +199,23 @@ describe('trades', () => {
     const { w: start, npc } = withTrader(34);
     const w0 = update(start, (w) => { addGoods(w, find(w, npc.id), 'salt', 1); });
     expect(() => buyTruckGood(w0, npc.id, 'salt', 1)).toThrow('No trade agreed');
+  });
+});
+
+describe('trade reach', () => {
+  it('tells which driver the player can trade with and keeps reach apart from parking', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const far = addVehicle(w, 'traders', 'scout', [], { x: 90, y: 30 });
+    const near = addVehicle(w, 'traders', 'scout', [], { x: 34, y: 30 });
+    const a = addState(w, 'trade', far.id, w.player.vehicleId, { kind: 'none' });
+    const b = addState(w, 'trade', near.id, w.player.vehicleId, { kind: 'none' });
+    expect(playerTrades(w)).toHaveLength(2);
+    expect(inMeetingReach(w, a)).toBe(false);
+    expect(inMeetingReach(w, b)).toBe(true);
+    expect(canTradeWith(w, far.id)).toBe(false);
+    expect(canTradeWith(w, near.id)).toBe(true);
+    near.speed = RULES.parkedSpeed + 1;
+    expect(inMeetingReach(w, b)).toBe(true);
+    expect(canTradeWith(w, near.id)).toBe(false);
   });
 });

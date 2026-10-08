@@ -132,7 +132,7 @@ describe('world from the baked map', () => {
     const segmentLooks = new Set<string>(['fence', ...Object.values(TERRITORIES).flatMap((t) => t.farm?.runs.map((run) => run.look) ?? [])]);
     const ends = (o: Obstacle) => (o.kind === 'landmark' && segmentLooks.has(o.look) ? [1, -1].map((k) => ({ x: o.pos.x + k * o.r * Math.cos(o.yaw), y: o.pos.y + k * o.r * Math.sin(o.yaw) })) : []);
     const touching = (a: Obstacle, b: Obstacle) => ends(a).some((p) => ends(b).some((q) => dist(p, q) < 1e-4));
-    // A hull piece of the Fallen Sun is long or hollow, so it stands on the ground only under its low boxes: trucks,
+    // A wreck piece of a territory is long or hollow, so it stands on the ground only under its low boxes: trucks,
     // caches and the reactor sit inside and beside it. Rim rocks overlap each other on purpose, as one rock wall.
     const low = (o: Obstacle) => propBoxes(o).filter((b) => b.z0 < PHYSICS.truckClearance);
     const boxed = (o: Obstacle) => o.kind === 'landmark' && HULL_PIECES.has(o.look);
@@ -352,7 +352,8 @@ describe('prop poses', () => {
 });
 
 // The Fallen Sun's hull piece looks, which stand on their low boxes.
-const HULL_PIECES = new Set<string>(['shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry']);
+// The looks of every territory's wreck pieces: hull pieces, the engine and its watchtowers.
+const HULL_PIECES = new Set<string>(Object.values(TERRITORIES).flatMap((t) => t.wreck?.pieces.map((p) => p.look) ?? []));
 
 describe('Broken Wing on the baked map', () => {
   const M = PHYSICS.metersPerTile;

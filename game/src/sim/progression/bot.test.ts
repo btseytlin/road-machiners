@@ -770,7 +770,7 @@ describe('the hunter', () => {
       const w = parkedAt('bowl');
       const target = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 300, y: 300 });
       target.brain = npcBrain('buggy', target.pos, ['raider']);
-      w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 23333, deadline: 5000, window: 600, tier: 1 }];
+      w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 23333, deadline: 5000, window: 600, tier: 1, fulfilled: false }];
       return botOrders(w, archetype).world.player.contracts.map((c) => c.id);
     };
 
@@ -783,7 +783,7 @@ describe('the hunter', () => {
       const w = parkedAt('bowl');
       const target = addVehicle(w, 'raiders', chassis, parts, { x: 300, y: 300 });
       target.brain = npcBrain(template, target.pos, ['raider']);
-      w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template, targetName: 'Raider', reward: 700, deadline: 5000, window: 600, tier: 1 }];
+      w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template, targetName: 'Raider', reward: 700, deadline: 5000, window: 600, tier: 1, fulfilled: false }];
       return botOrders(w, 'hunter').world.player.contracts.length;
     };
 
@@ -793,7 +793,7 @@ describe('the hunter', () => {
 
   it('has a hunter take no bounty when no truck of the type is left', () => {
     const w = parkedAt('bowl');
-    w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider', reward: 700, deadline: 5000, window: 600, tier: 1 }];
+    w.shops.bowl.contracts = [{ id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider', reward: 700, deadline: 5000, window: 600, tier: 1, fulfilled: false }];
 
     expect(botOrders(w, 'hunter').world.player.contracts).toEqual([]);
   });
@@ -864,7 +864,7 @@ describe('the hunter', () => {
   it('has a climber with fewer than three guns haul, and take no bounty', () => {
     const w = parkedAt('bowl');
     w.shops.bowl.contracts = [
-      { id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 23333, deadline: 5000, window: 600, tier: 1 },
+      { id: 'ct-bounty', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 23333, deadline: 5000, window: 600, tier: 1, fulfilled: false },
       { id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'scrap', units: 3, to: 'nose', reward: 20000, deadline: 5000, window: 600, rush: false, tier: 2 },
     ];
 
