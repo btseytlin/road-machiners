@@ -1,0 +1,34 @@
+{
+ "world": {
+  "sample_wagon_heard": {
+   "type": "boolean",
+   "init": false
+  }
+ },
+ "externals": [
+  "give_money",
+  "money"
+ ],
+ "quests": {
+  "sample_bowl": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"^Hattie sets her bucket down by the well.\",\"\\n\",{\"->\":\".^.talk\"},{\"talk\":[[\"#\",\"^checkpoint: start.talk\",\"/#\",\"ev\",\"str\",\"^Heard any rumors?\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":20},\"ev\",\"str\",\"^Can you spare some coin for the road?\",\"/str\",{\"VAR?\":\"trust\"},0,\">\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":21},\"ev\",\"str\",\"^Leave.\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},{\"c-0\":[\"\\n\",\"^A scavenger came through selling an Army radio. Said he pulled it off a dead wagon north-east of here.\",\"\\n\",\"ev\",true,\"/ev\",{\"VAR=\":\"sample_wagon_heard\",\"re\":true},\"ev\",{\"VAR?\":\"trust\"},1,\"+\",{\"VAR=\":\"trust\",\"re\":true},\"/ev\",{\"->\":\".^.^.^\"},{\"#f\":5}],\"c-1\":[\"\\n\",\"^Hattie counts out a few coins. \\\"Bring me news from Nose.\\\"\",\"\\n\",\"ev\",5,{\"x()\":\"give_money\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",{\"->\":\".^.^.^\"},{\"#f\":5}],\"c-2\":[\"\\n\",\"end\",null]}],null]}],\"global decl\":[\"ev\",false,{\"VAR=\":\"sample_wagon_heard\"},0,{\"VAR=\":\"trust\"},\"/ev\",\"end\",null]}],\"listDefs\":{}}",
+   "vars": {
+    "trust": {
+     "type": "number",
+     "init": 0
+    }
+   },
+   "checkpoints": [
+    "start",
+    "start.talk"
+   ]
+  },
+  "sample_nose": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[[\"#\",\"^checkpoint: start\",\"/#\",\"^Sergeant Kovac looks up from the dispatch board.\",\"\\n\",\"ev\",\"str\",\"^About that scavenger with the Army radio.\",\"/str\",{\"VAR?\":\"sample_wagon_heard\"},\"/ev\",{\"*\":\".^.c-0\",\"flg\":5},\"ev\",\"str\",\"^I have coin. Any work?\",\"/str\",{\"x()\":\"money\"},0,\">\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":5},\"ev\",\"str\",\"^Nothing. Bye.\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},{\"c-0\":[\"\\n\",\"^\\\"That set came off wagon Seven. Nobody went to look.\\\"\",\"\\n\",\"end\",null],\"c-1\":[\"\\n\",\"^\\\"Board is empty. Try tomorrow.\\\"\",\"\\n\",\"end\",null],\"c-2\":[\"\\n\",\"end\",null]}],null],\"global decl\":[\"ev\",false,{\"VAR=\":\"sample_wagon_heard\"},\"/ev\",\"end\",null]}],\"listDefs\":{}}",
+   "vars": {},
+   "checkpoints": [
+    "start"
+   ]
+  }
+ }
+}
