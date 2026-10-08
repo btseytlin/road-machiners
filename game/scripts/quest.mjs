@@ -40,8 +40,9 @@ function loaded(w, file) {
   const quests = { world: saved.world, local: saved.local, session: saved.session, live: null };
   const problems = questProblems(quests, bundle);
   if (problems.length > 0) throw new Error(`${file} does not fit the current quests:\n${problems.join('\n')}`);
-  if (quests.session?.quest !== id) throw new Error(`${file} holds no open session of ${id}`);
   w.player.quests = quests;
+  if (quests.session === null) return started(w);
+  if (quests.session.quest !== id) throw new Error(`${file} holds an open session of ${quests.session.quest}, not ${id}`);
   restoreQuest(w, bundle);
   console.log(`Resumed ${id} at checkpoint ${quests.session.checkpoint}\n`);
   return w;

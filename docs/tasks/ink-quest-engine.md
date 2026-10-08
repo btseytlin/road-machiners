@@ -159,6 +159,31 @@ UK3 is resolved here: the sample quests are real files in `game/src/data/quests/
 - RK3 — Visit-count capping can merge states that a script treats differently. The cap and the step limit are set in PH4 from the samples (UK1) and recorded with a reason.
 - Rollback: the branch is separate from `dev`, and nothing outside it starts a quest.
 
+## Verify
+
+Result: passed
+
+Happy-path:
+- CK1 — the Goal path through the terminal player: Bowl to mid-quest with `--save`, a new choice inserted above the old ones in the current section, `--load` resumes at `start.talk` with `sample_wagon_heard` and `trust` kept and the rumor choice still hidden, then Nose started with `--load` of the finished Bowl state offers the scavenger choice — held.
+- CK2 — an effect between two lines runs once, not again on ink's look-ahead — held, +1 M exactly.
+- CK3 — the same world rolls the same ink dice, and a restore rolls them again — held.
+
+Negative:
+- CK4 (IV10) — an effect pays, then a later effect throws in the same pick — held: the world is unchanged, and the cached story still serves the next command.
+- CK5 — a variable assigned a value of another type — held: "Variable n of quest q became a string, not a number".
+- CK6 (IV3) — malformed saved sessions, a nested value, a wrongly typed quest variable and missing quest state — held: each raises `SaveError`.
+- CK7 (IV3, IV4) — a renamed checkpoint section after a mid-quest save — held: `--load` names the missing checkpoint, `save:shape` refuses, and the quest-names test fails.
+- CK8 (IV8) — an ink edit without a build — held: `quests:check` reports the stale bundle.
+
+Invariants / assumptions:
+- CK9 — two worlds interleave picks on one cached story — held, each keeps its own count.
+- CK10 (AS1) — a pick costs 3.7 ms on a hub loop, under the 5 ms premise — held.
+- CK11 (AS2) — `vite build` bundles the ink runtime and none of the compiler — held.
+
+Smoke: `npm run playtest` against a dev server — PASS, 12 turns. The 196 tests of the six touched test files, typecheck and `npm run quality` pass.
+
+Notes: CK1 needed one fix: `--load` of a state with no open quest now starts the named quest with the saved variables, so Bowl's outcome can carry into Nose from the terminal.
+
 ## Conclusion
 
 ### Hands-off decisions
