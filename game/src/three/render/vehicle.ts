@@ -20,7 +20,7 @@ import { angleDiff, DEG } from '../../sim/vec';
 import { clearTop, headShape, sweepOf, type Obstacle } from './gunClearance';
 import { model, outlineOf, socket, TRUCK_BIT, type ModelName } from './models';
 import { hashStr } from '../../render/noise';
-import { onAir, radioSpeakers } from '../../sim/dialogue';
+import { callTrucks, radioSpeakers } from '../../sim/dialogue';
 import { TruckMotion, WHIPS } from './truckMotion';
 import { weaponHead } from './weaponHead';
 
@@ -38,7 +38,7 @@ const GLASS = 'glass'; // the cab window material in the base models, tinted by 
 const TRIM = 'trim'; // base material that takes the faction cab color
 
 // Color factor for every material of a broken part.
-const BROKEN_TONE: Record<PartKind, number> = { weapon: 0.5, armor: 0.6, engine: 0.6, cargo: 0.6, core: 0.6, scanner: 0.6, store: 0.6 };
+const BROKEN_TONE: Record<PartKind, number> = { weapon: 0.5, armor: 0.6, engine: 0.6, cargo: 0.6, core: 0.6, scanner: 0.6, store: 0.6, utility: 0.6 };
 
 // Yaw for rotation 1. Local +x, the model's front, turns to the truck's left.
 const ROT_YAW = Math.PI / 2;
@@ -326,6 +326,11 @@ export class VehicleView {
       const local = onChassis(v, item) ? surfacePoint(v, item) : new THREE.Vector3(-body.half.x, body.half.y, 0);
       this.anchors.set(item.part.id, { local, parent: this.body });
     }
+  }
+
+  // Whether the view draws the part, so partPoint() knows it.
+  hasPart(partId: string): boolean {
+    return this.anchors.has(partId);
   }
 
   // The world point of a part, in meters, valid after pose().
@@ -1006,34 +1011,117 @@ function isWheel(def: PartDef): boolean {
   return def.kind === 'core' && def.role === 'wheel';
 }
 
-// Wall-clock timing of the antenna radio light, so a call that freezes turns still blinks.
+// Wall-clock timing of the antenna radio light, so a call that freezes turns still plays its cue.
 export const RADIO_LIGHT = {
-  periodMs: 700, // one on and off cycle
-  spokeMs: 3000, // how long a truck keeps blinking after it talked in a turn
+  flashMs: 200, // one flash on, and the dark gap after it
+  talkMs: 1200, // how long a brief talk or a beacon switch-on glows between its opening and closing flashes
 };
 
-// Who blinks: the trucks on air now, and trucks that talked in a recently seen world.
+// One run of the light: start and end in wall-clock ms, with end null while the call is open.
+export type RadioCue = { start: number; end: number | null };
+
+// When the closing flash begins. The two opening flashes always finish first.
+function closeStart(cue: RadioCue): number {
+  return cue.end === null ? Infinity : Math.max(cue.end, cue.start + 4 * RADIO_LIGHT.flashMs);
+}
+
+function cueEnd(cue: RadioCue): number {
+  return closeStart(cue) + 2 * RADIO_LIGHT.flashMs;
+}
+
+// Two flashes, a steady glow, then dark and one flash.
+export function radioLit(cue: RadioCue, now: number): boolean {
+  const f = RADIO_LIGHT.flashMs;
+  if (now < cue.start) return false;
+  const open = now - cue.start;
+  if (open < 4 * f) return Math.floor(open / f) % 2 === 0;
+  const close = now - closeStart(cue);
+  if (close < 0) return true;
+  return close >= f && close < 2 * f;
+}
+
+// Turns each newly seen world into light cues: open calls from the call state, brief talk from events.
 export class RadioLights {
-  private readonly until = new Map<string, number>();
+  private readonly cues = new Map<string, RadioCue[]>(); // at most a closing cue and the next one
   private noted: World | null = null;
-  private air: { world: World; ids: Set<string> } | null = null; // onAir of the last world asked, once per world
+  private calling = new Set<string>();
+  private beacon = false;
 
   note(world: World, now: number): void {
-    for (const [id, end] of this.until) if (end <= now) this.until.delete(id);
+    this.prune(now);
     if (world === this.noted) return;
+    const first = this.noted === null;
     this.noted = world;
-    for (const id of radioSpeakers(world.events, world.player.vehicleId)) this.until.set(id, now + RADIO_LIGHT.spokeMs);
+    const call = new Set(callTrucks(world));
+    this.noteCall(call, now);
+    if (!first) this.noteTalk(world, call, now);
+    this.calling = call;
+    this.beacon = world.player.beacon;
   }
 
-  lit(world: World, id: string, now: number): boolean {
-    const end = this.until.get(id);
-    if (!this.onAir(world).has(id) && (end === undefined || end <= now)) return false;
-    const phase = (now / RADIO_LIGHT.periodMs + hashStr(id)) % 1;
-    return phase < 0.5;
+  // An id that joined the call opens a cue, and one that left closes its cue.
+  private noteCall(call: Set<string>, now: number): void {
+    for (const id of call) if (!this.calling.has(id)) this.open(id, now);
+    for (const id of this.calling) if (!call.has(id)) this.close(id, now);
   }
 
-  private onAir(world: World): Set<string> {
-    if (this.air?.world !== world) this.air = { world, ids: new Set(onAir(world)) };
-    return this.air.ids;
+  // Brief talk: speakers outside a call, and the player's beacon switching on.
+  private noteTalk(world: World, call: Set<string>, now: number): void {
+    for (const id of radioSpeakers(world.events, world.player.vehicleId)) {
+      if (!this.calling.has(id) && !call.has(id)) this.talk(id, now);
+    }
+    this.noteBeacon(world, call, now);
+  }
+
+  private noteBeacon(world: World, call: Set<string>, now: number): void {
+    const switchedOn = world.player.beacon && !this.beacon;
+    if (switchedOn && call.size === 0) this.talk(world.player.vehicleId, now);
+  }
+
+  lit(id: string, now: number): boolean {
+    const list = this.cues.get(id);
+    if (!list) return false;
+    for (const cue of list) if (radioLit(cue, now)) return true;
+    return false;
+  }
+
+  private open(id: string, now: number): void {
+    const joined = this.joinable(id, now);
+    if (joined) joined.end = null;
+    else this.push(id, now, null);
+  }
+
+  private close(id: string, now: number): void {
+    const last = this.cues.get(id)?.at(-1);
+    if (last && last.end === null) last.end = now;
+  }
+
+  private talk(id: string, now: number): void {
+    const joined = this.joinable(id, now);
+    if (joined) {
+      if (joined.end !== null) joined.end = Math.max(joined.end, now + RADIO_LIGHT.talkMs);
+    } else this.push(id, now, now + RADIO_LIGHT.talkMs);
+  }
+
+  // The last cue, while it has not begun closing.
+  private joinable(id: string, now: number): RadioCue | null {
+    const last = this.cues.get(id)?.at(-1);
+    return last && now < closeStart(last) ? last : null;
+  }
+
+  // A new cue waits for the closing one to finish and a dark gap, so a closing flash is never cut or merged with a new one.
+  private push(id: string, now: number, end: number | null): void {
+    const list = this.cues.get(id) ?? [];
+    const last = list.at(-1);
+    const start = last ? Math.max(now, cueEnd(last) + RADIO_LIGHT.flashMs) : now;
+    list.push({ start, end: end === null ? null : start + (end - now) });
+    this.cues.set(id, list);
+  }
+
+  private prune(now: number): void {
+    for (const [id, list] of this.cues) {
+      while (list.length > 0 && cueEnd(list[0]) <= now) list.shift();
+      if (list.length === 0) this.cues.delete(id);
+    }
   }
 }

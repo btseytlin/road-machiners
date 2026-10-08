@@ -46,6 +46,19 @@ describe('engine heat', () => {
     expect(engine(w).hp).toBe(hp - 2 * ENGINE_HEAT.overheatDamage);
   });
 
+  it('never warms or hurts an engine shut down by an emitter pulse, even rolling fast at noon', () => {
+    const w = emptyWorld();
+    w.turn = NOON;
+    const me = w.vehicles[0];
+    me.speed = 6;
+    me.shutDown = { from: w.turn, until: w.turn + 2 };
+    w.player.engineHeat = 1;
+    const hp = engine(w).hp;
+    advanceEngineHeat(w);
+    expect(w.player.engineHeat).toBeLessThan(1);
+    expect(engine(w).hp).toBe(hp);
+  });
+
   it('never warms while driving at night', () => {
     const w = emptyWorld();
     w.turn = NIGHT;

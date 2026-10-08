@@ -199,13 +199,10 @@ export function onCall(world: World, a: Vehicle, b: Vehicle): boolean {
   return pair.includes(call.with) && pair.includes(world.player.vehicleId);
 }
 
-// The vehicle ids on the radio now: both trucks of the open call, and the player's truck while its beacon is on.
-export function onAir(world: World): string[] {
-  const ids = new Set<string>();
+// The vehicle ids on the open call: both trucks of it, or none. The beacon is not a call.
+export function callTrucks(world: World): string[] {
   const call = world.player.call;
-  if (call) ids.add(world.player.vehicleId).add(call.with);
-  if (world.player.beacon) ids.add(world.player.vehicleId);
-  return [...ids];
+  return call ? [world.player.vehicleId, call.with] : [];
 }
 
 // The vehicle ids each kind of event puts on the radio. A honk, aid and patch work are not radio talk.
@@ -243,7 +240,7 @@ export function hangUp(world: World): World {
 // and wants to raise a topic calls. A knocked-out driver keeps its old goals, so it must not read them here. The highest priority topic wins. A driver in a feud with the player calls only with a topic
 // raised during feuds. While the player is in combat, only topics raised during combat call. One call at a time.
 export function raiseCalls(world: World): void {
-  if (world.player.call || world.player.state !== 'active') return;
+  if (world.player.call || world.player.state !== 'active' || world.player.frozen) return;
   const me = playerVehicle(world);
   for (const npc of world.vehicles) {
     const topic = raisedTopic(world, npc, me);

@@ -14,7 +14,7 @@ import { gridItemIcon, toneStyle } from "./cards";
 import { hp, kg } from "./units";
 
 const CELL_TITLE: Record<Cell, string> = {
-  D: "deck mount for a weapon, scanner, cargo frame or store",
+  D: "deck mount for a weapon, scanner, utility, cargo frame or store",
   E: "engine mount",
   F: "front armor mount",
   B: "back armor mount",

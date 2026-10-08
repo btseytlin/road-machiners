@@ -1,6 +1,7 @@
-// Throttle zones fanned ahead of the truck, draped on the ground, like the 2D src/render/throttle.ts.
+// Bands draped on the ground. Throttle zones fanned ahead of the truck, like the 2D src/render/throttle.ts.
 // The caller supplies the half-angle (it already clamps a minimum so barely-turning trucks keep
 // visible zones) and the hover color (throttle color under the cursor, or PAL.plan off any zone).
+// GroundBand draws a whole ring the same way, for utility range rings, point markers and effect edges.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
@@ -113,4 +114,54 @@ function gridIndices(arcSteps: number, radialSteps: number): number[] {
       idx.push(a, b, c, b, d, c);
     }
   return idx;
+}
+
+export type BandLook = { color: number; opacity: number; renderOrder: number; overTrucks: boolean };
+
+// A ring between two radii around a map point, draped on the ground. set() rebuilds the geometry only when the
+// center or the radii change.
+export class GroundBand {
+  readonly mesh: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
+  private key = '';
+
+  // overTrucks: the band draws over trucks and props, for aiming marks. Otherwise trucks hide it.
+  constructor(look: BandLook) {
+    this.mesh = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({
+      color: look.color, transparent: true, opacity: look.opacity, depthWrite: false, depthTest: !look.overTrucks,
+      side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
+    }));
+    this.mesh.renderOrder = look.renderOrder;
+    this.mesh.visible = false;
+  }
+
+  // inner and outer: radii in tiles around center.
+  set(terrain: Terrain, center: Vec, inner: number, outer: number): void {
+    this.mesh.visible = true;
+    const key = `${center.x},${center.y},${inner},${outer}`;
+    if (key === this.key) return;
+    this.key = key;
+    const arcSteps = Math.max(HOVER_SEGMENTS, Math.ceil((2 * Math.PI * outer) / SAMPLE_TILES));
+    const positions: number[] = [];
+    for (let i = 0; i <= arcSteps; i++) {
+      const a = (2 * Math.PI * i) / arcSteps;
+      pushPoint(positions, terrain, center, a, inner);
+      pushPoint(positions, terrain, center, a, outer);
+    }
+    this.mesh.geometry.dispose();
+    this.mesh.geometry = new THREE.BufferGeometry().setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    this.mesh.geometry.setIndex(gridIndices(arcSteps, 1));
+  }
+
+  color(hex: number): void {
+    this.mesh.material.color.setHex(hex);
+  }
+
+  hide(): void {
+    this.mesh.visible = false;
+  }
+
+  dispose(): void {
+    this.mesh.geometry.dispose();
+    this.mesh.material.dispose();
+  }
 }

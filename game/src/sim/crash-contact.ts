@@ -15,6 +15,7 @@ import { PERK_NUMBERS } from '../data/skills';
 import { vehicleMass } from './mass';
 import { bodyOf } from './body';
 import { towsClient } from './tow';
+import { claymoresSetOff, detonateOnCrash, detonateOnObstacle } from './claymore';
 import type { Vehicle, World } from './types';
 
 export type CrashContact = { side: Side; lanes: number[] };
@@ -24,15 +25,20 @@ export function applyContactCrash(world: World, a: Vehicle, b: Vehicle | null, w
   if (!Number.isFinite(impact) || impact < 0) throw new Error(`Bad crash impact ${impact}`);
   if (Boolean(b) !== Boolean(contact.b)) throw new Error('Crash geometry does not match the bodies');
   if (b) {
+    const blasts = claymoreBlasts(world, a, b, impact, contact);
     const { hitsA, hitsB } = damageVehicleCrash(world, a, b, impact, contact);
     stallRammed(world, a, b, hitsA, hitsB); // before the crash itself makes the trucks hostile
     noteCollision(world, a, b, hitsA, hitsB);
     world.events.push({ t: 'collision', a: a.id, b: b.id, hitsA, hitsB });
+    blasts();
     practiceRam(world, a, b, hitsA, hitsB);
     return;
   }
+  const crash = { impact, own: contact.a, theirs: null };
+  const rams = world.obstacles.some((o) => o.id === what) ? claymoresSetOff(world, a, null, crash) : [];
   const hitsA = applyContactDamage(world, a, contact.a, impact, 1, hardCrash(impact));
   world.events.push({ t: 'collision', a: a.id, b: what, hitsA, hitsB: [] });
+  detonateOnObstacle(world, a, what, rams, crash);
 }
 
 // The truck's body hit the ground, which hurts far more than a crash at the same speed into an obstacle.
@@ -50,6 +56,20 @@ export function applyLanding(world: World, v: Vehicle, what: string, impact: num
   const damage = RULES.ramDamage * RULES.crashDamage * RULES.landingDamage * impact * impact * Math.max(0, 1 - driving);
   const hitsA = coreParts(v, 'wheel').filter((wheel) => wheel.hp > 0).map((wheel) => ({ part: wheel.id, damage: damagePart(world, v, wheel, damage) }));
   world.events.push({ t: 'collision', a: v.id, b: what, hitsA, hitsB: [] });
+}
+
+// Each truck's armed claymore ram on its struck side may blast the other. Which ones go off is read at impact, before
+// the crash damage; the returned call sets them off, after the crash event.
+function claymoreBlasts(world: World, a: Vehicle, b: Vehicle, impact: number, contact: CrashGeometry): () => void {
+  if (!contact.b) throw new Error('Vehicle crash has no target contact');
+  const forA = { impact, own: contact.a, theirs: contact.b };
+  const forB = { impact, own: contact.b, theirs: contact.a };
+  const ramsA = claymoresSetOff(world, a, b, forA);
+  const ramsB = claymoresSetOff(world, b, a, forB);
+  return () => {
+    detonateOnCrash(world, a, b, ramsA, forA);
+    detonateOnCrash(world, b, a, ramsB, forB);
+  };
 }
 
 // How much harder a fast crash into an obstacle hits; see RULES.hardCrashSpeed.
