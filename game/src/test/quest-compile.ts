@@ -8,7 +8,8 @@ import { ErrorType } from 'inkjs/compiler/Parser/ErrorType';
 import { CHECKPOINT_TAG, type CompiledQuest, type QuestBundle, type QuestValueType, type QuestVarDecl } from '../data/quests';
 
 export type QuestSources = Record<string, string>;
-export type CompileResult = { quest: CompiledQuest | null; errors: string[]; warnings: string[] };
+export type CompileResult = { quest: CompiledQuest | null; errors: string[]; warnings: string[]; sections: string[] };
+export type SourcesResult = { bundle: QuestBundle; errors: string[]; warnings: string[]; sections: Record<string, string[]> };
 
 type ParsedVar = { listDefinition: unknown };
 type ParsedFlow = { isFunction: boolean; subFlowsByName: Map<string, ParsedFlow> };
@@ -26,39 +27,46 @@ export function questIds(sources: QuestSources): string[] {
 }
 
 export function compileBundle(sources: QuestSources): QuestBundle {
-  const world = parseInk(WORLD_FILE, sources);
-  if (world.errors.length > 0 || !world.parsed) throw new Error(`${WORLD_FILE} does not compile:\n${world.errors.join('\n')}`);
-  const results = questIds(sources).map((id) => [id, compileQuest(id, sources)] as const);
-  const failed = results.flatMap(([id, r]) => r.errors.map((e) => `${id}: ${e}`));
-  if (failed.length > 0) throw new Error(`Quests do not compile:\n${failed.join('\n')}`);
+  const { bundle, errors } = compileSources(sources, false);
+  if (errors.length > 0) throw new Error(`Quests do not compile:\n${errors.join('\n')}`);
+  return bundle;
+}
+
+export function compileSources(sources: QuestSources, countAllVisits: boolean): SourcesResult {
+  const world = parseInk(WORLD_FILE, sources, countAllVisits);
+  if (!world.parsed) return { bundle: { world: {}, externals: [], quests: {} }, errors: world.errors.map((e) => `world: ${e}`), warnings: [], sections: {} };
+  const results = questIds(sources).map((id) => [id, compileQuest(id, sources, countAllVisits)] as const);
+  const compiled = results.flatMap(([id, r]) => (r.quest ? [[id, r.quest] as const] : []));
   return {
-    world: declarations(world.parsed.story, world.parsed.vars),
-    externals: [...world.parsed.externals].sort(),
-    quests: Object.fromEntries(results.map(([id, r]) => [id, r.quest as CompiledQuest])),
+    bundle: { world: declarations(world.parsed.story, world.parsed.vars), externals: [...world.parsed.externals].sort(), quests: Object.fromEntries(compiled) },
+    errors: results.flatMap(([id, r]) => r.errors.map((e) => `${id}: ${e}`)),
+    warnings: results.flatMap(([id, r]) => r.warnings.map((w) => `${id}: ${w}`)),
+    sections: Object.fromEntries(results.map(([id, r]) => [id, r.sections])),
   };
 }
 
-export function compileQuest(id: string, sources: QuestSources): CompileResult {
-  const world = parseInk(WORLD_FILE, sources);
-  const own = parseInk(`${id}.ink`, sources);
-  if (!own.parsed || !world.parsed) return { quest: null, errors: [...world.errors, ...own.errors], warnings: own.warnings };
+export function compileQuest(id: string, sources: QuestSources, countAllVisits: boolean): CompileResult {
+  const world = parseInk(WORLD_FILE, sources, countAllVisits);
+  const own = parseInk(`${id}.ink`, sources, countAllVisits);
+  if (!own.parsed || !world.parsed) return { quest: null, errors: [...world.errors, ...own.errors], warnings: own.warnings, sections: [] };
   const worldVars = new Set(world.parsed.vars);
   const local = own.parsed.vars.filter((name) => !worldVars.has(name));
+  const sections = sectionsOf(own.parsed.flows);
   const ruleErrors = [...varErrors(own.parsed), ...checkpointErrors(own.parsed)];
-  if (ruleErrors.length > 0) return { quest: null, errors: ruleErrors, warnings: own.warnings };
+  if (ruleErrors.length > 0) return { quest: null, errors: ruleErrors, warnings: own.warnings, sections };
   const story = own.parsed.story.ToJson();
   if (!story) throw new Error(`Quest ${id} compiled to no story`);
-  return { quest: { story, vars: declarations(own.parsed.story, local), checkpoints: checkpointsOf(own.parsed) }, errors: [], warnings: own.warnings };
+  return { quest: { story, vars: declarations(own.parsed.story, local), checkpoints: checkpointsOf(own.parsed) }, errors: [], warnings: own.warnings, sections };
 }
 
-function parseInk(file: string, sources: QuestSources): { parsed: Parsed | null; errors: string[]; warnings: string[] } {
+function parseInk(file: string, sources: QuestSources, countAllVisits: boolean): { parsed: Parsed | null; errors: string[]; warnings: string[] } {
   const source = sources[file];
   if (source === undefined) return { parsed: null, errors: [`No source file ${file}`], warnings: [] };
   const errors: string[] = [];
   const warnings: string[] = [];
   const fileHandler = { ResolveInkFilename: (name: string) => name, LoadInkFileContents: (name: string) => includedSource(sources, name) };
   const onError = (message: string, type: ErrorType) => (type === ErrorType.Error ? errors : warnings).push(message);
-  const compiler = new Compiler(source, new CompilerOptions(file, [], false, onError, fileHandler));
+  const compiler = new Compiler(source, new CompilerOptions(file, [], countAllVisits, onError, fileHandler));
   const story = compileOrReport(compiler, errors);
   if (!story) return { parsed: null, errors, warnings };
   const parsed = compiler.parsedStory as unknown as { variableDeclarations: Map<string, ParsedVar>; externals: Map<string, unknown>; subFlowsByName: Map<string, ParsedFlow> };

@@ -164,6 +164,10 @@ UK3 is resolved here: the sample quests are real files in `game/src/data/quests/
 ### Hands-off decisions
 - make: switched to hands-off after the user approved the plan — the user asked for a hands-off build.
 - make: branch `ink-quest-engine` from `dev` in `.worktrees/ink-quest-engine` — the engine does not depend on #347.
+- uexecute: the explorer caps visit counts at 3 in its state key (UK1) — scripts compare visit counts to small numbers, and without a cap every hub loop is an endless state space.
+- uexecute: the explorer stops at 5,000 states and reports that as a failure (UK1) — the samples need 15. A quest that needs more should be split or should raise the limit in `quest-check.ts` as a reviewed edit.
+- uexecute: the explorer reads game queries from a new-game world only (UK2, RK2) — branching both ways on query answers is left for stage 4.
+- uexecute: the checker treats ink compile warnings as failures — ink warns on loose ends, which are dead ends in play.
 
 ### Deviations from plan
 - PH1: the compiler lives in `game/src/test/quest-compile.ts`, not a new `game/src/quests/` folder — the quality gate's fragmentation rule rejects a new folder holding one 100-line file, and `src/test/` already holds the other Node-only harnesses that scripts and tests use. The PH4 checker goes there too.
@@ -172,6 +176,7 @@ UK3 is resolved here: the sample quests are real files in `game/src/data/quests/
 - PH2: IV2 holds for choices and variables. The lines on view after a restore are the lines played since the checkpoint, not the lines before it.
 - PH2: the sample guards "Heard any rumors?" with a variable instead of a once-only choice. A used-up once-only choice returns after a restore, since visit counts are not saved.
 - PH3: a fifth helper, `dropQuest(world, quest)`, removes a whole quest. Stage 2 needs it to retire the sample quests.
+- PH4: the checker is `game/src/test/quest-check.ts`, `checkQuests(sources, world, limit)`, which compiles the sources itself with ink's count-all-visits option so it can see which sections were reached. It drives only the runner's public commands. The terminal player numbers choices from 1, so `--picks` is 1-based.
 
 ### Deferred (needs user input)
 - Rescue drops quest state — `carriedWorld()` in `game/src/sim/world.ts` rebuilds a new game and carries progression, but not `player.quests`. Rescue runs exactly when saved state may not match the content, so carrying quest variables means dropping the names `questProblems()` rejects. Decide whether rescue should carry the valid quest variables.
