@@ -130,6 +130,13 @@ describe('work by talk', () => {
     expect(townWork(w)?.id).toBe('ct-small');
   });
 
+  it('says the board holds nothing the truck can take, rather than nothing at all', () => {
+    const w = parkedAt('nose');
+    w.shops.nose.contracts = [{ ...haul('ct-huge', 300), shop: 'nose', to: 'bowl', units: 999 }];
+
+    expect(lastLine(talk(w, 'nose_kovac', [WORK]))).toBe('Nothing on the board fits you right now.');
+  });
+
   it('says so when the board is empty or the player holds the most contracts', () => {
     const empty = parkedAt('bowl');
     empty.shops.bowl.contracts = [];

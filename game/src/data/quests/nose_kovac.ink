@@ -18,6 +18,9 @@ Sergeant Kovac, dispatch. <b>Be brief.</b>
     - board_full():
       You are overcommitted. Clear your sheet first.
       -> hub
+    - not has_work() and has_offers():
+      Nothing on the board fits you right now.
+      -> hub
     - not has_work():
       Board is empty. Try tomorrow.
       -> hub

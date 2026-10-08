@@ -8,7 +8,7 @@ import BUNDLE from '../data/quests.json';
 import type { NoteId } from '../data/locals';
 import { REGION } from '../data/region';
 import { UNITS } from '../data/units';
-import { boardFull, holdsNote, isNoteId, learnNote, takeTownWork, townWork } from './dialogue-rules';
+import { boardFull, holdsNote, isNoteId, learnNote, takeTownWork, townOffers, townWork } from './dialogue-rules';
 import { hashRandom } from './rng';
 import { storyStock } from './salvage';
 import type { QuestLine, QuestSession, QuestState, QuestVars, World } from './types';
@@ -31,6 +31,7 @@ export const QUEST_QUERIES: Record<string, QuestQuery> = {
   found: (world, args) => world.player.discovered.includes(siteArg('found', args)),
   searched: (world, args) => world.player.scavenged.includes(storyStock(world, textArg('searched', args, 0)).id),
   has_work: (world) => townWork(world) !== null,
+  has_offers: (world) => townOffers(world).length > 0,
   board_full: (world) => boardFull(world),
 };
 

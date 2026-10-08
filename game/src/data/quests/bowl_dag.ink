@@ -21,6 +21,9 @@ Dag, Farmers patrol. Keep your guns cold inside the gates and we will get along 
     - board_full():
       You are carrying enough promises already. Finish a few first.
       -> hub
+    - not has_work() and has_offers():
+      Nothing on the board you could take on right now. Make some room and ask again.
+      -> hub
     - not has_work():
       Nothing on the board today. Come back in a couple of days.
       -> hub

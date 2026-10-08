@@ -409,11 +409,15 @@ export function boardFull(world: World): boolean {
   return world.player.contracts.length >= CONTRACTS.maxActive;
 }
 
-export function townWork(world: World): Contract | null {
+export function townOffers(world: World): Contract[] {
   const town = shopAt(world);
   if (!town) throw new Error('Not parked at a town, so no board is in reach');
+  return shopState(world, town).contracts.filter((c) => !isExpired(world, c));
+}
+
+export function townWork(world: World): Contract | null {
+  const open = townOffers(world).filter((c) => haulBlock(world, c) === null);
   if (boardFull(world)) return null;
-  const open = shopState(world, town).contracts.filter((c) => !isExpired(world, c) && haulBlock(world, c) === null);
   return open.reduce<Contract | null>((best, c) => (best === null || c.reward > best.reward ? c : best), null);
 }
 

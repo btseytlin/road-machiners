@@ -52,6 +52,7 @@ export class QuestScreen {
   private hide(): void {
     this.shown = null;
     this.transcript = [];
+    this.error = '';
     this.root.style.display = 'none';
     this.root.replaceChildren();
   }
@@ -109,9 +110,9 @@ export class QuestScreen {
   }
 
   private run(cmd: (w: World) => World): void {
+    this.error = '';
     try {
       this.host.announce(cmd(this.host.world()));
-      this.error = '';
     } catch (e) {
       this.asked = null;
       this.error = (e as Error).message;
