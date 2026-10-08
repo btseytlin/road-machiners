@@ -10,7 +10,7 @@ import { runJob } from './job';
 import { parseStage } from './jobs';
 import { liftEndedPause, pausedReason } from './pause';
 import { reportScheduler } from './observability';
-import { tick } from './tick';
+import { checkJobs, tick } from './tick';
 import { guardTick } from './tick-guard';
 
 function loadEnv(): void {
@@ -26,7 +26,7 @@ async function main(args: string[]): Promise<void> {
     writeHealth(ctx.cfg.home, ctx.cfg.minFreeGb, ctx.cfg.minAvailableGb, ctx.now());
     if (paused(ctx)) {
       reportScheduler(ctx.cfg.home, 'paused', ctx.now());
-      return;
+      return guardTick(ctx, () => checkJobs(ctx));
     }
     return guardTick(ctx, async () => {
       await drainInbox(ctx);

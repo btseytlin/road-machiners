@@ -87,7 +87,7 @@ Hermes manages the factory. Its incident watch wakes it on a stuck issue, a fail
 
 Hermes uses the `factory` CLI for every look at the factory and every change. Read commands print the state and change nothing. Write commands become inbox commands, and the next tick applies each one before it picks jobs. A write that cannot apply changes nothing and becomes a failure that names the reason. Each write names who ordered it and why, on the issue and in the ledger. Only a member's order runs `merge` or `move N harden` of a card the committee has not approved, `ship` and `merge-change`. `factory help` lists every command. [state.md](state.md) lists the commands.
 
-While Hermes edits state, it pauses the factory with the file `$FACTORY_HOME/paused`, and every tick skips. A paused tick also skips its job checks, so a dead job stays in `jobs` until the pause ends. A line `pid: N` in that file ties the pause to a process, and the tick lifts the pause once that process ends.
+While Hermes edits state, it pauses the factory with the file `$FACTORY_HOME/paused`, and every tick starts no job, applies no order, runs no cleanup and takes no intake. A paused tick still checks the running jobs, so a dead or timed-out job leaves `jobs` also during a pause. A line `pid: N` in that file ties the pause to a process, and the tick lifts the pause once that process ends.
 
 ## Activity and status
 

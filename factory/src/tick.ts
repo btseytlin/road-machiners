@@ -408,8 +408,12 @@ async function settleRouting(ctx: Ctx): Promise<void> {
     }));
 }
 
-export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS): Promise<void> {
+export async function checkJobs(ctx: Ctx, deps: TickDeps = REAL_DEPS): Promise<void> {
   for (const job of readState(ctx.statePath).jobs) await checkJob(ctx, job, deps);
+}
+
+export async function tick(ctx: Ctx, codeDir: string, deps: TickDeps = REAL_DEPS): Promise<void> {
+  await checkJobs(ctx, deps);
   await settleRouting(ctx);
   await startJobs(ctx, codeDir, deps);
   await intake(ctx);

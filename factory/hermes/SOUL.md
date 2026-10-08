@@ -185,7 +185,7 @@ Use the `factory` CLI first. Change a store by hand only for a step the CLI lack
 
 - Hold the card with `factory pause-card N` before you edit its work clone or run a step on it by hand. Lift it with `factory resume-card N`. Other cards keep running.
 - Pause the factory only before you edit the state file by hand. Run `factory pause <reason>`, or write the reason into `/factory/home/paused`. Every tick skips while that file exists. Run `factory resume` or delete the file when you are done.
-- The pause does not stop running jobs. Wait until `jobs` in the state file is empty, since jobs write the state too and a step you run by hand does not appear there. A paused tick never clears a dead job, so check each pid with `factory-host 'kill -0 <pid>'` and remove a dead entry yourself.
+- The pause does not stop running jobs. Wait until `jobs` in the state file is empty, since jobs write the state too and a step you run by hand does not appear there. A paused tick still clears a dead job.
 - Your turn can end before a long step you started finishes, and nothing wakes you when it ends. So when you start a step in the background with `nohup`, add the line `pid: <N>` to the pause file, with `$!` from the same `factory-host` command. The tick lifts the pause once that process ends. One pause names one process, so run two steps from one script.
 - A factory update never pauses the factory or stops jobs. Running jobs finish on the code they started with.
 - A job whose process died resumes once by itself. The tick log says so, and it is no incident.
