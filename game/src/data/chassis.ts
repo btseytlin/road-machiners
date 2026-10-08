@@ -3,7 +3,7 @@
 // falls short. Past ratedMass it slows hard. See loadFactor() in src/sim/mass.ts.
 //
 // layout is the inventory grid as a top view, nose on row 0. One string per row. Every character except a space is a cell.
-//   D           deck mount: weapons, scanners and cargo frames all compete for these cells
+//   D           deck mount: weapons, scanners, utilities and cargo frames all compete for these cells
 //   E           engine bay. The engine is drawn in the model's hood hole wherever these cells lie, see engineAnchor()
 //   F, B, L, R  armor mounts on the front, back, left and right edges. Armor works when it lies fully on one of them.
 //   X           built-in cells, each filled by a core part listed in core
@@ -65,8 +65,8 @@ export type ChassisDef = {
   look: 'pickup' | 'hauler' | 'buggy' | 'wagon' | 'courier' | 'van' | 'longbed' | 'carrier' | 'tractor' | 'jeep' | 'convertible' | 'bus' | 'loader' | 'niva' | 'bukhanka' | 'lincoln';
 };
 
-// Money per unit of each priced stat. See partModifier() in src/data/parts.ts for the value rule.
-export const CHASSIS_PRICE_MODIFIERS = { perDeckCell: 60, perArmorCell: 30, perTopSpeed: 80 };
+// Money per unit of each priced stat, in cents (100 cents is 1 M). See partModifier() in src/data/parts.ts for the value rule.
+export const CHASSIS_PRICE_MODIFIERS = { perDeckCell: 2000, perArmorCell: 1000, perTopSpeed: 2666.67 };
 
 // The hand-set fields. value and ratedMass derive from them.
 export type ChassisInput = Omit<ChassisDef, 'value' | 'ratedMass'>;
@@ -123,7 +123,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     ],
     fuelCap: 40,
     fuelPerTile: 0.25,
-    base: 800, showsCores: true, tier: 1,
+    base: 26667, showsCores: true, tier: 1,
     look: 'pickup',
   },
   hauler: {
@@ -151,7 +151,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     ],
     fuelCap: 80,
     fuelPerTile: 0.4,
-    base: 920, showsCores: false, tier: 2,
+    base: 30667, showsCores: false, tier: 2,
     look: 'hauler',
   },
   buggy: {
@@ -179,7 +179,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     ],
     fuelCap: 30,
     fuelPerTile: 0.2,
-    base: 360, showsCores: false, tier: 1,
+    base: 12000, showsCores: false, tier: 1,
     look: 'buggy',
   },
   wagon: {
@@ -207,7 +207,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
     ],
     fuelCap: 60,
     fuelPerTile: 0.4,
-    base: 1450, showsCores: true, tier: 2,
+    base: 48333, showsCores: true, tier: 2,
     look: 'wagon',
   },
   courier: {
@@ -224,7 +224,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheel', x: 1, y: 6 },
       { defId: 'wheel', x: 4, y: 6 },
     ],
-    fuelCap: 24, fuelPerTile: 0.18, base: 400, showsCores: true, tier: 1, look: 'courier',
+    fuelCap: 24, fuelPerTile: 0.18, base: 13333, showsCores: true, tier: 1, look: 'courier',
   },
   van: {
     id: 'van', name: 'Utility van', maxSpeed: 6.5, accel: 1.5, brake: 3, turnSlow: 100, turnFast: 35, reverseTurn: 65,
@@ -240,7 +240,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheelMid', x: 1, y: 6 },
       { defId: 'wheelMid', x: 5, y: 6 },
     ],
-    fuelCap: 55, fuelPerTile: 0.24, base: 1180, showsCores: false, tier: 2, look: 'van',
+    fuelCap: 55, fuelPerTile: 0.24, base: 39333, showsCores: false, tier: 2, look: 'van',
   },
   longbed: {
     id: 'longbed', name: 'Longbed truck', maxSpeed: 4.55, accel: 0.8, brake: 1.8, turnSlow: 70, turnFast: 20, reverseTurn: 40,
@@ -256,7 +256,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheelHeavy', x: 1, y: 8 },
       { defId: 'wheelHeavy', x: 7, y: 8 },
     ],
-    fuelCap: 100, fuelPerTile: 0.48, base: 1720, showsCores: false, tier: 3, look: 'longbed',
+    fuelCap: 100, fuelPerTile: 0.48, base: 57333, showsCores: false, tier: 3, look: 'longbed',
   },
   carrier: {
     id: 'carrier', name: 'Armored carrier', maxSpeed: 5.2, accel: 1, brake: 2.5, turnSlow: 75, turnFast: 28, reverseTurn: 50,
@@ -272,7 +272,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheelHeavy', x: 1, y: 6 },
       { defId: 'wheelHeavy', x: 6, y: 6 },
     ],
-    fuelCap: 70, fuelPerTile: 0.5, base: 2600, showsCores: false, tier: 3, look: 'carrier',
+    fuelCap: 70, fuelPerTile: 0.5, base: 86667, showsCores: false, tier: 3, look: 'carrier',
   },
   tractor: {
     id: 'tractor', name: 'Heavy tractor', maxSpeed: 3.9, accel: 1.8, brake: 2, turnSlow: 65, turnFast: 22, reverseTurn: 55,
@@ -288,7 +288,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheelHeavy', x: 1, y: 6 },
       { defId: 'wheelHeavy', x: 7, y: 6 },
     ],
-    fuelCap: 120, fuelPerTile: 0.6, base: 1730, showsCores: false, tier: 3, look: 'tractor',
+    fuelCap: 120, fuelPerTile: 0.6, base: 57667, showsCores: false, tier: 3, look: 'tractor',
   },
   // A VW Kübelwagen: open seats, a flat hood over the tank and the air-cooled engine under a rear lid.
   jeep: {
@@ -305,7 +305,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheel', x: 1, y: 5 },
       { defId: 'wheel', x: 4, y: 5 },
     ],
-    fuelCap: 35, fuelPerTile: 0.2, base: 390, showsCores: false, tier: 1, look: 'jeep',
+    fuelCap: 35, fuelPerTile: 0.2, base: 13000, showsCores: false, tier: 1, look: 'jeep',
   },
   // A 1964 Corvair Monza convertible: a front trunk, open seats and a flat-six under the rear deck lid.
   convertible: {
@@ -322,7 +322,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheel', x: 1, y: 6 },
       { defId: 'wheel', x: 5, y: 6 },
     ],
-    fuelCap: 45, fuelPerTile: 0.26, base: 860, showsCores: false, tier: 2, look: 'convertible',
+    fuelCap: 45, fuelPerTile: 0.26, base: 28667, showsCores: false, tier: 2, look: 'convertible',
   },
   // A LAZ-695 city bus: guns and frames ride on the roof.
   bus: {
@@ -339,7 +339,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheelMid', x: 1, y: 9 },
       { defId: 'wheelMid', x: 6, y: 9 },
     ],
-    fuelCap: 110, fuelPerTile: 0.45, base: 240, showsCores: false, tier: 2, look: 'bus',
+    fuelCap: 110, fuelPerTile: 0.45, base: 8000, showsCores: false, tier: 2, look: 'bus',
   },
   // A Caterpillar 950 wheel loader: the bucket on the front row, the cab in the middle and the engine over the counterweight.
   loader: {
@@ -356,7 +356,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheelHeavy', x: 1, y: 6 },
       { defId: 'wheelHeavy', x: 7, y: 6 },
     ],
-    fuelCap: 130, fuelPerTile: 0.65, base: 2460, showsCores: false, tier: 3, look: 'loader',
+    fuelCap: 130, fuelPerTile: 0.65, base: 82000, showsCores: false, tier: 3, look: 'loader',
   },
   // A Lada Niva 4x4: a nimble, frugal two-box off-roader with a small deck and tank.
   niva: {
@@ -373,7 +373,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheelMid', x: 1, y: 7 },
       { defId: 'wheelMid', x: 4, y: 7 },
     ],
-    fuelCap: 42, fuelPerTile: 0.21, base: 1100, showsCores: false, tier: 2, look: 'niva',
+    fuelCap: 42, fuelPerTile: 0.21, base: 36667, showsCores: false, tier: 2, look: 'niva',
   },
   // A UAZ-452 Bukhanka: a cab-over loaf van with a big roof deck. The cab sits right behind the front armor row.
   bukhanka: {
@@ -390,7 +390,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheelMid', x: 1, y: 7 },
       { defId: 'wheelMid', x: 5, y: 7 },
     ],
-    fuelCap: 78, fuelPerTile: 0.30, base: 1230, showsCores: false, tier: 2, look: 'bukhanka',
+    fuelCap: 78, fuelPerTile: 0.30, base: 41000, showsCores: false, tier: 2, look: 'bukhanka',
   },
   // A Lincoln Continental Mark III: the fast, light tier 3 gunboat with a long hood and a long thirsty body.
   lincoln: {
@@ -407,7 +407,7 @@ const CHASSIS_INPUTS: Record<string, ChassisInput> = {
       { defId: 'wheel', x: 1, y: 8 },
       { defId: 'wheel', x: 5, y: 8 },
     ],
-    fuelCap: 85, fuelPerTile: 0.36, base: 1500, showsCores: false, tier: 3, look: 'lincoln',
+    fuelCap: 85, fuelPerTile: 0.36, base: 50000, showsCores: false, tier: 3, look: 'lincoln',
   },
 };
 

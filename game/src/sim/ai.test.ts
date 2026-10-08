@@ -9,6 +9,12 @@ import { startEscort } from './tow';
 import type { Vehicle, World } from './types';
 import { dist } from './vec';
 
+// Ids compare as strings, so v9 sorts above v10. Swaps the two ids when needed, so the first truck has the lower one.
+function lowerIdFirst(first: Vehicle, second: Vehicle): void {
+  if (first.id < second.id) return;
+  [first.id, second.id] = [second.id, first.id];
+}
+
 describe('NPC driving', () => {
   it('uses the obstacle-aware driver on every turn', () => {
     const w = emptyWorld({ x: 40, y: 30 });
@@ -27,7 +33,7 @@ describe('NPC driving', () => {
     second.brain = npcBrain('trader', second.pos, ['trader']);
     second.heading = Math.PI;
     second.brain.goals.push({ kind: 'loot', targetId: 'cargo-gone', destination: { x: 130, y: 100 }, phase: 'travel', reason: 'take the handed-over cargo' });
-    expect(first.id < second.id).toBe(true);
+    lowerIdFirst(first, second);
     planNpcOrders(w);
     expect(topGoal(second)?.kind).not.toBe('loot');
   });
@@ -44,7 +50,7 @@ describe('face offs', () => {
     const second = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 104, y: 100 });
     second.brain = npcBrain('trader', second.pos, ['trader']);
     second.heading = Math.PI;
-    expect(first.id < second.id).toBe(true);
+    lowerIdFirst(first, second);
     return { w, first, second };
   }
 
@@ -183,7 +189,7 @@ describe('oncoming NPCs', () => {
     second.brain = npcBrain('trader', second.pos, ['trader']);
     second.speed = 4;
     second.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 50, y: 100 }, phase: 'travel', reason: 'test trip west' });
-    expect(first.id < second.id).toBe(true);
+    lowerIdFirst(first, second);
     return { w, first, second };
   }
 
@@ -206,7 +212,7 @@ describe('oncoming NPCs', () => {
     second.brain = npcBrain('roamer', second.pos, ['roamer']);
     second.speed = 3.22;
     second.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 223.7, y: 194.2 }, phase: 'travel', reason: 'test trip southwest' });
-    expect(first.id < second.id).toBe(true);
+    lowerIdFirst(first, second);
     planNpcOrders(w);
     expect(first.order?.kind).toBe('brake');
     expect(second.order?.kind).toBe('stopAt');

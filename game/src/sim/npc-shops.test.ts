@@ -13,7 +13,7 @@ function traderAt(id: string) {
   const w = emptyWorld({ x: 5, y: 5 });
   const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], sitePads(site(id))[0]);
   npc.brain = npcBrain('trader', npc.pos, ['trader']);
-  npc.resources!.money = 5_000;
+  npc.resources!.money = 166_667;
   return { w, npc };
 }
 
@@ -35,7 +35,7 @@ describe('NPCs use stalls as well as towns', () => {
     const w = emptyWorld({ x: 5, y: 5 });
     const npc = addVehicle(w, 'traders', 'hauler', [], sitePads(site('salvage-yard'))[0]);
     npc.brain = npcBrain('trader', npc.pos, ['trader']);
-    npc.resources!.money = 5_000;
+    npc.resources!.money = 166_667;
     const activity = thinkNpc(w, npc);
     expect(activity.kind).toBe('resupply');
     expect(REGION.towns.map((t) => t.id)).toContain(activity.targetId);
@@ -44,8 +44,8 @@ describe('NPCs use stalls as well as towns', () => {
   it('sends a damaged raider to a camp', () => {
     const w = emptyWorld({ x: 5, y: 5 });
     const npc = addVehicle(w, 'raiders', 'hauler', [], sitePads(site('pump-station'))[0]);
-    npc.brain = npcBrain('raider', npc.pos, ['raider']);
-    npc.resources!.money = 5_000;
+    npc.brain = npcBrain('buggy', npc.pos, ['raider']);
+    npc.resources!.money = 166_667;
     corePart(npc, 'cab').hp = 1;
     const activity = thinkNpc(w, npc);
     expect(activity.kind).toBe('resupply');

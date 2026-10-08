@@ -189,15 +189,46 @@ describe('runAgent reference images', () => {
     expect(runs[0].prompt).toContain('from the comment by ann');
   });
 
-  it('fails the stage before the agent starts when an image cannot be fetched', async () => {
-    const { ctx, runs } = agentCtx([], ASSET, [], hosted(403));
-    await expect(runAgent(ctx, 7, 'design', 'design', 'p')).rejects.toThrow('could not fetch, so no agent ran');
-    expect(runs).toHaveLength(0);
+  it('fetches an image that failed once more and runs the agent on the text with the image NOT AVAILABLE when it stays gone', async () => {
+    for (const stage of ['design', 'patch'] as const) {
+      let requests = 0;
+      const counted = ((input: URL | string) => { requests += 1; return hosted(403)(input); }) as typeof fetch;
+      const { ctx, runs } = agentCtx([], ASSET, [], counted);
+      await runAgent(ctx, 7, stage, stage, 'p');
+      expect(requests, stage).toBe(4);
+      expect(runs[0].prompt, stage).toContain(`1. NOT AVAILABLE, ${ASSET} (issue body): `);
+    }
+  });
+
+  it('runs the agent with the image when the second fetch works', async () => {
+    let first = true;
+    const flaky = ((input: URL | string) => { const status = first && String(input) !== ASSET ? 403 : 200; if (String(input) !== ASSET) first = false; return hosted(status)(input); }) as typeof fetch;
+    const { ctx, runs } = agentCtx([], ASSET, [], flaky);
+    await runAgent(ctx, 7, 'design', 'design', 'p');
+    expect(runs[0].prompt).not.toContain('NOT AVAILABLE, ');
+    expect(runs[0].prompt).toContain('/work/.factory-media/');
+  });
+
+  it('adds the committee images of earlier routes after the issue images', async () => {
+    mkdirSync('tmp/factory-common-test/media/issue-7/committee', { recursive: true });
+    writeFileSync('tmp/factory-common-test/media/issue-7/committee/abc.png', solidPng(1, 1, [0, 0, 0]));
+    writeFileSync('tmp/factory-common-test/media/issue-7/committee.json', JSON.stringify([{ url: 'telegram:post-55-5-1.png', source: 'committee reply in Telegram by ann', status: 'ok', file: 'committee/abc.png', type: 'png', width: 1, height: 1, bytes: 9, sha256: 'f'.repeat(64) }]));
+    const { ctx, runs } = agentCtx([], `look ${ASSET}`, [], hosted(200));
+    await runAgent(ctx, 7, 'design', 'design', 'p');
+    expect(runs[0].prompt).toContain(`2. /work/.factory-media/committee/abc.png (png, 1x1, 9 bytes, sha256 ${'f'.repeat(64)}, from the committee reply in Telegram by ann)`);
   });
 });
 
 describe('stage prompts for reference images', () => {
   const vars = { issue: '7', taskFile: 'f', branch: 'b', evidenceRules: '', visualRules: '', playtest: 'npm run playtest' };
+  it('tell the patch to act on the words, never on an image it lacks, and to go on with its reading when only that image decides', () => {
+    const text = fillPrompt('patch', { ...vars, played: 'abc' });
+    expect(text).toContain('act on the words, even when an image is NOT AVAILABLE');
+    expect(text).toContain('never describe what it shows');
+    expect(text).toContain('pick the most sensible reading of the text');
+    expect(text).toContain('That file is only for a game design fork or a major save bump.');
+  });
+
   it('tell every stage to read the images and what a missing one means', () => {
     for (const name of ['triage', 'design', 'implement', 'test', 'test-fix']) {
       const text = fillPrompt(name, vars);
@@ -317,7 +348,7 @@ describe('base branch', () => {
   const statePath = 'tmp/factory-common-test/state.json';
   const withRelease = () => {
     mkdirSync('tmp/factory-common-test', { recursive: true });
-    writeState(statePath, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [] } });
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } } });
   };
   const ctxWith = (labels: string[]) => ({ statePath, github: { issue: async () => ({ labels }) } }) as unknown as Ctx;
 

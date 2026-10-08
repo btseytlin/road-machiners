@@ -5,7 +5,7 @@
 
 import { chassisDef } from '../../data/chassis';
 import { ECONOMY, GOOD_IDS } from '../../data/goods';
-import { NPC_BEHAVIOR, NPC_UPKEEP, TRAITS } from '../../data/npcs';
+import { NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, TRAITS } from '../../data/npcs';
 import { partDef } from '../../data/parts';
 import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
@@ -18,20 +18,20 @@ import { aimGuns, isSoftTarget } from './aim';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder, setWeaponOrder } from '../world';
 import { playerVehicle, vehicleById } from '../damage';
 import { isDefeated, isKnockedOut } from '../defeat';
-import { isTownGuarded } from '../guards';
 import { callVehicle, chooseOption, currentOptions, hangUp } from '../dialogue';
 import { offeredSurrenderBy, type ThreatAnswer } from '../parley';
 import { hashRandom } from '../rng';
-import { affordableBuyCount, basicsRepairCost, buyGood, buyStockPart, buySupply, partTradePrice, getLotTradePrice, getTradePrice, repairAll, repairBasics, repairCost, sellGood, sellPart, supplyRoom } from '../economy';
+import { affordableBuyCount, basicsRepairCost, buyGood, buyStockPart, buySupply, driveRepairCost, partTradePrice, getLotTradePrice, getTradePrice, repairAll, repairBasics, repairCost, repairDrive, sellGood, sellPart, supplyRoom } from '../economy';
 import { corePart, findSpot, freeCells, goodsCount, gridOf, isMounted, itemCells, MOUNT_CELLS, mountedItems, mountedParts, type Spot } from '../grid';
-import { cargoMassRoom, getLayoutError, stowSpot, storePart } from '../inventory';
+import { cargoMassRoom, cargoRoom, getLayoutError, stowSpot, storePart } from '../inventory';
 import { itemMass } from '../mass';
 import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
 import { CONTRACTS, shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
-import { canLoot, downedHere, salvageHere, takeAllLoot } from '../locations';
+import { canLoot, downedHere, needsSearch, salvageHere, takeAllLoot } from '../locations';
 import { topGoal } from '../npc-activities';
-import { firepower, getUpkeepReserve, isWeak, ownDanger, perceiveDanger, getKnownSite, tripFuelCost } from '../npc-decisions';
+import { firepower, getUpkeepReserve, isWeak, judgeDanger, getKnownSite, strengthRatio, tripFuelCost } from '../npc-decisions';
+import { fightOdds } from '../fight-odds';
 import { canLootTruck, canReachSalvage, hasSalvage, isSiteStock, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
 import { canUseSite, nearestPad, nearestTown, siteGates, sitePads, townAt, type Site } from '../sites';
@@ -39,9 +39,9 @@ import { fuelCap, hasWorkingEngine, isStranded, isWorking, suppliesCap, vehicleS
 import { escortsOf, inTowReach, playerTow, setBeacon } from '../tow';
 import { towData } from '../states';
 import type { Call, Faction, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
-import { dist, type Vec } from '../vec';
+import { dist, pointsAway, type Vec } from '../vec';
 import { canVehicleSee, playerExplored, playerSees } from '../vision';
-import { mountBought, Orders, rearm, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
+import { BIGGEST_PART_CELLS, mountBought, Orders, rearm, REPAIR_PARTS, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
 
 // Every bot plays the base loop: earn money, pay upkeep, buy upgrades, and shoot back when attacked. Only the hunter
 // goes looking for fights. The fast trader wants speed and mounts no armor. The hauler takes the best haul contract on
@@ -73,10 +73,24 @@ const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
   convoyRobber: CARGO_GEAR,
 };
 
+// A hunter's gear keeps room for the loot of a wreck and the speed to catch the foes it fights. Its gear bought once
+// filled every free cell and left the truck slower than the raiders it hunts, so it could neither chase nor strip.
+function gearStyle(o: Orders, goal: Goal): UpgradeStyle {
+  if (goal !== 'hunter') return GEAR_STYLES[goal];
+  return { ...GEAR_STYLES.hunter, lootRoom: BIGGEST_PART_CELLS, minSpeed: huntedSpeed(o.world) };
+}
+
+// The top speed of the fastest raider the hunter would fight, or nothing to hold when it would fight none.
+function huntedSpeed(world: World): number | undefined {
+  const foes = world.vehicles.filter((v) => v.faction === 'raiders' && v.brain !== null && !isKnockedOut(v) && huntable(world, v));
+  return foes.length === 0 ? undefined : Math.max(...foes.map((v) => vehicleStats(world, v).maxSpeed));
+}
+
 // markovTurns is how many turns the markov bot keeps one goal. It is required for that bot and ignored by the others.
 // tolerateStalls is for the recorder: NPC stalls count in the rows instead of failing the run. kit names the start kit
 // the recorder begins from, standard when absent.
-export type BotOptions = { markovTurns?: number; tolerateStalls?: boolean; kit?: string; noGear?: boolean };
+// settings are world settings for the run's Roaming world, each missing one at its default.
+export type BotOptions = { markovTurns?: number; tolerateStalls?: boolean; kit?: string; noGear?: boolean; settings?: Record<string, number> };
 
 // The markov draws come from their own hash of the run seed, so they never shift the world's randomness.
 const MARKOV_SALT = 0x6d61726b;
@@ -106,7 +120,7 @@ export function botOrders(world: World, archetype: Policy, options: BotOptions =
 
 // A hold, a service stop and a fight each take the turn's command before the goal does.
 function act(o: Orders, goal: Goal): void {
-  if (holds(o) || serviceTrip(o, GEAR_STYLES[goal]) || defend(o, goal)) return;
+  if (holds(o) || serviceTrip(o, gearStyle(o, goal)) || defend(o, goal)) return;
   GOALS[goal](o);
 }
 
@@ -132,15 +146,16 @@ function goalOf(world: World, archetype: Policy, options: BotOptions): Goal {
 
 // ---- Calls and switches.
 
-// Replies that differ from the first one of a topic. Every bot defends against a demand for its cargo. The hunter also
-// refuses a truce and answers a plea for mercy with a demand to be stripped.
-const DEFENDER_REPLIES: Partial<Record<TopicId, string>> = { demand: 'Come and get it.' };
+// Replies that differ from the first one of a topic. Every bot defends against a demand for its cargo and an offer to
+// strip its stranded truck. The hunter also refuses a truce and answers a plea for mercy with a demand to be stripped.
+const DEFENDER_REPLIES: Partial<Record<TopicId, string>> = { demand: 'Come and get it.', surrender: 'Come and get it.' };
 const HUNTER_REPLIES: Partial<Record<TopicId, string>> = { ...DEFENDER_REPLIES, truceOffer: 'No. We finish this.', mercyPlea: 'Stand down and let me strip your truck.' };
 const REFUSE_TOW: Partial<Record<TopicId, string>> = { tow: 'No thanks.', towFree: 'No thanks.' };
 const YIELD_CARGO = 'Fine. Take it.';
 
 // Every open call gets the first reply of each topic, unless the bot's replies name another. Every bot hands its
-// cargo to a demand from a foe that outmatches it. On the hub, the bot hangs up, which is the last option.
+// cargo to a demand, and its truck to a strip offer, only from a foe that outmatches it. On the hub, the bot hangs
+// up, which is the last option.
 function answerCall(o: Orders, replies: Partial<Record<TopicId, string>> = DEFENDER_REPLIES): void {
   const seen = new Set<string>();
   for (let call = o.world.player.call; call; call = o.world.player.call) {
@@ -153,7 +168,7 @@ function answerCall(o: Orders, replies: Partial<Record<TopicId, string>> = DEFEN
 }
 
 function replyTo(world: World, call: Call, replies: Partial<Record<TopicId, string>>): string | undefined {
-  if (call.topic === 'demand' && outmatchedBy(world, vehicleById(world, call.with))) return YIELD_CARGO;
+  if ((call.topic === 'demand' || call.topic === 'surrender') && outmatchedBy(world, vehicleById(world, call.with))) return YIELD_CARGO;
   return call.topic ? replies[call.topic] : undefined;
 }
 
@@ -165,10 +180,9 @@ function keepSwitches(o: Orders): void {
   setFire(o, underFire(o.world, o.me));
 }
 
-// In combat and outside the guns of a town gate. Inside them a foe may camp at the gate for hundreds of turns: the
-// guard shoots any truck that fires at a non-raider, so the bot holds its fire there and repairs as a player would.
+// In combat, wherever the bot stands. It fires back at a town gate as anywhere else.
 function underFire(world: World, me: Vehicle): boolean {
-  return inCombat(world, me) && !isTownGuarded(me.pos);
+  return inCombat(world, me);
 }
 
 // Holding fire also drops the aim: an order set while auto fire was on keeps the guns shooting after the switch is off.
@@ -182,9 +196,7 @@ function setFire(o: Orders, on: boolean): void {
 // True when the truck must not drive this turn, after any command the hold needs.
 function holds(o: Orders): boolean {
   if (o.me.job) return true;
-  // A hot engine cools while parked. The bot stops at the warning, as the warning tells the player to. In combat it
-  // drives on: an overheated engine loses 2 HP a turn, and a parked truck loses its engine to the foe's guns.
-  if (o.world.player.engineHeat >= ENGINE_HEAT.warnAt && !inCombat(o.world, o.me)) {
+  if (coolsEngine(o)) {
     if (o.me.order) o.run((w) => setMoveOrder(w, null));
     return true;
   }
@@ -192,6 +204,21 @@ function holds(o: Orders): boolean {
   if (!deal) return false;
   workPatch(o, deal);
   return true;
+}
+
+// A parked truck cools 0.15 heat a turn in full sun heat 1 and a driving one gains up to 0.04 a turn at noon. Half the
+// warning level is about 8 turns of rest at noon for about 10 turns of driving. Resuming just under the warning gave a
+// stop-and-go every 1 to 3 turns that covered almost no ground.
+const HEAT_RESUME = ENGINE_HEAT.warnAt / 2;
+
+// A hot engine cools while parked. The bot stops at the warning, as the warning tells the player to, and stays parked
+// until the engine is down to HEAT_RESUME. A truck without a move order is the one it parked, since a driving bot
+// always holds one. With a hostile in sight it drives on: an overheated engine loses 2 HP a turn, and a parked truck
+// loses its engine to the foe's guns.
+function coolsEngine(o: Orders): boolean {
+  if (inCombat(o.world, o.me) || seenHostiles(o.world).length > 0) return false;
+  const heat = o.world.player.engineHeat;
+  return heat >= ENGINE_HEAT.warnAt || (heat >= HEAT_RESUME && o.me.order === null);
 }
 
 function patchDeal(world: World): NpcState | null {
@@ -212,10 +239,10 @@ function workPatch(o: Orders, deal: NpcState): void {
 // engine heads for the nearest shop with an engine its money and sellable gear cover, crawling or towed. Out of town
 // with low fuel, low supplies or a badly damaged part, and the money to fix it, it drives to the nearest shop. A need
 // it cannot pay for does not send it to town, so a poor bot drives on to earn, crawling if it must. A stranded truck
-// that wants a tow turns its beacon on and takes the first tow offered on the radio. Returns true when the trip to a
-// shop is this turn's order.
+// that wants a tow turns its beacon on and takes the first tow offered on the radio, but never in combat: the beacon
+// draws raiders to a truck with cargo. Returns true when the trip to a shop is this turn's order.
 function serviceTrip(o: Orders, style: UpgradeStyle): boolean {
-  const beacon = isStranded(o.world, o.me) && wantsTow(o.world);
+  const beacon = callsForTow(o);
   if (beacon !== o.world.player.beacon) o.run((w) => setBeacon(w, beacon));
   const shop = shopAt(o.world);
   if (shop) serviceInTown(o, style, shop);
@@ -223,6 +250,10 @@ function serviceTrip(o: Orders, style: UpgradeStyle): boolean {
   if (!target || target.id === shop) return false;
   driveToSite(o, target);
   return true;
+}
+
+function callsForTow(o: Orders): boolean {
+  return isStranded(o.world, o.me) && wantsTow(o.world) && !inCombat(o.world, o.me);
 }
 
 // A stranded bot wants a tow only when some shop can get it going, and takes an offer only to such a shop. A broke bot
@@ -240,7 +271,7 @@ function takesTowOffer(world: World): boolean {
 // truck without an engine needs a shop that stocks one. A broken engine or transmission needs a garage.
 function towFixes(world: World, siteId: string): boolean {
   if (!(siteId in SHOPS) || shopAt(world) === siteId) return false;
-  const budget = saleBudget(world, siteId);
+  const budget = saleBudget(world);
   if (mountedParts(playerVehicle(world), 'engine').length === 0) return stockEngine(world, siteId, budget) !== null;
   return repairFits(world, siteId, budget);
 }
@@ -274,6 +305,7 @@ function serviceInTown(o: Orders, style: UpgradeStyle, shop: string): void {
   restoreBasics(o, shop);
   serviceHere(o);
   if (needsService(o)) throw new Error(`Town service left a need the bot can pay for, with ${o.world.player.money} money: ${needsOf(o.world)}`);
+  stockRepairParts(o, shop);
   if (mountedParts(o.me, 'engine').length === 0) return;
   rearm(o);
   upgradeGear(o, style);
@@ -289,39 +321,35 @@ function needsOf(world: World): string {
 // sent the bot back to a shop that had none, again and again.
 function nearestEngineShop(world: World): Site | null {
   const pos = playerVehicle(world).pos;
-  const stocked = SHOP_SITES.filter((s) => stockEngine(world, s.id, saleBudget(world, s.id)) !== null);
+  const stocked = SHOP_SITES.filter((s) => stockEngine(world, s.id, saleBudget(world)) !== null);
   return stocked.reduce<Site | null>((best, s) => (!best || dist(pos, s.pos) < dist(pos, best.pos) ? s : best), null);
 }
 
-// The cheapest engine a shop stocks within the budget. A stall hands a bought part over loose, so there it must fit
-// the truck once the goods and spares are sold.
+// The cheapest engine a shop stocks within the budget. A part that does not fit the grid goes to garage storage.
 function stockEngine(world: World, shopId: string, budget: number): { part: PartInstance; price: number } | null {
   const me = playerVehicle(world);
-  const stripped = { ...me, items: me.items.filter((it) => it.kind === 'part' && isMounted(me.chassisId, it)) };
-  const takes = (part: PartInstance) => shopDef(shopId).kind === 'garage' || stowSpot(stripped, { id: 'engine-probe', x: 0, y: 0, rot: 0, kind: 'part', part }) !== null;
-  const engines = shopState(world, shopId).stock.filter((p) => partDef(p.defId).kind === 'engine' && takes(p))
+  const engines = shopState(world, shopId).stock.filter((p) => partDef(p.defId).kind === 'engine')
     .map((part) => ({ part, price: partTradePrice(world, me, part, 'buy') }))
     .filter((e) => e.price <= budget)
     .sort((a, b) => a.price - b.price);
   return engines[0] ?? null;
 }
 
-// The money, plus what the gear for sale at this shop brings.
-function saleBudget(world: World, shopId: string): number {
-  return world.player.money + gearForSale(world, shopId).reduce((sum, g) => sum + g.price, 0);
+// The money, plus what the gear for sale brings at any shop.
+function saleBudget(world: World): number {
+  return world.player.money + gearForSale(world).reduce((sum, g) => sum + g.price, 0);
 }
 
 // A part the bot may sell at a shop, with its price: spares first, then stored parts, then mounted gear, each
-// cheapest first. Every shop buys spares. Only a garage, which stands in a town, buys stored and mounted parts.
+// cheapest first. Every shop buys all three.
 // Built-in parts never sell. A mounted part goes into garage storage before the sale, as a player unmounts it.
 type GearSale = { part: PartInstance; mountedItem: string | null; price: number };
 
-function gearForSale(world: World, shopId: string): GearSale[] {
+function gearForSale(world: World): GearSale[] {
   const me = playerVehicle(world);
   const sale = (part: PartInstance, mountedItem: string | null) => ({ part, mountedItem, price: partTradePrice(world, me, part, 'sell') });
   const byPrice = (a: GearSale, b: GearSale) => a.price - b.price;
   const spares = spareItems(me).map((s) => sale(partOf(me, s.partId), null)).sort(byPrice);
-  if (shopDef(shopId).kind !== 'garage') return spares;
   const stored = world.player.storage.map((part) => sale(part, null)).sort(byPrice);
   const mounted = mountedItems(me).filter((it) => !['core', 'engine'].includes(partDef(it.part.defId).kind) && removable(me, it)).map((it) => sale(it.part, it.id)).sort(byPrice);
   return [...spares, ...stored, ...mounted];
@@ -342,7 +370,7 @@ function partOf(v: Vehicle, partId: string): PartInstance {
 // gear, cheapest first, until the money covers the engine.
 function restoreEngine(o: Orders, shopId: string): void {
   if (mountedParts(o.me, 'engine').length > 0) return;
-  const engine = stockEngine(o.world, shopId, saleBudget(o.world, shopId));
+  const engine = stockEngine(o.world, shopId, saleBudget(o.world));
   if (!engine) return;
   if (o.world.player.money < engine.price || !engineSpot(o.me, engine.part.defId)) sellCargo(o);
   sellGearFor(o, shopId, engine.price);
@@ -353,20 +381,31 @@ function restoreEngine(o: Orders, shopId: string): void {
 }
 
 // Badly damaged built-in parts get fixed before fuel and supplies, with cargo and then gear sold for the bill, since
-// the truck must drive to earn. Gear sells only when it covers the whole bill. The repair waits for the end of a fight.
+// the truck must drive to earn. Gear sells only when it covers the whole bill. A stranded truck that cannot cover
+// them all fixes only its broken engine, transmission, wheels and tank, as a player would: the town's scrap patch
+// counts that bill as paid by the gear, so it patches nothing. The repair waits for the end of a fight.
 function restoreBasics(o: Orders, shopId: string): void {
   if (underFire(o.world, o.me) || !mountedParts(o.me, 'core').some(isBadlyDamaged)) return;
   const cost = basicsRepairCost(o.world);
   if (o.world.player.money < cost) sellCargo(o);
-  if (saleBudget(o.world, shopId) < cost) return;
+  if (saleBudget(o.world) >= cost) payRepair(o, shopId, cost, repairBasics);
+  else if (isStranded(o.world, o.me)) restoreDrive(o, shopId);
+}
+
+function restoreDrive(o: Orders, shopId: string): void {
+  const cost = driveRepairCost(o.world);
+  if (saleBudget(o.world) >= cost) payRepair(o, shopId, cost, repairDrive);
+}
+
+function payRepair(o: Orders, shopId: string, cost: number, repair: (w: World) => World): void {
   sellGearFor(o, shopId, cost);
-  o.run(repairBasics, 'repairs');
+  o.run(repair, 'repairs');
 }
 
 // Each sale can change what else comes off, so the list is drawn again after every one.
 function sellGearFor(o: Orders, shopId: string, price: number): void {
   while (o.world.player.money < price) {
-    const g = gearForSale(o.world, shopId)[0];
+    const g = gearForSale(o.world)[0];
     if (!g) return;
     const mounted = g.mountedItem;
     if (mounted) o.run((w) => storePart(w, mounted));
@@ -433,6 +472,16 @@ function serviceHere(o: Orders): void {
   repairAtGarage(o);
 }
 
+// Tops up the parts good to REPAIR_PARTS, before any gear, so a breakdown on the road gets a field patch instead of a
+// beacon. A shop that does not trade parts leaves the stock as it is.
+function stockRepairParts(o: Orders, shop: string): void {
+  if (!shopDef(shop).goods.includes('parts')) return;
+  const want = Math.min(REPAIR_PARTS - (goodsCount(o.me).parts ?? 0), cargoRoom(o.me, 'parts'));
+  if (want <= 0) return;
+  const n = affordableBuyCount(o.world, o.me, shop, 'parts', want, o.world.player.money);
+  if (n > 0) o.run((w) => buyGood(w, 'parts', n), 'repairs');
+}
+
 // A field repairer pays the garage for the built-in parts at every visit and leaves guns and armor to the field.
 function repairAtGarage(o: Orders): void {
   const cost = o.fieldRepair ? basicsRepairCost(o.world) : repairCost(o.world);
@@ -448,7 +497,7 @@ const GOALS: Record<Goal, (o: Orders) => void> = { trader: traderGoal, scavenger
 function traderGoal(o: Orders): void {
   const held = heldHaul(o.world);
   if (held) return carryHaul(o, held);
-  if (!trade(o) && !takeHaul(o) && !scavenge(o)) checkNextBoard(o);
+  if (!trade(o) && !takeHaul(o) && !scavenge(o, false)) checkNextBoard(o);
 }
 
 // The hauler takes the best haul on the board it stands at before it looks at the market, so a contract pays the trip
@@ -456,7 +505,7 @@ function traderGoal(o: Orders): void {
 function haulerGoal(o: Orders): void {
   const held = heldHaul(o.world);
   if (held) return carryHaul(o, held);
-  if (!takeHaul(o) && !trade(o) && !scavenge(o)) checkNextBoard(o);
+  if (!takeHaul(o) && !trade(o) && !scavenge(o, false)) checkNextBoard(o);
 }
 
 // ---- Haul contracts: paid work for a trader too poor for a load. The contract loads its goods free.
@@ -501,10 +550,10 @@ function checkNextBoard(o: Orders): void {
 function scavengerGoal(o: Orders): void {
   const held = heldHaul(o.world);
   if (held) return carryHaul(o, held);
-  if (!scavenge(o) && !trade(o) && !takeHaul(o)) checkNextBoard(o);
+  if (!scavenge(o, false) && !trade(o) && !takeHaul(o)) checkNextBoard(o);
 }
 
-type Purchase = { town: TownDef; good: string; count: number; profit: number };
+type Purchase = { town: TownDef; good: string; count: number; profit: number; perTurn: number };
 
 // The trader sells what it carries in the known town that pays most for it, then buys the good with the most profit
 // between known towns that it can afford above its upkeep reserve and repair bill. With no such trade it drives to find a new town.
@@ -544,13 +593,15 @@ function bestMarket(world: World): TownDef {
   return byDistance(world, knownTowns(world)).reduce((best, town) => (profit(town) > profit(best) ? town : best));
 }
 
-// The money for a full repair stays out of the load, so a trader leaves town with a sound truck.
+// The money for a full repair stays out of the load, so a trader leaves town with a sound truck. The best trade pays
+// most per turn of the whole trip, from where the truck stands to the source and on to the market, so a trader does
+// not cross the map empty for a trade it could run the other way.
 function bestPurchase(world: World): Purchase | null {
   const spend = world.player.money - getUpkeepReserve(playerVehicle(world)) - repairCost(world);
   const towns = knownTowns(world);
   const room = freeCells(playerVehicle(world));
   const options = towns.flatMap((source) => towns.filter((t) => t.id !== source.id).flatMap((market) => GOOD_IDS.map((good) => purchase(world, { source, market, good, spend, room }))));
-  return options.reduce<Purchase | null>((best, p) => (p.count > 0 && p.profit > (best?.profit ?? 0) ? p : best), null);
+  return options.reduce<Purchase | null>((best, p) => (p.count > 0 && p.perTurn > (best?.perTurn ?? 0) ? p : best), null);
 }
 
 // The hauling margin of the world's prices: the most a load bought with `spend` into `room` cells earns between any
@@ -567,10 +618,10 @@ export function haulMarginAt(world: World, spend: number, room: number): number 
 
 // Buying the lot of a good at the source that sells at the market for the most profit, within what fits and the
 // money allows. Each unit bought raises the price and each unit sold lowers it, so a big lot can lose money that a
-// smaller one makes; the lot prices count that.
+// smaller one makes; the lot prices count that. perTurn spreads the profit over the trip from where the truck stands.
 function purchase(world: World, { source, market, good, spend, room }: { source: TownDef; market: TownDef; good: string; spend: number; room: number }): Purchase {
   const me = playerVehicle(world);
-  const none = { town: source, good, count: 0, profit: 0 };
+  const none = { town: source, good, count: 0, profit: 0, perTurn: 0 };
   if (sellAt(world, market, good) <= getTradePrice(world, me, source.id, good, 'buy')) return none;
   const lotProfit = (count: number) => (count === 0 ? 0 : getLotTradePrice(world, me, market.id, good, count, 'sell') - getLotTradePrice(world, me, source.id, good, count, 'buy'));
   // Each extra unit adds less profit than the one before, so the best lot is the last one whose last unit still pays.
@@ -581,24 +632,32 @@ function purchase(world: World, { source, market, good, spend, room }: { source:
     if (lotProfit(mid) > lotProfit(mid - 1)) low = mid;
     else high = mid - 1;
   }
-  return low > 0 && lotProfit(low) > 0 ? { ...none, count: low, profit: lotProfit(low) } : none;
+  if (low === 0 || lotProfit(low) <= 0) return none;
+  const trip = estimateTurns(me.pos, source.pos) + estimateTurns(source.pos, market.pos);
+  return { ...none, count: low, profit: lotProfit(low), perTurn: lotProfit(low) / trip };
 }
 
 function sellAt(world: World, town: TownDef, good: string): number {
   return getTradePrice(world, playerVehicle(world), town.id, good, 'sell');
 }
 
-// The scavenger loots what it searched, searches the nearest known stock it has not searched, and sells in the
+// The scavenger loots what it searched, searches the nearest known stock that needs a search, and sells in the
 // nearest town when its cargo is full or no stock is left. With nothing left to search it drives to find a new
-// salvage site. Returns false when it has nothing to do: no stock, no cargo and no site left to find.
-function scavenge(o: Orders): boolean {
-  if (townAt(o.world) && hasCargo(o.world, o.me)) sellCargo(o);
+// salvage site. Returns false when it has nothing to do: no stock, no cargo and no site left to find. Stripping is as in
+// sellCargo.
+function scavenge(o: Orders, stripping: boolean): boolean {
+  if (sellInTown(o, stripping)) return true;
   lootHere(o);
   const stock = freeCells(o.me) > 0 ? nearestStock(o.world, knownStocks(o.world)) : null;
   if (stock) visitStock(o, stock);
-  else if (hasCargo(o.world, o.me)) driveToSite(o, nearestTown(o.world));
+  else if (cargoToTown(o, stripping)) driveToSite(o, nearestTown(o.world));
   else return findSalvageSite(o);
   return true;
+}
+
+// Cargo still to take to town. In town the sale already sold what the bot would sell.
+function cargoToTown(o: Orders, stripping: boolean): boolean {
+  return sellsCargo(o, stripping) && !townAt(o.world);
 }
 
 function findSalvageSite(o: Orders): boolean {
@@ -610,29 +669,43 @@ function findSalvageSite(o: Orders): boolean {
 
 // The hunter strips a knocked-out truck it sees of its parts and goods. It drives at the weakest hostile it sees and
 // demands it stand down once it is badly broken. With no foe in sight it follows the nearest it hears, loots the wrecks
-// it sees, sells in town when full and otherwise patrols the roads between the shops.
+// it sees, sells in town when full and otherwise patrols the roads between the shops. While no raider in the world is weak enough to
+// hunt, it scavenges instead, as a player too weak to hunt does.
 function hunterGoal(o: Orders): void {
   // Without a working gun it scavenges, which needs no money, until a town sells it one it can pay for.
   if (firepower(o.world, o.me) === 0) return scavengerGoal(o);
-  if (townAt(o.world) && hasCargo(o.world, o.me)) sellCargo(o, true);
+  if (sellInTown(o, true)) return;
   takeBounties(o);
   if (stripDowned(o) || engageFoe(o)) return;
   lootHere(o);
+  scavengeOrHunt(o);
+}
+
+function scavengeOrHunt(o: Orders): void {
+  if (huntedSpeed(o.world) === undefined && scavenge(o, true)) return;
   collectOrHunt(o);
 }
 
-// A raider kill pays its bounty besides the wreck's loot, so the hunter takes each bounty on the board it is parked
-// at, one per raider template, up to the contract limit.
+// A raider kill fulfils its bounty besides the wreck's loot, and the shop pays it on a claim. So the hunter claims each
+// met bounty of the shop it is parked at, then takes each bounty on the board, one per raider template, up to the
+// contract limit.
 function takeBounties(o: Orders): void {
   const shop = shopAt(o.world);
   if (!shop) return;
+  claimBounties(o, shop);
   for (const c of shopState(o.world, shop).contracts) if (wantsBounty(o.world, c)) o.run((w) => acceptContract(w, c.id));
+}
+
+function claimBounties(o: Orders, shop: string): void {
+  for (const c of o.world.player.contracts) if (c.kind === 'bounty' && c.fulfilled && c.shop === shop) o.run((w) => deliverContract(w, c.id), 'contracts');
 }
 
 function wantsBounty(world: World, c: Contract): boolean {
   const held = world.player.contracts;
   if (c.kind !== 'bounty' || c.deadline <= world.turn || held.length >= CONTRACTS.maxActive) return false;
-  return !held.some((h) => h.kind === 'bounty' && h.template === c.template);
+  if (held.some((h) => h.kind === 'bounty' && h.template === c.template)) return false;
+  // Any truck of the template ends the bounty, so the weakest one the world holds is the one to judge.
+  return world.vehicles.some((v) => v.brain?.templateId === c.template && !isKnockedOut(v) && huntable(world, v));
 }
 
 // Demands the weakest foe in sight stand down when it is broken, or else drives at it, or at the nearest one heard. A
@@ -641,18 +714,27 @@ function wantsBounty(world: World, c: Contract): boolean {
 function engageFoe(o: Orders): boolean {
   const seen = weakestFoe(o.world);
   if (seen) return engageSeen(o, seen);
-  const heard = heardFoe(o.world);
+  const heard = heardFoe(o.world, (v) => huntable(o.world, v));
   if (heard) driveTo(o, heard);
   return heard !== null;
 }
 
-// A hunter picks a fight only against a foe this many times less dangerous than itself. In the snowball runs, fights
-// below a ratio of 2 cost about 700 net worth each, and fights at 4 or more cost next to nothing. A foe it will not
-// fight it outruns, as a player does.
+// A hunter picks a fight only against a foe group this many times weaker than itself by strengthRatio(), which is
+// odds of 80% or more to win. A won fight still costs repairs. A foe it will not fight it outruns, as a player does.
 const HUNT_MARGIN = 4;
 
+// Whether the hunter would fight the foe even if it read the foe at its worst: the foe and its faction mates near it,
+// each at the top of the error a sighting rolls. A heard foe is chased only when it passes, so a sighting never turns
+// the hunter away from a foe it drove at, which sent it round a strong raider for 100 turns. The bot keeps no memory,
+// so the same judgement of the same foe holds on every turn.
+function huntable(world: World, foe: Vehicle): boolean {
+  const group = world.vehicles.filter((v) => v.id === foe.id || (v.faction === foe.faction && !isKnockedOut(v) && dist(v.pos, foe.pos) <= SPAWN.neighborHelp));
+  const danger = strengthRatio(fightOdds(world, [playerVehicle(world)], group)) * (1 + NPC_BEHAVIOR.dangerSpread);
+  return danger * HUNT_MARGIN <= 1;
+}
+
 function engageSeen(o: Orders, foe: Vehicle): boolean {
-  if (dangerOf(o.world, foe) * HUNT_MARGIN > ownDanger(o.world, o.me) || !isSoftTarget(o.world, foe)) return false;
+  if (dangerOf(o.world, foe) * HUNT_MARGIN > 1 || !isSoftTarget(o.world, foe)) return false;
   setFire(o, true);
   aimGuns(o, foe);
   if (!demandYield(o, foe)) driveTo(o, foe.pos);
@@ -696,31 +778,112 @@ function stripDowned(o: Orders): boolean {
 // The hostile truck it sees with the least danger, as the bot reads it. Reading danger rolls world randomness, so the
 // roll is put back and the bot never shifts the NPCs' draws.
 function weakestFoe(world: World): Vehicle | null {
-  const me = playerVehicle(world);
-  const seen = world.vehicles.filter((v) => v.id !== me.id && hostileToPlayer(world, v) && !isKnockedOut(v) && playerSees(world, v.pos));
+  const seen = seenHostiles(world);
   const danger = new Map(seen.map((v) => [v.id, dangerOf(world, v)]));
   return seen.reduce<Vehicle | null>((best, v) => (!best || (danger.get(v.id) ?? 0) < (danger.get(best.id) ?? 0) ? v : best), null);
 }
 
-function dangerOf(world: World, foe: Vehicle): number {
-  const rng = world.rngState;
-  const danger = perceiveDanger(world, playerVehicle(world), foe);
-  world.rngState = rng;
-  return danger;
+function seenHostiles(world: World): Vehicle[] {
+  const me = playerVehicle(world);
+  return world.vehicles.filter((v) => v.id !== me.id && hostileToPlayer(world, v) && !isKnockedOut(v) && playerSees(world, v.pos));
 }
 
+// The bot misjudges each foe by the same factor every turn, as an NPC judges a foe once per sighting. A new roll each
+// turn flipped the bot between running from a near-even gunwagon and driving on past it, so it stood still.
+function dangerOf(world: World, foe: Vehicle): number {
+  const spread = NPC_BEHAVIOR.dangerSpread;
+  const roll = hashRandom(world.seed ^ JUDGE_SALT, ...[...foe.id].map((c) => c.charCodeAt(0)));
+  return judgeDanger(world, playerVehicle(world), foe) * (1 - spread + 2 * spread * roll);
+}
+
+const JUDGE_SALT = 0x6a756467;
+
 // A bot under fire turns on a foe it judges no more dangerous than itself, as an NPC does, so its guns bear. From a
-// stronger foe it runs for the nearest town, where guards cover it. Only the hunter fights a foe it can outrun: a won
-// fight still costs repairs, and broken wheels leave the truck for the next raider. A foe that drops out of sight
-// for a turn is still on its tail, so the bot keeps running until the combat ends. The hunter instead follows its
-// goal, which chases the foe it hears. True when the turn's command went to the fight.
+// stronger foe it runs as an NPC runs: for the nearest town away from the threat, where lawmen patrol. Only the
+// hunter fights a foe it can outrun: a won fight still costs repairs, and broken wheels leave the truck for the next
+// raider. A foe that drops out of sight for a turn is still on its tail, so the bot keeps running until the combat
+// ends. The hunter chases instead when it hears a foe it would hunt. True when the turn's command went to the fight.
 function defend(o: Orders, goal: Goal): boolean {
-  if (!inCombat(o.world, o.me)) return false;
+  if (!inCombat(o.world, o.me)) return avoid(o, goal);
   const foe = weakestFoe(o.world);
-  if (!foe && goal === 'hunter') return false;
-  if (foe && fights(o, foe, goal)) charge(o, foe, goal);
-  else driveToSite(o, nearestTown(o.world));
+  if (!foe) {
+    if (!(goal === 'hunter' && engageFoe(o))) flee(o);
+    return true;
+  }
+  if (fights(o, foe, goal)) charge(o, foe, goal);
+  else flee(o);
   return true;
+}
+
+// Out of combat, the bot runs before the guns reach it when it cannot beat even the weakest hostile in sight, as an
+// NPC flees a hostile it sees. Driving on into a gunwagon cost a hunter its truck to one tank gun shot. A foe it can
+// beat is no reason to run, even one it would rather outrun in a fight. With none in sight, a heard hostile it cannot
+// beat keeps the run going: the goal turned the bot back into the foe each time it dropped behind a ridge. A truck in
+// town, parked on a job or stranded does not run. True when the turn's command went to the run.
+function avoid(o: Orders, goal: Goal): boolean {
+  if (shopAt(o.world) || o.me.job || isStranded(o.world, o.me) || !runsFrom(o, goal)) return false;
+  flee(o);
+  return true;
+}
+
+function runsFrom(o: Orders, goal: Goal): boolean {
+  const foe = weakestFoe(o.world);
+  if (foe) return !beats(o, foe, goal);
+  return heardHostiles(o.world).some((v) => !beats(o, v, goal));
+}
+
+function heardHostiles(world: World): Vehicle[] {
+  const heard = new Set(world.player.contacts.map((c) => c.vehicleId));
+  return world.vehicles.filter((v) => heard.has(v.id) && hostileToPlayer(world, v) && !isKnockedOut(v));
+}
+
+// The nearest town whose direction is more than 90 degrees off every threat's, else straight away from the threats, as
+// fleeDestination() in npc-activities.ts picks for an NPC from one threat. The threats are the hostiles in sight, else
+// the nearest one heard. A run under way keeps its course while it closes on no foe in sight. A heard foe only starts
+// a run, since it may be a truck that is not after the bot. Running from one threat at a time reversed a bot caught
+// between two every turn until its engine burned out. With no threat placed and no run under way, the nearest town.
+function flee(o: Orders): void {
+  const seen = seenHostiles(o.world).map((v) => v.pos);
+  if (keepsCourse(o.me, seen)) return;
+  const threats = seen.length > 0 ? seen : heardThreat(o.world);
+  if (threats.length === 0) return driveToSite(o, nearestTown(o.world));
+  const safe = REGION.towns.filter((town) => threats.every((foe) => pointsAway(o.me.pos, town.pos, foe))).sort((a, b) => dist(o.me.pos, a.pos) - dist(o.me.pos, b.pos));
+  if (safe[0]) return driveToSite(o, safe[0]);
+  driveTo(o, awayFrom(o.me.pos, threats, o.world.size));
+}
+
+function keepsCourse(me: Vehicle, seen: Vec[]): boolean {
+  const order = me.order;
+  return order !== null && order.kind !== 'brake' && !seen.some((foe) => closesOn(me.pos, order.dest, foe));
+}
+
+function heardThreat(world: World): Vec[] {
+  const heard = heardFoe(world);
+  return heard ? [heard] : [];
+}
+
+// Whether driving from `from` to `to` brings the truck nearer to `foe` at first.
+function closesOn(from: Vec, to: Vec, foe: Vec): boolean {
+  return (to.x - from.x) * (foe.x - from.x) + (to.y - from.y) * (foe.y - from.y) > 0;
+}
+
+// The map edge straight away from the threats: along the sum of the directions away from each. Two threats on
+// opposite sides cancel out, and the way is then square to them. The point only sets the way, since the run ends when
+// the bot loses its foes. A point as far off as the nearest foe made the bot brake inside the foe's guns.
+function awayFrom(pos: Vec, threats: Vec[], size: number): Vec {
+  const unit = (foe: Vec) => ({ x: (pos.x - foe.x) / Math.max(dist(pos, foe), 1e-6), y: (pos.y - foe.y) / Math.max(dist(pos, foe), 1e-6) });
+  const sum = threats.map(unit).reduce((a, b) => ({ x: a.x + b.x, y: a.y + b.y }));
+  const near = nearest(pos, threats)!;
+  const len = Math.hypot(sum.x, sum.y);
+  const way = len > 1e-6 ? { x: sum.x / len, y: sum.y / len } : { x: -unit(near).y, y: unit(near).x };
+  return edgeAlong(pos, way, size);
+}
+
+// Where a ray from pos along the unit vector way meets the map's edge, one tile in.
+function edgeAlong(pos: Vec, way: Vec, size: number): Vec {
+  const reach = (p: number, d: number) => (d > 1e-6 ? (size - 1 - p) / d : d < -1e-6 ? (1 - p) / d : Infinity);
+  const t = Math.max(0, Math.min(reach(pos.x, way.x), reach(pos.y, way.y)));
+  return { x: pos.x + way.x * t, y: pos.y + way.y * t };
 }
 
 // Drives at the foe. A hunter also aims its guns at the foe's critical parts.
@@ -730,17 +893,29 @@ function charge(o: Orders, foe: Vehicle, goal: Goal): void {
 }
 
 function fights(o: Orders, foe: Vehicle, goal: Goal): boolean {
+  return beats(o, foe, goal) && (goal === 'hunter' || !outruns(o.world, o.me, foe));
+}
+
+// A foe the bot judges it can beat, by the hunter's margin for a hunter.
+function beats(o: Orders, foe: Vehicle, goal: Goal): boolean {
   const margin = goal === 'hunter' ? HUNT_MARGIN : 1;
-  return dangerOf(o.world, foe) * margin <= ownDanger(o.world, o.me) && (goal === 'hunter' || !outruns(o.world, o.me, foe));
+  return dangerOf(o.world, foe) * margin <= 1;
 }
 
 // A foe the bot can neither beat nor outrun takes the cargo anyway, and the gear with it after a knockout.
 function outmatchedBy(world: World, foe: Vehicle): boolean {
-  return dangerOf(world, foe) > ownDanger(world, playerVehicle(world)) && !outruns(world, playerVehicle(world), foe);
+  return dangerOf(world, foe) > 1 && !outruns(world, playerVehicle(world), foe);
 }
 
 function outruns(world: World, me: Vehicle, foe: Vehicle): boolean {
-  return vehicleStats(world, me).maxSpeed > vehicleStats(world, foe).maxSpeed;
+  return currentTopSpeed(world, me) > currentTopSpeed(world, foe);
+}
+
+// The top speed the truck can reach as it stands, after damage. A stranded truck, with no engine, a broken
+// transmission or a dry tank, only crawls.
+function currentTopSpeed(world: World, v: Vehicle): number {
+  const stats = vehicleStats(world, v);
+  return isStranded(world, v) ? Math.min(stats.maxSpeed, stats.limpSpeed) : stats.maxSpeed;
 }
 
 // Calls a badly broken foe in sight and demands it stand down, once. A foe that agrees is knocked out where it stands
@@ -756,9 +931,9 @@ function demandYield(o: Orders, foe: Vehicle): boolean {
 }
 
 // Where an unseen hostile is: the center of its contact circle. Nearest first.
-function heardFoe(world: World): Vec | null {
+function heardFoe(world: World, wanted: (v: Vehicle) => boolean = () => true): Vec | null {
   const me = playerVehicle(world);
-  const hostile = world.vehicles.filter((v) => v.id !== me.id && hostileToPlayer(world, v));
+  const hostile = world.vehicles.filter((v) => v.id !== me.id && hostileToPlayer(world, v) && wanted(v));
   return nearest(me.pos, world.player.contacts.filter((c) => hostile.some((v) => v.id === c.vehicleId)).map((c) => c.center));
 }
 
@@ -766,8 +941,13 @@ function nearestVehicle(from: Vec, vehicles: readonly Vehicle[]): Vehicle | null
   return vehicles.reduce<Vehicle | null>((best, v) => (!best || dist(from, v.pos) < dist(from, best.pos) ? v : best), null);
 }
 
+// With a full grid the hunter drives to town to sell, unless it stands in town already or holds nothing to sell. Then
+// the sale is done and it goes on with the hunt, since waiting frees no cell.
 function collectOrHunt(o: Orders): void {
-  if (freeCells(o.me) === 0) return driveToSite(o, nearestTown(o.world));
+  if (freeCells(o.me) === 0) {
+    if (townAt(o.world) || !sellsCargo(o, true)) return hunt(o);
+    return driveToSite(o, nearestTown(o.world));
+  }
   const wreck = nearestStock(o.world, knownStocks(o.world).filter((s) => s.id.startsWith('wreck-') && playerSees(o.world, s.pos)));
   if (wreck) return visitStock(o, wreck);
   hunt(o);
@@ -776,9 +956,9 @@ function collectOrHunt(o: Orders): void {
 // A place on the hunter's patrol: a shop, reached at its nearest pad, or a point on the road out of a raider camp.
 type Post = { pos: Vec; shop: Site | null };
 
-// A camp's gate guns shoot every outsider in range, so the hunter waits for raiders leaving it half a gun range
-// beyond that, on the line to the nearest shop.
-const CAMP_STANDOFF = RULES.guards.range * 1.5;
+// Tiles off a camp gate where the hunter waits for raiders leaving it, on the line to the nearest shop, clear of
+// the gate traffic.
+const CAMP_STANDOFF = 18;
 
 // The camp posts, each with the shop nearest to its gate.
 function campPosts(): { post: Post; near: Site }[] {
@@ -798,22 +978,41 @@ function postDests(post: Post): Vec[] {
 }
 
 // The hunter patrols the shops and the roads out of the raider camps, where lone raiders prey on traders. It keeps
-// driving to the post it is bound for. Without one, it goes to the post after the one nearest it.
+// driving to the post it is bound for. At a post it goes on to the post after it. Between posts, as after a stop to
+// cool the engine, it goes on to the nearest post ahead: the post after the nearest one could lie behind it, and
+// turned it back across the map short of the post it drove for.
 function hunt(o: Orders): void {
   const order = o.me.order;
   if (order?.kind === 'stopAt' && PATROL.some((p) => postDests(p).some((d) => d.x === order.dest.x && d.y === order.dest.y))) return;
-  const here = PATROL.reduce((best, p, i) => (dist(o.me.pos, p.pos) < dist(o.me.pos, PATROL[best].pos) ? i : best), 0);
-  const next = PATROL[(here + 1) % PATROL.length];
+  const next = nextPost(o.me);
   driveTo(o, next.shop ? nearestPad(next.shop, o.me.pos) : next.pos);
+}
+
+function nextPost(me: Vehicle): Post {
+  return (atPost(me.pos) ? null : postAhead(me)) ?? postAfterNearest(me.pos);
+}
+
+function atPost(pos: Vec): boolean {
+  return PATROL.some((p) => (p.shop ? canUseSite(pos, p.shop) : dist(pos, p.pos) <= RULES.arriveRadius));
+}
+
+function postAhead(me: Vehicle): Post | null {
+  const ahead = PATROL.filter((p) => (p.pos.x - me.pos.x) * Math.cos(me.heading) + (p.pos.y - me.pos.y) * Math.sin(me.heading) > 0);
+  return ahead.reduce<Post | null>((best, p) => (!best || dist(me.pos, p.pos) < dist(me.pos, best.pos) ? p : best), null);
+}
+
+function postAfterNearest(pos: Vec): Post {
+  const here = PATROL.reduce((best, p, i) => (dist(pos, p.pos) < dist(pos, PATROL[best].pos) ? i : best), 0);
+  return PATROL[(here + 1) % PATROL.length];
 }
 
 // ---- Salvage.
 
-// Stocks the player knows of that hold loot and that it has not searched: at a discovered site, or a wreck on
-// explored ground.
+// Stocks the player knows of that need a search, since they hide units or it never searched them: at a discovered
+// site, or a wreck on explored ground. So the bot searches a stock again while units stay hidden, as NPCs do.
 function knownStocks(world: World): SalvageStock[] {
   return world.salvage.filter((stock) => {
-    if (!hasSalvage(stock) || world.player.scavenged.includes(stock.id)) return false;
+    if (!hasSalvage(stock) || !needsSearch(world, stock)) return false;
     const site = REGION.locations.find((l) => l.id === stock.id);
     return site ? world.player.discovered.includes(site.id) : playerExplored(world, stock.pos);
   });
@@ -865,16 +1064,12 @@ function robberGoal(o: Orders, guarded: boolean): void {
     sellAtMarket(o);
     return;
   }
-  sellInTown(o);
+  sellInTown(o, false);
   lootHere(o);
   const foe = engagedFoe(o.world);
   if (foe) return driveTo(o, foe);
   demandInSight(o, guarded);
   if (freeCells(o.me) > 0) collectOrPatrol(o, guarded);
-}
-
-function sellInTown(o: Orders): void {
-  if (townAt(o.world) && hasCargo(o.world, o.me)) sellCargo(o);
 }
 
 // Demands cargo from the nearest target in sight, unless the player is in a fight.
@@ -1031,9 +1226,25 @@ function hasCargo(world: World, v: Vehicle): boolean {
 // Sells the goods for sale and the spare parts. Every shop buys both. A field repairer with stripping on keeps its
 // repair parts and strips its spares instead of selling them. A bot that needs the money now sells everything.
 function sellCargo(o: Orders, stripping = false): void {
+  for (const [good, n] of goodsToSell(o, stripping)) o.run((w) => sellGood(w, good, n), 'goodsSold');
+  sellSpares(o, stripping && o.fieldRepair);
+}
+
+// Sells in town. True when the sale started a strip job: the job holds the truck parked, and a drive order would
+// cancel it and leave the spare unsold.
+function sellInTown(o: Orders, stripping: boolean): boolean {
+  if (townAt(o.world) && sellsCargo(o, stripping)) sellCargo(o, stripping);
+  return o.me.job !== null;
+}
+
+function goodsToSell(o: Orders, stripping: boolean): [string, number][] {
   const keep = stripping && o.fieldRepair;
-  for (const [good, n] of Object.entries(cargoForSale(o.world, o.me))) if (!keep || good !== 'parts') o.run((w) => sellGood(w, good, n), 'goodsSold');
-  sellSpares(o, keep);
+  return Object.entries(cargoForSale(o.world, o.me)).filter(([good]) => !keep || good !== 'parts');
+}
+
+// Whether sellCargo with this stripping setting would sell anything.
+function sellsCargo(o: Orders, stripping: boolean): boolean {
+  return goodsToSell(o, stripping).length > 0 || spareItems(o.me).length > 0;
 }
 
 function sellSpares(o: Orders, keep: boolean): void {
@@ -1051,7 +1262,7 @@ function stripForRepair(o: Orders, partId: string): boolean {
 
 function canStrip(o: Orders, partId: string): boolean {
   const item = o.me.items.find((it) => it.kind === 'part' && it.part.id === partId);
-  return item?.kind === 'part' && !inCombat(o.world, o.me) && freeCells(o.me) >= stripYield(item.part);
+  return item?.kind === 'part' && !inCombat(o.world, o.me) && freeCells(o.me) >= stripYield(o.me, item.part);
 }
 
 // ---- Driving.

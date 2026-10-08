@@ -32,7 +32,7 @@ function withDriver(x: number, traits: TraitId[] = ['trader']): { w: World; npc:
   npc.brain = npcBrain('trader', npc.pos, traits);
   npc.resources!.fuel = fuelCap(npc);
   npc.resources!.supplies = suppliesCap(npc);
-  npc.resources!.money = 500;
+  npc.resources!.money = 16667;
   return { w, npc };
 }
 
@@ -110,7 +110,7 @@ describe('aid deal', () => {
     const money0 = start.player.money;
     const run = runUntil(agreed(start, npc.id, playerGift(5, price)), 3, (x) => !aidOpen(x, npc.id));
     expect(run.w.player.money).toBe(money0 + price);
-    expect(find(run.w, npc.id).resources!.money).toBe(500 - price);
+    expect(find(run.w, npc.id).resources!.money).toBe(16667 - price);
     expect(run.events.some((e) => e.t === 'practice' && e.source === 'aid')).toBe(false);
   });
 
@@ -245,6 +245,71 @@ describe('meeting for aid', () => {
     const { w: start, npc } = withDriver(34);
     const run = runUntil(agreed(start, npc.id, playerGift(5)), 3, (x) => !aidOpen(x, npc.id));
     expect(topGoal(find(endTurn(run.w, testDrive), npc.id))?.kind).not.toBe('meet');
+  });
+});
+
+describe('a defeated driver', () => {
+  // A retreating driver, low on fuel, with its retreat goal already on top.
+  function retreating(x: number): { w: World; npc: Vehicle } {
+    const { w, npc } = withDriver(x);
+    npc.defeat = { phase: 'retreat', turns: 0, unseen: 0, foes: [], gaveUp: false };
+    npc.resources!.fuel = 1;
+    thinkNpc(w, npc);
+    expect(topGoal(npc)?.kind).toBe('retreat');
+    return { w, npc };
+  }
+
+  it('drives over, stays for the handover, then drives on home', () => {
+    const { w: start, npc } = retreating(60);
+    const fuel0 = start.player.fuel;
+    let w = agreed(start, npc.id, playerGift(5));
+    w = endTurn(w, testDrive);
+    expect(topGoal(find(w, npc.id))).toMatchObject({ kind: 'meet', targetId: w.player.vehicleId });
+    const run = runUntil(w, 60, (x) => !aidOpen(x, npc.id));
+    expect(aidEvents(run.events)).toEqual([expect.objectContaining({ fuel: 5 })]);
+    expect(run.w.player.fuel).toBe(fuel0 - 5);
+    expect(find(run.w, npc.id).resources!.fuel).toBeGreaterThan(4);
+    expect(find(run.w, npc.id).defeat).toBeTruthy();
+    const after = endTurn(run.w, testDrive);
+    expect(topGoal(find(after, npc.id))?.kind).toBe('retreat');
+  });
+
+  it('re-aims its meet goal at where the player is now', () => {
+    const { w: start, npc } = retreating(60);
+    const w = update(agreed(start, npc.id, playerGift(5)), (d) => { playerVehicle(d).pos = { x: 30, y: 45 }; });
+    const goal = thinkNpc(w, find(w, npc.id));
+    expect(goal.kind).toBe('meet');
+    expect(goal.destination).toEqual({ x: 30, y: 45 });
+  });
+
+  it('a deal it never meets lapses and moves nothing', () => {
+    const { w: start, npc } = retreating(60);
+    const fuel0 = start.player.fuel;
+    const w = agreed(start, npc.id, playerGift(5));
+    const run = runUntil(w, 200, (x) => !aidOpen(x, npc.id), false);
+    expect(aidEvents(run.events)).toEqual([]);
+    expect(run.events).toContainEqual(expect.objectContaining({ t: 'stateEnded', ending: 'expired' }));
+    expect(run.w.player.fuel).toBe(fuel0);
+    expect(find(run.w, npc.id).resources!.fuel).toBeLessThanOrEqual(1);
+    expect(topGoal(find(endTurn(run.w, testDrive), npc.id))?.kind).toBe('retreat');
+  });
+
+  it('keeps the deal across a save round trip', () => {
+    const { w: start, npc } = retreating(60);
+    let w = agreed(start, npc.id, playerGift(5));
+    w = runUntil(w, 3, () => false, false).w;
+    w = JSON.parse(JSON.stringify(w)) as World;
+    const run = runUntil(w, 60, (x) => !aidOpen(x, npc.id));
+    expect(aidEvents(run.events)).toEqual([expect.objectContaining({ fuel: 5 })]);
+  });
+
+  it('takes a gift from a defeated driver', () => {
+    const { w: start, npc } = retreating(60);
+    npc.resources!.fuel = fuelCap(npc);
+    start.player.fuel = 0;
+    const w = agreed(start, npc.id, { giver: 'npc', fuel: 4, supplies: 0, price: 0, free: true });
+    const run = runUntil(w, 60, (x) => !aidOpen(x, npc.id));
+    expect(run.w.player.fuel).toBe(4);
   });
 });
 

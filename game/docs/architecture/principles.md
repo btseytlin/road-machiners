@@ -50,7 +50,7 @@ Plan check: name each saved type the change touches and its migration, and each 
 
 ## 6. Same seed, same game
 
-All sim randomness goes through `src/sim/rng.ts` with its state in the world. Each concern draws from its own stream: shops from `world.marketRng` and driver names from `world.nameRng`. A new concern whose draws must not shift others gets its own stream. Render and audio may use `Math.random()` or `src/render/noise.ts`.
+All sim randomness goes through `src/sim/rng.ts` with its state in the world. Each concern draws from its own stream: shops from `world.marketRng`, driver names from `world.nameRng` and search reveals from `world.searchRng`. A new concern whose draws must not shift others gets its own stream. Render and audio may use `Math.random()` or `src/render/noise.ts`.
 
 Why: harness runs, replays and bug reports mean something only when a run repeats exactly.
 

@@ -16,6 +16,7 @@ import { buildDrive, freeDrive, initPhysics, type Drive } from './drive';
 import { physicsMove } from './turn';
 import { TEST_MAP } from '../test/map';
 import { budget } from '../test/budget';
+import { defaultSetup } from '../sim/settings';
 
 beforeAll(async () => {
   await initPhysics();
@@ -66,7 +67,7 @@ describe('NPC driving', () => {
   });
 
   it('travels between towns without entering either site', () => {
-    let w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    let w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     // No spawns, so no raider can end the trip before it reaches Nose.
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -90,7 +91,7 @@ describe('NPC driving', () => {
   }, budget(120_000));
 
   it('passes the oncoming player without stopping or touching it', () => {
-    let w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    let w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     const bowl = REGION.towns[0];
@@ -131,18 +132,25 @@ describe('NPC driving', () => {
   it.each([-3, -1.5].flatMap((dx) => [-3, -1.5, 0, 1.5, 3].map((dy) => [dx, dy])))(
     'two NPCs closing head-on never touch: second goal offset %s,%s',
     (dx, dy) => {
-      let w = newWorld(1337, START_KITS.standard, TEST_MAP);
+      let w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
       w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
       for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
       w.vehicles[0].pos = { x: 300, y: 200 };
       const a = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 264.24, y: 165.07 }, (-48 * Math.PI) / 180);
       const b = addVehicle(w, 'roamers', 'scout', ['mg', 'stockEngine'], { x: 283.01, y: 143.29 }, (129 * Math.PI) / 180);
+      // The lower id waits, so which truck swerves follows the ids. Pin them to those of the recorded crash, since the id counter shifts with how many trucks a new world starts with.
+      a.id = 'v1062';
+      b.id = 'v1081';
       a.speed = 6.46;
       b.speed = 4.08;
       a.brain = npcBrain('scavenger', a.pos, ['scavenger']);
       b.brain = npcBrain('roamer', b.pos, ['roamer']);
       a.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 317, y: 102.75 }, phase: 'travel', reason: 'test trip' }];
       b.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 276.07 + dx, y: 157.15 + dy }, phase: 'travel', reason: 'test trip' }];
+      // Each has already weighed robbing the other and let it pass. This is traffic: on some world random states the
+      // scavenger rolls a robbery, and the fight that follows closes to contact by design, not by a driving fault.
+      a.brain.noticed[`preySeen:${b.id}`] = w.turn;
+      b.brain.noticed[`preySeen:${a.id}`] = w.turn;
       let d = buildDrive(w);
       let touches = 0;
       for (let i = 0; i < 10; i++) {

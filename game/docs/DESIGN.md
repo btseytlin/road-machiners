@@ -82,9 +82,9 @@ Details: [sight and detection](wiki/mechanics/detection.md).
 
 ## World
 
-Icarus is one fixed region where danger is set by place, not by the player's level. The land tells the story of the Old World under the New World: farm fields, ruins and old highways around crash wreckage and truck roads. Towns and sites are fixed places that trucks use from pads outside their gates. Town guns make a gate a safe place to run to, and raider camps are the opposite. Time of day, sun, shade and weather change what a route costs in fuel, supplies, sight and engine heat.
+Icarus is one fixed region where danger is set by place, not by the player's level. The land tells the story of the Old World under the New World: farm fields, ruins and old highways around crash wreckage and truck roads. Towns and sites are fixed places that trucks use from pads outside their gates. Lawmen patrol the roads around their towns, so few drivers start trouble at a town gate, and raiders patrol around their camps. Time of day, sun, shade and weather change what a route costs in fuel, supplies, sight and engine heat.
 
-Details: [world](wiki/mechanics/world.md), [lore](lore.md), [visual design](VISUAL_DESIGN.md).
+Details: [world](wiki/mechanics/world.md), [world settings](wiki/mechanics/world-settings.md), [lore](lore.md), [visual design](VISUAL_DESIGN.md).
 
 ## NPCs
 
@@ -100,7 +100,7 @@ Details: [social](wiki/mechanics/social.md).
 
 ## Economy
 
-The wasteland is a living economy that NPC traders move as much as the player. Every item has one value, and every price is a formula from it. Goods are cheap where they are made and dear far away, so profit comes from knowing routes, as in Dustland Delivery. Loot is finite and refills slowly, and nothing appears offscreen to keep the economy going. One turn of play is the unit of effort, and every price and reward is balanced against what a turn earns. Fuel and supplies limit how far a truck can go.
+The wasteland is a living economy that NPC traders move as much as the player. Every item has one value, and every price is a formula from it. Goods are cheap where they are made and dear far away, so profit comes from knowing routes, as in Dustland Delivery. Loot is finite and refills slowly, and nothing appears offscreen to keep the economy going. One turn of play is the unit of effort, and every price and reward is balanced against what a turn earns. One M is the price of 5 L of fuel at a town, and every price reads against it. Fuel and supplies limit how far a truck can go.
 
 Details: [economy](wiki/mechanics/economy.md), [economy reference](wiki/economy.md), [prototype content](wiki/mechanics/content.md).
 

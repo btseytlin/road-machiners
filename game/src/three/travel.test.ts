@@ -12,9 +12,10 @@ import { endTurn, newWorld, setMoveOrder } from "../sim/world";
 import { addRopeFrames, canTravel, overshoots, Travel } from "./travel";
 import { addState } from "../sim/states";
 import { TEST_MAP } from "../test/map";
+import { defaultSetup } from "../sim/settings";
 
 function makeSafeWorld() {
-  const world = newWorld(1337, startKit("standard"), TEST_MAP);
+  const world = newWorld(1337, startKit("standard"), TEST_MAP, defaultSetup('roaming'));
   world.vehicles = [playerVehicle(world)];
   world.events = [];
   return world;
@@ -276,7 +277,6 @@ describe("automatic travel safety", () => {
   it.each([
     "collision",
     "shot",
-    "guardShot",
     "breakdown",
     "partDisabled",
     "knockout",
@@ -295,13 +295,6 @@ describe("automatic travel safety", () => {
         chance: 1,
         damageChance: 1,
         side: "front",
-        rounds: [],
-      },
-      guardShot: {
-        t: "guardShot",
-        site: "town",
-        from: { x: 0, y: 0 },
-        target: id,
         rounds: [],
       },
       breakdown: { t: "breakdown", vehicle: id, part: "engine" },

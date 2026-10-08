@@ -1,11 +1,15 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { lineTime, type AgentUsage, type LedgerLine, type ModelUsage } from '../ledger';
+import { isFailedOutcome, lineTime, type AgentUsage, type LedgerLine, type ModelUsage } from '../ledger';
 import type { JobStage } from '../types';
 import type { Observation, SchedulerData } from '../observability';
+import { summarizeDelivery, type DeliverySummary } from './delivery';
 
 const DAY_MS = 86_400_000;
+// A card can take months from triage to its merge, so card lines stay longer than the 30 days of usage. Each card writes a few lines, so this stays small.
+const CARD_DAYS = 180;
 type Job = Extract<LedgerLine, { kind: 'job' }>;
+type CardLine = Extract<LedgerLine, { kind: 'card' }>;
 type Counts = { input: number; output: number; cacheRead: number; cacheWrite: number };
 // A bucket is one UTC hour for the 24-hour range and one UTC day otherwise. Segment tokens count measured usage only.
 type Segment = { cost: number; tokens: number };
@@ -22,6 +26,7 @@ type Summary = {
   activity: { stage: JobStage; issue: number | null; outcome: string; at: string }[];
   waitingMs: number | null; waitingStages: { stage: string; workerMs: number }[]; waitingGaps: number;
   retries: { outcome: string; runs: number; workerMs: number; cost: number | null }[];
+  delivery: DeliverySummary | null;
 };
 type StageRow = Summary['stages'][number];
 type IssueRow = Summary['issues'][number];
@@ -37,7 +42,7 @@ function getPublicIssue(job: Job): number | null {
   return job.stage === 'change' || job.stage === 'adhoc' ? null : job.issue;
 }
 function createSummary(days: number, since: string | null): Summary {
-  return { days, since, completed: 0, failed: 0, timeouts: 0, workerMs: 0, cost: null, tokens: null, missingUsage: 0, collectionFaults: 0, wasted: { cost: null, tokens: null }, waitingMs: null, waitingStages: [], waitingGaps: 0, retries: [], models: [], stageModels: [], stages: [], issues: [], buckets: [], activity: [] };
+  return { days, since, completed: 0, failed: 0, timeouts: 0, workerMs: 0, cost: null, tokens: null, missingUsage: 0, collectionFaults: 0, wasted: { cost: null, tokens: null }, waitingMs: null, waitingStages: [], waitingGaps: 0, retries: [], delivery: null, models: [], stageModels: [], stages: [], issues: [], buckets: [], activity: [] };
 }
 function addCost(summary: Summary, stage: StageRow, issue: IssueRow | null, cost: number): void {
   summary.cost = (summary.cost ?? 0) + cost;
@@ -50,7 +55,7 @@ function addWaste(summary: Summary, agent: AgentUsage): void {
 }
 function addAgent(summary: Summary, totals: Totals, job: Job, agent: AgentUsage, stage: StageRow, issue: IssueRow | null): void {
   addCost(summary, stage, issue, agent.costUsd);
-  if (job.outcome !== 'done') addWaste(summary, agent);
+  if (isFailedOutcome(job.outcome)) addWaste(summary, agent);
   const bucket = getBucket(totals, job.endedAt.slice(0, summary.days === 1 ? 13 : 10));
   bucket.cost += agent.costUsd;
   addSegment(bucket.stages, job.stage, agent.costUsd, 0);
@@ -99,7 +104,7 @@ function addJob(summary: Summary, totals: Totals, job: Job): void {
   if (!Number.isFinite(duration) || duration < 0) throw new Error('Invalid job duration');
   summary.workerMs += duration;
   summary.completed += Number(job.outcome === 'done');
-  summary.failed += Number(job.outcome !== 'done');
+  summary.failed += Number(isFailedOutcome(job.outcome));
   summary.timeouts += Number(job.outcome === 'timeout');
   const publicIssue = getPublicIssue(job);
   summary.activity.push({ stage: job.stage, issue: publicIssue, outcome: job.outcome === 'done' ? 'finished' : job.outcome, at: job.endedAt });
@@ -160,7 +165,10 @@ function addRetry(summary: Summary, jobs: Job[], job: Job): void {
   for (const agent of job.agents) row.cost = (row.cost ?? 0) + agent.costUsd;
 }
 function readPreviousOutcome(jobs: Job[], id: string): string { return jobs.find((job) => job.id === id)?.outcome ?? 'unknown'; }
-function retainRecord(line: LedgerLine): boolean { return line.kind !== 'observation' || line.data.type === 'scheduler'; }
+function retainRecord(line: LedgerLine): boolean {
+  if (line.kind === 'control') return false;
+  return line.kind !== 'observation' || line.data.type === 'scheduler';
+}
 type SchedulerPoint = Observation & { data: SchedulerData };
 function addWaitInterval(summary: Summary, point: SchedulerPoint, duration: number): void {
   if (point.data.report === null) return;
@@ -196,7 +204,7 @@ function addWaiting(summary: Summary, records: LedgerLine[], now: Date, days: nu
 
 function parseHistoryRecord(text: string): LedgerLine {
   const line = JSON.parse(text) as LedgerLine;
-  if (!['job', 'route', 'post', 'observation'].includes(line.kind)) throw new Error('Invalid ledger line');
+  if (!['job', 'route', 'post', 'observation', 'control', 'card'].includes(line.kind)) throw new Error('Invalid ledger line');
   if (!Number.isFinite(Date.parse(lineTime(line)))) throw new Error('Invalid ledger timestamp');
   return line;
 }
@@ -205,6 +213,7 @@ export class DashboardHistory {
   private offset = 0;
   private remainder = '';
   private records: LedgerLine[] = [];
+  private cards: CardLine[] = [];
   private first: string | null = null;
   constructor(private readonly home: string, private readonly tickIntervalMs: number) {}
   private consumeLine(text: string, now: Date): void {
@@ -212,8 +221,12 @@ export class DashboardHistory {
     const line = parseHistoryRecord(text);
     const at = lineTime(line);
     this.first ??= at;
+    if (line.kind === 'card') return this.keepCard(line, now);
     if (!retainRecord(line)) return;
     if (Date.parse(at) >= now.getTime() - 30 * DAY_MS) this.records.push(line);
+  }
+  private keepCard(line: CardLine, now: Date): void {
+    if (Date.parse(line.at) >= now.getTime() - CARD_DAYS * DAY_MS) this.cards.push(line);
   }
   private consumeChunk(chunk: string, now: Date): void {
     const parts = (this.remainder + chunk).split('\n');
@@ -224,13 +237,14 @@ export class DashboardHistory {
     const path = join(this.home, 'ledger.jsonl');
     if (!existsSync(path)) return;
     const size = statSync(path).size;
-    if (size < this.offset) { this.offset = 0; this.remainder = ''; this.records = []; this.first = null; }
+    if (size < this.offset) { this.offset = 0; this.remainder = ''; this.records = []; this.cards = []; this.first = null; }
     if (size > this.offset) {
       const stream = createReadStream(path, { start: this.offset, end: size - 1, encoding: 'utf8' });
       for await (const chunk of stream) this.consumeChunk(chunk, now);
       this.offset = size;
     }
     this.records = this.records.filter((line) => Date.parse(lineTime(line)) >= now.getTime() - 30 * DAY_MS);
+    this.cards = this.cards.filter((line) => Date.parse(line.at) >= now.getTime() - CARD_DAYS * DAY_MS);
   }
   summarize(now: Date, days: number): Summary {
     const summary = createSummary(days, this.first);
@@ -242,6 +256,7 @@ export class DashboardHistory {
       addRetry(summary, jobs, job);
     }
     addWaiting(summary, this.records, now, days, this.tickIntervalMs * 3);
+    summary.delivery = summarizeDelivery(this.cards, jobs, now, days);
     summary.stages = [...totals.stages.values()];
     summary.issues = [...totals.issues.values()].sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0));
     summary.models = [...totals.models.values()];

@@ -15,6 +15,7 @@ import { DECKS, deckAt } from './bridge';
 import type { World } from './types';
 import type { Vec } from './vec';
 import { newWorld } from './world';
+import { defaultSetup } from './settings';
 
 describe('vision', () => {
   it('sees an unblocked tile within radius', () => {
@@ -349,7 +350,7 @@ describe('sight from the wing', () => {
   const at = (p: Vec, along: number, side: number): Vec => ({ x: p.x + span.axis.x * along + across.x * side, y: p.y + span.axis.y * along + across.y * side });
 
   function wingWorld(): World {
-    const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     // The player watches from near the wing, so the meetings play by the full rules.
     w.vehicles[0].pos = at(mid, 0, -5);

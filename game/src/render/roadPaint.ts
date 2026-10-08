@@ -1,6 +1,6 @@
 // Road look for the ground shader. The mask marks where region roads (red) and territory dirt roads (green) lie on
-// the map. The detail is a small tiling image of packed dirt with gravel, cracked patches and potholes, drawn in
-// pixels a third the size of the ground paint pixels. The tone is slow noise that varies the road and wanders its
+// the map, and where fused glass (blue) lies. The detail is a small tiling image of packed dirt with gravel, cracked
+// patches and potholes, drawn in pixels a third the size of the ground paint pixels. The tone is slow noise that varies the road and wanders its
 // edge, with a period far from the detail's, so the detail never repeats in the same light.
 
 import { REGION, type TerritoryDef } from "../data/region";
