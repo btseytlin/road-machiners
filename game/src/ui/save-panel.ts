@@ -1,5 +1,6 @@
 // The Save and Load panels. Save lists the manual slots and writes the world into the one clicked. Load lists every
 // filled slot, newest first, and loads the one clicked. Save writes at once. Load asks first, since it drops progress.
+// Save also downloads the game or the run log as a file.
 
 import { clockOf } from "../sim/sun";
 import type { SlotId, SlotInfo } from "../three/save-slots";
@@ -10,7 +11,9 @@ export type SavePanelActions = {
   list: () => SlotInfo[];
   manualSlots: () => SlotId[];
   save: (slot: SlotId) => void;
-  requestBoot: (slot: SlotId) => void;
+  reboot: (slot: SlotId) => void;
+  exportSave: () => void;
+  exportLog: () => void;
 };
 
 const DAMAGED = "Old or damaged save";
@@ -50,7 +53,13 @@ export class SavePanel {
   openSave(): void {
     const infos = new Map(this.actions.list().map((info) => [info.slot, info]));
     const rows = this.actions.manualSlots().map((slot) => this.row(slot, infos.get(slot) ?? null, () => this.saveInto(slot)));
-    this.show("Save", rows);
+    const exports = el(
+      "div",
+      { class: "save-exports" },
+      el("button", { onclick: () => this.actions.exportSave(), title: "Download the game as it is now" }, "Export save"),
+      el("button", { onclick: () => this.actions.exportLog(), title: "Download what happened this run, one event per line" }, "Export run log"),
+    );
+    this.show("Save", [...rows, exports]);
   }
 
   openLoad(): void {
@@ -65,8 +74,7 @@ export class SavePanel {
 
   private loadFrom(slot: SlotId): void {
     if (!window.confirm("Load this save? Progress since your last save is lost.")) return;
-    this.actions.requestBoot(slot);
-    window.location.reload();
+    this.actions.reboot(slot);
   }
 
   private row(slot: SlotId, info: SlotInfo | null, onclick: () => void): HTMLElement {

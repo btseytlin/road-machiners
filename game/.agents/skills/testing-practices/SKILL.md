@@ -37,7 +37,7 @@ Turn demonstrated bug probes, including reviewer probes, into regression tests b
 - Use `npm test -- src/sim/<owner>.test.ts` for a focused simulation check, `npm run typecheck` for TypeScript, and `npm run quality` for new lint and architecture debt.
 - Test Node-only tooling with the existing runner. `npm run test:quality` exercises the Git hook in disposable repositories.
 - Use the world RNG for deterministic simulation fixtures. Do not substitute `Math.random()`.
-- After render or game changes, run `npm run playtest -- --url <dev server>`. Follow the Metal GPU and screenshot rules in [project guidance](../../../CLAUDE.md).
+- After render or game changes, run `npm run playtest -- --url <dev server>`. Follow the GPU and screenshot rules in [project guidance](../../../CLAUDE.md).
 - Type assertions do not prove runtime safety. Include malformed inputs at external boundaries and test the visible failure.
 - Restore spies and global state after each test. Keep fixtures small and avoid depending on test order.
 

@@ -17,8 +17,6 @@ const moveAllFar = (w: World) => {
   for (const v of w.vehicles) advanceFar(w, v);
 };
 
-// A fuelless majority: most NPCs broke, dry and a few tiles off the site that serves them. Every one gets fuel again.
-// What a driver does with that fuel afterwards, like a long trip to sell loot, is its own goals' business.
 describe('a fuelless majority of NPCs', () => {
   it('all recover scrap fuel at their serving sites with no stall', () => {
     let w = emptyWorld({ x: 5, y: 5 });
@@ -46,7 +44,6 @@ describe('a fuelless majority of NPCs', () => {
     const farthest = Math.max(...broke.map((v) => dist(v.pos, v === raider ? camp.pos : bowl.pos)));
     const bound = Math.ceil(farthest / RULES.limpSpeed) + NPC_BEHAVIOR.stallTurns;
     const stalls: unknown[] = [];
-    // A recovered driver goes back to work and may run dry again before the end, so recovery is any turn with fuel.
     const refuelled = new Set<string>();
     for (let turn = 0; turn < bound; turn++) {
       w = endTurn(w, moveAllFar);

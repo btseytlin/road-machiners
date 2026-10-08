@@ -37,7 +37,6 @@ const SITES = [...REGION.towns, ...REGION.locations];
 const WET = GEOLOGY.ground.washFlow * 2;
 const SEED = 1337;
 
-// IV2: off every road surface, clear of sites with their pads, and off the Canyon Bridge deck.
 function expectOffBuilt(p: BakedProp): void {
   const bridge = deckById('canyon-bridge');
   expect(ROAD_INDEX.nearestWithin(p.pos.x, p.pos.y, Infinity)).toBeGreaterThanOrEqual(HALF + p.r);
@@ -58,7 +57,6 @@ function tilesMarked(d: MapDraft, code: number): Vec[] {
   return out;
 }
 
-// The nearest road to p and the distance along it of its nearest point, to half a tile.
 function nearestOnRoads(p: Vec): { line: RoadLine; s: number; road: number } {
   let best = { line: new RoadLine(REGION.roads[0]), s: 0, road: 0, d: Infinity };
   REGION.roads.forEach((points, road) => {
@@ -73,7 +71,6 @@ function nearestOnRoads(p: Vec): { line: RoadLine; s: number; road: number } {
 
 describe('settlements', () => {
   it('stand on flat, dry ground and keep their spacing', () => {
-    // Steep random ground west of x = 300, flat ground east of it, with a wash band across the flat.
     const d = newDraft(SIZE);
     setCorners(d, 'heights', (i, j) => (i < 300 ? hashRandom(3, i, j) * 2 : 0));
     setCorners(d, 'flow', (i, j) => (i >= 300 && j >= 400 && j <= 420 ? WET : 0));
@@ -109,7 +106,6 @@ describe('settlements', () => {
 });
 
 describe('overlooks', () => {
-  // A mesa 4 units high with a steep rim, far from roads and sites, on flat ground.
   const MESA = { x: 60, y: 200 };
   const MESA_RADIUS = 25;
 
@@ -161,9 +157,6 @@ describe('bend buildings', () => {
 });
 
 describe('old roads', () => {
-  // Two settlements on flat ground with a wash bed running north to south between them, off every road
-  // and site of the region. The wash is a trench `depth` deep, with a floor from x 38 to 42 and sides
-  // sloping over 4 tiles.
   function washDraft(depth = 4): { d: MapDraft; towns: OldSettlement[] } {
     const d = newDraft(80);
     setCorners(d, 'flow', (i) => (i >= 34 && i <= 46 ? WET : 0));
@@ -232,7 +225,6 @@ describe('old roads', () => {
 });
 
 describe('old highway', () => {
-  // A trench 3 units deep along the dry river, and one settlement on each side of it.
   function riverDraft(): { d: MapDraft; towns: OldSettlement[] } {
     const d = newDraft(REGION.size);
     const river = TERRAIN.features.dryRiver.path;
@@ -278,7 +270,6 @@ describe('power lines', () => {
       expect(sides.size).toBe(1);
       for (let k = 1; k < poles.length; k++) {
         if (poles[k].step !== poles[k - 1].step + 1) continue;
-        // Where the road turns between two poles, their offsets from it move them closer or farther apart.
         expect(Math.abs(dist(poles[k].pos, poles[k - 1].pos) - rules.spacing)).toBeLessThanOrEqual(2 * (HALF + rules.gap + rules.radius));
       }
     }
@@ -298,7 +289,6 @@ describe('power lines', () => {
   });
 });
 
-// +1 or -1: the side of the road's nearest segment that p lies on.
 function sideOfRoad(road: readonly Vec[], p: Vec): number {
   let best = 0;
   for (let k = 1; k < road.length; k++) if (segmentDist(p, road[k - 1], road[k]) < segmentDist(p, road[best], road[best + 1])) best = k - 1;
@@ -363,7 +353,6 @@ describe('ship debris', () => {
   const trail = new RoadLine(rules.trail);
   const reach = rules.sideSpread + rules.clusterStep / 3 + rules.clusterReach;
 
-  // Flat ground over the whole map, with an old road across the south of the trail.
   function debrisDraft(): MapDraft {
     const d = newDraft(SIZE);
     for (let x = 0; x < SIZE; x++) for (let y = 300; y < 302; y++) d.built[y * SIZE + x] = BUILT_OLD_ROAD;
@@ -459,7 +448,6 @@ describe('ship debris on the baked map', () => {
 });
 
 describe('fields', () => {
-  // Flat ground at height 0 with a high plateau east of x = 60.
   function farmDraft(): MapDraft {
     const d = newDraft(80);
     setCorners(d, 'heights', (i) => (i >= 60 ? 3 : 0));
@@ -492,7 +480,6 @@ describe('fields', () => {
 });
 
 describe('old-world layer', () => {
-  // Gentle rolling ground with wash beds along two sine valleys, over the whole map.
   function rollingDraft(): MapDraft {
     const d = newDraft(SIZE);
     setCorners(d, 'heights', (i, j) => Math.sin(i / 40) * 1.5 + Math.cos(j / 55) * 1.5);
@@ -505,7 +492,6 @@ describe('old-world layer', () => {
 
     const standing = d.props;
     expect(new Set(standing.map((p) => p.kind)).size).toBeGreaterThan(5);
-    // The Broken Wing hoop arches over its road by design.
     for (const p of standing.filter((q) => q.kind !== 'shipWing')) expectOffBuilt(p);
     for (let a = 0; a < standing.length; a++) for (let b = a + 1; b < standing.length; b++) {
       expect(dist(standing[a].pos, standing[b].pos)).toBeGreaterThanOrEqual(standing[a].r + standing[b].r);
@@ -521,7 +507,6 @@ describe('old-world layer', () => {
     for (const c of marked) {
       expect(ROAD_INDEX.nearestWithin(c.x, c.y, Infinity)).toBeGreaterThanOrEqual(HALF);
       expect(deckAt(c.x, c.y)).toBeNull();
-      // The far corners of a pad reach this far from the site center.
       for (const site of SITES) expect(siteGap(site, c)).toBeGreaterThan(padReach(site));
     }
     expect(d.built.every((b) => b === BUILT_NONE || b === BUILT_OLD_ROAD || b === BUILT_FIELD)).toBe(true);

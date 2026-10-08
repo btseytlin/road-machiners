@@ -18,7 +18,6 @@ import {
 import type { GameEvent, Vehicle, World } from './types';
 import { endTurn, update } from './world';
 
-// A trader in the open, the given distance east of a parked player. No other trucks spawn.
 function withTrader(x: number): { w: World; npc: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -64,7 +63,6 @@ describe('trade meeting', () => {
 
   it('a meeting that never comes together lapses', () => {
     const { w: start, npc } = withTrader(80);
-    // The state alone, with no meet goal, so the driver never comes.
     const w0 = update(start, (w) => { addState(w, 'trade', npc.id, w.player.vehicleId, { kind: 'none' }); });
     const r = runUntil(w0, STATE_TURNS.trade! + 2, (x) => stateOf(x, 'trade', npc.id, x.player.vehicleId) === null);
     expect(r.events).toContainEqual(expect.objectContaining({ t: 'stateEnded', ending: 'expired' }));
@@ -89,7 +87,6 @@ describe('trade meeting', () => {
 });
 
 describe('trades', () => {
-  // A trader parked beside a parked player, with a trade agreed.
   function meeting(): { w: World; npc: Vehicle } {
     const { w: start, npc } = withTrader(34);
     const w = agreed(start, npc.id);

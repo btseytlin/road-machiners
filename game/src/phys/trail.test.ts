@@ -4,7 +4,6 @@ import { dist } from '../sim/vec';
 import { TURN_STEPS } from './drive';
 import { trailOf } from './turn';
 
-// Frames of a truck driving along +x at `speed` tiles per physics step, in physics meters (4 per tile).
 function straight(speed: number) {
   return Array.from({ length: TURN_STEPS }, (_, k) => ({ pos: { x: (k + 1) * speed * 4, y: 0, z: 0 }, rot: { x: 0, y: 0, z: 0, w: 1 }, wheels: [] }));
 }

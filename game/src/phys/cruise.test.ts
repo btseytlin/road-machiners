@@ -25,10 +25,9 @@ beforeAll(async () => {
 
 const KPH = (PHYSICS.metersPerTile / PHYSICS.turnSeconds) * 3.6;
 const CRUISE_KPH = 65;
-const RAMP_TURNS = 8; // long enough for any truck here to reach its top speed from rest
+const RAMP_TURNS = 8;
 const ROAD_Y = 30;
 
-// A world with the player parked beside the road's middle, so every truck on it keeps its physics body.
 function road(): World {
   return emptyWorld({ x: 70, y: ROAD_Y + 12 });
 }
@@ -39,7 +38,6 @@ function truck(w: World, chassisId: string, parts: string[]): Vehicle {
   return v;
 }
 
-// Plays the ramp-up and returns the truck's speed in tiles a turn.
 function cruise(w: World, id: string): number {
   let d: Drive = buildDrive(w);
   for (let i = 0; i < RAMP_TURNS; i++) {

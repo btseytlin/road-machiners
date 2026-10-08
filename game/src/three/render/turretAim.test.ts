@@ -16,7 +16,6 @@ await loadModels(async (name) => {
   return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0)).buffer;
 });
 
-// The gun's drawn bearing off the truck heading in degrees, after aiming at a map bearing in degrees.
 function drawn(gun: string, headingDeg: number, aimDeg: number | null): number {
   const w = emptyWorld();
   const v = addVehicle(w, 'raiders', 'scout', [gun, 'stockEngine'], { x: 40, y: 40 }, headingDeg * DEG);

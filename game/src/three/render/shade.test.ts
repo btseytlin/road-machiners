@@ -54,7 +54,6 @@ describe('heat haze', () => {
     expect(cornerLook(w, x, y, sun, w.obstacles).haze).toBe(0);
   });
 
-  // The patch filters shade casters once around the truck, so a rock beyond the patch edge must still shade it.
   it('shades a patch-edge corner behind a rock outside the patch', () => {
     const w = emptyWorld();
     w.turn = turnFor(noon);

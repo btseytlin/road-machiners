@@ -3,6 +3,7 @@ import { mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { GUARD_ROUND } from './agent-check';
 import { must } from './exec';
 import { MEDIA_MOUNT } from './media';
 import { jobLabel } from './jobs';
@@ -13,11 +14,6 @@ import { AGENT_NETWORK, GAME_DIR, PROXY_NAME, PROXY_PORT, type AgentSession, typ
 
 const FACTORY_LABEL = 'factory=1';
 
-// Every factory container carries the factory label. A job's containers also carry its own label, so a kill finds them.
-// A job's containers run on the CPUs of its pool. A run by hand has no pool, so its containers are not pinned.
-// TEST_TIMEOUTS=off takes the time limits off the game's tests and playtest. On this shared server they measure load, not hangs, and the job's own time limit stops a hung run.
-// With the GPU on, every container gets the card. The graphics capability gives Chromium the NVIDIA Vulkan and GL drivers for WebGL.
-// TEST_WORKERS sets how many workers the game's test runner starts, so a pool's memory holds its jobs' test runs.
 function baseArgs(jobId: string | null, cpus: string | null, testWorkers: number | null, gpu: boolean): string[] {
   const label = jobId === null ? [] : ['--label', jobLabel(jobId)];
   const pin = cpus === null ? [] : ['--cpuset-cpus', cpus];
@@ -26,7 +22,6 @@ function baseArgs(jobId: string | null, cpus: string | null, testWorkers: number
   return ['run', '--rm', '--label', FACTORY_LABEL, ...label, ...pin, ...workers, ...card, '-e', 'TEST_TIMEOUTS=off'];
 }
 
-// Each container prints its cgroup's peak memory on stderr when it ends, so the job can record it.
 const PEAK_MARK = 'FACTORY_MEMORY_PEAK';
 const PEAK_TRAP = `trap 'echo "${PEAK_MARK} $(cat /sys/fs/cgroup/memory.peak)" >&2' EXIT`;
 const GB = 1024 ** 3;
@@ -36,7 +31,6 @@ export function readPeakGb(stderr: string): number | undefined {
   return bytes === undefined ? undefined : Math.round((Number(bytes) / GB) * 100) / 100;
 }
 
-// A container killed before its end prints no peak, and its job records none.
 function recordContainerPeak(cfg: FactoryConfig, jobId: string | null, result: RunResult): void {
   const peak = readPeakGb(result.stderr);
   if (jobId !== null && peak !== undefined) recordPeak(cfg.home, jobId, peak);
@@ -44,14 +38,12 @@ function recordContainerPeak(cfg: FactoryConfig, jobId: string | null, result: R
 const PROXY_URL = `http://${PROXY_NAME}:${PROXY_PORT}`;
 const NO_PROXY = 'localhost,127.0.0.1';
 
-// The npm cache is shared across runs, so `npm ci` reuses downloads. npm checks every package against the lockfile's integrity hash, so a bad cache entry fails the install instead of slipping in.
 const NPM_CACHE = '/home/pwuser/.npm';
 const SESSIONS_MOUNT = '/home/pwuser/.claude/projects';
 
 function mountArgs(cfg: FactoryConfig, clone: string, dir: string, mediaDir?: string): string[] {
   const cache = `${cfg.home}/npm-cache`;
   mkdirSync(cache, { recursive: true });
-  // The reference images mount read only inside the clone's mount. The clone's exclude file keeps them out of its commits.
   const media = mediaDir === undefined ? [] : ['-v', `${mediaDir}:${MEDIA_MOUNT}:ro`];
   return ['-v', `${clone}:/work`, '-v', `${cache}:${NPM_CACHE}`, ...media, '-w', `/work/${dir}`];
 }
@@ -60,7 +52,6 @@ function envArgs(env: Record<string, string>): string[] {
   return Object.entries(env).flatMap(([key, value]) => ['-e', `${key}=${value}`]);
 }
 
-// The internal network has no route out. Its only way out is the proxy, which passes the allowlisted hosts.
 function networkArgs(open: boolean): string[] {
   if (open) return [];
   const proxyEnv = Object.fromEntries(
@@ -69,16 +60,12 @@ function networkArgs(open: boolean): string[] {
   return ['--network', AGENT_NETWORK, ...envArgs(proxyEnv)];
 }
 
-// Setting up the proxy takes seconds. A job that waits this long found a stuck lock.
 const PROXY_LOCK_MS = 120_000;
 
-// Creates the internal network and the proxy container when they are missing. Throws when either cannot start.
-// Parallel jobs set it up under one lock, so two never start the proxy at once.
 function ensureProxy(run: Run, cfg: FactoryConfig): Promise<void> {
   return withLock(join(cfg.home, 'locks', 'proxy'), PROXY_LOCK_MS, () => setUpProxy(run, cfg));
 }
 
-// A proxy from an older image is replaced only while no factory container runs, so a deploy never cuts off a running agent.
 async function setUpProxy(run: Run, cfg: FactoryConfig): Promise<void> {
   const docker = async (what: string, args: string[]) => must(await run('docker', args), what);
   if ((await run('docker', ['network', 'inspect', AGENT_NETWORK])).code !== 0) {
@@ -97,13 +84,15 @@ async function othersRun(docker: (what: string, args: string[]) => Promise<strin
   return (await docker('docker ps', ['ps', '-q', '--filter', `label=${FACTORY_LABEL}`])).trim() !== '';
 }
 
-// The agent runs the factory's own evidence checks in its container. The image has Node but not the factory's code, so each run bundles the current source into one file
-// and mounts its folder read only. The agent can read the checks but never change them, and they cannot drift from the ones the factory runs after the stage.
 const CHECK_MOUNT = '/opt/factory-check';
 export const EVIDENCE_CHECK_COMMAND = `node ${CHECK_MOUNT}/check.mjs`;
+
+export const GUARD_HOOK = `#!/bin/sh
+[ -f ${CHECK_MOUNT}/check.mjs ] || exit 0
+exec ${EVIDENCE_CHECK_COMMAND} ${GUARD_ROUND}
+`;
 const CHECK_ENTRY = fileURLToPath(new URL('./agent-check-bin.ts', import.meta.url));
 
-// Parallel jobs bundle at once, so each writes its own file and renames it into place.
 export async function buildCheckBundle(home: string): Promise<string> {
   const dir = join(home, 'agent-check');
   mkdirSync(dir, { recursive: true });
@@ -113,26 +102,21 @@ export async function buildCheckBundle(home: string): Promise<string> {
   return dir;
 }
 
-async function readOnlyMounts(home: string, readOnly: Record<string, string>, evidenceCheck: boolean): Promise<string[]> {
-  const mounts = evidenceCheck ? { ...readOnly, [await buildCheckBundle(home)]: CHECK_MOUNT } : readOnly;
+async function readOnlyMounts(home: string, readOnly: Record<string, string>): Promise<string[]> {
+  const mounts = { ...readOnly, [await buildCheckBundle(home)]: CHECK_MOUNT };
   return Object.entries(mounts).flatMap(([host, path]) => ['-v', `${host}:${path}:ro`]);
 }
 
-// Prompts name agent files relative to the agent folder. An agent that changes directory, say to commit from the repo root, would write them elsewhere, so the full path comes first.
 export function outputsNote(dir: string, jobMaxMinutes: number): string {
   return `Your folder is /work/${dir}. Write every .factory/ and .factory-tasks/ file under /work/${dir}, even after you change directory. When your activity changes, run factory-status with one category: reading, editing, tests, typecheck, playtest, build, publish, install, git, review, design, investigate, or waiting. ${MILESTONE_NOTE} ${longJobsNote(jobMaxMinutes)}`;
 }
 
-// The public dashboard shows the milestone beside the activity, so a reader sees which part of the card is in work.
 const MILESTONE_NOTE = 'Each time you start a new part of the work, run factory-status milestone \'<step>\' with a short step in the card\'s words, like \'Building orchard buildings\' or \'Testing the tow fee\'. Use 3 to 80 letters, digits, spaces and , . \' - only. Never name files, commands or secrets.';
 
-// Background tasks are off, and a sleep loop on a stuck command lost hours. factory-job runs a long command under a time limit and reports its activity on each check.
-// factory-job refuses a limit above FACTORY_JOB_MAX_MINUTES, since agents gave sims and screenshot scripts hours and polled them until the job timed out.
 function longJobsNote(jobMaxMinutes: number): string {
   return `Start a command that may run longer than 5 minutes with factory-job start <name> <activity> <minutes> '<command>', with a time limit of about twice its expected run. The limit is at most ${jobMaxMinutes} minutes. A check that needs longer is too big, so use fewer seeds, fewer turns or a direct test. Then check it with sleep 240; factory-job check <name>, with a Bash timeout of 5 minutes, until it ends. If its log has not changed for 15 minutes, stop it with factory-job stop <name> and find out why. Never end your run while a job is running, since the end of the run kills it.`;
 }
 
-// Only the projects folder is mounted, since the image keeps its skills in the rest of ~/.claude.
 function sessionMount(session: AgentSession | undefined): string[] {
   return session === undefined ? [] : ['-v', `${session.dir}:${SESSIONS_MOUNT}`];
 }
@@ -145,19 +129,20 @@ function effortArgs(effort: string | undefined): string[] {
   return effort === undefined ? [] : ['--effort', effort];
 }
 
+function advisorArgs(advisor: string | undefined): string[] {
+  return advisor === undefined ? [] : ['--advisor', advisor];
+}
+
 function disallowedArgs(tools: string[] | undefined): string[] {
   return tools === undefined ? [] : ['--disallowedTools', tools.join(',')];
 }
 
-// A finished run must report its cost, and one that does not fails its job, which then prices the run from its transcript.
-// A failed run may have died before its result event, and then its transcript prices it at once.
 function recordUsage(cfg: FactoryConfig, jobId: string | null, result: RunResult, model: string, session: AgentSession | undefined): void {
   if (jobId === null) return;
   if (result.code === 0 || result.stdout.includes('"type":"result"')) return closeRun(cfg.home, jobId, usageFromOutput(result.stdout, model, session?.resume ?? false));
   closeRunFromTranscript(cfg.home, jobId, cfg.tokenPrices, new Date());
 }
 
-// The message of a result event that ended on the Claude usage limit, or null. Every 429 result seen on the server was the weekly limit.
 export function usageLimitMessage(stdout: string): string | null {
   for (const line of stdout.split('\n')) {
     if (!line.includes('"api_error_status":429')) continue;
@@ -169,13 +154,11 @@ export function usageLimitMessage(stdout: string): string | null {
   return null;
 }
 
-// A run by hand has no job id and records no usage.
 function openRecordedRun(cfg: FactoryConfig, jobId: string | null, model: string, session: AgentSession | undefined): void {
   if (jobId === null || session === undefined) return;
   openRun(cfg.home, jobId, { model, projects: session.dir, sessionId: session.id, resumed: session.resume, startedAt: new Date().toISOString() });
 }
 
-// Every run of a job keeps its transcript on the host. A run with no issue session gets one of its own that lives until the run is priced.
 function recordedSession(cfg: FactoryConfig, jobId: string | null, session: AgentSession | undefined): AgentSession | undefined {
   if (session !== undefined || jobId === null) return session;
   const dir = runProjectsDir(cfg.home, jobId);
@@ -183,23 +166,19 @@ function recordedSession(cfg: FactoryConfig, jobId: string | null, session: Agen
   return { dir, id: randomUUID(), resume: false };
 }
 
-// Agents get the work clone, the npm cache, the read-only folders their stage names, the OAuth token and the ElevenLabs key with its cap, nothing else. Secrets travel in the docker process env, never in argv.
-// Unless the run is open, containers sit on the internal network and reach only the proxy's allowlist.
 export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | null, cpus: string | null = null, testWorkers: number | null = null): Container {
   return {
-    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, evidenceCheck, session: issueSession, skill, effort, disallowedTools }) {
+    async agent({ clone, dir, model, prompt, log, openNetwork, mediaDir, readOnly = {}, session: issueSession, skill, effort, disallowedTools, advisor }) {
       if (!openNetwork) await ensureProxy(run, cfg);
       const session = recordedSession(cfg, jobId, issueSession);
-      // A headless run ends when the agent ends its turn, and that kills anything it left in the background.
-      // Agents ended turns to wait for background subagents, and the run died with their work, so background tasks are off.
       const env = {
         CLAUDE_CODE_OAUTH_TOKEN: cfg.oauthToken, ELEVENLABS_API_KEY: cfg.elevenlabsKey, SFX_MAX_GENERATIONS: String(cfg.sfxMaxGenerations),
         CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: '1', FACTORY_JOB_MAX_MINUTES: String(cfg.agentJobMaxMinutes),
       };
-      const readOnlyArgs = await readOnlyMounts(cfg.home, readOnly, evidenceCheck === true);
+      const readOnlyArgs = await readOnlyMounts(cfg.home, readOnly);
       const args = [
         ...baseArgs(jobId, cpus, testWorkers, cfg.gpu), '-i', ...mountArgs(cfg, clone, dir, mediaDir), ...sessionMount(session), ...readOnlyArgs, ...networkArgs(openNetwork === true), ...Object.keys(env).flatMap((key) => ['-e', key]), cfg.image,
-        'bash', '-c', `${PEAK_TRAP}; factory-agent "$@"`, 'factory-agent', '-p', '--model', model, ...effortArgs(effort), ...disallowedArgs(disallowedTools), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs(session),
+        'bash', '-c', `${PEAK_TRAP}; factory-agent "$@"`, 'factory-agent', '-p', '--model', model, ...effortArgs(effort), ...advisorArgs(advisor), ...disallowedArgs(disallowedTools), '--permission-mode', 'bypassPermissions', '--output-format', 'stream-json', '--verbose', ...sessionArgs(session),
       ];
       const input = [skill, outputsNote(dir, cfg.agentJobMaxMinutes), prompt].filter((part) => part !== undefined).join('\n\n');
       openRecordedRun(cfg, jobId, model, session);
@@ -213,9 +192,10 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
       }
       return must(result, `agent in ${clone}`);
     },
-    async shell(clone, script, log, env = {}) {
+    async shell(clone, script, log, env = {}, mounts = {}) {
       await ensureProxy(run, cfg);
-      const args = [...baseArgs(jobId, cpus, testWorkers, cfg.gpu), ...mountArgs(cfg, clone, GAME_DIR), ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', `${PEAK_TRAP}\n${script}`];
+      const extraMounts = Object.entries(mounts).flatMap(([host, path]) => ['-v', `${host}:${path}`]);
+      const args = [...baseArgs(jobId, cpus, testWorkers, cfg.gpu), ...mountArgs(cfg, clone, GAME_DIR), ...extraMounts, ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', `${PEAK_TRAP}\n${script}`];
       const result = await run('docker', args, { logPath: log });
       recordContainerPeak(cfg, jobId, result);
       must(result, `shell in ${clone}`);

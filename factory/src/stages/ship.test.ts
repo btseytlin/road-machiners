@@ -1,3 +1,4 @@
+import { stepScript } from '../activity';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,7 +10,7 @@ import { CLONE_SHA, ROOT, fake, reset, type Fake } from './test-fakes';
 vi.mock('../deploy', () => ({ deployDev: async () => 'https://play.test/dev/' }));
 const { ship } = await import('./ship');
 
-const RELEASE: ReleaseState = { issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [6], candidateSha: 'abc1234', playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } };
+const RELEASE: ReleaseState = { issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [6], tasks: [], candidateSha: 'abc1234', playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } };
 const done = (issue: number, labels: string[] = []): Card => ({ itemId: `i${issue}`, issue, column: 'Done', labels });
 
 beforeEach(() => {
@@ -41,12 +42,11 @@ describe('ship', () => {
     expect(f.calls.slice(at('fetch'), at('fetch') + 4)).toEqual(['fetch', 'merge release/2026-09-29 main', 'merge main dev', 'push main dev']);
     expect(at('push main dev')).toBeLessThan(at('prepare main'));
     expect(at('prepare main')).toBeLessThan(at('run butler'));
-    expect(shells).toEqual([{ script: 'npm ci && npm run build', env: { SAVE_SCOPE: '', ERROR_REPORT_URL: 'https://play.test/errors', ERROR_REPORT_BUILD: 'release' } }]);
+    expect(shells).toEqual([{ script: stepScript('Building the release', [['npm ci', 'npm ci'], ['build', 'npm run build']]), env: { SAVE_SCOPE: '', ERROR_REPORT_URL: 'https://play.test/errors', ERROR_REPORT_BUILD: 'release' } }]);
     expect(runs).toEqual([
       { cmd: 'git', args: ['rev-parse', 'HEAD'], env: undefined },
       { cmd: 'butler', args: ['push', join(ROOT, 'work', 'release-main', 'game', 'dist'), 'u/g:html5', '--userversion', 'abc1234'], env: { BUTLER_API_KEY: 'secret' } },
     ]);
-    // The maps stay on the host under the commit, so itch never gets them.
     expect(existsSync(join(ROOT, 'work', 'release-main', 'game', 'dist', 'assets', 'index.js.map'))).toBe(false);
     expect(existsSync(join(ROOT, 'sourcemaps', CLONE_SHA, 'assets', 'index.js.map'))).toBe(true);
     expect(readPublished(ROOT)).toEqual([{ sha: CLONE_SHA, kind: 'release', publishedAt: '2026-09-29T10:00:00.000Z' }]);

@@ -1,11 +1,5 @@
 import type { WeaponDef } from './parts';
 
-// Every gun. Each tier has one gun per class set: damager, chip and precision alone, and each pair of them. See
-// WeaponClass in src/data/parts.ts. Prices come from base plus the stat modifier in src/data/parts.ts. The bases set each gun's full-stat price by its win rate in duels against the pure guns of its tier, at the tier's mean price.
-// Every range fits inside the 20 tile sight radius, TERRAIN.vision.radius, since a gun never fires at a truck its
-// driver cannot see. Pure precision guns reach farthest, then precision pairs. Chip guns and pure damagers reach about as far as each other, and the other pairs least. Precision guns
-// shake little, so they hit on the move and trade damage for reach.
-// Every gun has a power draw: (1 + 0.5 per cell beyond the first) times (1 + 0.25 per tier above 1). Engines carry it, see RULES.gunDragMax.
 export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
   mg: {
     id: "mg",
@@ -673,10 +667,6 @@ export const UNPRICED_WEAPONS: Record<string, Omit<WeaponDef, 'value'>> = {
       craterRadius: 0,
     },
   },
-  // The harpoon: a gun of one round whose hit ties a line to the part it strikes. It is no class's gun, so it stands
-  // outside the class sets of its tier. Its reach is short, so it aims tight and leads well: from 5 tiles it lands
-  // about 95% on a parked truck and 65% on one crossing at 4 tiles a turn, where an MG lands 30%. See
-  // src/sim/harpoon.ts.
   harpoon: {
     id: "harpoon",
     kind: "weapon",

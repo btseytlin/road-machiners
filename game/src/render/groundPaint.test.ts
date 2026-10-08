@@ -21,7 +21,6 @@ describe('desertWeight', () => {
   });
 });
 
-// A 12x12 map with a road band six tiles wide down the middle, hardpan on its left and salt crust on its right.
 function bandMap(): Terrain {
   const size = 12;
   const types: TerrainTypeId[] = [];
@@ -67,12 +66,9 @@ describe('lookTypes', () => {
   });
 });
 
-// A path the painter filled or stroked, in canvas pixels.
 type Shape = { kind: 'arc'; x: number; y: number; r: number } | { kind: 'poly'; points: Vec[] };
 type Op = { kind: 'image' } | { kind: 'fill'; shapes: Shape[] } | { kind: 'stroke'; shapes: Shape[]; width: number };
 
-// The part of a 2D context the ground painter uses. It keeps each fill and stroke as geometry, so a test can ask
-// which paint lands on a point. Node has no canvas, and the painted pixels follow from that geometry.
 class RecordingContext {
   ops: Op[] = [];
   image: Uint8ClampedArray | null = null;
@@ -133,13 +129,11 @@ function covers(op: Op, p: Vec): boolean {
   });
 }
 
-// The whole map painted at half a pixel per tile, with its ops recorded.
 function paintedMap(): { canvas: PaintCanvas; ops: Op[] } {
   const res = 0.5;
   const from = -TERRAIN_MARGIN;
   const ctx = new RecordingContext();
   const canvas: PaintCanvas = {
-    // The recorder covers every call the painter makes; the painter never reads anything else off the context.
     ctx: ctx as unknown as CanvasRenderingContext2D,
     size: Math.ceil((TEST_MAP.terrain.size + 2 * TERRAIN_MARGIN) * res),
     res,
@@ -150,7 +144,6 @@ function paintedMap(): { canvas: PaintCanvas; ops: Op[] } {
   return { canvas, ops: ctx.ops };
 }
 
-// Paint laid over the ground image at a map point, in paint order.
 function paintOver(painted: { canvas: PaintCanvas; ops: Op[] }, p: Vec): Op[] {
   const px = { x: painted.canvas.toPx(p.x), y: painted.canvas.toPx(p.y) };
   const image = painted.ops.findIndex((op) => op.kind === 'image');
@@ -185,7 +178,6 @@ describe('ground paint over the Fallen Sun', () => {
 
   it('paints scree on the foot of the bank of the west arc only', () => {
     const scree = TERRITORIES['fallen-sun'].wreck!.scree!;
-    // `up` tiles up the bank, out from a floor vertex along its bearing.
     const onBank = (k: number, up = 3) => {
       const v = sunBasin.floor[k];
       const r = Math.hypot(v.x, v.y);
@@ -193,12 +185,10 @@ describe('ground paint over the Fallen Sun', () => {
       return { x: sunBasin.center.x + v.x * out, y: sunBasin.center.y + v.y * out };
     };
     const n = sunBasin.floor.length;
-    // The vertices strictly between the arc's two ends, which wraps past vertex 0.
     const arc = Array.from({ length: (scree.to - scree.from + n) % n - 1 }, (_, i) => (scree.from + 1 + i) % n);
     expect(arc).toEqual([21, 0, 1]);
     for (const k of arc) expect(paintOver(painted, onBank(k)).length, `vertex ${k}`).toBeGreaterThan(0);
     for (const k of [6, 12, 17]) expect(paintOver(painted, onBank(k)), `vertex ${k}`).toEqual([]);
-    // The west road's long bank is a road grade: no scree halfway up it.
     expect(sunBasin.bank[21]).toBeGreaterThan(20);
     expect(paintOver(painted, onBank(21, sunBasin.bank[21] / 2))).toEqual([]);
   });
@@ -240,7 +230,6 @@ describe('ground paint around towns, sites and craters', () => {
         if (Math.hypot(x, y) > reach) continue;
         const p = { x: place.pos.x + x, y: place.pos.y + y };
         samples++;
-        // The canyon and the dry river paint strokes of their own where they pass.
         if (polylineDist(p, canyon.path) <= canyon.width + canyon.bank) continue;
         if (polylineDist(p, dryRiver.path) <= dryRiver.width + dryRiver.bank) continue;
         clear++;
@@ -251,7 +240,6 @@ describe('ground paint around towns, sites and craters', () => {
   });
 });
 
-// The ground image painted over a small map at 4 pixels per tile, as RGB per pixel.
 function paintedImage(t: Terrain): Uint8ClampedArray {
   const res = 4;
   const size = t.size * res;
@@ -273,7 +261,6 @@ describe('ground paint under fused glass', () => {
   });
 });
 
-// A size x size flat map with glass on the tiles that `glass` accepts.
 function glassMap(size: number, glass: (x: number, y: number) => boolean): Terrain {
   const types: TerrainTypeId[] = Array.from({ length: size * size }, (_, i) => (glass(i % size, Math.floor(i / size)) ? 'glass' : 'sand'));
   return { size, heights: new Array<number>((size + 1) ** 2).fill(0), types };
@@ -293,7 +280,6 @@ describe('glassField', () => {
     const at = (x: number, y: number) => field[y * 20 + x];
     expect(at(5, 10)).toBeGreaterThan(HALF);
     expect(at(4, 10)).toBeLessThan(HALF);
-    // The corner tile sees less glass around it than an edge tile does.
     expect(at(5, 5)).toBeLessThan(at(5, 10));
   });
 

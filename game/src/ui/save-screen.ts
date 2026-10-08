@@ -6,13 +6,11 @@ import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { WORLD_SETTINGS } from '../data/modes';
 import { percent } from '../sim/settings';
-import { el, panel } from './dom';
+import { download, el, panel } from './dom';
 import { openNewGame, type NewGameActions } from './new-game';
 import { moneyText } from './units';
 
-// Shows the choice and resolves when the player picks Migrate. New game opens the New game screen over it, whose Back
-// returns here and whose Start reloads into the new game.
-export function chooseSaveFate(reason: string, canMigrate: boolean, newGame: NewGameActions): Promise<void> {
+export function chooseSaveFate(reason: string, canMigrate: boolean, stored: unknown, newGame: NewGameActions): Promise<void> {
   return new Promise((resolve) => {
     const root = savePanel('Your save needs migrating');
     const migrate = () => {
@@ -27,13 +25,14 @@ export function chooseSaveFate(reason: string, canMigrate: boolean, newGame: New
         { class: 'death-buttons' },
         el('button', { onclick: migrate, disabled: !canMigrate }, 'Migrate save'),
         el('button', { onclick: () => openNewGame(newGame, () => {}) }, 'New game'),
+        el('button', { onclick: () => downloadSave(stored) }, 'Download save'),
       ),
     );
     if (!canMigrate) root.append(el('div', { class: 'dim' }, 'The save is unreadable'));
+    root.append(el('div', { class: 'dim' }, 'If this looks like a bug, download the save and attach it to a GitHub issue.'));
   });
 }
 
-// Shows what the migration did. Resolves when the player drives on.
 export function showCarryReport(report: CarryReport): Promise<void> {
   return new Promise((resolve) => {
     const root = savePanel('Save migrated');
@@ -43,6 +42,10 @@ export function showCarryReport(report: CarryReport): Promise<void> {
       el('div', { class: 'death-buttons' }, el('button', { onclick: () => { root.remove(); resolve(); } }, 'Drive on')),
     );
   });
+}
+
+function downloadSave(stored: unknown): void {
+  download('roam-save.json', typeof stored === 'string' ? stored : JSON.stringify(stored), 'application/json');
 }
 
 function savePanel(title: string): HTMLElement {

@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { cpuSets } from './cpus';
+import { cpuSets, poolOf } from './cpus';
 
 const SHARES = { cpuLight: 0.25, cpuImplement: 0.25, cpuTest: 0.5 };
+
+describe('poolOf', () => {
+  it('gives the merge job the test pool, though it runs in the branch queue', () => {
+    expect([poolOf('merge'), poolOf('approve'), poolOf('verify'), poolOf('checks')]).toEqual(['test', 'light', 'implement', 'test']);
+  });
+});
 
 describe('cpuSets', () => {
   it('splits 4 CPUs into one light, one implement and two test CPUs', () => {

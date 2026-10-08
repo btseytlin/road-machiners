@@ -1,10 +1,6 @@
 // Harpoon lines: a rope from the harpoon on one truck to the part it holds on the other, between the two vehicle
 // views' part points each frame, so it follows the trucks as they move. A line shows while it holds and both trucks
 // are drawn. A line shot this turn stays hidden while its turn plays: the shot's own rope flies with the bolt (see
-// Projectiles). A line that lets go, ages out or tears, reels its far end back into the harpoon over
-// ROPE_LOOK.reelMs.
-// Every rope hangs: a line closer than its length sags toward the ground and rests on it, and a stretched one runs
-// straight. Render only: it reads the holding lines and never changes them.
 
 import * as THREE from 'three';
 import { groundPoint, toMap, type V3 } from '../../phys/frames';
@@ -14,21 +10,15 @@ import type { Terrain } from '../../sim/terrain';
 import type { World } from '../../sim/types';
 import type { VehicleView } from './vehicle';
 
-// radius: meters across half the rope. sides: the faces around it. segments: straight pieces along one rope.
-// minSlack: the share of its span a taut rope still has spare, so it never reads as a rod. reelMs: how long a loose
-// rope takes to reel in. restMs: how long a missed shot's rope lies on the ground before it reels in. missSlack: the
-// spare share of a missed shot's rope as it falls. reelSlack: the spare share of a rope while it reels in, so it drags.
 export const ROPE_LOOK = { radius: 0.03, sides: 5, segments: 16, minSlack: 0.004, reelMs: 500, restMs: 400, missSlack: 0.15, reelSlack: 0.06 };
 const UP = new THREE.Vector3(0, 1, 0);
 
-// The ground height under a point, in meters.
 export type GroundAt = (p: V3) => number;
 
 export function groundOf(terrain: Terrain): GroundAt {
   return (p) => groundPoint(terrain, toMap(p)).y;
 }
 
-// One rope of short straight pieces, laid as a rope of a given length hanging between two points.
 export class Rope {
   readonly root = new THREE.Group();
   private readonly pieces = Array.from({ length: ROPE_LOOK.segments }, () => new THREE.Mesh(ROPE_GEOMETRY, ROPE_MATERIAL));
@@ -37,16 +27,12 @@ export class Rope {
     this.root.add(...this.pieces);
   }
 
-  // Lays the rope from a to b, `length` meters long, never below the ground. A rope no longer than its span runs
-  // straight with ROPE_LOOK.minSlack to spare.
   set(a: V3, b: V3, length: number, ground: GroundAt): void {
     const points = hangingPoints(a, b, length, ground);
     this.pieces.forEach((piece, i) => stretch(piece, points[i], points[i + 1]));
   }
 }
 
-// The points of a rope hanging from a to b: a parabola whose sag spends the rope's spare length, the arc of a span d
-// with sag s being about d + 8s²/(3d). Points under the ground rest on it.
 function hangingPoints(a: V3, b: V3, length: number, ground: GroundAt): V3[] {
   const span = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
   const spare = Math.max(length - span, span * ROPE_LOOK.minSlack);
@@ -58,11 +44,9 @@ function hangingPoints(a: V3, b: V3, length: number, ground: GroundAt): V3[] {
   });
 }
 
-// The lines shot in the turn now playing, and whether that turn is still playing.
 export type LineShots = { fresh: ReadonlySet<string>; playing: boolean };
 
 type Held = { rope: Rope; from: string; fromPart: string; b: V3 };
-// A rope whose far end slides back to its near end, and when it started, in ms.
 type Reel = { rope: Rope; startMs: number; a: () => V3 | null; b: V3 };
 
 export class HarpoonLinesView {
@@ -83,8 +67,6 @@ export class HarpoonLinesView {
     this.reel(nowMs, ground);
   }
 
-  // A rope whose line is gone reels in toward the harpoon while the harpoon is drawn. A line that still holds but
-  // does not show, as when a truck leaves the drawn world, just goes.
   private letGo(world: World, shown: ReadonlyMap<string, unknown>, views: ReadonlyMap<string, VehicleView>, nowMs: number): void {
     for (const [id, held] of this.ropes) {
       if (shown.has(id)) continue;
@@ -120,23 +102,19 @@ export class HarpoonLinesView {
   }
 }
 
-// Lays a reeling rope from a toward b, its far end `left` of the way out, dragging slack.
 export function reelRope(rope: Rope, a: V3, b: V3, left: number, ground: GroundAt): void {
   const end = { x: a.x + (b.x - a.x) * left, y: a.y + (b.y - a.y) * left, z: a.z + (b.z - a.z) * left };
   rope.set(a, end, Math.hypot(end.x - a.x, end.y - a.y, end.z - a.z) * (1 + ROPE_LOOK.reelSlack), ground);
 }
 
-// Where the harpoon on a drawn truck is, or null when the truck or the harpoon is no longer drawn.
 function harpoonPoint(views: ReadonlyMap<string, VehicleView>, vehicleId: string, partId: string): V3 | null {
   const view = views.get(vehicleId);
   return view && view.hasPart(partId) ? view.partPoint(partId) : null;
 }
 
-// One meter of rope along y, stretched and turned onto each piece of a rope.
 const ROPE_GEOMETRY = new THREE.CylinderGeometry(ROPE_LOOK.radius, ROPE_LOOK.radius, 1, ROPE_LOOK.sides, 1, true);
 const ROPE_MATERIAL = new THREE.MeshLambertMaterial({ color: PAL.rope });
 
-// The two anchor points of each holding line whose trucks are both drawn, and its length, by line id.
 function ropeEnds(world: World, views: ReadonlyMap<string, VehicleView>): Map<string, { a: V3; b: V3; length: number }> {
   const holding = new Set(lineAnchors(world).map((l) => l.id));
   const ends = new Map<string, { a: V3; b: V3; length: number }>();
@@ -148,7 +126,6 @@ function ropeEnds(world: World, views: ReadonlyMap<string, VehicleView>): Map<st
   return ends;
 }
 
-// Lays one piece straight from a to b.
 function stretch(piece: THREE.Mesh, a: V3, b: V3): void {
   const dir = new THREE.Vector3(b.x - a.x, b.y - a.y, b.z - a.z);
   const length = dir.length();

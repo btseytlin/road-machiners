@@ -73,7 +73,6 @@ describe('adhoc', () => {
     const filesDir = `${cfg.home}/work/adhoc-7/game/.factory/files`;
     const documents = (f: Fake) => f.calls.filter((call) => call.startsWith('document'));
 
-    // The fake agent writes text only, so a test that needs a link or a big file adds it after the agent ran.
     function afterAgent(f: Fake, extra: (dir: string) => void): void {
       const agent = f.ctx.container.agent;
       f.ctx.container.agent = async (run) => {
