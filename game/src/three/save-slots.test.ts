@@ -60,4 +60,26 @@ describe('save slots', () => {
     session.setItem('roam.save.boot', 'bogus');
     expect(() => takeBootRequest(session, 'roam.save')).toThrow(/bogus/);
   });
+
+  it('carries a new game setup through the reload exactly once, with its exact values', () => {
+    const session = makeStorage();
+    const setup = { mode: 'roaming' as const, settings: { damage: 1.5, fuelUse: 2, supplyUse: 0.75 } };
+    requestBoot(session, 'roam.save', { new: setup });
+
+    expect(takeBootRequest(session, 'roam.save')).toEqual({ new: setup });
+    expect(takeBootRequest(session, 'roam.save')).toBeNull();
+  });
+
+  it.each([
+    ['a setting out of bounds', JSON.stringify({ new: { mode: 'roaming', settings: { damage: 5, fuelUse: 1, supplyUse: 1 } } })],
+    ['broken JSON', '{"new":'],
+    ['JSON with no new game', JSON.stringify({ old: 1 })],
+    ['the old plain new request', 'new'],
+  ])('removes a request with %s and throws', (_, value) => {
+    const session = makeStorage();
+    session.setItem('roam.save.boot', value);
+
+    expect(() => takeBootRequest(session, 'roam.save')).toThrow();
+    expect(session.getItem('roam.save.boot')).toBeNull();
+  });
 });

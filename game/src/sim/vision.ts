@@ -17,6 +17,7 @@ import { weatherOn } from './weather';
 import { dist, segmentDist, type Vec } from './vec';
 import { playerVehicle } from './damage';
 import { cloudsSeenBy, contactDifficulty, contactsOf } from './detect';
+import { litAt, litFlares } from './hazards';
 import { practice, skillEffect, vehicleHasPerk } from './progress';
 import { PERK_NUMBERS } from '../data/skills';
 
@@ -30,12 +31,18 @@ function propsNear(world: World, a: Vec, b: Vec): Obstacle[] {
 type Screen = { pos: Vec; r: number };
 
 // A viewer's vision radius: the base radius, shrunk by the weather the viewer feels and at night, and widened by the
-// player's perception. Night eyes keeps it at night, and storm rider keeps it in weather.
-export function sightRadius(world: World, viewer: Vehicle): number {
-  const night = sunAt(world.turn) || vehicleHasPerk(world, viewer, 'nightEyes') ? 1 : TIME.nightSight;
+// player's perception. Night eyes keeps it at night, and storm rider keeps it in weather. lit: the viewed ground lies in
+// a flare's light, which keeps the night from shrinking sight to it and leaves every other factor.
+export function sightRadius(world: World, viewer: Vehicle, lit = false): number {
+  const night = nightFactor(world, viewer, lit);
   const weather = vehicleHasPerk(world, viewer, 'stormRider') ? 1 : weatherOn(world, viewer).sight;
   const skill = 1 + skillEffect(world, viewer, 'perception', 'sight');
   return TERRAIN.vision.radius * weather * night * skill;
+}
+
+// The night's share of sight: none of it by day, with night eyes, or to ground in a flare's light.
+function nightFactor(world: World, viewer: Vehicle, lit: boolean): number {
+  return lit || sunAt(world.turn) || vehicleHasPerk(world, viewer, 'nightEyes') ? 1 : TIME.nightSight;
 }
 
 // Reach of the player's gray vision. It ignores rocks and hills, and it shows places but never vehicles.
@@ -56,27 +63,43 @@ export function exploreFrom(world: World, from: Vec): void {
   forSeenTiles(world, from, (idx) => explored[idx] === 0, (idx) => { explored[idx] = 1; });
 }
 
-// Calls `seen` for each tile within vision radius of `from` that passes `test` and lies in plain view.
+// Calls `seen` for each tile within vision radius of `from` that passes `test` and lies in plain view. At night the
+// ground in a flare's light is seen out to the radius without the night's halving, so each lit flare in reach scans its
+// own disk too. A tile in both is seen twice, which every caller takes as once.
 function forSeenTiles(world: World, from: Vec, test: (idx: number) => boolean, seen: (idx: number) => void): void {
+  const me = playerVehicle(world);
+  const r = sightRadius(world, me);
+  forTilesIn(world, from, r, { pos: from, r }, test, seen);
+  const lit = sightRadius(world, me, true);
+  if (lit > r) for (const f of litFlares(world)) if (dist(from, f.pos) - f.r < lit) forTilesIn(world, from, lit, f, test, seen);
+}
+
+type Disk = { pos: Vec; r: number };
+
+// Calls `seen` for each tile inside the disk and within reach of `from` that passes `test` and lies in plain view.
+function forTilesIn(world: World, from: Vec, reach: number, disk: Disk, test: (idx: number) => boolean, seen: (idx: number) => void): void {
   const size = world.size;
-  const r = sightRadius(world, playerVehicle(world));
-  const inView = plainViewFrom(world, from, r);
-  const lo = { x: Math.max(0, Math.floor(from.x - r)), y: Math.max(0, Math.floor(from.y - r)) };
-  const hi = { x: Math.min(size - 1, Math.ceil(from.x + r)), y: Math.min(size - 1, Math.ceil(from.y + r)) };
+  const inView = plainViewFrom(world, from, reach);
+  const lo = { x: Math.max(0, Math.floor(disk.pos.x - disk.r)), y: Math.max(0, Math.floor(disk.pos.y - disk.r)) };
+  const hi = { x: Math.min(size - 1, Math.ceil(disk.pos.x + disk.r)), y: Math.min(size - 1, Math.ceil(disk.pos.y + disk.r)) };
   for (let x = lo.x; x <= hi.x; x++) {
     for (let y = lo.y; y <= hi.y; y++) {
       const idx = y * size + x;
       const tile = { x: x + 0.5, y: y + 0.5 };
-      if (!test(idx) || dist(from, tile) > r) continue;
+      if (!test(idx) || !inDisks(tile, { pos: from, r: reach }, disk)) continue;
       if (inView(tile)) seen(idx);
     }
   }
 }
 
-// Whether a tile within r of `from` lies in plain view. The recorder's player sees the whole radius.
+function inDisks(p: Vec, a: Disk, b: Disk): boolean {
+  return dist(a.pos, p) <= a.r && dist(b.pos, p) <= b.r;
+}
+
+// Whether a tile within reach of `from` lies in plain view. The recorder's player sees the whole radius.
 function plainViewFrom(world: World, from: Vec, r: number): (tile: Vec) => boolean {
   if (isHeadless()) return () => true;
-  // Every sight line lies within r of the viewer, so props beyond r plus their reach cannot touch it.
+  // Every sight line lies within reach of the viewer, so props beyond r plus their reach cannot touch it.
   const props = propsAround(world, 'sight', from, r);
   return (tile) => inPlainView(world, from, tile, props, []);
 }
@@ -84,7 +107,7 @@ function plainViewFrom(world: World, from: Vec, r: number): (tile: Vec) => boole
 export function canVehicleSee(world: World, observer: Vehicle, position: Vec): boolean {
   if (observer.id === world.player.vehicleId) return playerSees(world, position);
   const target = position;
-  if (dist(observer.pos, target) > sightRadius(world, observer)) return false;
+  if (dist(observer.pos, target) > sightRadius(world, observer, litAt(world, target))) return false;
   // Out of the player's live range, sight is the radius alone.
   return isCheapMeeting(world, observer.pos, target) || inPlainView(world, observer.pos, target, propsNear(world, observer.pos, target), dustScreens(world));
 }
@@ -108,7 +131,7 @@ export function hasLineOfFire(world: World, a: Vec, b: Vec): boolean {
 }
 
 // A dust screen blocks sight only if it sits between the viewer and the target.
-function hasLineOfSight(terrain: Terrain, line: SightLine, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
+export function hasLineOfSight(terrain: Terrain, line: SightLine, props: readonly Obstacle[], screens: readonly Screen[]): boolean {
   const { a, b } = line;
   const targetDist = dist(a, b);
   return props.every((o) => !propHides(terrain, o, line)) && screens.every((o) => dist(a, o.pos) >= targetDist || segmentDist(o.pos, a, b) >= o.r);
@@ -116,9 +139,9 @@ function hasLineOfSight(terrain: Terrain, line: SightLine, props: readonly Obsta
 
 // The line from the viewer's eye to the target's top, in height units over each end's height: a deck where the end
 // stands on one, else the ground. Props and hills both test against it.
-type SightLine = { a: Vec; b: Vec; from: number; to: number };
+export type SightLine = { a: Vec; b: Vec; from: number; to: number };
 
-function sightLine(terrain: Terrain, a: Vec, b: Vec): SightLine {
+export function sightLine(terrain: Terrain, a: Vec, b: Vec): SightLine {
   const eye = TERRAIN.vision.eyeHeight;
   return { a, b, from: heightAt(terrain, a.x, a.y) + eye, to: heightAt(terrain, b.x, b.y) + eye };
 }
@@ -150,7 +173,7 @@ function leaveHeights(line: SightLine, lo: number, hi: number): number {
 }
 
 // Hills block sight: the ground between must stay under the line from the viewer's eye to the target's top.
-function clearOverTerrain(terrain: Terrain, line: SightLine): boolean {
+export function clearOverTerrain(terrain: Terrain, line: SightLine): boolean {
   const { a, b, from, to } = line;
   const n = Math.ceil(dist(a, b) * TERRAIN.vision.samplesPerTile);
   for (let i = 1; i < n; i++) {

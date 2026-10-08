@@ -1,9 +1,11 @@
 import type { BakedMap } from '../sim/terrain';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
-import type { BrokenProp, Obstacle, Player, Vehicle, World } from '../sim/types';
+import type { BrokenProp, Obstacle, Player, Vehicle, World, WorldSetup } from '../sim/types';
 import { refreshVision } from '../sim/vision';
+import { parseSetup } from '../sim/settings';
 import { clearTips } from '../ui/tips';
+import type { NewGameActions } from '../ui/new-game';
 import { settleAims } from '../sim/combat';
 import { clockOf } from '../sim/sun';
 import { allSlots, listSaves, manualSlots, requestBoot, type BootRequest, type SlotId } from './save-slots';
@@ -117,7 +119,16 @@ function brokenProps(baked: readonly Obstacle[], broken: readonly SavedBroken[])
 function savedWorld(save: unknown): SavedWorld {
   const world = migratedWorld(save);
   if (!isWorld(world)) throw new SaveError('Invalid saved world');
-  return world;
+  return { ...world, setup: savedSetup(world.setup) };
+}
+
+// A save with bad world settings does not load, so a world never plays on NaN or runaway values. Rescue repairs them.
+function savedSetup(setup: unknown): WorldSetup {
+  try {
+    return parseSetup(setup);
+  } catch (err) {
+    throw new SaveError(`Invalid world settings: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 // The saved world carried through every step from the save's minor format to the current one.
@@ -248,6 +259,12 @@ export function saveStore(slots: SaveSlots, log: RunLog, session: Storage, world
       requestBoot(session, SAVE_KEY, request);
       Promise.all([slots.flush(), log.flush()]).then(() => window.location.reload(), reportError);
     },
+    // The New game screen asks for the boot request and the reload apart. The reload waits for every write, like reboot.
+    newGame: {
+      requestBoot: (request: BootRequest) => requestBoot(session, SAVE_KEY, request),
+      reload: () => void Promise.all([slots.flush(), log.flush()]).then(() => window.location.reload(), reportError),
+      confirm: (text: string) => window.confirm(text),
+    } satisfies NewGameActions,
   };
 }
 

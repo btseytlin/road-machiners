@@ -1,13 +1,33 @@
 {
-  "turn": 2600,
+  "seed": 7,
+  "turn": 40,
   "player": {
-    "vehicleId": "v1",
-    "money": 5120,
-    "contacts": [{ "vehicleId": "v2", "sources": ["sound"] }],
-    "clouds": ["dust-v1-3685"],
-    "explored": "AAAA"
+    "vehicleId": "player",
+    "scavenged": ["podfield", "wreck4"],
+    "headlights": false
   },
-  "dustClouds": [
-    { "id": "dust-v1-3685", "source": "v1", "pos": { "x": 112.4, "y": 419.4 }, "vel": { "x": 1.7, "y": -0.5 }, "age": 7, "range": 29.4 }
+  "vehicles": [
+    { "id": "player", "weaponOrders": {} },
+    { "id": "npc1", "weaponOrders": { "p9": { "targetId": "player", "aim": "body" } } }
+  ],
+  "removed": [
+    { "id": "gone1", "weaponOrders": {} }
+  ],
+  "salvage": [
+    {
+      "id": "burnt-convoy", "pos": { "x": 200, "y": 210 }, "radius": 12,
+      "goods": { "scrap": 3, "parts": 1 }, "parts": [{ "id": "p20", "defId": "mg", "hp": 36, "wear": 1, "gun": { "cooldown": 0, "ammo": 5, "reloadWork": 0 } }],
+      "fuel": 2, "supplies": 1
+    },
+    { "id": "podfield", "pos": { "x": 300, "y": 120 }, "radius": 14, "goods": { "scrap": 2 }, "parts": [], "fuel": 1, "supplies": 0 },
+    { "id": "barn-759", "pos": { "x": 120, "y": 300 }, "radius": 3, "goods": { "grain": 2, "parts": 0 }, "parts": [], "fuel": 0, "supplies": 3 },
+    { "id": "deckBay-1450", "pos": { "x": 410, "y": 380 }, "radius": 2, "goods": { "scrap": 4 }, "parts": [] },
+    { "id": "wreck12", "pos": { "x": 90, "y": 95 }, "radius": 1.5, "goods": { "scrap": 1, "parts": 2 }, "parts": [], "fuel": 1, "supplies": 0 },
+    { "id": "wreck4", "pos": { "x": 100, "y": 100 }, "radius": 1.5, "goods": { "scrap": 1 }, "parts": [], "fuel": 0, "supplies": 0, "emptySince": 30 },
+    { "id": "wreck-v40", "pos": { "x": 150, "y": 150 }, "radius": 2, "goods": { "parts": 3 }, "parts": [{ "id": "p41", "defId": "plates", "hp": 20, "wear": 0 }] },
+    {
+      "id": "cargo-v41-30", "pos": { "x": 160, "y": 150 }, "radius": 1, "goods": { "salt": 2 }, "parts": [],
+      "pile": { "until": 60, "fromPlayer": false, "basis": {} }
+    }
   ]
 }

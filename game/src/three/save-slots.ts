@@ -3,6 +3,9 @@
 
 import type { SaveSlots } from './save-db';
 
+import { parseSetup } from '../sim/settings';
+import type { WorldSetup } from '../sim/types';
+
 export type SlotId = 'auto' | 'day' | `slot${number}`;
 
 export function manualSlots(count: number): SlotId[] {
@@ -45,26 +48,39 @@ export function newestSlot(slots: SaveSlots, count: number): SlotId | null {
   return listSaves(slots, count)[0]?.slot ?? null;
 }
 
-// What the next boot does. The page reloads between the menu click and boot, so the request waits in session storage.
-export type BootRequest = SlotId | 'new';
+// What the next boot does: load a slot, or start a new game with the setup picked for it. The page reloads between
+// the menu click and boot, so the request waits in session storage, a slot id as plain text and a new game as JSON.
+export type BootRequest = SlotId | { new: WorldSetup };
 
 function requestKey(base: string): string {
   return `${base}.boot`;
 }
 
 export function requestBoot(session: Storage, base: string, request: BootRequest): void {
-  session.setItem(requestKey(base), request);
+  session.setItem(requestKey(base), typeof request === 'string' ? request : JSON.stringify({ new: request.new }));
 }
 
-function isBootRequest(value: string): value is BootRequest {
-  return value === 'new' || value === 'auto' || value === 'day' || /^slot[1-9]\d*$/.test(value);
+function isSlotId(value: string): value is SlotId {
+  return value === 'auto' || value === 'day' || /^slot[1-9]\d*$/.test(value);
 }
 
-// Reads the request and removes it, so a later plain reload loads the newest save.
+// Reads the request and removes it before anything else, so it is used at most once and a later plain reload loads
+// the newest save. Throws on a request that is neither a slot nor a new game with a valid setup.
 export function takeBootRequest(session: Storage, base: string): BootRequest | null {
   const value = session.getItem(requestKey(base));
   if (value === null) return null;
   session.removeItem(requestKey(base));
-  if (!isBootRequest(value)) throw new Error(`Unknown boot request ${value}`);
-  return value;
+  if (isSlotId(value)) return value;
+  return { new: parseSetup(newGameSetup(value)) };
+}
+
+function newGameSetup(value: string): unknown {
+  let request: unknown;
+  try {
+    request = JSON.parse(value);
+  } catch {
+    throw new Error(`Unknown boot request ${value}`);
+  }
+  if (typeof request !== 'object' || request === null || !('new' in request)) throw new Error(`Unknown boot request ${value}`);
+  return request.new;
 }

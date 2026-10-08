@@ -26,6 +26,7 @@ import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR } from './save-migrations';
 import SAVED_SHAPE from './save-shape.json';
 import { allSlots, type SlotId } from './save-slots';
 import { newGameShape } from '../test/save-shape';
+import { defaultSetup, parseSetup } from '../sim/settings';
 
 const SLOTS = allSlots(3);
 const RUN = 'run-1';
@@ -56,7 +57,7 @@ function savedWorldOf(slots: SaveSlots, slot: SlotId): Saved {
 describe('game save', () => {
   it('saves by hand on any turn and clears for a new game', () => {
     const slots = makeSlots();
-    const world = { ...newWorld(1337, startKit('standard'), TEST_MAP), turn: 7 };
+    const world = { ...newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')), turn: 7 };
     writeSave(slots, 'auto', world, RUN, 1000);
     expect(hasSave(slots, SLOTS)).toBe(true);
     expect(loadWorld(slots, 'auto', TEST_MAP)).toEqual(world);
@@ -67,7 +68,7 @@ describe('game save', () => {
   it('clears the save and the seen tips for a new game, and keeps sound settings', () => {
     const slots = makeSlots();
     const storage = makeStorage();
-    writeSave(slots, 'auto', newWorld(1337, startKit('standard'), TEST_MAP), RUN, 1000);
+    writeSave(slots, 'auto', newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')), RUN, 1000);
     storage.setItem('roam.tips', JSON.stringify(['waypoint']));
     storage.setItem('roam-sound', '{}');
     clearGame(slots, storage);
@@ -106,12 +107,12 @@ describe('game save', () => {
     expect(update(loaded, () => {}).player.overdrive).toBe(false);
   });
 
-  it('keeps a held bounty across a reload, and a knockout after it finishes the bounty once', () => {
+  it('keeps a held bounty across a reload, and a knockout after it fulfils the bounty once', () => {
     const slots = makeSlots();
     const world = emptyWorld();
     const raider = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 }, Math.PI);
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
-    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1 };
+    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1, fulfilled: false };
     world.player.contracts = [bounty];
     writeSave(slots, 'auto', world, RUN, 1000);
     const loaded = loadWorld(slots, 'auto', TEST_MAP);
@@ -121,10 +122,10 @@ describe('game save', () => {
       d.events = [{ t: 'npcKnockout', vehicle: raider.id, by: d.player.vehicleId }];
       advanceContracts(d);
     });
-    expect(after.events.filter((e) => e.t === 'contract')).toEqual([{ t: 'contract', contract: bounty, outcome: 'done' }]);
-    expect(after.player.money).toBe(loaded.player.money + 100);
+    expect(after.events.filter((e) => e.t === 'contract')).toEqual([{ t: 'contract', contract: { ...bounty, fulfilled: true }, outcome: 'fulfilled' }]);
+    expect(after.player.money).toBe(loaded.player.money);
     writeSave(slots, 'auto', after, RUN, 1000);
-    expect(loadWorld(slots, 'auto', TEST_MAP)?.player.contracts).toEqual([]);
+    expect(loadWorld(slots, 'auto', TEST_MAP)?.player.contracts).toEqual([{ ...bounty, fulfilled: true }]);
   });
 
   it('resumes a pending refit after loading without losing progress', () => {
@@ -171,13 +172,13 @@ describe('game save', () => {
 
   it('stores explored as a string', () => {
     const slots = makeSlots();
-    writeSave(slots, 'auto', newWorld(1337, startKit('standard'), TEST_MAP), RUN, 1000);
+    writeSave(slots, 'auto', newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')), RUN, 1000);
     expect(typeof savedWorldOf(slots, 'auto').player.explored).toBe('string');
   });
 
   it('rejects explored of the wrong length', () => {
     const slots = makeSlots();
-    writeSave(slots, 'auto', newWorld(1337, startKit('standard'), TEST_MAP), RUN, 1000);
+    writeSave(slots, 'auto', newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')), RUN, 1000);
     const save = slots.get('auto') as { world: Saved };
     save.world.player.explored = 'AAAA';
     slots.put('auto', save);
@@ -190,7 +191,7 @@ describe('game save', () => {
 
   it('restores the complete world including fields added later', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     const expanded = { ...world, futureFeature: { progress: 7 } };
     saveWorld(slots, { ...expanded, turn: 21 }, RUN, 20, 1000);
     expect(loadWorld(slots, 'auto', TEST_MAP)).toEqual({ ...expanded, turn: 21 });
@@ -205,7 +206,7 @@ describe('game save', () => {
 
   it('rejects another major format, a newer minor format and incomplete worlds', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     const saved = saveOf(world).world;
     const cases = [
       [{ major: SAVE_MAJOR - 1, minor: 0 }, saved, /new game/],
@@ -229,7 +230,7 @@ describe('game save', () => {
 
   it('rejects a save missing a field required for future turns', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     for (const field of ['nextId', 'rngState', 'spawnTimer', 'weather', 'broken'] as const) {
       const saved = { ...saveOf(world).world } as Record<string, unknown>;
       delete saved[field];
@@ -240,7 +241,7 @@ describe('game save', () => {
 
   it('keeps baked props out of the save and rebuilds them from the map', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     const baked = new Set(mapObstacles(TEST_MAP).map((o) => o.id));
     writeSave(slots, 'auto', world, RUN, 1000);
     const saved: { id: string }[] = savedWorldOf(slots, 'auto').obstacles;
@@ -253,7 +254,7 @@ describe('game save', () => {
 
   it('rejects a save that holds a baked prop', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     writeSave(slots, 'auto', world, RUN, 1000);
     const save = slots.get('auto') as { world: Saved };
     save.world.obstacles.push(mapObstacles(TEST_MAP)[0]);
@@ -265,7 +266,7 @@ describe('game save', () => {
 
   it('keeps a broken baked fence broken across a save and a load', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     const fence = world.obstacles.find(isBreakable);
     if (!fence || !isBakedObstacle(fence)) throw new Error('The map needs a baked fence or junk pile');
     breakProp(world, fence.id, world.player.vehicleId);
@@ -280,7 +281,7 @@ describe('game save', () => {
 
   it('stores no trails, visible tiles, last turn events, removed vehicles or broken prop copies, and rebuilds them on load', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     const fence = world.obstacles.find(isBreakable)!;
     breakProp(world, fence.id, world.player.vehicleId);
     world.vehicles[0].trail = [{ x: 1, y: 2, heading: 0 }];
@@ -320,7 +321,7 @@ describe('game save', () => {
 
   it('rejects a save whose broken props do not match the map', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     const rock = mapObstacles(TEST_MAP).find((o) => o.kind === 'rock')!;
     const fence = world.obstacles.find(isBreakable)!;
     const stranger = { ...fence, id: 'fence-999999' };
@@ -334,7 +335,7 @@ describe('game save', () => {
 
   it('rejects a save made on another map', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     writeSave(slots, 'auto', world, RUN, 1000);
     const otherMap = { ...TEST_MAP, hash: 'ffffffff' };
     expect(() => loadWorld(slots, 'auto', otherMap)).toThrow(SaveError);
@@ -344,7 +345,7 @@ describe('game save', () => {
 
   it('saves only after each twentieth completed turn', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     saveWorld(slots, { ...world, turn: 20 }, RUN, 20, 1000);
     expect(loadWorld(slots, 'auto', TEST_MAP)).toBeNull();
     saveWorld(slots, { ...world, turn: 21 }, RUN, 20, 1000);
@@ -357,7 +358,7 @@ describe('game save', () => {
 
   it('never saves a dead world', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     saveWorld(slots, { ...world, turn: 21 }, RUN, 20, 1000);
     const previous = slots.get('auto');
     const dead = { ...world, turn: 41, player: { ...world.player, health: 0, state: 'dead' as const } };
@@ -369,13 +370,13 @@ describe('game save', () => {
 
   it('rejects an invalid interval instead of skipping saves', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     expect(() => saveWorld(slots, world, RUN, 0, 1000)).toThrow(/interval/);
   });
 
   it('stores no terrain and restores far routes', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     const npc = world.vehicles.find((v) => v.brain);
     if (!npc?.brain) throw new Error('The start world needs an NPC');
     npc.brain.farRoute = { dest: { x: 300, y: 200 }, points: [{ x: 290, y: 205 }, { x: 300, y: 200 }], offRoad: false };
@@ -388,7 +389,7 @@ describe('game save', () => {
 
   it('writes the day start autosave on the first turn of a day only', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     expect([319, 320, 321, 770].map(isDayStart)).toEqual([false, true, false, true]);
     saveWorld(slots, { ...world, turn: 319 }, RUN, 20, 1000);
     saveWorld(slots, { ...world, turn: 321 }, RUN, 20, 1000);
@@ -399,7 +400,7 @@ describe('game save', () => {
 
   it('writes only the autosave on the interval and in town, and never a manual slot', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     saveWorld(slots, { ...world, turn: 21 }, RUN, 20, 1000);
     saveInTown(slots, emptyWorld(sitePads(REGION.towns[0])[0]), RUN, 1000);
     const written = SLOTS.filter((slot: SlotId) => hasSave(slots, [slot]));
@@ -408,7 +409,7 @@ describe('game save', () => {
 
   it('writes no slot for a dead world', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     const dead = { ...world, turn: 320, player: { ...world.player, health: 0, state: 'dead' as const } };
     saveWorld(slots, dead, RUN, 20, 1000);
     expect(hasSave(slots, SLOTS)).toBe(false);
@@ -417,7 +418,7 @@ describe('game save', () => {
   it('keeps the manual slots and the sound settings when a new game clears the autosaves', () => {
     const slots = makeSlots();
     const storage = makeStorage();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     for (const slot of SLOTS) writeSave(slots, slot, world, RUN, 1000);
     storage.setItem('roam-sound', '{}');
     clearGame(slots, storage);
@@ -427,18 +428,67 @@ describe('game save', () => {
 
   it('loads a save from before slots, with no savedAt, as the autosave', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     slots.put('auto', saveOf(world));
     expect(loadWorld(slots, 'auto', TEST_MAP)).toEqual(world);
   });
 
   it('holds the run id, and gives a save from before run ids one from its seed', () => {
     const slots = makeSlots();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     writeSave(slots, 'auto', world, RUN, 1000);
     expect(savedRunId(slots.get('auto'))).toBe(RUN);
     expect(savedRunId(saveOf(world))).toBe('legacy-1337');
     expect(savedRunId('{')).toBeNull();
+  });
+});
+
+describe('saved world settings', () => {
+  const tuned = (damage: number, fuelUse: number) => parseSetup({ mode: 'roaming', settings: { damage, fuelUse, supplyUse: 1 } });
+
+  // A current save of a new world whose setup is replaced by `setup` as stored JSON.
+  function storedWith(setup: unknown): SaveSlots {
+    const slots = makeSlots();
+    const save = JSON.parse(JSON.stringify(saveOf(newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')))));
+    save.world.setup = setup;
+    if (setup === undefined) delete save.world.setup;
+    slots.put('auto', save);
+    return slots;
+  }
+
+  it('keeps each slot its own setup across a save and a load', () => {
+    const slots = makeSlots();
+    writeSave(slots, 'slot1', newWorld(1337, startKit('standard'), TEST_MAP, tuned(1.5, 2)), RUN, 1000);
+    writeSave(slots, 'slot2', newWorld(1337, startKit('standard'), TEST_MAP, tuned(0.5, 1)), RUN, 1000);
+
+    expect(loadWorld(slots, 'slot1', TEST_MAP)?.setup).toEqual(tuned(1.5, 2));
+    expect(loadWorld(slots, 'slot2', TEST_MAP)?.setup).toEqual(tuned(0.5, 1));
+  });
+
+  it('gives a save from format 2.13 the default Roaming setup, once', () => {
+    const slots = makeSlots();
+    const save = JSON.parse(JSON.stringify(saveOf(newWorld(1337, startKit('standard'), TEST_MAP, tuned(2, 2)))));
+    delete save.world.setup;
+    // A save of that age still holds the last turn's events, the removed vehicles and the trails.
+    save.world.events = [];
+    save.world.removed = [];
+    for (const vehicle of save.world.vehicles) vehicle.trail = [];
+    slots.put('auto', { ...save, format: { major: SAVE_MAJOR, minor: 13 } });
+    writeSave(slots, 'slot1', newWorld(1337, startKit('standard'), TEST_MAP, tuned(2, 2)), RUN, 1000);
+
+    expect(loadWorld(slots, 'auto', TEST_MAP)?.setup).toEqual(defaultSetup('roaming'));
+    expect(loadWorld(slots, 'slot1', TEST_MAP)?.setup).toEqual(tuned(2, 2));
+  });
+
+  it.each([
+    ['NaN, which JSON stores as null', { mode: 'roaming', settings: { damage: NaN, fuelUse: 1, supplyUse: 1 } }],
+    ['zero', { mode: 'roaming', settings: { damage: 1, fuelUse: 0, supplyUse: 1 } }],
+    ['a runaway value', { mode: 'roaming', settings: { damage: 10, fuelUse: 1, supplyUse: 1 } }],
+    ['an unknown mode', { mode: 'campaign', settings: { damage: 1, fuelUse: 1, supplyUse: 1 } }],
+    ['no setup at the current format', undefined],
+  ])('rejects a save with %s as a save error', (_, setup) => {
+    expect(() => loadWorld(storedWith(setup), 'auto', TEST_MAP)).toThrow(SaveError);
+    expect(() => loadWorld(storedWith(setup), 'auto', TEST_MAP)).toThrow(/Invalid world settings/);
   });
 });
 
@@ -525,7 +575,7 @@ describe('full browser storage', () => {
     const slots = new SaveSlots(backend, new Map());
     const errors: unknown[] = [];
     slots.onError = (err) => errors.push(err);
-    const world = { ...newWorld(1337, startKit('standard'), TEST_MAP), turn: 21 };
+    const world = { ...newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')), turn: 21 };
     writeSave(slots, 'auto', world, RUN, 1000);
     await slots.flush();
     const quota = new DOMException('quota', 'QuotaExceededError');

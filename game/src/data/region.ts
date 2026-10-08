@@ -9,7 +9,8 @@ export type SiteLocationDef = {
   kind: "oasis" | "convoy" | "landmark" | "camp";
   pos: Vec;
   radius: number;
-  edge: SiteEdge;
+  // The edge of a site without a fortress curtain. A fortress site (FORTRESS_SITES) has none.
+  edge?: SiteEdge;
 };
 // Open ground full of loot spots. It has no edge, gates or pads: trucks drive in. Its rules live in TERRITORIES.
 // outline is its edge as a polygon, in tiles from pos, or null when the edge is the circle of radius. For an outline,
@@ -17,8 +18,8 @@ export type SiteLocationDef = {
 // decides inside and outside.
 export type TerritoryDef = { id: string; name: string; kind: "territory"; pos: Vec; radius: number; outline: Vec[] | null };
 export type LocationDef = SiteLocationDef | TerritoryDef;
-// What closes a location on its collision edge. Towns always have a town wall.
-export type SiteEdge = "palisade" | "camp" | "stone" | "fence" | "wrecks";
+// What closes a location on its collision edge, when no fortress curtain does.
+export type SiteEdge = "fence" | "wrecks";
 export const MAP_SCALE = 5;
 
 export function scalePoint(p: Vec): Vec {
@@ -171,6 +172,56 @@ function edgePoint(from: Vec, to: Vec, centre: Vec, outline: readonly Vec[]): Ve
   return { x: from.x + d.x * t, y: from.y + d.y * t };
 }
 
+// Glass Flats: open glass desert round a crashed ship's engine, laid out from
+// docs/concepts/glass-flats-game-style-issue-112.jpg (TERRITORIES['glass-flats'] in src/data/territory.ts). The centre is
+// the crossroads ground before the engine mouth, on open roadless land of sand, gravel, hardpan and scrub.
+export const GLASS_FLATS_POS = scalePoint({ x: 81, y: 75.6 });
+// Glass Flats' edge, in tiles from its centre: 32 points, each [bearing in degrees from map east toward south, distance
+// in tiles]. It fills the land between the region roads round it, Kiln Camp, Green Pit and the Salvage Yard, about 5
+// tiles short of each road's edge and 8 past each site's. The centre lies south-west of that land's middle, so the
+// edge runs 47 tiles out to the south-east and 95 to the north-east.
+const GLASS_FLATS_OUTLINE: Vec[] = [
+  [0, 71], // east: toward the south road's bend north to Canyon Bridge
+  [11.25, 61],
+  [22.5, 56],
+  [33.75, 51],
+  [45, 47], // south-east: the south road, where S1 leaves its junction
+  [56.25, 48],
+  [67.5, 49],
+  [78.75, 55],
+  [90, 67], // south: the south road
+  [101.25, 76],
+  [112.5, 78],
+  [123.75, 66], // Green Pit
+  [135, 78],
+  [146.25, 90], // south-west: open scrub between Green Pit and Kiln Camp
+  [157.5, 80],
+  [168.75, 68],
+  [180, 60], // west: Kiln Camp and the west road
+  [-168.75, 58],
+  [-157.5, 59],
+  [-146.25, 60],
+  [-135, 58], // north-west: the west road
+  [-123.75, 62],
+  [-112.5, 74],
+  [-101.25, 86],
+  [-90, 95], // north: over the cliffs, short of the Salvage Yard
+  [-78.75, 95],
+  [-67.5, 95],
+  [-56.25, 95],
+  [-45, 95], // north-east: the Salvage Yard road, where S2 comes in
+  [-33.75, 95],
+  [-22.5, 95],
+  [-11.25, 83],
+].map(([deg, r]) => ({ x: r * Math.cos((deg * Math.PI) / 180), y: r * Math.sin((deg * Math.PI) / 180) }));
+// Glass Flats' two approaches, each straight from a region road point toward the centre to just inside the edge, where
+// the dirt road web takes over. S1 leaves the south road's junction, S2 the Salvage Yard road.
+const GLASS_FLATS_S1 = scalePoint({ x: 88, y: 84 });
+const GLASS_FLATS_S2 = scalePoint({ x: 97, y: 62 });
+const GLASS_FLATS_APPROACHES: Vec[][] = [GLASS_FLATS_S1, GLASS_FLATS_S2].map((from) => [from, edgePoint(from, GLASS_FLATS_POS, GLASS_FLATS_POS, GLASS_FLATS_OUTLINE)]);
+// Where S1 and S2 end, in tiles from the centre, so the web's lanes start there.
+export const GLASS_FLATS_ENDS: Vec[] = GLASS_FLATS_APPROACHES.map(([, end]) => ({ x: end.x - GLASS_FLATS_POS.x, y: end.y - GLASS_FLATS_POS.y }));
+
 // A point in tiles from the Fallen Sun's centre, on the map.
 function fromFallenSun(x: number, y: number): Vec {
   return { x: FALLEN_SUN_POS.x + x, y: FALLEN_SUN_POS.y + y };
@@ -254,7 +305,6 @@ export const REGION = {
     { id: "orchard", name: "Old Orchard", kind: "territory", pos: ORCHARD_POS, radius: boundingRadius(ORCHARD_OUTLINE), outline: ORCHARD_OUTLINE },
     {
       id: "dustwell",
-      edge: "stone",
       name: "Dustwell",
       kind: "oasis",
       pos: scalePoint({ x: 33.8, y: 32 }),
@@ -262,7 +312,6 @@ export const REGION = {
     },
     {
       id: "granary",
-      edge: "palisade",
       name: "The Granary",
       kind: "landmark",
       pos: scalePoint({ x: 50, y: 32.8 }),
@@ -294,15 +343,14 @@ export const REGION = {
     },
     {
       id: "glass-flats",
-      edge: "fence",
       name: "Glass Flats",
-      kind: "landmark",
-      pos: scalePoint({ x: 90.3, y: 86.3 }),
-      radius: 6,
+      kind: "territory",
+      pos: GLASS_FLATS_POS,
+      radius: boundingRadius(GLASS_FLATS_OUTLINE),
+      outline: GLASS_FLATS_OUTLINE,
     },
     {
       id: "green-pit",
-      edge: "stone",
       name: "Green Pit",
       kind: "oasis",
       pos: scalePoint({ x: 71.8, y: 89 }),
@@ -310,7 +358,6 @@ export const REGION = {
     },
     {
       id: "south-lock",
-      edge: "fence",
       name: "South Lock",
       kind: "landmark",
       pos: scalePoint({ x: 56.8, y: 94 }),
@@ -326,7 +373,6 @@ export const REGION = {
     },
     {
       id: "pump-station",
-      edge: "fence",
       name: "Pump Station",
       kind: "landmark",
       pos: scalePoint({ x: 40.7, y: 51.7 }),
@@ -342,7 +388,6 @@ export const REGION = {
     },
     {
       id: "salvage-yard",
-      edge: "palisade",
       name: "Salvage Yard",
       kind: "convoy",
       pos: scalePoint({ x: 82, y: 52.2 }),
@@ -361,7 +406,6 @@ export const REGION = {
     // Raider camps. Raiders spawn at their gates and service there.
     {
       id: "scrapjaw",
-      edge: "camp",
       name: "Scrapjaw Camp",
       kind: "camp",
       pos: scalePoint({ x: 22, y: 14 }),
@@ -369,7 +413,6 @@ export const REGION = {
     },
     {
       id: "kiln",
-      edge: "camp",
       name: "Kiln Camp",
       kind: "camp",
       pos: scalePoint({ x: 66, y: 76 }),
@@ -441,11 +484,13 @@ export const REGION = {
       { x: 48, y: 61 },
       { x: 43, y: 54 },
     ]),
+    // The Salvage Yard road runs south-east to the south road's bend north to Canyon Bridge, round Glass Flats' east
+    // edge, not south through the land Glass Flats covers.
     scaleRoad([
       { x: 82, y: 49 },
       { x: 90, y: 56 },
-      { x: 93, y: 70 },
-      { x: 88, y: 84 },
+      { x: 97, y: 62 },
+      { x: 103, y: 70 },
     ]),
     // Short straight spurs lead from a road point to each location beside it, so through traffic passes by.
     // The orchard's spur ends at the south end of its old road, just inside the edge.
@@ -456,12 +501,15 @@ export const REGION = {
     scaleRoad([{ x: 63, y: 20 }, { x: 60, y: 18.8 }], [0]),
     scaleRoad([{ x: 77, y: 24 }, { x: 78.2, y: 21 }], [0]),
     scaleRoad([{ x: 103, y: 70 }, { x: 106.2, y: 70 }], [0]),
-    scaleRoad([{ x: 88, y: 84 }, { x: 90.3, y: 86.3 }], [0]),
     scaleRoad([{ x: 73, y: 92 }, { x: 71.8, y: 89 }], [0]),
     scaleRoad([{ x: 58, y: 91 }, { x: 56.8, y: 94 }], [0]),
     scaleRoad([{ x: 41, y: 87 }, { x: 41, y: 90.2 }], [0]),
     scaleRoad([{ x: 43, y: 54 }, { x: 40.7, y: 51.7 }], [0]),
     scaleRoad([{ x: 82, y: 49 }, { x: 82, y: 52.2 }], [0]),
+    // Two approaches into Glass Flats, neither through it. S1, the south-east approach, is a 2-point spur from the
+    // south road's junction. S2, the north-east approach, comes from the Salvage Yard road's middle point to the edge
+    // facing it, so it needs no bend.
+    ...GLASS_FLATS_APPROACHES,
     // Dead-end tracks lead to the raider camps.
     scaleRoad([
       { x: 37, y: 32 },
@@ -513,10 +561,6 @@ export const REGION = {
     maxTries: 20000,
   },
   sites: {
-    buildingsPerTown: 10,
-    buildingRing: [0.62, 0.82] as [number, number], // buildings fit inside the non-drivable town radius
-    buildingRadius: [0.75, 1.2] as [number, number],
-    roadGapAngle: 0.38, // radians kept clear on each side of a road leaving a town
     convoyWrecks: [
       { x: -2.6, y: 0.6 },
       { x: 0.8, y: -2.6 },
@@ -530,27 +574,13 @@ export const REGION = {
     multiGateRadius: 12, // tiles; towns and locations at least this large get a gate per road, smaller sites get one
   },
   settlement: {
-    streetSpacing: 5, // 20 m blocks, with houses separated by alleys
-    houseWidth: 2.7, // 10.8 m, against the pickup's 5.2 m length
-    houseDepth: 2.1,
-    houseHeights: [1.1, 1.8],
-    wallHeight: 1.6, // 6.4 m, well over a truck roof
-    wallThickness: 1.2,
-    wallSegment: 3, // tiles per straight wall section around the curve
     gateWidth: 5, // tiles of shut doors where a road meets any site edge
-    palisadeHeight: 1, // 4 m of scrap and posts
-    palisadeThickness: 0.6,
-    palisadeSegment: 1.5,
-    stoneHeight: 0.6, // 2.4 m of piled stone around an oasis
-    stoneThickness: 0.9,
-    stoneSegment: 1.2,
     fenceHeight: 0.8, // 3.2 m of posts and rails
     fenceThickness: 0.15,
     fenceSegment: 1.5,
     wreckHeight: 0.9, // 3.6 m of piled car wrecks
     wreckThickness: 1,
     wreckSegment: 1.1, // about one car length
-    gatePostRise: 0.4, // most tiles a gate post rises over its wall, so the posts of the tall town wall stay posts
     gatePoleHeight: 5.5, // 22 m, so a gate shows from across the fog edge
     lampHeight: 1.6, // 6.4 m gate lamp posts, lower on the higher walls
   },
@@ -558,6 +588,7 @@ export const REGION = {
   // point lies 125 tiles along it from Bowl's center, about 90 tiles past its wall and halfway to Old Orchard, so
   // Bowl is past grey vision. `offset` tiles to the right of that point the road lies in grey vision, past clear
   // sight, near the top edge of the screen at the widest zoom. The ground between is open. A new player drives
-  // ahead and meets the road.
-  playerStart: { road: 0, distance: 125, offset: 45 },
+  // ahead and meets the road. The opening wreck of a new game lies `wreck.ahead` tiles ahead of the start and
+  // `wreck.side` to its right, in clear sight on the open ground.
+  playerStart: { road: 0, distance: 125, offset: 45, wreck: { ahead: 6, side: 5 } },
 };

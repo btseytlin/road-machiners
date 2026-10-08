@@ -36,7 +36,7 @@ Run these from `game/`. The repo-wide quality gate and pre-commit hook run from 
 - `npm run perf` fails on a miss against `scripts/perf-budgets.json`.
 - `npm run map:bake` writes `public/maps/icarus.bin`. Commit it after a change to map rules.
 - `npm run models:shapes`, `npm run wiki` and `npm run save:shape` regenerate checked files. A test fails when they are stale.
-- `npm run sfx:board`, `sfx:import`, `sfx:reimport` and `sfx:gen` manage sounds. `sfx:gen` costs credits, so ask before running it.
+- `npm run sfx:board`, `sfx:import`, `sfx:reimport`, `sfx:report` and `sfx:gen` manage sounds. `sfx:gen` costs credits, so ask before running it.
 - `npm run itch` publishes to itch.io.
 
 Game settings live in `src/config.ts`. Copy `.env.example` to `.env` for sound generation and publishing keys.
@@ -63,6 +63,7 @@ One owner per concept. Use these and do not decide the same thing elsewhere:
 - `talkOf()` in `src/sim/dialogue.ts` is the one place talk reads traits.
 - `propPose()` in `src/sim/mapgen.ts` gives each prop's turn and scale.
 - `src/sim/body.ts` is the only conversion between grid cells and meters.
+- `src/sim/utility.ts` owns utility charge, orders, the activation step and the emitter shutdown. Each utility effect's world object has one owner: `hazards.ts` for smoke, ground fields and flares, and `claymore.ts`. `harpoon.ts` owns the lines of the harpoon, which is a gun.
 - Timed deals between two trucks are states in `src/sim/states.ts`. New group work adds a state kind, not a goal.
 - A `stall` event is always a bug.
 - Truck meshes own stencil bit `TRUCK_BIT` and props `PROP_BIT`. Other views must not write them.

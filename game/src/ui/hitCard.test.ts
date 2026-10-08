@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
+import { partDef, type WeaponDef } from '../data/parts';
 import { hitOdds } from '../sim/combat';
+import { makePart } from '../sim/factory';
+import { mountPart } from '../sim/inventory';
 import { corePart } from '../sim/grid';
 import { vehicleStats } from '../sim/stats';
 import { addVehicle, emptyWorld } from '../sim/testkit';
@@ -17,6 +20,19 @@ function createDuel() {
 }
 
 describe('hover card rows', () => {
+  it('shows the shut-down turns the hovered truck has ahead, and nothing while it runs', () => {
+    const { world, them } = createDuel();
+    expect(hitCardRows(world, them.id)!.shutDown).toBeNull();
+    them.shutDown = { from: world.turn + 1, until: world.turn + 2 };
+    expect(hitCardRows(world, them.id)!.shutDown).toBe('Shut down: 2 turns left');
+  });
+
+  it('shows my guns as shut down while I am', () => {
+    const { world, me, them } = createDuel();
+    me.shutDown = { from: world.turn, until: world.turn + 1 };
+    expect(hitCardRows(world, them.id)!.mine[0]).toMatchObject({ odds: null, text: 'shut down' });
+  });
+
   it('shows my weapon odds from hitOdds with every cause', () => {
     const { world, me, them, mine } = createDuel();
     const o = hitOdds(world, me, mine, them, 'body');
@@ -98,6 +114,23 @@ describe('hover card rows', () => {
     expect(hitCardRows(world, them.id)!.mine[0].detail).toContain(` −${(-o.causes.skill / DEG).toFixed(1)}° perception`);
   });
 
+  it('shows smoke between us as a scatter cause and names it as a reason', () => {
+    const { world, me, them, mine } = createDuel();
+    world.smoke = [{ id: 's1', source: me.id, pos: { x: 31.5, y: 30 }, r: 1, turnsLeft: 3 }];
+    const o = hitOdds(world, me, mine, them, 'body');
+    const row = hitCardRows(world, them.id)!.mine[0];
+    expect(o.causes.smoke).toBeGreaterThan(0);
+    expect(row.detail).toContain(` +${(o.causes.smoke / DEG).toFixed(1)}° smoke`);
+    expect(row.cause).toContain('smoke');
+  });
+
+  it('names no smoke on a clear shot', () => {
+    const { world, them } = createDuel();
+    const row = hitCardRows(world, them.id)!.mine[0];
+    expect(row.detail).not.toContain('smoke');
+    expect(row.cause).not.toContain('smoke');
+  });
+
   it('shows no card for my own truck', () => {
     const { world, me } = createDuel();
     expect(hitCardRows(world, me.id)).toBeNull();
@@ -106,5 +139,37 @@ describe('hover card rows', () => {
   it('throws for an unknown truck', () => {
     const { world } = createDuel();
     expect(() => hitCardRows(world, 'nobody')).toThrow();
+  });
+});
+
+describe('hover card harpoon row', () => {
+  // The player facing east with a harpoon on its deck, and a buggy 5 tiles east in sight.
+  function harpoonDuel() {
+    const world = emptyWorld();
+    const me = world.vehicles[0];
+    me.heading = 0;
+    const harpoon = makePart(world, 'harpoon', 0);
+    if (!mountPart(world, me, harpoon)) throw new Error('No deck room for the harpoon');
+    const them = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 35, y: 30 }, Math.PI / 2);
+    refreshVision(world);
+    return { world, me, harpoon, them };
+  }
+
+  it('shows the harpoon as a gun row with its round and its chance from hitOdds', () => {
+    const { world, me, them } = harpoonDuel();
+    const odds = hitOdds(world, me, { def: partDef('harpoon') as WeaponDef }, them, 'body');
+
+    const row = hitCardRows(world, them.id)!.mine.find((r) => r.label.endsWith('Harpoon 1/1'));
+
+    expect(row).toMatchObject({ odds, text: `${Math.round(odds.damageChance * 100)}%` });
+  });
+
+  it('shows a reloading harpoon with no odds', () => {
+    const { world, harpoon, them } = harpoonDuel();
+    harpoon.gun = { cooldown: 0, ammo: 0, reloadWork: 2 };
+
+    const row = hitCardRows(world, them.id)!.mine.find((r) => r.label.endsWith('Harpoon 0/1'));
+
+    expect(row).toMatchObject({ odds: null, text: 'reloading 3 turns' });
   });
 });

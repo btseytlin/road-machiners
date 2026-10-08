@@ -1,3 +1,4 @@
+import { defaultSetup } from '../../sim/settings';
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { PHYSICS } from '../../data/physics';
@@ -9,7 +10,7 @@ import { newWorld } from '../../sim/world';
 import { TEST_MAP } from '../../test/map';
 import { CACTUS_NEAR_ROCK, OBSTACLE_GAP, ROAD_GAP, SHOULDER_TILES, scatterPlacements, type ScatterChunk } from './scatter';
 
-const world = newWorld(1337, START_KITS.standard, TEST_MAP);
+const world = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
 const t = world.terrain;
 const chunks = scatterPlacements(t, world.obstacles);
 const all = (c: ScatterChunk) => [...c.pebbles, ...c.scrub, ...c.desert_stones, ...c.desert_scrub, ...c.cactus];
@@ -123,6 +124,13 @@ describe('scatterPlacements', () => {
       expect(kept.flatMap((c) => [...c.desert_stones, ...c.desert_scrub, ...c.cactus]), type).toEqual([]);
       expect(kept.flatMap((c) => c.pebbles).length, type).toBeGreaterThan(100);
     }
+  });
+
+  it('puts no stones, scrub or cacti on fused glass, where only spires stand', () => {
+    const types = t.types.map(() => 'glass' as const);
+    expect(scatterPlacements({ ...t, types }, []).flatMap(all).length).toBe(0);
+    expect(t.types.some((type) => type === 'glass')).toBe(true);
+    for (const p of placed) expect(typeAt(at(p))).not.toBe('glass');
   });
 
   it('places the same scatter on every load', () => {

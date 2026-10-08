@@ -1,3 +1,4 @@
+import { defaultSetup } from '../sim/settings';
 import { describe, expect, it } from 'vitest';
 import { startKit } from '../data/start';
 import { makePart } from '../sim/factory';
@@ -9,7 +10,7 @@ import { logEntries, RunLog } from './run-log';
 import { memoryBackend } from './save-db';
 
 function start(): World {
-  return { ...newWorld(1337, startKit('standard'), TEST_MAP), turn: 400 };
+  return { ...newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')), turn: 400 };
 }
 
 // The next world, as a command makes it: a clone with fresh events.

@@ -5,13 +5,15 @@ import { fireBlock, hitOdds, type HitOdds } from '../sim/combat';
 import { playerVehicle } from '../sim/damage';
 import { vehicleStats, type MountedWeapon } from '../sim/stats';
 import type { Aim, Vehicle, World } from '../sim/types';
+import { shutDownTurnsLeft } from '../sim/utility';
 import { DEG } from '../sim/vec';
 import { el } from './dom';
 import { ammoText, blockText } from './weapons';
 
 // `cause` names the biggest reasons in plain words. `detail` holds every number, for a tooltip.
 export type HitRow = { label: string; odds: HitOdds | null; text: string; cause: string | null; detail: string | null };
-export type HitCardData = { name: string; mine: HitRow[]; theirs: HitRow[] };
+// shutDown: the shut-down turns the hovered truck still has ahead, as words, or null while it runs.
+export type HitCardData = { name: string; shutDown: string | null; mine: HitRow[]; theirs: HitRow[] };
 
 function deg(r: number): string {
   return (Math.abs(r) / DEG).toFixed(1);
@@ -20,7 +22,7 @@ function deg(r: number): string {
 // "18 m, shows 4.1 m wide, scatter 2.0° weapon +1.1° crossing +0.4° own speed −0.3° gunnery".
 // Extra causes that round to zero are left out.
 function detailLine(o: HitOdds): string {
-  const extra = ([[o.causes.range, 'range'], [o.causes.crossing, 'crossing'], [o.causes.own, 'own speed'], [o.causes.recoil, 'recoil'], [o.causes.skill, 'perception'], [o.causes.weather, 'weather'], [o.causes.still, 'still target']] as const)
+  const extra = ([[o.causes.range, 'range'], [o.causes.crossing, 'crossing'], [o.causes.own, 'own speed'], [o.causes.recoil, 'recoil'], [o.causes.skill, 'perception'], [o.causes.weather, 'weather'], [o.causes.smoke, 'smoke'], [o.causes.still, 'still target']] as const)
     .filter(([r]) => deg(r) !== '0.0')
     .map(([r, name]) => ` ${r < 0 ? '−' : '+'}${deg(r)}° ${name}`)
     .join('');
@@ -32,7 +34,7 @@ const MAIN_SHARE = 0.25;
 const MAX_REASONS = 2;
 
 // The biggest reasons the chance is low, in plain words: "far, you are moving". A parked target reads as easy.
-// An aimed part that other parts shield from this side leads.
+// Smoke between the trucks and an aimed part that other parts shield from this side lead.
 function reasonLine(o: HitOdds, aim: Aim): string {
   const c = o.causes;
   const covered = aim !== 'body' && Math.round(o.damageChance * 100) < Math.round(o.chance * 100);
@@ -41,9 +43,14 @@ function reasonLine(o: HitOdds, aim: Aim): string {
     .sort((a, b) => b[0] - a[0])
     .slice(0, covered ? MAX_REASONS - 1 : MAX_REASONS)
     .map(([, name]) => name);
-  if (covered) reasons.unshift('parts in the way');
-  if (deg(c.still) !== '0.0') reasons.unshift('target is parked: easy');
+  reasons.unshift(...leadReasons(c, covered));
   return reasons.length > 0 ? reasons.join(', ') : 'clear shot';
+}
+
+// Reasons named whatever their share: a parked target, smoke on the line and parts in the way.
+function leadReasons(c: HitOdds['causes'], covered: boolean): string[] {
+  const lead: [boolean, string][] = [[deg(c.still) !== '0.0', 'target is parked: easy'], [c.smoke > 0, 'smoke'], [covered, 'parts in the way']];
+  return lead.filter(([on]) => on).map(([, name]) => name);
 }
 
 function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim, name: string): HitRow {
@@ -66,8 +73,10 @@ export function hitCardRows(world: World, hoveredId: string): HitCardData | null
   if (hoveredId === me.id) return null;
   const it = world.vehicles.find((v) => v.id === hoveredId);
   if (!it) throw new Error(`No vehicle ${hoveredId} to hover`);
+  const left = shutDownTurnsLeft(world, it);
   return {
     name: it.name,
+    shutDown: left > 0 ? `Shut down: ${left} ${left === 1 ? 'turn' : 'turns'} left` : null,
     mine: vehicleStats(world, me).weapons.map((mw, i) => row(world, me, mw, it, aimAt(me, mw, it), `[${i + 1}] ${mw.def.name}`)),
     theirs: vehicleStats(world, it).weapons.map((mw) => row(world, it, mw, me, aimAt(it, mw, me), mw.def.name)),
   };
@@ -95,7 +104,8 @@ export class HitCard {
         ...(r.cause ? [el('div', { class: 'hc-cause dim', title: r.detail ?? '' }, r.cause)] : []),
       ])),
     ];
-    this.root.replaceChildren(...section('You → it', card.mine), ...section('It → you', card.theirs));
+    const shutDown = card.shutDown ? [el('div', { class: 'hc-cause' }, card.shutDown)] : [];
+    this.root.replaceChildren(...shutDown, ...section('You → it', card.mine), ...section('It → you', card.theirs));
   }
 
   hide(): void {

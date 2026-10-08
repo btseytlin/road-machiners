@@ -1,6 +1,7 @@
 import { chassisDef } from '../data/chassis';
 import { GOODS } from '../data/goods';
 import { GEAR_DRAWS, GEAR_LEVELS, GEAR_LEVEL_IDS, GEAR_WHIM, MAX_GUN_SLOWDOWN, NPC_UPKEEP, NPC_WEAR, PRIORITY_TOP, SCRAP_ARMOR, type CargoRoll, type GearLevel, type LoadoutPriorities, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
+import { NPC_UTILITY_PARTS, type UtilityRoll } from '../data/npc-utilities';
 import { partDef, type EngineDef, type PartKind } from '../data/parts';
 import { CONDITION } from '../data/wear';
 import { everyGunFires } from './armor';
@@ -50,6 +51,32 @@ function validatePartPool(pool: Weighted<string | null>[], kind: PartKind, requi
     if (entry.value === null && !required) continue;
     if (entry.value === null || partDef(entry.value).kind !== kind) throw new Error(`NPC pool requires ${kind} parts`);
   }
+}
+
+// The template's utility pool. Every template must have one.
+function utilityPoolOf(template: NpcTemplate): UtilityRoll[] {
+  const pool = NPC_UTILITY_PARTS[template.id];
+  if (!pool) throw new Error(`NPC template ${template.id} has no utility pool`);
+  return pool;
+}
+
+// A utility pool holds utility parts and the harpoon, the gun that ties a line, which drivers carry as gear rather
+// than as one of their guns.
+function validateUtilityPool(pool: UtilityRoll[]): void {
+  validateWeights(pool);
+  const stray = pool.find(({ value }) => value !== null && !isGearPart(value));
+  if (stray) throw new Error(`NPC utility pool holds ${stray.value}, not a utility or a line gun`);
+  for (const { levels } of pool) for (const level of levels ?? []) if (!GEAR_LEVEL_IDS.includes(level)) throw new Error(`Unknown gear level ${level}`);
+}
+
+function isGearPart(defId: string): boolean {
+  const def = partDef(defId);
+  return def.kind === 'utility' || (def.kind === 'weapon' && def.line !== undefined);
+}
+
+// The utility rolls open to the gear level: those with no level list, and those that name it.
+function utilityRollsAt(pool: UtilityRoll[], gear: GearLevel): Weighted<string | null>[] {
+  return pool.filter((entry) => !entry.levels || entry.levels.includes(gear));
 }
 
 function validateSparePool(pool: Weighted<string | null>[]): void {
@@ -199,14 +226,22 @@ function chooseRequiredParts(rng: Rng, table: NpcLoadoutTable, choices: ArmedCho
   return choice.vehicle;
 }
 
-function chooseOptionalPart(world: World, rng: Rng, v: Vehicle, plan: Plan, pool: Weighted<string | null>[]): Vehicle {
+function chooseOptionalPart(world: World, rng: Rng, v: Vehicle, plan: Plan, pool: Weighted<string | null>[], accepts: (next: Vehicle) => boolean = () => true): Vehicle {
   const choices: Weighted<Vehicle>[] = [];
   for (const entry of pool) {
-    const candidate = entry.value === null ? v : tryMountExtra(world, v, entry.value, plan);
+    const candidate = optionalCandidate(world, v, entry.value, plan, accepts);
     if (candidate) choices.push({ value: candidate, weight: entry.weight });
   }
   if (!choices.length) throw new Error(`No eligible optional equipment for ${v.chassisId}. Add an explicit empty outcome or a fitting part.`);
   return sampleWeighted(rng, choices);
+}
+
+// The truck with the pool entry mounted, or as it stands for the empty entry. Null when the part does not fit or
+// `accepts` refuses the truck with it.
+function optionalCandidate(world: World, v: Vehicle, defId: string | null, plan: Plan, accepts: (next: Vehicle) => boolean): Vehicle | null {
+  if (defId === null) return v;
+  const next = tryMountExtra(world, v, defId, plan);
+  return next && accepts(next) ? next : null;
 }
 
 // Non-core mounted parts with the wear rolled onto each.
@@ -273,16 +308,20 @@ function addSpareParts(world: World, rng: Rng, table: NpcLoadoutTable, level: Le
 }
 
 // Rolls the engine's wear first, then the chassis, engine and main gun among the builds that keep MIN_NPC_SPEED on an
-// engine that worn, so the guns suit the engine. Then one utility part, then guns and armor by pickGear(). The
-// utility part comes first, so a full deck of guns never crowds out a hauler's cargo part. Each part fits the money
-// and the rated mass at pristine wear.
-function chooseVehicle(probe: World, rng: Rng, wearRng: Rng, template: NpcTemplate, chassisId: string | null, level: Level): Vehicle {
+// engine that worn, so the guns suit the engine. Then one cargo part and one utility part, then guns and armor by
+// pickGear(). Those parts come first, so a full deck of guns never crowds out a hauler's cargo part or a driver's
+// utility. Each part fits the money and the rated mass at pristine wear.
+function chooseVehicle(probe: World, rng: Rng, wearRng: Rng, template: NpcTemplate, chassisId: string | null, gear: GearLevel): Vehicle {
   const table = template.loadout;
+  const level = GEAR_LEVELS[gear];
   const engineWear = wearOf(wearRng, level);
   const choices = fastChoices(probe, rng, template, chassisId, table.budget, engineWear);
   let v = wearEngine(probe, withFreshIds(probe, chooseRequiredParts(rng, table, choices)), engineWear);
-  // The utility part belongs to what the template is, like the base build, so only MIN_NPC_SPEED holds it back.
-  v = chooseOptionalPart(probe, rng, v, { budget: table.budget, share: 0 }, table.cargoPart);
+  // The cargo and utility parts belong to what the template is, like the base build, so only MIN_NPC_SPEED holds them
+  // back. A gun among them, the harpoon, also keeps the gun power limit.
+  const whole = { budget: table.budget, share: 0 };
+  v = chooseOptionalPart(probe, rng, v, whole, table.cargoPart);
+  v = chooseOptionalPart(probe, rng, v, whole, utilityRollsAt(utilityPoolOf(template), gear), withinGunDraw);
   // The template budget is a standard truck's whole value. The money left past the base build is the gear money, and
   // the gear level scales it, so a poor driver still buys a little gear.
   const base = computeEquipmentCost(v);
@@ -399,13 +438,14 @@ function used(v: Vehicle, next: Vehicle, plan: Plan): number {
 export function generateNpcLoadout(world: World, template: NpcTemplate, chassisId: string | null = null, level: GearLevel | null = null): NpcLoadout {
   const table = template.loadout;
   validateTable(table);
+  validateUtilityPool(utilityPoolOf(template));
   // Probes may allocate IDs, but only the completed selection advances the real world's RNG.
   const probe = { ...world };
   const rng = { rngState: world.rngState };
   // Wear and spares draw from the market stream, so they never shift the main stream's decisions.
   const wearRng = { rngState: world.marketRng.rngState };
   const gear = level ?? sampleWeighted(rng, table.levels);
-  const v = chooseVehicle(probe, rng, wearRng, template, chassisId, GEAR_LEVELS[gear]);
+  const v = chooseVehicle(probe, rng, wearRng, template, chassisId, gear);
   rollWear(probe, wearRng, GEAR_LEVELS[gear], v);
   const { spares, carried } = chooseCargo(probe, rng, wearRng, table, GEAR_LEVELS[gear], v);
   world.rngState = rng.rngState;

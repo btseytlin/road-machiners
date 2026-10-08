@@ -1,6 +1,6 @@
 // Market data: shop profiles and stock, the effort model and contract terms. See src/sim/market.ts.
 
-import { PARTS } from './parts';
+import { PARTS, type PartDef } from './parts';
 import type { Weighted } from './npcs';
 import { TIME } from './time';
 
@@ -12,19 +12,20 @@ import { TIME } from './time';
 
 export type Tier = 1 | 2 | 3;
 
-export type ItemKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'scanner' | 'store' | 'chassis' | 'good';
+export type ItemKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'scanner' | 'store' | 'utility' | 'chassis' | 'good';
 
 export const EFFORT = {
-  // Net money per turn at each tier. Tier 1 is the salvage wage of the deleted econ harness. Tiers 2 and 3 are a
-  // guessed ratio to tier 1. `npm run progression:report` over 30-day runs is the measure that replaces them.
+  // Net money per turn at each tier, in cents (100 cents is 1 M). Tier 1 is the salvage wage of the deleted econ
+  // harness. Tiers 2 and 3 are a guessed ratio to tier 1. `npm run progression:report` over 30-day runs is the
+  // measure that replaces them.
   wage: {
-    1: 0.37,
-    2: 1,
-    3: 2.2,
+    1: 12.33,
+    2: 33.33,
+    3: 73.33,
   } as Record<Tier, number>,
 
   // Target effort in turns per tier and item kind: value / wage[tier] should land in this range.
-  // They hold chassis from 2000, 3000 and 4500 money per tier, and parts from 100, 200 and 450.
+  // They hold chassis from about 667, 1000 and 1500 M per tier, and parts from about 33, 67 and 150 M.
   // Goods are priced far below parts, since a haul is many units, not one purchase.
   bands: {
     1: {
@@ -34,6 +35,7 @@ export const EFFORT = {
       cargo: [250, 700],
       scanner: [250, 700],
       store: [250, 700],
+      utility: [250, 700],
       chassis: [5000, 7500],
       good: [40, 100],
     },
@@ -44,6 +46,7 @@ export const EFFORT = {
       cargo: [180, 480],
       scanner: [180, 480],
       store: [180, 480],
+      utility: [180, 480],
       chassis: [2800, 4200],
       good: [50, 100],
     },
@@ -54,6 +57,7 @@ export const EFFORT = {
       cargo: [180, 380],
       scanner: [180, 380],
       store: [180, 380],
+      utility: [180, 380],
       chassis: [1900, 2800],
       good: [40, 80],
     },
@@ -102,8 +106,8 @@ export const CONTRACTS = {
     units: [3, 12] as [number, number],
     // Owed share of the hauled goods' value if the deadline passes (Design > Contract terms).
     penaltyShare: 1,
-    // Social XP per money of the reward, all of which pays for the trip.
-    xpPerEffort: 0.1,
+    // Social XP per cent of the reward, all of which pays for the trip.
+    xpPerEffort: 0.003,
     // A rush haul is a standard haul with a short window and a premium.
     rush: {
       // Share of rolled hauls that are rush jobs.
@@ -125,8 +129,8 @@ export const CONTRACTS = {
     // Worst wear a hand-in part may carry. One rebuild keeps the fetch honest: the client wants a
     // part that still does its job, not a part on its last legs.
     maxWear: 1,
-    // Social XP per money of the search fee. The part's own price is a purchase, not work, so it teaches nothing.
-    xpPerEffort: 0.15,
+    // Social XP per cent of the search fee. The part's own price is a purchase, not work, so it teaches nothing.
+    xpPerEffort: 0.0045,
   },
 
   bounty: {
@@ -136,8 +140,8 @@ export const CONTRACTS = {
     // Turns of tier 1 wage paid per raider template, whatever the target carries. A bounty pays for the risk of
     // the fight, so a gunwagon pays more than an outrider, and a better geared target pays the same.
     rewardTurns: { buggy: 900, gunwagon: 1350 } as Record<string, number>,
-    // Social XP per money of the reward, all of which pays for the fight.
-    xpPerEffort: 0.25,
+    // Social XP per cent of the reward, all of which pays for the fight.
+    xpPerEffort: 0.0075,
   },
 };
 
@@ -180,11 +184,17 @@ const STALL_WEAR: Weighted<number>[] = [
   { value: 4, weight: 1 },
 ];
 
-// Every non-core part, equal weight, for the two general-stock garages.
-const NON_CORE_PART_IDS = Object.values(PARTS)
-  .filter((def) => def.kind !== 'core')
-  .map((def) => def.id);
-const GARAGE_PARTS: Weighted<string>[] = NON_CORE_PART_IDS.map((id) => ({ value: id, weight: 1 }));
+// Every non-core part for the two general-stock garages. A utility is stocked three times as often as any other part,
+// so most shelves show one. The emitter is ship tech, stocked at a fifth of another utility's weight. The weights
+// change which parts a shelf shows, not how many: stockSize is the same.
+const NON_CORE_PARTS = Object.values(PARTS).filter((def) => def.kind !== 'core');
+const PART_SHELF_WEIGHT = { utility: 3, emitter: 0.6, other: 1 };
+const GARAGE_PARTS: Weighted<string>[] = NON_CORE_PARTS.map((def) => ({ value: def.id, weight: shelfWeightOf(def) }));
+
+function shelfWeightOf(def: PartDef): number {
+  if (def.id === 'emitter') return PART_SHELF_WEIGHT.emitter;
+  return def.kind === 'utility' ? PART_SHELF_WEIGHT.utility : PART_SHELF_WEIGHT.other;
+}
 
 export type PartStockTable = { parts: Weighted<string>[]; wear: Weighted<number>[] };
 
@@ -260,7 +270,10 @@ export const SHOPS: Record<string, ShopDef> = {
     goods: ['scrap', 'parts', 'tools'],
     priceFactor: PRICE_FACTOR,
     partStock: {
-      parts: (['plates', 'steelPlate', 'cage', 'scrapPanels', 'scrapSheet', 'ram', 'plowRam', 'mg', 'shotgun', 'rack', 'panniers'] as const).map((id) => ({ value: id, weight: 1 })),
+      parts: ([
+        'plates', 'steelPlate', 'cage', 'scrapPanels', 'scrapSheet', 'ram', 'plowRam', 'mg', 'shotgun', 'rack', 'panniers',
+        'caltrops', 'oilSpiller', 'scrapersKnife', 'patcherCrane', 'claymoreRam',
+      ] as const).map((id) => ({ value: id, weight: 1 })),
       wear: STALL_WEAR,
     },
     stockSize: [2, 4],
@@ -280,7 +293,7 @@ export const SHOPS: Record<string, ShopDef> = {
     goods: ['grain', 'salt', 'textiles'],
     priceFactor: PRICE_FACTOR,
     partStock: {
-      parts: (['rack', 'panniers', 'flatbed', 'scrapPanels', 'scrapSheet', 'cage', 'supplyLocker'] as const).map((id) => ({ value: id, weight: 1 })),
+      parts: (['rack', 'panniers', 'flatbed', 'scrapPanels', 'scrapSheet', 'cage', 'supplyLocker', 'patcherCrane'] as const).map((id) => ({ value: id, weight: 1 })),
       wear: STALL_WEAR,
     },
     stockSize: [2, 4],
@@ -300,7 +313,7 @@ export const SHOPS: Record<string, ShopDef> = {
     goods: ['batteries', 'scrap', 'parts'],
     priceFactor: PRICE_FACTOR,
     partStock: {
-      parts: (['stockEngine', 'flatFour', 'workhorseDiesel', 'scanner', 'plates', 'jerrycans'] as const).map((id) => ({ value: id, weight: 1 })),
+      parts: (['stockEngine', 'flatFour', 'workhorseDiesel', 'scanner', 'plates', 'jerrycans', 'oilSpiller', 'flareCannon'] as const).map((id) => ({ value: id, weight: 1 })),
       wear: STALL_WEAR,
     },
     stockSize: [2, 4],

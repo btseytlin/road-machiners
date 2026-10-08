@@ -1,3 +1,4 @@
+import { defaultSetup } from '../sim/settings';
 import { describe, expect, it } from 'vitest';
 import { startKit } from '../data/start';
 import { newWorld } from '../sim/world';
@@ -23,7 +24,7 @@ function makeStorage(): Storage {
 describe('SaveSlots.open', () => {
   it('moves every local storage save into the backend, loads it, and deletes the local storage key', async () => {
     const legacy = makeStorage();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     legacy.setItem('roam.save', JSON.stringify({ ...saveOf(world), savedAt: 5 }));
     legacy.setItem('roam.save:slot2', JSON.stringify({ ...saveOf({ ...world, turn: 9 }), savedAt: 6 }));
     legacy.setItem('roam.tips', '[]');
@@ -61,7 +62,7 @@ describe('SaveSlots.open', () => {
 
   it('opens what an earlier session saved', async () => {
     const backend = memoryBackend();
-    const world = newWorld(1337, startKit('standard'), TEST_MAP);
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     const first = await SaveSlots.open(backend, makeStorage(), 'roam.save', SLOTS);
     writeSave(first, 'slot1', world, 'r', 1);
     await first.flush();

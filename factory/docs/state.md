@@ -31,7 +31,7 @@ Each position lists the column, the state fields, the artifacts it needs and the
 - `checks`: column Testing, `testPhase` is `checks` or `checks-after-fix`. Next job: checks.
 - `post`: column Testing, `testPhase` is `post`. Next job: checks, which builds, publishes and posts with no tests or playtest. Needs `.factory/approval.json` and the screenshot. `move N approval` goes through it.
 - `approval`: column Approval. Needs a published build in `builds` and an open post in `approvalPosts`, or an approval queued in `pendingApprovals`. Next job: approve, which runs when the committee presses Approve.
-- `harden`: column Hardening, with no `testPhase` entry and an `approvedResolving` entry, or a cleanup task. Its `builds` entry is the commit the committee played. Next job: harden, which runs the harden round and the review. It runs the checks only if the head moved past that build, and otherwise moves the card to Approval with its merge queued. `move N harden` records the mover as approver when none is recorded.
+- `harden`: column Hardening, with no `testPhase` entry and an `approvedResolving` entry, or a cleanup task. Its `builds` entry is the commit the committee played. Next job: harden, which runs the harden round and the review. A cleanup task or a docs change gets the review alone. It runs the checks only if the head moved past that build, and otherwise moves the card to Approval with its merge queued. `move N harden` records the mover as approver when none is recorded.
 - `harden-fix`: column Hardening, `testPhase` is `fix`. The checks failed once. Next job: harden, which runs the fix round. `move` cannot target it.
 - `resolve`: column Hardening, `testPhase` is `resolve`. Approve hit a conflict with the base. Next job: harden, which merges the base and lets a merge agent resolve the conflict, with no harden round or review. `move` cannot target it.
 - `harden-checks`: column Hardening, `testPhase` is `checks` or `checks-after-fix`. Next job: checks, which queue the merge with no post. `move N checks` on an approved card puts it here.
@@ -68,7 +68,13 @@ Flags hold on any position:
 `release.playtest` holds the playtest of the open release: `seed`, fixed at the cut; `runs`, every run started, which names the audit folders; `streak`, the runs since the last pass or retry, up to `FACTORY_PLAYTEST_RUNS`; `passed`, the commit a clean run approved; `blocked`; and `notes`, the members' decisions from `retry`.
 - Shipped: `ship` merged the release into `main`, closed its cards and set `release` to null.
 
-`factory audit` and `card N` flag three drifts: an open release whose tracking card is missing, a pending ship with no current candidate post, and a candidate post of a commit the playtest did not pass. `factory release` flags nothing.
+The public post of a shipped release has its own position in `releasePost`, beside the next open release. `factory release` prints it as `public post`.
+
+- None due: `releasePost` is null.
+- Waiting for a draft: Ship set `releasePost` with the changelog and the screenshot under `$FACTORY_HOME/release-posts/<day>/`, and `postId` is null. The incident watch shows `release post due`, and Hermes sends a draft.
+- Draft posted: `releasePost.postId` holds the draft post in the committee chat, and `releasePost.draft` its text. A reply to it goes to Hermes, who sends a new draft. Publish on the current draft posts it to `FACTORY_PUBLIC_CHANNEL` and sets `releasePost` to null.
+
+`factory audit` and `card N` flag four drifts: an open release whose tracking card is missing, a pending ship with no current candidate post, a candidate post of a commit the playtest did not pass, and a release post with a draft post id but no draft text or the reverse. `factory release` flags nothing.
 
 The release tracking card has the label `release`. It waits in Approval for the whole release, and its post is `release.postId`. It never shows card drift.
 

@@ -1,7 +1,8 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from 'vitest';
+import { NPC_UTILITY_PARTS, type UtilityRoll } from '../data/npc-utilities';
 import { CHASSIS } from '../data/chassis';
 import { GEAR_LEVEL_IDS, GEAR_LEVELS, MAX_GUN_SLOWDOWN, MIN_NPC_SPEED, NPC_WEAR, NPCS, PRIORITY_TOP, type GearLevel, type LoadoutPriorities, type NpcTemplate } from '../data/npcs';
-import { PARTS, partDef } from '../data/parts';
+import { PARTS, partDef, type UtilityDef } from '../data/parts';
 import { START_KITS } from '../data/start';
 import { newWorld } from './world';
 import { CONDITION } from '../data/wear';
@@ -23,6 +24,7 @@ import type { Vehicle, World } from './types';
 import { TEST_MAP } from '../test/map';
 import TRUCK_SHAPES from '../data/truck-shapes.json';
 import { budget } from '../test/budget';
+import { defaultSetup } from './settings';
 
 // A scout with one deck cell, where a cannon or a heavy frame cannot mount. It borrows the scout's collision boxes.
 const TINY = {
@@ -90,19 +92,21 @@ describe('NPC equipment generation', () => {
     for (let seed = 1; seed <= 12; seed++) total += of(rolled(template, level, seed));
     return total / 12;
   };
-  const guns = (v: Vehicle) => mountedItems(v, 'weapon').length;
+  // The guns a driver chose to carry. The harpoon is gear from its utility roll, not one of its guns.
+  const guns = (v: Vehicle) => mountedItems(v, 'weapon').filter((item) => !(partDef(item.part.defId) as WeaponDef).line).length;
 
   describe('loadout priorities', () => {
-    // A gun still shields the parts behind it, so a driver with no firepower priority rarely adds one.
+    // A gun still shields the parts behind it, utility part included, so a driver with no firepower priority rarely adds one.
     it('gives a template with no firepower priority few guns past its main one', () => {
       const template = withPriorities(NPCS.gunwagon, { firepower: 0 });
-      for (const level of GEAR_LEVEL_IDS) expect(average(template, level, guns)).toBeLessThanOrEqual(1.25);
+      for (const level of GEAR_LEVEL_IDS) expect(average(template, level, guns)).toBeLessThanOrEqual(1.6);
     }, budget(120_000));
 
     // A driver who can only shoot forward is beaten by anyone who drives behind it.
-    it.each(['gunwagon', 'trader', 'buggy', 'courier'])('gives most %s trucks a gun that fires at the rear', (id) => {
+    // A buggy's deck is so small that its utility, which most carry, often takes the spot a rear gun needs.
+    it.each([['gunwagon', 0.75], ['trader', 0.75], ['buggy', 0.35], ['courier', 0.75]])('gives most %s trucks a gun that fires at the rear', (id, share) => {
       const rearGun = (v: Vehicle) => (mountedItems(v, 'weapon').some((g) => reachedSides(partDef(g.part.defId) as WeaponDef).includes('rear') && openSides(v, g).includes('rear')) ? 1 : 0);
-      expect(average(NPCS[id], 'standard', rearGun)).toBeGreaterThanOrEqual(0.75);
+      expect(average(NPCS[id], 'standard', rearGun)).toBeGreaterThanOrEqual(share);
     }, budget(120_000));
 
     // The gear money is the level's share of what the template budget leaves past the base build.
@@ -130,8 +134,9 @@ describe('NPC equipment generation', () => {
       expect(room(withPriorities(NPCS.trader, { cargo: PRIORITY_TOP }))).toBeGreaterThan(room(withPriorities(NPCS.trader, { cargo: 0 })));
     }, budget(120_000));
 
+    // A loaded wagon's deck is full of its utility, guns and armor whatever the speed priority, so the heavy level shows it.
     it('keeps a faster truck for more speed priority', () => {
-      const speed = (template: NpcTemplate) => average(template, 'loaded', topSpeed);
+      const speed = (template: NpcTemplate) => average(template, 'heavy', topSpeed);
       expect(speed(withPriorities(NPCS.gunwagon, { speed: PRIORITY_TOP }))).toBeGreaterThan(speed(withPriorities(NPCS.gunwagon, { speed: 0 })));
     }, budget(120_000));
   });
@@ -325,6 +330,7 @@ describe('trader spare parts', () => {
     }
   });
 
+  // Seed 6 rolls this buggy no utility whose mass would leave the textiles too heavy to fit.
   it('carries no spares once cargo and repair parts already fill the grid', () => {
     const template = structuredClone(NPCS.trader);
     template.loadout.chassis = [{ value: 'buggy', weight: 1 }];
@@ -378,11 +384,13 @@ describe('weighted equipment rolls', () => {
 
 describe('spawned NPCs', () => {
   it('carry the rolled wear and spares into the world', () => {
-    const world = newWorld(1, START_KITS.standard, TEST_MAP);
+    const world = newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const npcs = world.vehicles.filter((v) => v.brain !== null);
     const parts = npcs.flatMap((v) => v.items.flatMap((it) => (it.kind === 'part' && partDef(it.part.defId).kind !== 'core' ? [it.part] : [])));
     expect(parts.some((p) => p.wear > 0)).toBe(true);
-    const traders = npcs.filter((v) => v.brain!.templateId === 'trader');
+    // A world rolls about five traders, and a trader often carries no spare, so one world may roll none. Four worlds
+    // roll about twenty.
+    const traders = [1, 2, 3, 4].flatMap((seed) => newWorld(seed, START_KITS.standard, TEST_MAP, defaultSetup('roaming')).vehicles.filter((v) => v.brain?.templateId === 'trader'));
     expect(traders.some((v) => v.items.some((it) => it.kind === 'part' && !isMounted(v.chassisId, it)))).toBe(true);
   });
 });
@@ -473,5 +481,165 @@ describe('armed choice cache', () => {
     expect(template.loadout.weapon.map((w) => w.value)).toContain(mainGun());
     template.loadout.weapon = [{ value: 'mg', weight: 1 }];
     expect(mainGun()).toBe('mg');
+  });
+});
+
+// Swaps a template's utility pool until the test ends.
+function withUtilityPool(templateId: string, pool: UtilityRoll[]): void {
+  const saved = NPC_UTILITY_PARTS[templateId];
+  NPC_UTILITY_PARTS[templateId] = pool;
+  onTestFinished(() => { NPC_UTILITY_PARTS[templateId] = saved; });
+}
+
+describe('NPC utility parts', () => {
+  const utilitiesOf = (parts: { defId: string }[]) => parts.filter((p) => partDef(p.defId).kind === 'utility').map((p) => p.defId);
+
+  it('rejects a utility pool that names a part of another kind', () => {
+    withUtilityPool('merc', [{ value: 'mg', weight: 1 }, { value: null, weight: 1 }]);
+
+    expect(() => generateNpcLoadout(emptyWorld(), NPCS.merc)).toThrow(/utility/);
+  });
+
+  it('rejects a template with no utility pool', () => {
+    const template: NpcTemplate = { ...structuredClone(NPCS.merc), id: 'nobody' };
+
+    expect(() => generateNpcLoadout(emptyWorld(), template)).toThrow(/no utility pool/);
+  });
+
+  it.each(Object.values(NPCS))('mounts at most one utility on $id, from its own pool', (template) => {
+    const pool = NPC_UTILITY_PARTS[template.id].map((entry) => entry.value);
+    for (let seed = 1; seed <= 16; seed++) {
+      const utilities = utilitiesOf(generateNpcLoadout({ ...fixture, rngState: seed }, template).parts);
+      expect(utilities.length, `seed ${seed}`).toBeLessThanOrEqual(1);
+      for (const id of utilities) expect(pool, `seed ${seed}`).toContain(id);
+    }
+  });
+
+  it('mounts the utilities its pool offers over many rolls', () => {
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 40; seed++) for (const id of utilitiesOf(generateNpcLoadout({ ...fixture, rngState: seed }, NPCS.scavenger).parts)) seen.add(id);
+
+    expect([...seen].sort()).toEqual(['patcherCrane', 'scrapersKnife']);
+  });
+
+  it('rolls the emitter only at the heavy and loaded gear levels', () => {
+    // The merc's own emitter roll, made near certain. Few merc decks keep a 2x2 spot free beside the main gun.
+    const emitter = NPC_UTILITY_PARTS.merc.find((entry) => entry.value === 'emitter');
+    if (!emitter) throw new Error('Mercs roll no emitter');
+    withUtilityPool('merc', [{ ...emitter, weight: 1000 }, { value: null, weight: 0.001 }]);
+    const template = NPCS.merc;
+    const emitters = (level: GearLevel) => {
+      let count = 0;
+      for (let seed = 1; seed <= 40; seed++) count += utilitiesOf(generateNpcLoadout({ ...fixture, rngState: seed }, template, null, level).parts).filter((id) => id === 'emitter').length;
+      return count;
+    };
+
+    expect(emitters('standard')).toBe(0);
+    expect(emitters('heavy')).toBeGreaterThan(0);
+    expect(emitters('loaded')).toBeGreaterThan(0);
+  }, 120_000);
+
+  // Small neighboring seeds roll alike at first, so the sample spans 200 of them.
+  it('mounts the claymore ram on some gunwagons', () => {
+    let rams = 0;
+    for (let seed = 1; seed <= 200; seed++) rams += generateNpcLoadout({ ...fixture, rngState: seed }, NPCS.gunwagon).parts.filter((p) => p.defId === 'claymoreRam').length;
+
+    expect(rams).toBeGreaterThan(0);
+  }, 120_000);
+});
+
+// The share of a template's spawns that mount a utility, of each kind that matters to IV25. Each gear level the template
+// rolls gets CENSUS_SPAWNS seeded spawns, and the shares are weighted by how often the template rolls that level.
+type UtilityShares = { any: number; active: number; emitter: number };
+type TemplateCensus = { shares: UtilityShares; byLevel: Partial<Record<GearLevel, UtilityShares>>; emitterBelowHeavy: number; tier2AtPoor: number };
+
+const CENSUS_SPAWNS = 300;
+const COMBAT_TEMPLATES = ['buggy', 'gunwagon', 'vulture', 'merc', 'bowlFarmer', 'noseArmy', 'convoyGuard'];
+
+// The gear a utility roll mounts: utilities, and the harpoon, the gun that ties a line.
+function mountedUtilities(parts: { defId: string }[]): (UtilityDef | WeaponDef)[] {
+  return parts.map((p) => partDef(p.defId)).filter((def): def is UtilityDef | WeaponDef => def.kind === 'utility' || (def.kind === 'weapon' && def.line !== undefined));
+}
+
+function levelShares(template: NpcTemplate, level: GearLevel, census: TemplateCensus): UtilityShares {
+  const shares = { any: 0, active: 0, emitter: 0 };
+  for (let seed = 1; seed <= CENSUS_SPAWNS; seed++) {
+    const utilities = mountedUtilities(generateNpcLoadout({ ...fixture, rngState: seed }, template, null, level).parts);
+    if (utilities.length > 0) shares.any += 1 / CENSUS_SPAWNS;
+    if (utilities.some((def) => def.kind === 'weapon' || def.reload !== null)) shares.active += 1 / CENSUS_SPAWNS;
+    if (utilities.some((def) => def.id === 'emitter')) {
+      shares.emitter += 1 / CENSUS_SPAWNS;
+      if (level !== 'heavy' && level !== 'loaded') census.emitterBelowHeavy++;
+    }
+    if (level === 'poor' && utilities.some((def) => def.tier === 2)) census.tier2AtPoor++;
+  }
+  return shares;
+}
+
+function levelOf(census: TemplateCensus, level: GearLevel): UtilityShares {
+  const shares = census.byLevel[level];
+  if (!shares) throw new Error(`The census has no ${level} spawns`);
+  return shares;
+}
+
+function templateCensus(template: NpcTemplate): TemplateCensus {
+  const census: TemplateCensus = { shares: { any: 0, active: 0, emitter: 0 }, byLevel: {}, emitterBelowHeavy: 0, tier2AtPoor: 0 };
+  const total = template.loadout.levels.reduce((sum, entry) => sum + entry.weight, 0);
+  for (const { value: level, weight } of template.loadout.levels) {
+    const shares = levelShares(template, level, census);
+    census.byLevel[level] = shares;
+    census.shares.any += (shares.any * weight) / total;
+    census.shares.active += (shares.active * weight) / total;
+    census.shares.emitter += (shares.emitter * weight) / total;
+  }
+  return census;
+}
+
+describe('NPC utility census (IV25)', () => {
+  const census: Record<string, TemplateCensus> = {};
+  beforeAll(async () => {
+    for (const template of Object.values(NPCS)) {
+      census[template.id] = templateCensus(template);
+      await new Promise((resolve) => setImmediate(resolve)); // lets the test runner's messages through between templates
+    }
+  }, budget(300_000)); // 300 seeded spawns at each gear level of every template
+
+  it('puts a utility on at least 65% of NPC trucks across templates', () => {
+    const shares = Object.values(census).map((c) => c.shares.any);
+    const mean = shares.reduce((sum, share) => sum + share, 0) / shares.length;
+
+    expect(mean).toBeGreaterThanOrEqual(0.65);
+  });
+
+  it.each(COMBAT_TEMPLATES)('mounts an active utility on at least half of %s trucks', (id) => {
+    expect(census[id].shares.active).toBeGreaterThanOrEqual(0.5);
+  });
+
+  // Most merc decks keep no 2x2 spot free beside the main gun, so the deck, not the weight, caps this share near 5%.
+  it('mounts the emitter on some heavy and loaded mercs', () => {
+    const levels = NPCS.merc.loadout.levels.filter((entry) => entry.value === 'heavy' || entry.value === 'loaded');
+    const total = levels.reduce((sum, entry) => sum + entry.weight, 0);
+    const share = levels.reduce((sum, entry) => sum + (levelOf(census.merc, entry.value).emitter * entry.weight) / total, 0);
+
+    expect(share).toBeGreaterThanOrEqual(0.04);
+  });
+
+  it('never mounts the emitter below heavy gear or a tier-2 utility at poor gear', () => {
+    for (const [id, c] of Object.entries(census)) {
+      expect(c.emitterBelowHeavy, id).toBe(0);
+      expect(c.tier2AtPoor, id).toBe(0);
+    }
+  });
+
+  it('gates every tier-2 roll away from poor gear and the emitter to heavy and loaded gear', () => {
+    for (const [id, pool] of Object.entries(NPC_UTILITY_PARTS)) {
+      for (const roll of pool) {
+        if (roll.value === null) continue;
+        const tier = partDef(roll.value).tier;
+        const levels = roll.levels ?? GEAR_LEVEL_IDS;
+        if (tier >= 2) expect(levels, `${id} ${roll.value}`).not.toContain('poor');
+        if (roll.value === 'emitter') expect([...levels].sort(), id).toEqual(['heavy', 'loaded']);
+      }
+    }
   });
 });
