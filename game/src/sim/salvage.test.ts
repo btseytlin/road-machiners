@@ -37,13 +37,13 @@ describe('player piles', () => {
     const me = w.vehicles[0];
     addGoods(w, me, 'scrap', 2);
     const held = goodsCount(me).scrap;
-    w.player.costBasis.scrap = 12;
+    w.player.costBasis.scrap = 400;
     let next = w;
     for (const item of me.items.filter((it) => it.kind === 'good' && it.good === 'scrap')) next = dumpItem(next, item.id);
     const pile = next.salvage.find((s) => s.pile)!;
     collectSalvage(next, next.vehicles[0], pile.id, 100);
     expect(goodsCount(next.vehicles[0]).scrap).toBe(held);
-    expect(next.player.costBasis.scrap).toBe(12);
+    expect(next.player.costBasis.scrap).toBe(400);
   });
 
   it('goods from a pile another truck dropped count at their base value', () => {
@@ -52,9 +52,9 @@ describe('player piles', () => {
     addGoods(w, npc, 'scrap', 2);
     const pile = createCargoSalvage(w, npc, 1);
     const held = goodsCount(w.vehicles[0]).scrap ?? 0;
-    w.player.costBasis.scrap = 12;
+    w.player.costBasis.scrap = 400;
     collectSalvage(w, w.vehicles[0], pile.id, 100);
-    expect(w.player.costBasis.scrap).toBeCloseTo((12 * held + GOODS.scrap.value * 2) / (held + 2));
+    expect(w.player.costBasis.scrap).toBeCloseTo((400 * held + GOODS.scrap.value * 2) / (held + 2));
     expect(w.player.scavenged).not.toContain(pile.id);
   });
 
@@ -63,7 +63,7 @@ describe('player piles', () => {
     const me = w.vehicles[0];
     me.items = me.items.filter((it) => it.kind === 'part');
     addGoods(w, me, 'tools', 6);
-    w.player.costBasis.tools = 180;
+    w.player.costBasis.tools = 6000;
     let next = w;
     for (const item of me.items.filter((it) => it.kind === 'good')) next = dumpItem(next, item.id);
     next.salvage.push({ id: 'free', pos: { x: 30, y: 30 }, radius: 1, goods: { tools: 1 }, parts: [], hidden: emptyHidden() });
@@ -72,7 +72,7 @@ describe('player piles', () => {
     expect(next.player.costBasis.tools).toBe(GOODS.tools.value);
     collectSalvage(next, next.vehicles[0], next.salvage.find((s) => s.pile?.fromPlayer)!.id, 100);
     expect(goodsCount(next.vehicles[0]).tools).toBe(7);
-    expect(next.player.costBasis.tools).toBeCloseTo((180 * 6 + GOODS.tools.value) / 7);
+    expect(next.player.costBasis.tools).toBeCloseTo((6000 * 6 + GOODS.tools.value) / 7);
   });
 
   it('one looted good taken by hand moves the basis like taking all', () => {
@@ -80,11 +80,11 @@ describe('player piles', () => {
     const me = w.vehicles[0];
     me.items = me.items.filter((it) => it.kind === 'part');
     addGoods(w, me, 'scrap', 2);
-    w.player.costBasis.scrap = 12;
+    w.player.costBasis.scrap = 400;
     w.salvage.push({ id: 'free', pos: { x: 30, y: 30 }, radius: 1, goods: { scrap: 1 }, parts: [], hidden: emptyHidden() });
     w.player.scavenged.push('free');
     const spot = findSpot(gridOf(me), me.items, { id: 'x', kind: 'good', good: 'scrap', x: 0, y: 0, rot: 0 }, null, null)!;
-    expect(takeLoot(w, 'free', { kind: 'good', good: 'scrap' }, spot).player.costBasis.scrap).toBeCloseTo((12 * 2 + GOODS.scrap.value) / 3);
+    expect(takeLoot(w, 'free', { kind: 'good', good: 'scrap' }, spot).player.costBasis.scrap).toBeCloseTo((400 * 2 + GOODS.scrap.value) / 3);
   });
 
   it('the player dumping beside another truck pile starts its own pile and leaves that one unsearched', () => {

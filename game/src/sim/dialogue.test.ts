@@ -892,7 +892,7 @@ describe('fuel and supply aid', () => {
   // A driver with full tanks and 500 money beside the player, both at peace.
   function aidWorld(templateId = 'trader', faction: Vehicle['faction'] = 'traders'): { w: World; npc: Vehicle } {
     const { w, npc } = withNpc(templateId, faction);
-    npc.resources = { fuel: fuelCap(npc), supplies: suppliesCap(npc), money: 500, health: 100 };
+    npc.resources = { fuel: fuelCap(npc), supplies: suppliesCap(npc), money: 16667, health: 100 };
     return { w, npc };
   }
 

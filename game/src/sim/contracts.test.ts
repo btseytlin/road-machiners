@@ -406,7 +406,7 @@ describe('haulPenalty', () => {
 describe('contract boards and delivery', () => {
   const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
   const nose = REGION.towns.find((t) => t.id === 'nose')!;
-  const haul = (to: string, units: number): Contract => ({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units, to, reward: 300, deadline: 500, window: 500, rush: false, tier: 1 });
+  const haul = (to: string, units: number): Contract => ({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units, to, reward: 10000, deadline: 500, window: 500, rush: false, tier: 1 });
   const fetch = (): Contract => ({ id: 'ct-fetch', shop: 'bowl', kind: 'fetch', defId: 'mg', reward: fetchReward('mg', 1), deadline: 500, window: 500, tier: 1 });
 
   function atBowlWithOffer(c: Contract): World {
@@ -440,7 +440,7 @@ describe('contract boards and delivery', () => {
     w.vehicles[0].pos = { ...sitePads(nose)[0] };
     const money = w.player.money;
     w = deliverContract(w, 'ct-haul');
-    expect(w.player.money).toBe(money + 300);
+    expect(w.player.money).toBe(money + 10000);
     expect(goodsCount(playerVehicle(w)).salt ?? 0).toBe(0);
     expect(w.player.contracts).toHaveLength(0);
   });
@@ -670,7 +670,7 @@ describe('contract boards and delivery', () => {
     w.vehicles[0].pos = { ...sitePads(nose)[0] };
     const money = w.player.money;
     w = deliverContract(w, 'ct-haul');
-    expect(w.player.money).toBe(money + 300);
+    expect(w.player.money).toBe(money + 10000);
     expect(goodsCount(playerVehicle(w)).salt ?? 0).toBe(0);
   });
 

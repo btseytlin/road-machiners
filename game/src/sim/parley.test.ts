@@ -479,7 +479,7 @@ describe('warning a looter off', () => {
 });
 
 describe('bounty talk', () => {
-  const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'trader', targetName: 'Test Driver', reward: 400, deadline: 900, window: 900, tier: 2, fulfilled: false };
+  const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'trader', targetName: 'Test Driver', reward: 13333, deadline: 900, window: 900, tier: 2, fulfilled: false };
 
   function beggar(perks: World['player']['perks']): { w: World; npc: Vehicle } {
     const w = quietWorld();
