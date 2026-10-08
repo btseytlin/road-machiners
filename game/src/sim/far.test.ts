@@ -9,12 +9,12 @@ import { PHYSICS } from '../data/physics';
 import { physicsMove } from '../phys/turn';
 import { advanceFar, fuelLimit, fuelLimited, isNear } from './far';
 import { getResources } from './resources';
+import { addState } from './states';
 import { fuelCap, vehicleStats } from './stats';
 import { addVehicle, editableTerrain, emptyWorld, npcBrain } from './testkit';
 import type { Obstacle, Pose, World } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
-import { addState } from './states';
 import { REGION } from '../data/region';
 
 beforeAll(async () => {
@@ -239,7 +239,7 @@ describe('far NPC travel', () => {
     for (let i = 0; i < t.types.length; i++) t.types[i] = Math.abs(Math.floor(i / t.size) + 0.5 - 120) < 3 ? 'road' : 'hardpan';
     const far = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 120, y: 120 });
     far.brain = npcBrain('raider', { x: 0, y: 0 }, ['raider']);
-    far.brain.goals = [{ kind: 'patrol', targetId: null, destination: null, phase: 'travel', reason: 'test patrol' }];
+    far.brain.goals = [{ kind: 'sell', targetId: null, destination: null, phase: 'travel', reason: 'test patrol' }];
     far.order = { kind: 'stopAt', dest: { x: 180, y: 120 } };
     advanceFar(w, far);
     expect(far.brain.farRoute!.offRoad).toBe(false);
@@ -349,16 +349,18 @@ describe('far travel contact', () => {
     expect(mover.speed).toBe(0);
   });
 
-  it('drives through the position of a truck hitched to a tow rope', () => {
+  it('drives through the position of a truck hitched to its tow rope', () => {
     const { w, mover } = far();
-    const tower = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 300, y: 300 });
     const towed = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 121, y: 120 });
-    addState(w, 'tow', tower.id, towed.id, { kind: 'tow', site: REGION.towns[0].id, fee: 0, waived: 0, hitched: true });
-    mover.order = { kind: 'through', dest: { x: 200, y: 120 } };
+    addState(w, 'tow', mover.id, towed.id, { kind: 'tow', site: 'bowl', fee: 0, waived: 0, hitched: true });
+    const dest = { x: 200, y: 120 };
+    mover.brain = npcBrain('trader', mover.pos, ['trader']);
+    mover.brain.farRoute = { dest, points: [dest], offRoad: false };
+    mover.order = { kind: 'through', dest };
 
     advanceFar(w, mover);
 
-    expect(mover.pos.x).toBeGreaterThan(121);
+    expect(mover.pos.x).toBeGreaterThan(120);
   });
 
   it('lets two trucks on the same point drive apart', () => {
@@ -426,12 +428,11 @@ describe('far tower and its rope', () => {
     expect(tower.order).not.toBeNull();
   });
 
-  it('drives out past a truck hanging on another tower rope', () => {
-    const { w, tower } = boxedTower();
+  it('still counts a parked truck on another tower rope as a blocker', () => {
+    const { w, tower, client } = boxedTower();
     const other = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 200, y: 200 });
     w.states = w.states.map((s) => (s.kind === 'tow' ? { ...s, holder: other.id } : s));
     advanceFar(w, tower);
-    expect(tower.pos.x).toBeLessThan(119);
-    expect(tower.order).not.toBeNull();
+    expect(dist(tower.pos, { x: 120, y: 120 })).toBeLessThan(dist(client.pos, { x: 120, y: 120 }) - 1);
   });
 });

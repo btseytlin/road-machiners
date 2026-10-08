@@ -37,19 +37,25 @@ function spotTableAt(kind: string, pos: Vec): SpotTable | null {
   return t ? tableOfKind(TERRITORIES[t.id], kind) : null;
 }
 
-function tableOfKind(rules: TerritoryRules, kind: string): SpotTable | null {
+// The table a prop of this kind rolls as a loot spot under these rules, or null when it is none.
+export function tableOfKind(rules: TerritoryRules, kind: string): SpotTable | null {
   const fromWreck = rules.wreck ? wreckTableOfKind(rules.wreck, kind) : null;
   return fromWreck ?? rules.farm?.buildings.find((b) => b.look === kind)?.table ?? null;
 }
 
 function wreckTableOfKind(wreck: WreckRules, kind: string): SpotTable | null {
+  return cacheOrFieldTable(wreck, kind) ?? wreck.buildings.find((b) => b.look === kind)?.table ?? null;
+}
+
+// The table of a wreck's caches or field spots when the kind is one of them.
+function cacheOrFieldTable(wreck: WreckRules, kind: string): SpotTable | null {
   if (kind === wreck.cacheLook && wreck.caches.length > 0) return wreck.cacheTable;
   if (kind === wreck.spotLook && wreck.patches.some((p) => p.spots > 0)) return wreck.spotTable;
   return null;
 }
 
-// A baked prop of a spot kind inside the territory that makes that kind a spot: a cache, a field spot or a farm
-// building.
+// A baked prop of a spot kind inside the territory that makes that kind a spot: a cache, a field spot or a building of
+// a wreck or a farm.
 export function isLootSpot(o: Obstacle): boolean {
   return o.kind === 'landmark' && spotTableAt(o.look, o.pos) !== null;
 }

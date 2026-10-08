@@ -1,3 +1,4 @@
+import { defaultSetup } from './settings';
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { REGION, type TerritoryDef } from '../data/region';
@@ -25,7 +26,7 @@ const ROUTE_RATIO = 1.5; // longest route from the south entry to a spot's parki
 const NEAR = 2; // tiles past a parking ring, or from a point, where a free cell still counts
 
 const radius = CHASSIS[START_KITS.standard.chassis].radius;
-const world = newWorld(1337, START_KITS.standard, TEST_MAP);
+const world = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
 const layer = navLayer(world.terrain, world.obstacles, radius);
 const overlay = stampOverlay(layer, [], radius);
 const cellOf = (p: Vec): number => Math.floor(p.y / CELL) * layer.n + Math.floor(p.x / CELL);

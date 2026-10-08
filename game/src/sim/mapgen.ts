@@ -17,11 +17,17 @@ import { dist, segmentDist, type Vec } from './vec';
 
 const O = REGION.obstacles;
 // Baked props come first and never change in play, so a save leaves them out and a load puts them back in
-// the same place in the list.
-export function generateObstacles(world: World, map: BakedMap): Obstacle[] {
+// the same place in the list. `fixed` obstacles, like the opening wreck, follow the sites, so road wrecks keep off
+// them. One that lands on a prop, a site or a deck throws.
+export function generateObstacles(world: World, map: BakedMap, fixed: Obstacle[]): Obstacle[] {
   const baked = mapObstacles(map);
   const sites = placeSites();
   const out = [...baked, ...sites];
+  for (const o of fixed) {
+    if (overlapsAny(out, o.pos, o.r) || !clearOfSites(o.pos, o.r) || !clearOfDecks(o.pos, o.r))
+      throw new Error(`Obstacle ${o.id} at ${o.pos.x.toFixed(1)}, ${o.pos.y.toFixed(1)} overlaps a prop, a site or a deck`);
+    out.push(o);
+  }
   placeRoadWrecks(world, out);
   return out;
 }
@@ -137,7 +143,7 @@ export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: num
 
 type FortLook = Extract<PropKind, `fort${string}`>;
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
-type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'crates' | 'reactor' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | 'ship_bow' | 'ship_cage' | 'ship_hub' | 'hull_shell' | 'hull_drum' | 'hull_shard' | 'hull_tower' | 'hull_gantry' | 'rim_rock' | 'escape_pod' | 'habitat_cylinder' | 'wing_shard' | 'power_cell' | 'tank_trap' | 'nose_rise' | 'nose_crag' | FortModel;
+type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'crates' | 'reactor' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | 'ship_bow' | 'ship_cage' | 'ship_hub' | 'hull_shell' | 'hull_drum' | 'hull_shard' | 'hull_tower' | 'hull_gantry' | 'rim_rock' | 'escape_pod' | 'habitat_cylinder' | 'wing_shard' | 'power_cell' | 'tank_trap' | 'nose_rise' | 'nose_crag' | 'engine_nozzle' | 'engine_frame' | 'watchtower' | 'ruin_compound' | 'glass_spire' | 'scrap_wall' | FortModel;
 
 const M = PHYSICS.metersPerTile;
 const TURN = Math.PI * 2;
@@ -185,6 +191,13 @@ const LANDMARK_MODELS: Record<Exclude<LandmarkLook, FortLook>, PropModel> = {
   rimRock: 'rim_rock',
   noseRise: 'nose_rise',
   noseCrag: 'nose_crag',
+  engineNozzle: 'engine_nozzle',
+  engineFrame: 'engine_frame',
+  watchtower: 'watchtower',
+  ruinCompound: 'ruin_compound',
+  deadTruck: 'wreck',
+  glassSpire: 'glass_spire',
+  scrapWall: 'scrap_wall',
   escapePod: 'escape_pod',
   habitat: 'habitat_cylinder',
   wingShard: 'wing_shard',
@@ -194,7 +207,10 @@ const LANDMARK_MODELS: Record<Exclude<LandmarkLook, FortLook>, PropModel> = {
 // fence or barrier segment is 4 m long, so its radius is half that: it is one straight segment along its yaw. The
 // orchard's buildings, army truck and clutter are built at their size against the 8.1 m army truck, and the orchard
 // poses them at about these radii, so they draw near scale 1 (each radius is stated in its tools/blender script). The
-// Fallen Sun's hull pieces are built at their real size, with half their length along +x as the radius. The building
+// Fallen Sun's hull pieces are built at their real size, with half their length along +x as the radius. The Glass
+// Flats models are built at their size measured from its concept, and Glass Flats poses them at these radii, so they
+// draw at scale 1: half the length along +x for the nozzle, the frame, the spire cluster and the wall, and half the
+// footprint's diagonal for the compound and the tower (each radius is stated in its tools/blender script). The building
 // model stretches to its footprint instead. The pole, billboard and tank stand at their real size.
 const MODEL_RADIUS: Partial<Record<PropModel, number>> = {
   crag: 1,
@@ -234,6 +250,12 @@ const MODEL_RADIUS: Partial<Record<PropModel, number>> = {
   wing_shard: 7,
   power_cell: 1.6,
   tank_trap: 1,
+  engine_nozzle: 13,
+  engine_frame: 15,
+  watchtower: 2.4,
+  ruin_compound: 9.8,
+  glass_spire: 5,
+  scrap_wall: 3.8,
 };
 const WRECK_RADIUS = 0.7; // tiles, the reference size of the wreck model
 const BUILDING_FILL = 0.78; // share of the obstacle radius a building's footprint fills

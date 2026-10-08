@@ -25,6 +25,7 @@ import { bodyState, buildDrive, captureDrive, freeDrive, GROUND, initPhysics, RA
 import { toMap } from './frames';
 import { physicsMove } from './turn';
 import { budget } from '../test/budget';
+import { defaultSetup } from '../sim/settings';
 
 beforeAll(async () => {
   await initPhysics();
@@ -288,7 +289,7 @@ describe('Broken Wing', () => {
 
   // The baked map's world with only the player truck, driving carelessly straight through `to`.
   function onMap(from: Vec, heading: number, to: Vec): World {
-    const w = newWorld(1337, { ...START_KITS.standard, wear: 0 }, TEST_MAP, false);
+    const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'), false);
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     me(w).pos = { ...from };
     me(w).heading = heading;
@@ -352,7 +353,7 @@ describe('a Fallen Sun flap', () => {
   // the flap and on across the landing. The run-up, the flap and the landing are levelled to the ground at the flap's
   // low end and cleared of props, as the bake leaves a flap's landing strip: the flat landing the rise is tuned for.
   function jump(turns: number): { w: World; hp: Map<string, number>; after: JumpTurn[]; hits: string[]; lipSpeed: number } {
-    let w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    let w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const [start, end] = [on(-12), on(flap.length + 36)];
     const onRun = (p: Vec, margin: number) => segmentDist(p, start, end) < flap.width / 2 + margin;
     const level = groundAt(w.terrain, flap.from.x, flap.from.y);

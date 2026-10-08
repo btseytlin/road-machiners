@@ -45,6 +45,7 @@ function knockedOut(): { w: World; me: Vehicle } {
 function knockedOutByRaider(parts: string[] = []): { w: World; me: Vehicle; raider: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   w.salvage = [];
+  for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER; // no new drivers, whose goals need a stock
   const me = w.vehicles[0];
   const raider = addVehicle(w, 'raiders', 'buggy', parts, { x: 36, y: 30 });
   me.lastHitBy = raider.id;

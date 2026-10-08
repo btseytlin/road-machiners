@@ -150,9 +150,21 @@ export function wornDef<T extends PartDef>(part: PartInstance): T {
       return { ...def, hp, armor: def.armor * keep, blastArmor: def.blastArmor * keep } as T;
     case 'scanner':
       return { ...def, hp, range: def.range * keep } as T;
+    case 'utility': // a passive utility loses max HP only
+      return { ...def, hp, reload: wornReloadTurns(def.reload, steps) } as T;
     default: // cargo and core parts lose max HP only
       return { ...def, hp } as T;
   }
+}
+
+// A reload in turns after `steps` wear steps. Integer percent math, so 10 turns at one step is exactly 11.
+export function wornTurns(turns: number, steps: number): number {
+  return Math.ceil((turns * (100 + CONDITION.reloadPercent * steps)) / 100);
+}
+
+// A passive utility has no reload to wear.
+function wornReloadTurns(reload: number | null, steps: number): number | null {
+  return reload === null ? null : wornTurns(reload, steps);
 }
 
 export function isJunk(part: PartInstance): boolean {
@@ -167,6 +179,13 @@ export function damagePart(part: PartInstance, amount: number, floor: number): v
   part.hp = Math.min(part.hp, Math.max(floor, part.hp - amount));
   if (!wasWorking || part.hp > 0) return;
   part.wear = partDef(part.defId).kind === 'core' ? Math.min(CONDITION.maxWear, part.wear + 1) : part.wear + 1;
+}
+
+// Lowers a fresh part to `share` of its max HP for a new game's start. It keeps at least 1 HP, so it adds no wear step.
+export function setStartHp(part: PartInstance, share: number): void {
+  if (!(share > 0 && share <= 1)) throw new Error(`Start HP share ${share} for ${part.id} is outside (0, 1]`);
+  if (part.hp !== maxHp(part)) throw new Error(`${part.id} is not fresh`);
+  damagePart(part, part.hp - Math.round(maxHp(part) * share), 1);
 }
 
 // Raises HP to `hp`, capped at max HP. Throws for a junk part rising from 0 HP and for a restore that lowers HP.

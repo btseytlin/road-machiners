@@ -15,7 +15,7 @@ import { cancelJob } from './jobs';
 import { isFree } from './spawn';
 import { bodyStop } from './meeting-stop';
 import {
-  tradeOffers, tradeSpend, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolPoints, patrolSite, travelSitesAway,
+  tradeOffers, tradeSpend, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolStopsOf, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, npcSenses, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
   lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition,
 } from './npc-decisions';
@@ -25,7 +25,7 @@ import { standingPressures } from './market';
 import { remember } from './memory';
 import { hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
-import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn } from './salvage';
+import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn, searchTarget } from './salvage';
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
@@ -38,6 +38,7 @@ import { spotGoal, territoryOfStock, tripGoal } from './territory';
 import { clamp, dist, pointsAway, type Vec } from './vec';
 import { heatAt } from './sun';
 import { canVehicleSee } from './vision';
+import { isWatching, startWatch, watchOver } from './watch-posts';
 import { chooseOn, comesInSight, sensedAt, senseTracks, trackOf } from './tracks';
 import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, runTow, steerFollow, steerToStranded, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut } from './defeat';
@@ -101,6 +102,7 @@ export function popGoal(w: World, v: Vehicle, reason: string): NpcActivity {
   const goals = goalsOf(v);
   const popped = goals.pop();
   if (!popped) throw new Error(`${v.id} has no goal to pop`);
+  reconsider(v, popped);
   logChange(w, v, popped, reason);
   return popped;
 }
@@ -109,7 +111,14 @@ export function popGoal(w: World, v: Vehicle, reason: string): NpcActivity {
 export function dropGoal(w: World, v: Vehicle, goal: NpcActivity, reason: string): void {
   const previous = topGoal(v);
   v.brain!.goals = goalsOf(v).filter((g) => g !== goal);
+  reconsider(v, goal);
   logChange(w, v, previous, reason);
+}
+
+// A fight or a flight that ends leaves its hostile unnoticed, so a driver that still sees it decides about it again
+// instead of going back to work beside it.
+function reconsider(v: Vehicle, goal: NpcActivity): void {
+  if ((goal.kind === 'fight' || goal.kind === 'flee') && goal.targetId) delete v.brain!.noticed[`hostileSeen:${goal.targetId}`];
 }
 
 // Swaps the long-term goal at the bottom, keeping any interruptions above it.
@@ -280,19 +289,19 @@ function siteGoal(world: World, vehicle: Vehicle): NpcActivity {
 
 type IdleGoal = (world: World, vehicle: Vehicle) => NpcActivity;
 
-// A raid drives to a ground of the raider's camp, a prowl to any hunting ground. A prowl looks for wrecks, and passed salvage is looted through salvageSeen.
-function huntingGoal(kind: 'raid' | 'prowl', reason: string, grounds: (vehicle: Vehicle) => Vec[]): IdleGoal {
+// A raid drives to a watch post of the raider's camp, a prowl to any hunting ground. A prowl looks for wrecks, and passed salvage is looted through salvageSeen.
+function huntingGoal(kind: 'raid' | 'prowl', reason: string, grounds: (world: World, vehicle: Vehicle) => Vec[]): IdleGoal {
   return (world, vehicle) => {
-    const places = grounds(vehicle);
+    const places = grounds(world, vehicle);
     if (places.length === 0) throw new Error(`${vehicle.id} chose to ${kind} with no hunting ground away`);
     return createActivity(kind, null, { ...places[randInt(world, 0, places.length - 1)] }, reason);
   };
 }
 
-// A patrol drives to a road point near the town or camp it guards.
+// A patrol drives to a road point near the town it guards, or to a watch post near the camp, with no watch there.
 function patrolGoal(world: World, vehicle: Vehicle): NpcActivity {
   const site = patrolSite(vehicle);
-  const points = patrolPoints(site);
+  const points = patrolStopsOf(world, vehicle);
   if (points.length === 0) throw new Error(`${vehicle.id} chose to patrol ${site.id} with no road near it`);
   return createActivity('patrol', site.id, { ...points[randInt(world, 0, points.length - 1)] }, `patrol the roads near ${'kind' in site && site.kind === 'camp' ? 'camp' : 'town'}`);
 }
@@ -326,8 +335,8 @@ function haulGoal(world: World, vehicle: Vehicle): NpcActivity {
 const IDLE_GOALS: Record<Exclude<DecisionOptions['idle'], 'wait'>, IdleGoal> = {
   trade: tradeGoal,
   scavenge: scavengeGoal,
-  raid: huntingGoal('raid', 'look for prey at known hunting grounds', raiderGroundsAway),
-  prowl: huntingGoal('prowl', 'prowl the roads for wrecks', huntingGroundsAway),
+  raid: huntingGoal('raid', 'watch the road for prey', raiderGroundsAway),
+  prowl: huntingGoal('prowl', 'prowl the roads for wrecks', (_world, vehicle) => huntingGroundsAway(vehicle)),
   patrol: patrolGoal,
   travel: travelGoal,
   explore: exploreGoal,
@@ -351,7 +360,14 @@ export function finishGoal(world: World, vehicle: Vehicle, reason: string): void
   if (reason === CANNOT_HOLD) noteCannotHold(world, vehicle, done.targetId);
   const goals = vehicle.brain!.goals;
   if (!INTERRUPTIONS.includes(done.kind) || goals.length !== 1 || INTERRUPTIONS.includes(goals[0].kind)) return;
-  if (decide(world, vehicle, 'resume', null, null) === 'new') popGoal(world, vehicle, 'chose something new');
+  resumeOrDrop(world, vehicle);
+}
+
+// The long-term goal an interruption left alone: dropped when the driver chooses something new, and a watch also when
+// the raider left its post for the interruption, since nothing drives it back, so the watch ends where it stands.
+function resumeOrDrop(world: World, vehicle: Vehicle): void {
+  if (decide(world, vehicle, 'resume', null, null) === 'new') return void popGoal(world, vehicle, 'chose something new');
+  if (isWatching(vehicle)) popGoal(world, vehicle, 'left its post');
 }
 
 function heldTow(world: World, vehicle: Vehicle): NpcState | null {
@@ -536,8 +552,7 @@ export function goalHolds(world: World, vehicle: Vehicle, goal: NpcActivity): bo
 
 function invalidReason(world: World, vehicle: Vehicle, goal: NpcActivity, contacts: Contact[]): string | null {
   if (EXPOSED.includes(goal.kind) && inCombat(world, vehicle)) return 'in combat';
-  const check = GOAL_CHECKS[goal.kind];
-  return check ? check(world, vehicle, goal, contacts) : null;
+  return watchOver(world, goal) ?? GOAL_CHECKS[goal.kind]?.(world, vehicle, goal, contacts) ?? null;
 }
 
 // ---- Decision points.
@@ -612,6 +627,11 @@ export function react<D extends NoticedDecision>(world: World, vehicle: Vehicle,
   return decide(world, vehicle, decision, id, seen ? perceiveDanger(world, vehicle, vehicleById(world, id)) : null);
 }
 
+// Returns a cornered fighter to combat, replacing its interrupted goal.
+export function fightCornered(world: World, vehicle: Vehicle, foe: Vehicle): void {
+  interrupt(world, vehicle, fightGoal(world, vehicle, foe, 'cornered'));
+}
+
 type HostileDecision = 'hostileSeen' | 'contactHeard';
 
 // Rolls the driver's first choice on a hostile it sees or hears at `at`, and tracks the truck with it. When only keep
@@ -649,11 +669,6 @@ function reactHeard(world: World, vehicle: Vehicle, contact: Contact): DecisionO
 function seenFleeReason(world: World, vehicle: Vehicle, enemy: Vehicle): string {
   if (trackOf(vehicle, enemy.id)?.choice === 'flee') return 'avoid a truck it ran from';
   return isWeak(world, vehicle) ? 'damaged and threatened' : 'avoid a costly fight';
-}
-
-// Turns a cornered driver on a foe it cannot get away from, over the goal it was driving to.
-export function fightCornered(world: World, vehicle: Vehicle, foe: Vehicle): void {
-  interrupt(world, vehicle, fightGoal(world, vehicle, foe, 'cornered'));
 }
 
 // Pushes a danger goal. A tower in danger drops its tow for free.
@@ -1178,8 +1193,9 @@ function resolveSearch(world: World, vehicle: Vehicle, activity: NpcActivity): v
   if (taken) { finishGoal(world, vehicle, taken); return; }
   const truck = world.vehicles.find((v) => v.id === activity.targetId);
   if (truck) { resolveTruckLoot(world, vehicle, activity, truck); return; }
-  const stock = world.salvage.find((entry) => entry.id === activity.targetId);
-  if (!stock) { finishGoal(world, vehicle, 'salvage no longer available'); return; }
+  const found = searchTarget(world, vehicle, activity.targetId);
+  if ('ended' in found) { finishGoal(world, vehicle, found.ended); return; }
+  const { stock } = found;
   // A search already runs at this stock: keep parked and wait for it to finish.
   if (worksOnLoot(vehicle, stock.id)) { activity.phase = 'act'; return; }
   if (!canReachSalvage(vehicle, stock)) return;
@@ -1214,8 +1230,9 @@ function reachedDestination(world: World, vehicle: Vehicle, activity: NpcActivit
   return withinReach(vehicle, activity) || world.events.some((e) => e.t === 'arrived' && e.vehicle === vehicle.id);
 }
 
+// A raid watches on arrival. Its goal check ends it once the watch runs out.
 function resolveRaid(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  if (reachedDestination(world, vehicle, activity)) finishGoal(world, vehicle, 'reached hunting ground');
+  if (activity.phase === 'travel' && reachedDestination(world, vehicle, activity)) startWatch(world, activity);
 }
 
 // A flee ends parked on its point: a safe spot, or the map edge. The driver keeps the threat noticed while it

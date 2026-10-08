@@ -28,7 +28,7 @@ import { itemMass } from '../mass';
 import { acceptContract, deliverContract, estimateTurns, shopAt, shopState, siteOf, type Contract } from '../market';
 import { CONTRACTS, shopDef, SHOPS } from '../../data/market';
 import { heatAt } from '../sun';
-import { canLoot, downedHere, downedNear, salvageHere, takeAllLoot } from '../locations';
+import { canLoot, downedHere, downedNear, needsSearch, salvageHere, takeAllLoot } from '../locations';
 import { topGoal } from '../npc-activities';
 import { firepower, getUpkeepReserve, isWeak, judgeDanger, getKnownSite, strengthRatio, tripFuelCost } from '../npc-decisions';
 import { fightOdds } from '../fight-odds';
@@ -47,8 +47,7 @@ import { BIGGEST_PART_CELLS, mountBought, Orders, rearm, REPAIR_PARTS, upgradeGe
 // goes looking for fights. The fast trader wants speed and mounts no armor. The hauler takes the best haul contract on
 // every board it reads and trades only with none. The markov bot plays a random one of the others, but the hauler, for
 // a stretch of turns, then draws again.
-// The climber plays a player's snowball: it trades and buys the hunter's gear until the truck mounts CLIMB_GUNS guns,
-// then hunts and trades between fights. It accepts truces and mercy pleas.
+// The climber earns by trading while building a fighting truck, then hunts safe prey and trades between fights.
 export type Archetype = 'trader' | 'scavenger' | 'hunter' | 'fastTrader' | 'hauler' | 'climber' | 'markov';
 export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'hunter', 'fastTrader', 'hauler', 'climber', 'markov'];
 // A policy is an archetype or a robber of the income harness. The selective robber skips guarded targets, and the
@@ -61,26 +60,25 @@ type Goal = Exclude<Policy, 'markov' | 'climber'>;
 const CLIMB_GUNS = 3;
 const GOALS_PLAYED: readonly Goal[] = ['trader', 'scavenger', 'hunter', 'fastTrader'];
 
-// Each bot buys gear for its job. Traders and scavengers earn with cargo room, so their gear never takes it. Only a
-// trader keeps the money for a load, so a hunter spends its starting money on guns.
-const CARGO_GEAR: UpgradeStyle = { job: 'carrier', skip: [], chassis: 'value', keepRoom: true, capital: 'none' };
+// Traders and scavengers earn with cargo room, so their gear never takes it.
+const CARGO_GEAR: UpgradeStyle = { skip: [], chassis: 'value', job: 'carrier' };
 const GEAR_STYLES: Record<Goal, UpgradeStyle> = {
-  trader: { ...CARGO_GEAR, job: 'trader', capital: 'average' },
-  scavenger: CARGO_GEAR,
+  trader: { skip: [], chassis: 'value', job: 'trader' },
+  scavenger: { skip: [], chassis: 'value', job: 'carrier' },
   // A hunter keeps the chassis it starts with: a swap pays the shop's spread, and gear is where its edge comes from.
-  hunter: { job: 'fighter', skip: [], chassis: 'keep', keepRoom: false, capital: 'none' },
-  fastTrader: { job: 'courier', skip: ['armor'], chassis: 'speed', keepRoom: true, capital: 'average' },
+  hunter: { skip: [], chassis: 'keep', job: 'fighter' },
+  fastTrader: { skip: ['armor'], chassis: 'speed', job: 'courier' },
   hauler: CARGO_GEAR,
   robber: CARGO_GEAR,
   convoyRobber: CARGO_GEAR,
 };
 
+const CLIMBER_GEAR: UpgradeStyle = { skip: [], chassis: 'keep', job: 'fighter', budgetJob: 'trader' };
+
 // A hunter's gear keeps room for the loot of a wreck and the speed to catch the foes it fights. Its gear bought once
-// filled every free cell and left the truck slower than the raiders it hunts, so it could neither chase nor strip. The
-// climber buys the hunter's gear from the start, but trades for its living, so it keeps room and the money for a full
-// load of the cheapest good. A load of an average good would swallow all of its profit and it would never buy a gun.
+// filled every free cell and left the truck slower than the raiders it hunts, so it could neither chase nor strip.
 function gearStyle(o: Orders, goal: Goal, archetype: Policy): UpgradeStyle {
-  if (archetype === 'climber') return { ...gearStyle(o, 'hunter', 'hunter'), capital: 'cheapest' };
+  if (archetype === 'climber') return CLIMBER_GEAR;
   if (goal !== 'hunter') return GEAR_STYLES[goal];
   return { ...GEAR_STYLES.hunter, lootRoom: BIGGEST_PART_CELLS, minSpeed: huntedSpeed(o.world) };
 }
@@ -94,7 +92,8 @@ function huntedSpeed(world: World): number | undefined {
 // markovTurns is how many turns the markov bot keeps one goal. It is required for that bot and ignored by the others.
 // tolerateStalls is for the recorder: NPC stalls count in the rows instead of failing the run. kit names the start kit
 // the recorder begins from, standard when absent.
-export type BotOptions = { markovTurns?: number; tolerateStalls?: boolean; kit?: string; noGear?: boolean };
+// settings are world settings for the run's Roaming world, each missing one at its default.
+export type BotOptions = { markovTurns?: number; tolerateStalls?: boolean; kit?: string; noGear?: boolean; settings?: Record<string, number> };
 
 // The markov draws come from their own hash of the run seed, so they never shift the world's randomness.
 const MARKOV_SALT = 0x6d61726b;
@@ -122,7 +121,7 @@ export function botOrders(world: World, archetype: Policy, options: BotOptions =
   return { world: o.world, events: o.events, ledger: o.ledger, notes: o.notes };
 }
 
-// A hold comes first. The climber then strips a nearby knockout before it leaves for service. A service stop and a
+// A hold comes first. The mixed hunter collects a nearby knockout before leaving for service. A service stop and a
 // fight each take the turn's command before the goal does.
 function act(o: Orders, goal: Goal, archetype: Policy): void {
   if (holds(o) || collectNearbyKnockout(o, goal, archetype)) return;
@@ -130,16 +129,16 @@ function act(o: Orders, goal: Goal, archetype: Policy): void {
   followGoal(o, goal, archetype);
 }
 
-function followGoal(o: Orders, goal: Goal, archetype: Policy): void {
-  if (archetype === 'climber' && goal === 'hunter') hunterGoal(o, true);
-  else GOALS[goal](o);
-}
-
-// A reachable knocked-out truck pays for the fight, unless the climber is stranded or still fighting.
+// A reachable knocked-out truck pays for the fight, unless the hunter is stranded or still fighting.
 function collectNearbyKnockout(o: Orders, goal: Goal, archetype: Policy): boolean {
   if (archetype !== 'climber' || goal !== 'hunter') return false;
   if (isStranded(o.world, o.me) || inCombat(o.world, o.me)) return false;
   return downedNear(o.world) !== null && stripDowned(o);
+}
+
+function followGoal(o: Orders, goal: Goal, archetype: Policy): void {
+  if (archetype === 'climber' && goal === 'hunter') hunterGoal(o, true);
+  else GOALS[goal](o);
 }
 
 // Whether the truck stands still for a reason: a job or a patch deal under way, a stop at a town, or a knockout.
@@ -474,7 +473,7 @@ function needsRepair(o: Orders): boolean {
   return !underFire(o.world, o.me) && garageFixes(o).some(isBadlyDamaged);
 }
 
-// The mounted parts a garage can repair and the money covers, most damaged first.
+// The mounted parts a garage can repair, most damaged first.
 function garageFixes(o: Orders): PartInstance[] {
   const fixable = (part: PartInstance) => !isJunk(part) || canRebuild(o.world, part);
   const share = (part: PartInstance) => part.hp / maxHp(part);
@@ -519,7 +518,7 @@ function repairAtGarage(o: Orders): void {
 
 // ---- Goals.
 
-const GOALS: Record<Goal, (o: Orders) => void> = { trader: traderGoal, scavenger: scavengerGoal, hunter: (o) => hunterGoal(o, false), fastTrader: traderGoal, hauler: haulerGoal, robber: (o) => robberGoal(o, false), convoyRobber: (o) => robberGoal(o, true) };
+const GOALS: Record<Goal, (o: Orders) => void> = { trader: traderGoal, scavenger: scavengerGoal, hunter: hunterGoal, fastTrader: traderGoal, hauler: haulerGoal, robber: (o) => robberGoal(o, false), convoyRobber: (o) => robberGoal(o, true) };
 
 // A trader with too little money for a load, and every town known, scavenges until it can buy one. Salvage never
 // grows back, so a bot with neither left waits in the nearest town.
@@ -670,7 +669,7 @@ function sellAt(world: World, town: TownDef, good: string): number {
   return getTradePrice(world, playerVehicle(world), town.id, good, 'sell');
 }
 
-// The scavenger loots what it searched, searches the nearest known stock it has not searched, and sells in the
+// The scavenger loots what it searched, searches the nearest known stock that needs a search, and sells in the
 // nearest town when its cargo is full or no stock is left. With nothing left to search it drives to find a new
 // salvage site. Returns false when it has nothing to do: no stock, no cargo and no site left to find. Stripping is as in
 // sellCargo.
@@ -698,22 +697,25 @@ function findSalvageSite(o: Orders): boolean {
 
 // The hunter strips a knocked-out truck it sees of its parts and goods. It drives at the weakest hostile it sees and
 // demands it stand down once it is badly broken. With no foe in sight it follows the nearest it hears, loots the wrecks
-// it sees, sells in town when full and otherwise patrols the roads between the shops. While no raider in the world is weak enough to
-// hunt, it scavenges instead, as a player too weak to hunt does. With tradeWhenIdle, as the climber has, it trades
-// between fights instead.
-function hunterGoal(o: Orders, tradeWhenIdle: boolean): void {
+// it sees, sells in town when full and otherwise patrols the roads between the shops. While no raider in the world is
+// weak enough to hunt, it scavenges instead, as a player too weak to hunt does. The climber trades between fights.
+function hunterGoal(o: Orders, tradeWhenIdle = false): void {
   // Without a working gun it scavenges, which needs no money, until a town sells it one it can pay for.
   if (firepower(o.world, o.me) === 0) return scavengerGoal(o);
   if (sellsFirst(o, tradeWhenIdle)) return;
   takeBounties(o);
   if (stripDowned(o) || engageFoe(o)) return;
   lootHere(o);
-  return tradeWhenIdle ? traderGoal(o) : scavengeOrHunt(o);
+  earnAfterHunt(o, tradeWhenIdle);
 }
 
-// The pure hunter sells in town before it hunts. The climber sells as it trades.
 function sellsFirst(o: Orders, tradeWhenIdle: boolean): boolean {
   return !tradeWhenIdle && sellInTown(o, true);
+}
+
+function earnAfterHunt(o: Orders, tradeWhenIdle: boolean): void {
+  if (tradeWhenIdle) traderGoal(o);
+  else scavengeOrHunt(o);
 }
 
 function scavengeOrHunt(o: Orders): void {
@@ -721,12 +723,18 @@ function scavengeOrHunt(o: Orders): void {
   collectOrHunt(o);
 }
 
-// A raider kill pays its bounty besides the wreck's loot, so the hunter takes each bounty on the board it is parked
-// at, one per raider template, up to the contract limit.
+// A raider kill fulfils its bounty besides the wreck's loot, and the shop pays it on a claim. So the hunter claims each
+// met bounty of the shop it is parked at, then takes each bounty on the board, one per raider template, up to the
+// contract limit.
 function takeBounties(o: Orders): void {
   const shop = shopAt(o.world);
   if (!shop) return;
+  claimBounties(o, shop);
   for (const c of shopState(o.world, shop).contracts) if (wantsBounty(o.world, c)) o.run((w) => acceptContract(w, c.id));
+}
+
+function claimBounties(o: Orders, shop: string): void {
+  for (const c of o.world.player.contracts) if (c.kind === 'bounty' && c.fulfilled && c.shop === shop) o.run((w) => deliverContract(w, c.id), 'contracts');
 }
 
 function wantsBounty(world: World, c: Contract): boolean {
@@ -1037,11 +1045,11 @@ function postAfterNearest(pos: Vec): Post {
 
 // ---- Salvage.
 
-// Stocks the player knows of that hold loot and that it has not searched: at a discovered site, or a wreck on
-// explored ground.
+// Stocks the player knows of that need a search, since they hide units or it never searched them: at a discovered
+// site, or a wreck on explored ground. So the bot searches a stock again while units stay hidden, as NPCs do.
 function knownStocks(world: World): SalvageStock[] {
   return world.salvage.filter((stock) => {
-    if (!hasSalvage(stock) || world.player.scavenged.includes(stock.id)) return false;
+    if (!hasSalvage(stock) || !needsSearch(world, stock)) return false;
     const site = REGION.locations.find((l) => l.id === stock.id);
     return site ? world.player.discovered.includes(site.id) : playerExplored(world, stock.pos);
   });
@@ -1291,7 +1299,7 @@ function stripForRepair(o: Orders, partId: string): boolean {
 
 function canStrip(o: Orders, partId: string): boolean {
   const item = o.me.items.find((it) => it.kind === 'part' && it.part.id === partId);
-  return item?.kind === 'part' && !inCombat(o.world, o.me) && freeCells(o.me) >= stripYield(item.part);
+  return item?.kind === 'part' && !inCombat(o.world, o.me) && freeCells(o.me) >= stripYield(o.me, item.part);
 }
 
 // ---- Driving.

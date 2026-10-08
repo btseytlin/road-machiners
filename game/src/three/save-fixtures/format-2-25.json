@@ -1,32 +1,33 @@
 {
-  "turn": 900,
+  "seed": 7,
+  "turn": 40,
+  "player": {
+    "vehicleId": "player",
+    "scavenged": ["podfield", "wreck4"],
+    "headlights": false
+  },
   "vehicles": [
-    { "id": "player", "pos": { "x": 100, "y": 100 }, "brain": null },
-    {
-      "id": "npc-3",
-      "pos": { "x": 198.5, "y": 230.2 },
-      "brain": {
-        "goals": [
-          { "kind": "raid", "targetId": null, "destination": { "x": 40, "y": 40 }, "phase": "travel", "reason": "look for prey at known hunting grounds" },
-          { "kind": "rearm", "targetId": "kiln", "destination": { "x": 198, "y": 228 }, "phase": "act", "reason": "lie up for fresh gear", "until": 1400 }
-        ]
-      }
-    },
-    {
-      "id": "npc-4",
-      "pos": { "x": 60, "y": 70 },
-      "brain": {
-        "goals": [{ "kind": "patrol", "targetId": null, "destination": { "x": 66, "y": 76 }, "phase": "travel", "reason": "patrol the roads near camp" }]
-      }
-    }
+    { "id": "player", "weaponOrders": {} },
+    { "id": "npc1", "weaponOrders": { "p9": { "targetId": "player", "aim": "body" } } }
   ],
   "removed": [
+    { "id": "gone1", "weaponOrders": {} }
+  ],
+  "salvage": [
     {
-      "id": "npc-9",
-      "pos": { "x": 10, "y": 20 },
-      "brain": {
-        "goals": [{ "kind": "rearm", "targetId": "bowl", "destination": { "x": 15, "y": 25 }, "phase": "act", "reason": "lie up for fresh gear", "until": 1200 }]
-      }
+      "id": "burnt-convoy", "pos": { "x": 200, "y": 210 }, "radius": 12,
+      "goods": { "scrap": 3, "parts": 1 }, "parts": [{ "id": "p20", "defId": "mg", "hp": 36, "wear": 1, "gun": { "cooldown": 0, "ammo": 5, "reloadWork": 0 } }],
+      "fuel": 2, "supplies": 1
+    },
+    { "id": "podfield", "pos": { "x": 300, "y": 120 }, "radius": 14, "goods": { "scrap": 2 }, "parts": [], "fuel": 1, "supplies": 0 },
+    { "id": "barn-759", "pos": { "x": 120, "y": 300 }, "radius": 3, "goods": { "grain": 2, "parts": 0 }, "parts": [], "fuel": 0, "supplies": 3 },
+    { "id": "deckBay-1450", "pos": { "x": 410, "y": 380 }, "radius": 2, "goods": { "scrap": 4 }, "parts": [] },
+    { "id": "wreck12", "pos": { "x": 90, "y": 95 }, "radius": 1.5, "goods": { "scrap": 1, "parts": 2 }, "parts": [], "fuel": 1, "supplies": 0 },
+    { "id": "wreck4", "pos": { "x": 100, "y": 100 }, "radius": 1.5, "goods": { "scrap": 1 }, "parts": [], "fuel": 0, "supplies": 0, "emptySince": 30 },
+    { "id": "wreck-v40", "pos": { "x": 150, "y": 150 }, "radius": 2, "goods": { "parts": 3 }, "parts": [{ "id": "p41", "defId": "plates", "hp": 20, "wear": 0 }] },
+    {
+      "id": "cargo-v41-30", "pos": { "x": 160, "y": 150 }, "radius": 1, "goods": { "salt": 2 }, "parts": [],
+      "pile": { "until": 60, "fromPlayer": false, "basis": {} }
     }
   ]
 }

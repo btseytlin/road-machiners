@@ -5,18 +5,19 @@ import { RULES } from "../data/rules";
 import { isKnockedOut } from "./defeat";
 import { isNear } from "./far";
 import { fightCornered, getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
-import { route, routeLength, type Blocker } from "./path";
+import { clearLines, route, routeLength, type Blocker } from "./path";
 import { randRange } from "./rng";
 import { isFree } from "./spawn";
 import { parkedVehicles } from "./steering";
+import { fieldBlockers } from "./hazards";
 import { vehicleStats, type MountedWeapon } from "./stats";
-import { escortsOf, followPace, getHitchedTowIds, isOnRope } from "./tow";
+import { escortsOf, followPace, getHitchedTowIds, isOnRope, ropeClientOf } from "./tow";
 import { ramImpact, ramValue } from "./crash-contact";
-import { firepower, ramsReadily, visibleHostiles } from "./npc-decisions";
+import { canStartFight, ramsReadily, visibleHostiles } from "./npc-decisions";
 import type { MoveOrder, NpcActivity, Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
 import { canVehicleSee } from "./vision";
-import { bodyHitChance, inArc, inCombat } from "./combat";
+import { bodyHitChance, inArc, inCombatWith } from "./combat";
 import { passShare, sideToward } from "./armor";
 import { chance } from "./rng";
 
@@ -71,13 +72,13 @@ function noteStuck(world: World, v: Vehicle, goal: Vec | null): void {
   b.stuck = 0;
 }
 
-// A trapped driver with a working gun turns back to fight a visible foe it is in combat with or has a fight goal on,
-// even if the combat state ran out while it fled. A driver already on that fight backs out like any other.
-export function turnCornered(world: World, v: Vehicle): boolean {
-  if (topGoal(v)?.kind === "fight" || firepower(world, v) === 0) return false;
-  const foe = visibleHostiles(world, v).find((other) => inCombat(world, v) || v.brain!.goals.some((goal) => goal.kind === "fight" && goal.targetId === other.id));
+// A trapped driver that can fight turns back on a visible foe it is in combat with, or holds a fight goal on, even if
+// combat state expired while it fled. Any other driver returns false, so the caller's recovery runs.
+export function turnCornered(world: World, vehicle: Vehicle): boolean {
+  if (topGoal(vehicle)?.kind === "fight") return false;
+  const foe = visibleHostiles(world, vehicle).find((other) => (inCombatWith(world, vehicle, other) || vehicle.brain!.goals.some((goal) => goal.kind === "fight" && goal.targetId === other.id)) && canStartFight(world, vehicle, other));
   if (!foe) return false;
-  fightCornered(world, v, foe);
+  fightCornered(world, vehicle, foe);
   return true;
 }
 
@@ -99,8 +100,8 @@ function freeSpotNear(world: World, v: Vehicle): Vec | null {
   return null;
 }
 
-// A driver that barely moved on a move order for RULES.npcStuckTurns turns in a row backs out, unless a foe it cannot
-// get away from is in sight, where it turns on the foe. Waiting for traffic is not being stuck.
+// A driver that barely moved on a move order for RULES.npcStuckTurns turns in a row backs out, unless it is in a
+// fight it cannot get away from, where it turns on its foe. Waiting for traffic is not being stuck.
 function noteStall(world: World, v: Vehicle, yielding: boolean): void {
   const b = v.brain!;
   b.stalled = !yielding && barelyMoved(v) ? (b.stalled ?? 0) + 1 : 0;
@@ -239,14 +240,17 @@ export function leadOf(target: Vehicle): Vec {
 }
 
 // The best scored point around the target's lead, no nearer than `clearance`. Arcs and hit chances are judged where
-// the fighter is after this turn's drive toward the point, since guns fire after the move. A point where some
-// working gun bears always beats one where none does, so a slow fighter never parks where it cannot fire while a
-// firing spot exists. With no such point, or no working gun, the best score wins.
+// the fighter is after this turn's drive toward the point, since guns fire after the move. A point the fighter can
+// drive straight to always beats one behind a rock, a cliff or water, since the fighter stands still while it has no
+// route to its point. Among those, a point where some working gun bears always beats one where none does, so a slow
+// fighter never parks where it cannot fire while a firing spot exists. With no such point, or no working gun, the
+// best score wins.
 export function fightPoint(world: World, v: Vehicle, target: Vehicle, clearance: number): Vec {
   const lead = leadOf(target);
   const turn = circleTurn(world, v);
   const reach = longestRange(world, v) - RULES.arriveRadius;
-  let best: { p: Vec; score: number; fires: boolean } | null = null;
+  const clear = clearLines(world, vehicleStats(world, v).radius, []);
+  let best: Candidate | null = null;
   for (const share of F.rings) {
     const r = Math.max(clearance, share * reach);
     for (let i = 0; i < F.angles; i++) {
@@ -254,13 +258,17 @@ export function fightPoint(world: World, v: Vehicle, target: Vehicle, clearance:
       const p = { x: lead.x + Math.cos(a) * r, y: lead.y + Math.sin(a) * r };
       const score = scorePoint(world, v, target, lead, p, turn);
       const fires = bearingShare(world, v, { ...target, pos: lead }, p) > 0;
-      if (!best || beats({ score, fires }, best)) best = { p, score, fires };
+      const open = clear(v.pos, p);
+      if (!best || beats({ p, score, fires, open }, best)) best = { p, score, fires, open };
     }
   }
   return best!.p;
 }
 
-function beats(a: { score: number; fires: boolean }, b: { score: number; fires: boolean }): boolean {
+type Candidate = { p: Vec; score: number; fires: boolean; open: boolean };
+
+function beats(a: Candidate, b: Candidate): boolean {
+  if (a.open !== b.open) return a.open;
   return a.fires === b.fires ? a.score > b.score : a.fires;
 }
 
@@ -339,14 +347,14 @@ export function fightOrder(world: World, v: Vehicle, target: Vehicle, dest: Vec)
 // a moving vehicle on a collision course will cover. It stops only when that path blocks its way, when it
 // faces off with a parked NPC, or when it is the lower id of two NPCs closing on each other.
 
-// What an NPC routes around: parked vehicles, and the swept path of each moving vehicle on a collision course.
-// A swerve takes a turn to show, and orders are set once per turn, so drivers route around a moving vehicle one
-// turn of closing before it could make them stop. The player routes around parked vehicles only, since the player
-// steers for itself.
+// What an NPC routes around: parked vehicles, the ground fields it has seen, and the swept path of each moving
+// vehicle on a collision course. A swerve takes a turn to show, and orders are set once per turn, so drivers route
+// around a moving vehicle one turn of closing before it could make them stop. The player routes around parked
+// vehicles and seen fields only, since the player steers for itself.
 export function routeBlockers(world: World, v: Vehicle): Blocker[] {
-  const parked = parkedVehicles(world, v.id);
-  if (!v.brain) return parked;
-  return [...parked, ...conflicts(world, v, 1).flatMap((x) => sweptPath(world, v, x))];
+  const standing = [...parkedVehicles(world, v.id, getHitchedTowIds(world)), ...fieldBlockers(world, v)];
+  if (!v.brain) return standing;
+  return [...standing, ...conflicts(world, v, 1).flatMap((x) => sweptPath(world, v, x))];
 }
 
 // Whether v must stop short of `dest` for another vehicle. A moving vehicle stops v only when the route around
@@ -359,7 +367,7 @@ export function trafficStops(world: World, v: Vehicle, dest: Vec): boolean {
   if (facesOncoming(world, v)) return true;
   const moving = conflicts(world, v, 0);
   if (moving.length === 0) return false;
-  const parked = parkedVehicles(world, v.id);
+  const parked = parkedVehicles(world, v.id, getHitchedTowIds(world));
   const radius = vehicleStats(world, v).radius;
   const open = route(world, v.pos, dest, radius, parked, v);
   const around = route(world, v.pos, dest, radius, [...parked, ...moving.flatMap((x) => sweptPath(world, v, x))], v);
@@ -368,10 +376,9 @@ export function trafficStops(world: World, v: Vehicle, dest: Vec): boolean {
   return routeLength(v.pos, around) - routeLength(v.pos, open) > vs * t;
 }
 
-// Vehicles v yields to: never the truck it rams, nor a truck on a tow rope, which has no body.
+// Vehicles v yields to: never the truck it rams, nor the truck on its own rope.
 function others(world: World, v: Vehicle): Vehicle[] {
-  const onRope = getHitchedTowIds(world);
-  return world.vehicles.filter((x) => x.id !== v.id && x.id !== v.brain?.ramTarget && !onRope.has(x.id));
+  return world.vehicles.filter((x) => x.id !== v.id && x.id !== v.brain?.ramTarget && !onOwnRope(world, v, x));
 }
 
 // Moving vehicles close ahead whose path meets v's. leadTurns adds turns of closing at both current speeds to the
@@ -447,6 +454,10 @@ function pathsMeet(world: World, v: Vehicle, x: Vehicle): boolean {
   const rr = rx * rx + ry * ry;
   const t = rr === 0 ? 0 : Math.min(h, Math.max(0, -(px * rx + py * ry) / rr));
   return Math.hypot(px + rx * t, py + ry * t) < sv.radius + sx.radius + RULES.yieldDistance;
+}
+
+function onOwnRope(world: World, tower: Vehicle, x: Vehicle): boolean {
+  return ropeClientOf(world, tower.id) === x.id;
 }
 
 // The gap between v and x past both radii when x lies within 45 degrees of v's heading, else null.

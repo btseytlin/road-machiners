@@ -3,6 +3,7 @@ import { RANK_COSTS, SKILL_IDS, XP_SOURCES } from '../../data/skills';
 import { START_KITS } from '../../data/start';
 import { TIME } from '../../data/time';
 import type { World, XpSource } from '../types';
+import { cumulativeCost } from '../progress';
 import { playerVehicle } from '../damage';
 import { emptyWorld } from '../testkit';
 import { record, recordFrom, recordTurns, StallWatch, stepsFrom, type TraceLine } from './record';
@@ -27,6 +28,18 @@ describe('record', () => {
     expect(second).toEqual(first);
   }, RUN_TIMEOUT);
 
+  it('starts in a Roaming world with the given settings, the missing ones at their defaults', () => {
+    const first = recordTurns(1337, 'trader', 1, { settings: { damage: 2, fuelUse: 1.5 } }).next();
+
+    expect(first.done).toBe(false);
+    expect(first.value?.world.setup).toEqual({ mode: 'roaming', settings: { damage: 2, fuelUse: 1.5, supplyUse: 1 } });
+  }, RUN_TIMEOUT);
+
+  it('fails a run with a bad setting before it plays', () => {
+    expect(() => recordTurns(1337, 'trader', 1, { settings: { damage: 9 } }).next()).toThrow(/damage/);
+    expect(() => recordTurns(1337, 'trader', 1, { settings: { speed: 1 } }).next()).toThrow(/speed/);
+  }, RUN_TIMEOUT);
+
   it('replays to the XP the world gave through practice', async () => {
     const lines: TraceLine[] = [];
     let last: World | null = null;
@@ -47,12 +60,10 @@ describe('record', () => {
     }
     // The recorder buys ranks from the pool as it fills, so the XP earned is what is left plus what ranks cost.
     const pool = SKILL_IDS.reduce((sum, skill) => sum + curve[skill].total, 0);
-    const spent = SKILL_IDS.reduce((sum, skill) => sum + RANK_COSTS.slice(0, world.player.ranks[skill]).reduce((a, b) => a + b, 0), 0);
+    const spent = SKILL_IDS.reduce((sum, skill) => sum + cumulativeCost(world.player.ranks[skill]), 0);
     expect(pool).toBeCloseTo(world.player.xp + spent, 6);
   }, RUN_TIMEOUT);
-});
 
-describe('record start kit', () => {
   it('starts the hunter on the snowball kit and the others on the standard kit unless a kit is named', () => {
     const chassisOf = (archetype: 'hunter' | 'trader', kit?: string): string => {
       const [step] = recordTurns(1337, archetype, 1, kit === undefined ? {} : { kit });

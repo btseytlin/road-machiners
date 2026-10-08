@@ -10,6 +10,7 @@ import { perfSnapshot, resetPerf, type PerfStat } from '../perf';
 import { playerVehicle } from '../sim/damage';
 import { advanceFar } from '../sim/far';
 import { applyContactCrash, applyGroundCrash, applyLanding } from '../sim/crash-contact';
+import { tearLine } from '../sim/harpoon';
 import { breakProp } from '../sim/salvage';
 import { isOnRope } from '../sim/tow';
 import { burnFuel } from '../sim/resources';
@@ -104,7 +105,7 @@ export function physicsMove(d: Drive, done: (r: TurnResult) => void): (w: World)
 // and are left alone. A vehicle driving in physics drops any route stored while it was far, since it
 // no longer starts where that route left off. Breaks go first, from each truck's pose at the turn's start, so
 // the side that hit takes the scrape. The body's speed then replaces the sim's, since physics already took the
-// slowdown when the prop broke.
+// slowdown when the prop broke. Torn harpoon lines go last.
 export function applyTurn(w: World, r: TurnResult): void {
   applyBreaks(w, r);
   for (const v of w.vehicles) {
@@ -113,6 +114,7 @@ export function applyTurn(w: World, r: TurnResult): void {
   }
   applyCrashes(w, r);
   applyLandings(w, r);
+  for (const t of r.tears) tearLine(w, t.line);
 }
 
 function applyCrashes(w: World, r: TurnResult): void {

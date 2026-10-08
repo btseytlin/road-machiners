@@ -17,6 +17,9 @@ export const CONDITION = {
     speedBonus: 0.26, // engine top speed bonus lost, in tiles per turn, a fifth of the smallest engine step
     accelBonus: 0.1, // engine acceleration bonus lost, in the chassis accel unit
   },
+  // Percent of an active utility's reload added per wear step, rounded up to whole turns. Kept apart from stepLoss
+  // since a reload counts whole turns, and 2.7% of a 10 turn reload would never add a turn.
+  reloadPercent: 10,
 };
 
 export const WEAR = {
@@ -36,7 +39,7 @@ export const WEAR = {
 // A roadside patch between two trucks. See src/sim/patch.ts.
 export const PATCH = {
   share: 0.25, // share of max HP a patch gives a broken engine, transmission or tank: enough to drive, not to trust
-  laborPerTurn: 8, // money per turn of work on the paid and own-parts deals, a little under a unit of parts
+  laborPerTurn: 266.67, // cents per turn of work on the paid and own-parts deals, a little under a unit of parts
 };
 
 export const REPAIR = {

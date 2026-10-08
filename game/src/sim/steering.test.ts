@@ -2,10 +2,11 @@ import { RULES } from "../data/rules";
 import { describe, expect, it } from "vitest";
 import { vehicleStats } from "./stats";
 import { chassisDef } from "../data/chassis";
-import { addState } from "./states";
 import { backsToDestination, clickOrder, parkedVehicles, setDownSpot, throttleFor, zoneEdges, zoneSpeed } from "./steering";
 import { DEG, dist } from "./vec";
 import { addVehicle, emptyWorld, npcBrain } from "./testkit";
+import { addState } from "./states";
+import { getHitchedTowIds } from "./tow";
 
 function setup(speed: number) {
   const w = emptyWorld();
@@ -86,19 +87,13 @@ describe("backing up", () => {
 });
 
 describe("parked blockers", () => {
-  it("leaves a truck on a tow rope out of every route", () => {
+  it("leaves a truck on a tow rope out of the tower's route", () => {
     const w = emptyWorld();
     const tower = addVehicle(w, "traders", "scout", ["stockEngine"], { x: 30, y: 30 });
     const towed = addVehicle(w, "traders", "scout", ["stockEngine"], { x: 32, y: 30 });
-    const bystander = addVehicle(w, "traders", "scout", ["stockEngine"], { x: 34, y: 30 });
     addState(w, "tow", tower.id, towed.id, { kind: "tow", site: "bowl", fee: 0, waived: 0, hitched: true });
 
-    const forTower = parkedVehicles(w, tower.id);
-    const forBystander = parkedVehicles(w, bystander.id);
-
-    expect(forTower).not.toContainEqual({ pos: towed.pos, r: chassisDef(towed.chassisId).radius });
-    expect(forBystander).not.toContainEqual({ pos: towed.pos, r: chassisDef(towed.chassisId).radius });
-    expect(forBystander).toContainEqual({ pos: tower.pos, r: chassisDef(tower.chassisId).radius });
+    expect(parkedVehicles(w, tower.id, getHitchedTowIds(w))).not.toContainEqual({ pos: towed.pos, r: chassisDef(towed.chassisId).radius });
   });
 });
 

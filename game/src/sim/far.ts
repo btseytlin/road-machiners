@@ -14,7 +14,8 @@ import { breakProp } from './salvage';
 import { burnFuel, getResources } from './resources';
 import { fuelCap, vehicleStats, type VehicleStats } from './stats';
 import { parkedVehicles, throughSpeed } from './steering';
-import { getHitchedTowIds, isOnRope } from './tow';
+import { fieldBlockers } from './hazards';
+import { getHitchedTowIds, isOnRope, ropeClientOf } from './tow';
 import type { Blocker } from './nav/buckets';
 import type { MoveOrder, Obstacle, Pose, Vehicle, World } from './types';
 import { bearing, dist, segmentDist, type Vec } from './vec';
@@ -68,11 +69,10 @@ export function advanceFar(w: World, v: Vehicle): void {
   const s = fuelLimited(w, v, full, v.speed, order);
   const next = order.kind === 'through' ? throughSpeed(s, v.speed, dist(v.pos, order.dest), order.pace) : Math.min(s.maxSpeed, v.speed + s.accel);
   const offRoad = keepsOffRoads(w, v);
-  const onRope = getHitchedTowIds(w);
-  const points = farPoints(w, v, order.dest, offRoad, full, s, onRope);
+  const points = farPoints(w, v, order.dest, offRoad, full, s);
 
   const planned = follow(v.pos, points, (v.speed + next) / 2);
-  const block = firstContact(w, v, planned.path, full.radius, onRope);
+  const block = firstContact(w, v, planned.path, full.radius);
   const walk = block ? follow(v.pos, points, block.clear) : planned;
   const end = walk.path[walk.path.length - 1];
   const reach = order.kind === 'stopAt' ? RULES.arriveRadius : RULES.passRadius;
@@ -97,15 +97,16 @@ export function advanceFar(w: World, v: Vehicle): void {
 
 // The kept route toward dest, or a new one. A new route steers around parked vehicles, like the physics driver's, and
 // around slower ones it could reach. A kept route planned on or off roads is dropped once the driver's style has changed.
-function farPoints(w: World, v: Vehicle, dest: Vec, offRoad: boolean, full: VehicleStats, s: VehicleStats, onRope: ReadonlySet<string>): Vec[] {
+function farPoints(w: World, v: Vehicle, dest: Vec, offRoad: boolean, full: VehicleStats, s: VehicleStats): Vec[] {
+  const onRope = getHitchedTowIds(w);
   const stored = keptFarRoute(v);
   if (stored && stored.dest.x === dest.x && stored.dest.y === dest.y && keptOffRoad(stored) === offRoad) return stored.points;
-  return route(w, v.pos, dest, full.radius, farBlockers(w, v, s, onRope), v);
+  // A new route steers around parked vehicles and seen ground fields, like the physics driver's, and around slower ones it could reach.
+  return route(w, v.pos, dest, full.radius, [...farBlockers(w, v, s, onRope), ...fieldBlockers(w, v)], v);
 }
 
 // The trucks a new far route steers around: parked ones, and moving ones slower than this truck's top speed within
 // a turn's drive of it, so it overtakes them as a driver would instead of trailing them. A ram target stays a target.
-// A truck on a tow rope has no body and is never one of them.
 function farBlockers(w: World, v: Vehicle, s: VehicleStats, onRope: ReadonlySet<string>): Blocker[] {
   const target = v.brain?.ramTarget;
   const reach = s.maxSpeed + radiusOf(v);
@@ -149,10 +150,11 @@ function keepFarRoute(v: Vehicle, route: FarRoute | undefined): void {
 const CONTACT_STEP = 0.25; // tiles between overlap checks along a far walk, below the smallest vehicle radius
 
 // The first vehicle the walk would drive into, and how far the walk stays clear of it. Moving away from a
-// vehicle already overlapped is allowed, so two trucks that start on top of each other can separate. A truck on a
-// tow rope has no body and is never in the way.
-function firstContact(w: World, v: Vehicle, path: Vec[], radius: number, onRope: ReadonlySet<string>): { other: Vehicle; clear: number; contact: number } | null {
-  const others = w.vehicles.filter((o) => o.id !== v.id && !onRope.has(o.id)).map((o) => ({ o, contact: radius + chassisDef(o.chassisId).radius }));
+// vehicle already overlapped is allowed, so two trucks that start on top of each other can separate. The truck on
+// the vehicle's own rope trails it and is never in its way.
+function firstContact(w: World, v: Vehicle, path: Vec[], radius: number): { other: Vehicle; clear: number; contact: number } | null {
+  const client = ropeClientOf(w, v.id);
+  const others = w.vehicles.filter((o) => o.id !== v.id && o.id !== client).map((o) => ({ o, contact: radius + chassisDef(o.chassisId).radius }));
   let walked = 0;
   for (let seg = 1; seg < path.length; seg++) {
     const a = path[seg - 1];

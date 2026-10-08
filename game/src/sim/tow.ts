@@ -82,14 +82,19 @@ function hitchedTows(world: World): NpcState[] {
   return world.states.filter((s) => s.kind === 'tow' && towData(s).hitched);
 }
 
+// The trucks with no bodies while hitched, for route and contact checks across many vehicles.
+export function getHitchedTowIds(world: World): Set<string> {
+  return new Set(hitchedTows(world).map((s) => s.other));
+}
+
 // The vehicle hangs on a tow rope, so it has no physics body and trails its tower.
 export function isOnRope(world: World, id: string): boolean {
   return hitchedTows(world).some((s) => s.other === id);
 }
 
-// The trucks with no bodies while hitched, for route and contact checks across many vehicles.
-export function getHitchedTowIds(world: World): Set<string> {
-  return new Set(hitchedTows(world).map((s) => s.other));
+// The truck on this tower's rope, or null. It trails the tower, so the tower never routes around it or stops for it.
+export function ropeClientOf(world: World, towerId: string): string | null {
+  return hitchedTows(world).find((s) => s.holder === towerId)?.other ?? null;
 }
 
 // The vehicle pulls a truck on its tow rope.
