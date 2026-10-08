@@ -6,24 +6,26 @@ import { el, isBrowserChord, panel, topLeft, topRight } from "./dom";
 import { versionLabel } from "./hud-readout";
 import { isNewGameOpen, openNewGame, type NewGameActions } from "./new-game";
 import { SavePanel, type SavePanelActions } from "./save-panel";
+import type { TipSwitch } from "./tips";
 
 export type GameMenuActions = SavePanelActions & {
   hasSave: () => boolean;
   newGame: NewGameActions;
 };
 
-export type MenuEntry = "new" | "save" | "load" | "help";
+export type MenuEntry = "new" | "save" | "load" | "tips" | "help";
 
 const ENTRIES: { entry: MenuEntry; label: string }[] = [
   { entry: "new", label: "New Game" },
   { entry: "save", label: "Save" },
   { entry: "load", label: "Load" },
+  { entry: "tips", label: "Show tips" },
   { entry: "help", label: "Help" },
 ];
 
 // Save and New Game wait for the turn to end. Load also needs a filled slot. Help is always there.
 export function entryEnabled(entry: MenuEntry, busy: boolean, hasSave: boolean): boolean {
-  if (entry === "help") return true;
+  if (entry === "help" || entry === "tips") return true;
   if (entry === "load") return !busy && hasSave;
   return !busy;
 }
@@ -116,11 +118,12 @@ export class GameMenu {
     if (e.relatedTarget instanceof Node && !this.root.contains(e.relatedTarget)) this.closeList(false);
   };
 
-  constructor(private actions: GameMenuActions, private isBusy: () => boolean, setup: () => string) {
+  constructor(private actions: GameMenuActions, private isBusy: () => boolean, setup: () => string, private tips: TipSwitch) {
     this.help = new HelpPanel(setup);
     this.savePanel = new SavePanel(actions);
     for (const { entry, label } of ENTRIES) {
-      const item = el("button", { role: "menuitem", onclick: () => this.choose(entry) }, label) as HTMLButtonElement;
+      const role = entry === "tips" ? "menuitemcheckbox" : "menuitem";
+      const item = el("button", { role, onclick: () => this.choose(entry) }, label) as HTMLButtonElement;
       this.items[entry] = item;
       this.list.append(item);
     }
@@ -136,6 +139,9 @@ export class GameMenu {
     const busy = this.isBusy();
     const saved = this.actions.hasSave();
     for (const { entry } of ENTRIES) this.items[entry].disabled = !entryEnabled(entry, busy, saved);
+    const on = this.tips.isOn();
+    this.items.tips.setAttribute("aria-checked", String(on));
+    this.items.tips.textContent = `${on ? "✓ " : ""}Show tips`;
   }
 
   toggle(): void {
@@ -179,7 +185,10 @@ export class GameMenu {
     this.closeList(false);
     if (entry === "save") this.savePanel.openSave();
     else if (entry === "load") this.savePanel.openLoad();
-    else if (entry === "help") this.help.toggle();
+    else if (entry === "tips") {
+      this.tips.setOn(!this.tips.isOn());
+      this.refresh();
+    } else if (entry === "help") this.help.toggle();
     else this.newGame();
   }
 

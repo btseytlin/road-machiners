@@ -25,7 +25,7 @@ import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, overd
 import { createIcon, createSpeedDial } from "./cards";
 import { aimMarks } from "./weapons";
 import { createSwitch } from "./switch";
-import { Tips } from "./tips";
+import { Tips, type TipSwitch } from "./tips";
 import { kph, moneyText } from "./units";
 import { playerVehicle } from "../sim/damage";
 import { affordableRanks, pendingPerkPairs } from "../sim/progress";
@@ -136,7 +136,7 @@ export class Hud {
   // Shows only while a pan has left the truck.
   private recenter = panel("recenter", bottomLeft());
   private cameraSwitch = panel("camera-mode", topRight());
-  private tips = new Tips(window.localStorage);
+  private tips = new Tips(window.localStorage, () => this.toast("Tips are off. Menu, Show tips turns them back on."));
   cameraMode: CameraMode = "auto";
   private toastTimer: number | null = null;
 
@@ -220,6 +220,10 @@ export class Hud {
 
   showRecenter(on: boolean): void {
     this.recenter.style.display = on ? "" : "none";
+  }
+
+  tipSwitch(): TipSwitch {
+    return { isOn: () => this.tips.isOn(), setOn: (on) => this.tips.setOn(on) };
   }
 
   getInspectionRoot(): HTMLElement {

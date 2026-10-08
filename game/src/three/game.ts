@@ -314,7 +314,7 @@ export class Game {
     this.hoverHold.watch(this.hud.getInspectionRoot());
     const saves = saveStore(window.localStorage, window.sessionStorage, () => this.world, CONFIG.saveSlots, () => this.hud.note(this.world, SAVE_FULL_NOTE, "bad"));
     const guarded = { ...saves, save: (slot: SlotId) => this.saveNow(() => saves.save(slot)) };
-    this.menu = new GameMenu(guarded, () => this.anim !== null, () => setupLabel(this.world.setup));
+    this.menu = new GameMenu(guarded, () => this.anim !== null, () => setupLabel(this.world.setup), this.hud.tipSwitch());
     this.death = new DeathScreen(saves);
 
     this.bindInput();
