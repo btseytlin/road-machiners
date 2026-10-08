@@ -124,7 +124,7 @@ export class TruckContext {
     this.host.pushEvents();
   }
 
-  private searchStock(stockId: string, combat: number | undefined): void {
+  searchStock(stockId: string, combat?: number): void {
     const w = this.host.world();
     if (isBusy(playerVehicle(w))) return;
     if (combat !== undefined) this.host.note(combatBlocked(combat));

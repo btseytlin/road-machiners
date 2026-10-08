@@ -1,6 +1,7 @@
 // The 3D game: wires input to the sim, the sim and physics to the Three.js view, and the HTML UI.
 // Sim time only moves while a turn plays. The path preview runs the same physics the turn will run.
 
+import { getSearchAction } from "../ui/hud-readout";
 import * as THREE from "three";
 import { CONFIG } from "../config";
 import { PHYSICS } from "../data/physics";
@@ -338,6 +339,7 @@ export class Game {
       pressTurn: () => this.pressTurn(),
       releaseTurn: () => this.releaseTurn(),
       runKey: (code) => this.runKey(code),
+      searchStock: (id) => this.searchFromLoot(id),
       autoTravel: () => this.travel.isAuto(this.world),
       getTurnPhase: () => this.phase,
     };
@@ -512,6 +514,13 @@ export class Game {
 
   private releaseTurn(): void {
     this.travel.release();
+  }
+
+  private searchFromLoot(stockId: string): void {
+    const action = getSearchAction(this.world, this.world.salvage.find((s) => s.id === stockId)!);
+    if (!action.ready && action.combat === undefined) return;
+    this.inventory.close();
+    this.context.searchStock(stockId, action.combat);
   }
 
   private runKey(code: string): void {

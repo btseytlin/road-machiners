@@ -412,6 +412,7 @@ describe("weapon panel keys and the turn button", () => {
       pressTurn: vi.fn(),
       releaseTurn: vi.fn(),
       runKey: vi.fn(),
+      searchStock: vi.fn(),
       autoTravel: () => auto,
       getTurnPhase: () => null,
     } satisfies UiHost;
@@ -596,6 +597,7 @@ describe("the utility row", () => {
       pressTurn: vi.fn(),
       releaseTurn: vi.fn(),
       runKey: vi.fn(),
+      searchStock: vi.fn(),
       autoTravel: () => false,
       getTurnPhase: vi.fn<() => "Moving" | null>(() => null),
     } satisfies UiHost;
