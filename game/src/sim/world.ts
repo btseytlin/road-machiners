@@ -119,6 +119,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
       beacon: false,
       call: null,
       talked: {},
+      quests: { world: {}, local: {}, session: null, live: null },
       god: false,
       fullLog: false,
       frozen: false,

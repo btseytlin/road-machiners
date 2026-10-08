@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import BUNDLE from '../data/quests.json';
-import { parseBundle } from '../data/quests';
+import { parseBundle } from '../sim/quests';
 import { compileBundle, compileQuest, readQuestSources, type QuestSources } from './quest-compile';
 
 const WORLD = 'VAR heard = false\nEXTERNAL money()\n';

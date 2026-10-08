@@ -10,6 +10,7 @@ import type { Contract, ShopState } from "./market";
 import type { Rng } from "./rng";
 import type { PerkId } from "../data/skills";
 import type { UtilityEffectType } from "../data/parts";
+import type { QuestValue } from "../data/quests";
 
 export type PatchDeal = DecisionOptions["patchDeal"];
 
@@ -288,6 +289,12 @@ export type CallVars = Record<string, CallVar>;
 export type Repeat = { count: number; turn: number };
 
 export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars; line: { text: string; vars: CallVars } };
+
+export type QuestVars = Record<string, QuestValue>;
+export type QuestSession = { quest: string; checkpoint: string; seed: number };
+export type QuestLine = { text: string; tags: string[] };
+export type QuestLive = { ink: string; lines: QuestLine[]; choices: string[] };
+export type QuestState = { world: QuestVars; local: Record<string, QuestVars>; session: QuestSession | null; live: QuestLive | null };
 export type TopicOutcome = "agreed" | "refused" | "done";
 
 export type Player = {
@@ -323,6 +330,7 @@ export type Player = {
   beacon: boolean;
   call: Call | null;
   talked: Record<string, Partial<Record<TopicId, TopicOutcome>>>;
+  quests: QuestState;
   explored: Uint8Array;
   visible: number[];
   contacts: Contact[];

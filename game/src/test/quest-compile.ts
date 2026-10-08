@@ -5,7 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Compiler, CompilerOptions, type Story } from 'inkjs/full';
 import { ErrorType } from 'inkjs/compiler/Parser/ErrorType';
-import type { CompiledQuest, QuestBundle, QuestValueType, QuestVarDecl } from '../data/quests';
+import { CHECKPOINT_TAG, type CompiledQuest, type QuestBundle, type QuestValueType, type QuestVarDecl } from '../data/quests';
 
 export type QuestSources = Record<string, string>;
 export type CompileResult = { quest: CompiledQuest | null; errors: string[]; warnings: string[] };
@@ -15,7 +15,6 @@ type ParsedFlow = { isFunction: boolean; subFlowsByName: Map<string, ParsedFlow>
 type Parsed = { story: Story; vars: string[]; externals: string[]; flows: Map<string, ParsedFlow> };
 
 export const WORLD_FILE = 'world.ink';
-export const CHECKPOINT_TAG = 'checkpoint:';
 
 export function readQuestSources(dir: string): QuestSources {
   const files = readdirSync(dir).filter((file) => file.endsWith('.ink')).sort();

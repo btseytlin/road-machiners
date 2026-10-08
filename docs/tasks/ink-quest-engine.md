@@ -167,3 +167,7 @@ UK3 is resolved here: the sample quests are real files in `game/src/data/quests/
 
 ### Deviations from plan
 - PH1: the compiler lives in `game/src/test/quest-compile.ts`, not a new `game/src/quests/` folder — the quality gate's fragmentation rule rejects a new folder holding one 100-line file, and `src/test/` already holds the other Node-only harnesses that scripts and tests use. The PH4 checker goes there too.
+- PH2: the hooks live in `game/src/sim/quests.ts` with the runner, not in `quest-hooks.ts`, and bundle parsing moved from `data/quests.ts` into `sim/quests.ts`, which exports `QUESTS` — `game/src/sim` sat 15 code lines below the gate's 5 files per 1,000 lines, so a second new file failed the gate. Parsing is validation logic, so `data/quests.ts` now holds only types.
+- PH2: `resumeQuest(world) -> World` became `restoreQuest(world): void` — load rebuilds derived state in place like `refreshVision()`, without `update()` side effects.
+- PH2: IV2 holds for choices and variables. The lines on view after a restore are the lines played since the checkpoint, not the lines before it.
+- PH2: the sample guards "Heard any rumors?" with a variable instead of a once-only choice. A used-up once-only choice returns after a restore, since visit counts are not saved.
