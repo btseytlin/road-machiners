@@ -58,7 +58,7 @@ describe('operationsQuestions', () => {
     'The test suite fails on main, should I skip it?',
     'Should I merge this into the dev branch or open a pull request?',
     'npm run typecheck fails in the work clone, what should I do?',
-    'Should the checkout use `main`?',
+    'Should the work branch use `main`?',
     'My clone is stale, can you refresh it?',
     'Is #242 already in dev?',
     'Can I assume #242 is done?',
@@ -79,6 +79,12 @@ describe('operationsQuestions', () => {
     'Should the dev console be hidden from players?',
     'Should the trader wait until night before opening?',
     'Should raiders branch off the main road to chase you?',
+    'Should the dialogue branch match the one in #242?',
+    'Should the truck be able to drive upstream on the river?',
+    'Should the shop have a checkout screen?',
+    'Should the player be able to enter the factory ruins?',
+    'Should the road merge into the main branch of the highway?',
+    'Should the radio stay on until #5 is found?',
   ])('passes a product question: %s', (question) => {
     expect(operationsQuestions([question])).toEqual([]);
   });

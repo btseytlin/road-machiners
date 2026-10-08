@@ -10,9 +10,9 @@ Intake runs last in each tick, so a card it adds starts on the next tick. It rea
 
 ## Author questions
 
-Triage and Design run in the work clone of the issue. The clone outlives a stage, so each of them first merges the new commits of the issue branch on GitHub and fast-forwards a clone with no commits of its own to the current base. A clone with its own commits, as in a redesign, keeps them, and Testing merges the base. A broken clone is `factory repair-clone`'s job.
+Triage and Design run in the work clone of the issue. The clone outlives a stage, so each of them first fast-forwards a clone with no commits of its own to the current base. Design first merges the new commits of the issue branch on GitHub too, and Triage, which pushes nothing, does not. A clone with its own commits, as in a redesign, keeps them, and Testing merges the base. A broken clone is `factory repair-clone`'s job.
 
-`askAuthor` posts the questions and labels `needs-info` for both stages. It first refuses any question about factory work, like branches, merges, clones, checkouts, builds, tests, `#N` as a prerequisite or the factory itself, by the patterns in `src/questions.ts`. A refused set posts nothing and fails the stage with the questions, so the resume gets them and a second failure goes to Hermes.
+`askAuthor` posts the questions and labels `needs-info` for both stages. It first refuses any question about factory work, like branches, merges, clones, checkouts, builds, tests, `#N` as a prerequisite or the factory itself, by the patterns in `src/questions.ts`. A refused set posts nothing, deletes the stage's `questions.md` or `triage.json`, and fails the stage with the questions, so the resumed agent writes it again and a second failure goes to Hermes.
 
 ## Triage
 
@@ -32,7 +32,7 @@ A `ready` issue may bundle other free Triage cards that touch the same code. Eac
 Design runs Opus, or Sonnet with `design-sonnet`, at `FACTORY_DESIGN_EFFORT`. It uses up:udesign and up:uplan in hands-off mode. It writes the task file `.factory-tasks/issue-N.md` in the work clone on branch `factory/issue-N`. Git ignores the task file, so design posts it to the issue as a comment, and later stages read it from the clone.
 
 - `.factory/questions.md` sends the card back to Triage with the questions, as unclear triage does.
-- `.factory/blocked.md` fails the stage with its text, for a factory problem the agent cannot fix, like a branch or clone that lacks a prerequisite. The author is not asked.
+- `.factory/blocked.md` fails the stage with its text, and the factory deletes it so a resume does not replay it. It is for a factory problem the agent cannot fix, like a branch or clone that lacks a prerequisite. The author is not asked.
 - `.factory/wont-do.md` closes the issue as wont-do.
 - A revision reads the issue comments under "## Committee feedback". Comments under "## Committee question" are context only.
 

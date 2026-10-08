@@ -1,14 +1,15 @@
 import { moveCard } from '../card-events';
-import { BRANCH, GAME_DIR, TASK_FILE, WONT_DO_LABEL, type Ctx } from '../types';
+import { BRANCH, GAME_DIR, OUT_DIR, TASK_FILE, WONT_DO_LABEL, type Ctx } from '../types';
 import { releaseBundle } from './bundle';
-import { agentHome, askAuthor, baseBranchOf, fillPrompt, fitComment, guardAndPush, prepareOutputs, readOutput, refreshClone, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
-import { existsSync, readFileSync } from 'node:fs';
+import { agentHome, askAuthor, catchUpBranch, baseBranchOf, fillPrompt, fitComment, guardAndPush, prepareOutputs, readOutput, refreshClone, requireProductQuestions, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const clone = workDir(ctx, issue);
   const base = await baseBranchOf(ctx, issue);
   await ctx.repo.fetch();
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, clone);
+  await catchUpBranch(ctx, issue, 'design');
   await refreshClone(ctx, issue, base, 'design');
   const home = agentHome(clone, GAME_DIR);
   prepareOutputs(ctx, issue, home);
@@ -18,7 +19,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   throwIfNeedsCommittee(home);
   throwIfBlocked(home);
   const questions = readOutput(home, 'questions.md');
-  if (questions !== null) return askBack(ctx, issue, questions);
+  if (questions !== null) return askBack(ctx, issue, home, questions);
   const reason = readOutput(home, 'wont-do.md');
   if (reason !== null) return refuse(ctx, issue, reason);
   requirePlan(home, TASK_FILE(issue));
@@ -29,12 +30,15 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
 
 function throwIfBlocked(home: string): void {
   const text = readOutput(home, 'blocked.md');
-  if (text !== null) throw new Error(`Design is blocked by factory work, so the author was not asked. Fix it, then delete .factory/blocked.md: ${text.trim()}`);
+  if (text === null) return;
+  rmSync(`${home}/${OUT_DIR}/blocked.md`);
+  throw new Error(`Design is blocked by factory work, so the author was not asked: ${text.trim()}`);
 }
 
-async function askBack(ctx: Ctx, issue: number, text: string): Promise<void> {
+async function askBack(ctx: Ctx, issue: number, home: string, text: string): Promise<void> {
   const questions = text.split('\n').map((line) => line.trim()).filter((line) => line !== '');
   if (questions.length === 0) throw new Error('The design stage wrote an empty questions.md');
+  requireProductQuestions(home, 'questions.md', questions, 'design');
   await askAuthor(ctx, issue, questions, 'design');
   await moveCard(ctx, issue, 'Triage', 'questions');
 }

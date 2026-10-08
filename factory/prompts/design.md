@@ -64,7 +64,7 @@ If one still does, do not plan it.
 Write the reason in plain words to `.factory/wont-do.md`.
 Then stop.
 
-The factory brought this clone up to date with the base on GitHub before you started.
+The factory brought this clone up to date with its branch on GitHub before you started, and with the base when the branch holds no commits of its own.
 Branches, merges, clones, checkouts, cherry-picks, prerequisite issues, builds, tests and the order of work are the factory's job.
 Never ask the author about them.
 When the clone, a branch or a missing prerequisite blocks the design and you cannot fix it here, do not write a task file.

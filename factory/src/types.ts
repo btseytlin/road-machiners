@@ -230,6 +230,8 @@ export interface Container {
   shell(clone: string, script: string, log: string, env?: Record<string, string>, mounts?: Record<string, string>): Promise<void>;
 }
 
+export type FastForward = { outcome: 'current' | 'diverged' } | { outcome: 'moved'; commit: string };
+
 export type MergeStep = { branch: string; into: string; message: string };
 
 export interface HostRepo {
@@ -246,7 +248,7 @@ export interface HostRepo {
   fetchFromWork(dir: string, branch: string): Promise<string>;
   push(commit: string, branch: string): Promise<void>;
   mergeBaseIntoWork(dir: string, base: string): Promise<{ commit: string; conflicts: string[] }>;
-  fastForwardWork(dir: string, base: string): Promise<string | null>;
+  fastForwardWork(dir: string, base: string): Promise<FastForward>;
   mergeBranchIntoWork(dir: string, branch: string, message?: string): Promise<{ commit: string | null; conflicts: string[] }>;
   isMerged(base: string, branch: string): Promise<boolean>;
   headHash(branch: string): Promise<string>;

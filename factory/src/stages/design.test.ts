@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { runStage } from './design';
 import { EMPTY_STATE, readState, writeState } from '../state';
@@ -40,7 +40,7 @@ function fakeCtx(agent: (run: AgentRun) => void): Ctx {
     repo: {
       fetch: record('fetch'), push: record('push'), fetchFromWork: async () => 'w1', untrackFactoryFiles: async () => [],
       mergeBranchIntoWork: async () => { calls.push('catch up branch'); return { commit: null, conflicts: [] }; },
-      fastForwardWork: async (_dir: string, base: string) => { calls.push(`fast-forward ${base}`); return null; },
+      fastForwardWork: async (_dir: string, base: string) => { calls.push(`fast-forward ${base}`); return { outcome: 'current' }; },
       prepareWorkClone: async (_b: string, base: string, dir: string) => { bases.push(`prepare ${base}`); mkdirSync(dir, { recursive: true }); },
       diff: async (base: string) => { bases.push(`diff ${base}`); return diff; },
     },
@@ -148,6 +148,7 @@ describe('design stage', () => {
     const ctx = fakeCtx((run) => writeFileSync(`${run.clone}/${run.dir}/.factory/questions.md`, `Which horn?\n${STALE_BRANCH}\n`));
     await expect(runStage(ctx, 7)).rejects.toThrow(`asked the issue author about factory work, not about the game, so nothing was posted and no needs-info label was added:\n- ${STALE_BRANCH}`);
     expect(calls.filter((call) => /^(comment|addLabel|removeLabel|message|move) /.test(call))).toEqual([]);
+    expect(existsSync(`${home}/work/issue-7/game/.factory/questions.md`)).toBe(false);
   });
 
   it('asks the author a missing factual requirement and sends the card to Triage', async () => {
@@ -163,8 +164,9 @@ describe('design stage', () => {
       writeFileSync(`${run.clone}/${run.dir}/.factory/blocked.md`, 'dev lacks #242, which this plan builds on.\n');
       writeFileSync(`${run.clone}/${run.dir}/.factory/questions.md`, 'Which horn?');
     });
-    await expect(runStage(ctx, 7)).rejects.toThrow('Design is blocked by factory work, so the author was not asked. Fix it, then delete .factory/blocked.md: dev lacks #242, which this plan builds on.');
+    await expect(runStage(ctx, 7)).rejects.toThrow('Design is blocked by factory work, so the author was not asked: dev lacks #242, which this plan builds on.');
     expect(calls.filter((call) => /^(comment|addLabel|message|move|push) /.test(call))).toEqual([]);
+    expect(existsSync(`${home}/work/issue-7/game/.factory/blocked.md`)).toBe(false);
   });
 
   it('throws on an empty questions file', async () => {

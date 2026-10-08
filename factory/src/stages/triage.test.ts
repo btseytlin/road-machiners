@@ -52,7 +52,7 @@ function fakeCtx(verdict: string | null, labels: string[] = [], earlier: string[
       mergeLog: async () => ['Merge issue #5: Night driving', 'Merge main into dev'],
       prepareWorkClone: async (_b: string, _base: string, dir: string) => { mkdirSync(dir, { recursive: true }); },
       mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
-      fastForwardWork: async (_dir: string, base: string) => { calls.push(`fast-forward ${base}`); return 'n1'; },
+      fastForwardWork: async (_dir: string, base: string) => { calls.push(`fast-forward ${base}`); return { outcome: 'moved', commit: 'n1' }; },
     },
   };
   return fake as unknown as Ctx;
@@ -154,6 +154,7 @@ describe('triage stage', () => {
     const question = 'Should this wait until #242 is merged into the dev branch?';
     await expect(runStage(fakeCtx(verdict({ verdict: 'unclear', reason: 'Blocked', questions: ['Which horn?', question] })), 7)).rejects.toThrow(`- ${question}\n`);
     expect(calls.filter((call) => /^(comment|addLabel|message|move) /.test(call))).toEqual([]);
+    expect(existsSync(`${home}/work/issue-7/game/.factory/triage.json`)).toBe(false);
   });
 
   it('notifies the committee once, with stage, issue link and reply place, and no question text', async () => {

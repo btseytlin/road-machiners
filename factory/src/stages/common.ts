@@ -165,7 +165,6 @@ export function fitComment(text: string, fullAt: string): string {
 }
 
 export async function askAuthor(ctx: Ctx, issue: number, questions: string[], stage: 'triage' | 'design'): Promise<void> {
-  requireProductQuestions(questions, stage);
   const [{ author }, earlier] = await Promise.all([ctx.github.issue(issue), ctx.github.comments(issue)]);
   const stillOpen = earlier.some((comment) => comment.body.includes(FACTORY_MARK) && comment.body.startsWith(QUESTIONS_HEADING)) && !isAnswered(earlier);
   const numbered = questions.map((question, index) => `${index + 1}. ${question}`);
@@ -177,12 +176,13 @@ export async function askAuthor(ctx: Ctx, issue: number, questions: string[], st
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, text).catch((error: unknown) => ctx.log(stage, issue, `could not notify the committee of the questions: ${error instanceof Error ? error.message : String(error)}`));
 }
 
-function requireProductQuestions(questions: string[], stage: 'triage' | 'design'): void {
+export function requireProductQuestions(home: string, output: string, questions: string[], stage: 'triage' | 'design'): void {
   const operations = operationsQuestions(questions);
   if (operations.length === 0) return;
+  rmSync(`${home}/${OUT_DIR}/${output}`, { force: true });
   const redo = stage === 'triage'
-    ? 'Rewrite .factory/triage.json without them. Pick ready on the most sensible reading and name it in the reason.'
-    : 'Delete .factory/questions.md, or keep in it only questions about what the game should do. Handle the factory work in this stage, take the most sensible reading as an assumption in the task file, or write a factory blocker you cannot fix to .factory/blocked.md.';
+    ? 'The factory deleted .factory/triage.json. Write it again without them. Pick ready on the most sensible reading and name it in the reason.'
+    : 'The factory deleted .factory/questions.md. Write it again only with questions about what the game should do, or write no questions. Handle the factory work in this stage, take the most sensible reading as an assumption in the task file, or write a factory blocker you cannot fix to .factory/blocked.md.';
   throw new Error([
     `The ${stage} agent asked the issue author about factory work, not about the game, so nothing was posted and no ${NEEDS_INFO_LABEL} label was added:`,
     ...operations.map((question) => `- ${question}`),
@@ -232,9 +232,9 @@ export async function catchUpBranch(ctx: Ctx, issue: number, stage: CardStage): 
 }
 
 export async function refreshClone(ctx: Ctx, issue: number, base: string, stage: CardStage): Promise<void> {
-  await catchUpBranch(ctx, issue, stage);
-  const moved = await ctx.repo.fastForwardWork(workDir(ctx, issue), base);
-  ctx.log(stage, issue, moved === null ? `the work clone is at ${base} or holds its own commits, so it stays` : `fast-forwarded the work clone to ${base} at ${moved.slice(0, 7)}`);
+  const result = await ctx.repo.fastForwardWork(workDir(ctx, issue), base);
+  if (result.outcome === 'moved') ctx.log(stage, issue, `fast-forwarded the work clone to ${base} at ${result.commit.slice(0, 7)}`);
+  else ctx.log(stage, issue, result.outcome === 'current' ? `the work clone already holds ${base}` : `the work clone holds its own commits, so it keeps its older ${base} until Testing merges it`);
 }
 
 export async function mergeBase(ctx: Ctx, issue: number, base: string, home: string, stage: CardStage): Promise<string> {

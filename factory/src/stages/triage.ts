@@ -3,7 +3,7 @@ import { rmSync, writeFileSync } from 'node:fs';
 import { readState } from '../state';
 import { BRANCH, DESIGN_SONNET_LABEL, GAME_DIR, HOTFIX_LABEL, IMPLEMENTATION_OPUS_LABEL, OUT_DIR, RELEASE_TASK_LABEL, ROUTING_MARK, WONT_DO_LABEL, type Ctx, type FactoryState, type ReleaseState } from '../types';
 import { addToBundle, bundleCandidates } from './bundle';
-import { BASE_BRANCH, agentHome, askAuthor, fillPrompt, prepareOutputs, readOutput, refreshClone, runAgent, workDir, writeIssueInput } from './common';
+import { BASE_BRANCH, agentHome, askAuthor, fillPrompt, prepareOutputs, readOutput, refreshClone, requireProductQuestions, runAgent, workDir, writeIssueInput } from './common';
 import { featureLine, recordReleaseTask, releaseFeatures } from './release-common';
 
 type Complexity = 'trivial' | 'intermediate' | 'hard';
@@ -26,7 +26,10 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await writeRelease(ctx, home, release);
   await runAgent(ctx, issue, 'triage', 'triage', fillPrompt('triage', { issue: String(issue) }), { effort: ctx.cfg.triageEffort });
   const result = parseVerdict(readOutput(home, 'triage.json'), candidates, release);
-  if (result.verdict === 'unclear') return askAuthor(ctx, issue, result.questions, 'triage');
+  if (result.verdict === 'unclear') {
+    requireProductQuestions(home, 'triage.json', result.questions, 'triage');
+    return askAuthor(ctx, issue, result.questions, 'triage');
+  }
   if (result.verdict === 'ready') return ready(ctx, issue, result, release);
   await ctx.github.comment(issue, result.reason);
   await ctx.github.addLabel(issue, WONT_DO_LABEL);

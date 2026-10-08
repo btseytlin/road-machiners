@@ -282,11 +282,11 @@ describe('work clones', () => {
     const ownHead = (await git(own, 'rev-parse', 'HEAD')).trim();
     await commit('dev', 'f.txt', 'prerequisite\n');
     await repo.fetch();
-    expect(await repo.fastForwardWork(stale, 'dev')).toBe(await head('dev'));
+    expect(await repo.fastForwardWork(stale, 'dev')).toEqual({ outcome: 'moved', commit: await head('dev') });
     expect((await git(stale, 'rev-parse', 'HEAD')).trim()).toBe(await head('dev'));
     expect(readFileSync(join(stale, 'f.txt'), 'utf8')).toBe('prerequisite\n');
-    expect(await repo.fastForwardWork(stale, 'dev')).toBeNull();
-    expect(await repo.fastForwardWork(own, 'dev')).toBeNull();
+    expect(await repo.fastForwardWork(stale, 'dev')).toEqual({ outcome: 'current' });
+    expect(await repo.fastForwardWork(own, 'dev')).toEqual({ outcome: 'diverged' });
     expect((await git(own, 'rev-parse', 'HEAD')).trim()).toBe(ownHead);
   });
 

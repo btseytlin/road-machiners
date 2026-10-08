@@ -245,11 +245,11 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     },
     async fastForwardWork(dir, base) {
       await gitIn(dir, ['fetch', 'origin']);
-      const [head, tip] = await Promise.all([gitIn(dir, ['rev-parse', 'HEAD']), gitIn(dir, ['rev-parse', `origin/${base}`])]);
-      if (head.trim() === tip.trim()) return null;
-      if ((await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', 'HEAD', tip.trim()], { cwd: dir })).code !== 0) return null;
-      await gitIn(dir, ['merge', '--ff-only', '--quiet', tip.trim()]);
-      return tip.trim();
+      const tip = (await gitIn(dir, ['rev-parse', `origin/${base}`])).trim();
+      if ((await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', tip, 'HEAD'], { cwd: dir })).code === 0) return { outcome: 'current' };
+      if ((await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', 'HEAD', tip], { cwd: dir })).code !== 0) return { outcome: 'diverged' };
+      await gitIn(dir, ['merge', '--ff-only', '--quiet', tip]);
+      return { outcome: 'moved', commit: tip };
     },
     async mergeBranchIntoWork(dir, branch, message) {
       await gitIn(dir, ['fetch', 'origin']);
