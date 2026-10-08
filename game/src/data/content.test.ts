@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { CHASSIS, PLAYER_CHASSIS } from "./chassis";
 import { GOODS, GOOD_IDS } from "./goods";
 import { EFFORT, SHOPS, type ItemKind } from "./market";
-import { goodBasePrice } from "../sim/market";
+import { goodBasePrice, partPristineBuyPrice } from "../sim/market";
 import { PARTS, type PartDef, type PartKind, type WeaponDef } from "./parts";
 import { REGION } from "./region";
 import { SALVAGE, type LootTable } from "./salvage";
@@ -434,4 +434,39 @@ describe("NPC wallets and trade stakes", () => {
       for (const v of w.vehicles.filter((x) => x.brain)) expect(v.resources!.money, v.brain!.templateId).toBeGreaterThanOrEqual(getUpkeepReserve(v));
     }
   }, 30_000);
+});
+
+describe("cargo shop prices", () => {
+  const cargo = Object.values(PARTS).filter((p): p is Extract<PartDef, { kind: "cargo" }> => p.kind === "cargo");
+  const shopPrice = (p: PartDef): number => partPristineBuyPrice(p.id);
+  const rowsPerM = (p: { extraRows: number; id: string }): number => p.extraRows / shopPrice(PARTS[p.id]);
+  const money = START_KITS.standard.money;
+
+  it("lets the starting money buy panniers several times over", () => {
+    expect(shopPrice(PARTS.panniers) * 5).toBeLessThan(money);
+  });
+
+  it("keeps the dearest frame within a few days' worth of a tier 3 weapon price, not above the dearest tier 3 part", () => {
+    expect(shopPrice(PARTS.heavyFrame)).toBeLessThan(shopPrice(PARTS.emitter));
+  });
+
+  it("never asks more for a tier 1 carrier than for a tier 2 frame, and more for each tier", () => {
+    const top = (tier: number) => Math.max(...cargo.filter((p) => p.tier === tier).map(shopPrice));
+    const low = (tier: number) => Math.min(...cargo.filter((p) => p.tier === tier).map(shopPrice));
+    expect(top(1)).toBeLessThan(low(2));
+    expect(top(2)).toBeLessThan(low(3));
+  });
+
+  it("gives each tier at least as many rows per M as the tier below", () => {
+    const best = (tier: number) => Math.max(...cargo.filter((p) => p.tier === tier).map(rowsPerM));
+    expect(best(2)).toBeGreaterThanOrEqual(best(1));
+    expect(best(3)).toBeGreaterThanOrEqual(best(1));
+  });
+
+  it("prices a cargo carrier no higher than a tier peer weapon, engine or armor", () => {
+    for (const p of cargo) {
+      const peers = Object.values(PARTS).filter((q) => q.tier === p.tier && ["weapon", "engine", "armor"].includes(q.kind));
+      expect(shopPrice(p), p.id).toBeLessThanOrEqual(Math.max(...peers.map(shopPrice)));
+    }
+  });
 });
