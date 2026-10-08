@@ -19,7 +19,7 @@ import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods, hasCargoRoom } from './inventory';
 import { finishGoal, getActivityDestination, patchGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
-import { backOffLoot } from './loot-warning';
+import { leaveLoot } from './loot-warning';
 import { chooseOn, trackOf } from './tracks';
 import { watchStalls } from './npc-watchdog';
 import { CANNOT_HOLD, canTakeAny } from './salvage';
@@ -1556,7 +1556,7 @@ describe('one looter per target', () => {
       const { w, first, wreck } = contestedWreck();
       w.turn = 7;
       w.events = [];
-      backOffLoot(w, first);
+      leaveLoot(w, first, wreck.id, 'warned off the loot');
       expect(first.job).toBeNull();
       expect(first.brain!.goals.some((g) => g.targetId === wreck.id)).toBe(false);
       expect(first.brain!.noticed[`salvageSeen:${wreck.id}`]).toBe(7);
@@ -1570,15 +1570,9 @@ describe('one looter per target', () => {
       resolveNpcActivities(w);
       const [first] = looters;
       expect(stripping(w, buggy.id)).toEqual([first]);
-      backOffLoot(w, first);
+      leaveLoot(w, first, buggy.id, 'warned off the loot');
       expect(stripping(w, buggy.id)).toEqual([]);
       expect(first.brain!.goals.some((g) => g.targetId === buggy.id)).toBe(false);
-    });
-
-    it('throws for a driver with no loot claim', () => {
-      const { w, second } = contestedWreck();
-      second.brain!.goals = [{ kind: 'travel', targetId: 'bowl', destination: { x: 200, y: 200 }, phase: 'travel', reason: 'test goal' }];
-      expect(() => backOffLoot(w, second)).toThrow('no loot claim');
     });
   });
 });

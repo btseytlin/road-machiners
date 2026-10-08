@@ -146,12 +146,6 @@ function isLootGoalOn(goal: NpcActivity | null, targetId: string): boolean {
   return (goal?.kind === 'loot' || goal?.kind === 'scavenge') && goal.targetId === targetId;
 }
 
-export function backOffLoot(world: World, vehicle: Vehicle): void {
-  const target = lootClaimedBy(world, vehicle);
-  if (target === null) throw new Error(`${vehicle.id} holds no loot claim to back off from`);
-  leaveLoot(world, vehicle, target, 'warned off the loot');
-}
-
 function logArgument(world: World, warner: Vehicle, looter: Vehicle, targetId: string, end: ArgumentEnd): void {
   if (warner.brain && looter.brain) world.events.push({ t: 'lootArgument', warner: warner.id, looter: looter.id, place: placeOf(world, targetId), end });
 }
