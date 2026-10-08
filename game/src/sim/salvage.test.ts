@@ -825,8 +825,8 @@ describe('territory loot spots', () => {
     for (const stock of stocks) emptyStock(stock);
     runDays(w, 365);
     for (const [k, stock] of stocks.entries()) {
-      for (const [good, [, hi]] of Object.entries(SALVAGE.cityStores.goods)) expect(stock.goods[good], `${compounds[k].id} ${good}`).toBe(hi);
-      expect(stock.supplies, compounds[k].id).toBe(SALVAGE.cityStores.supplies[1]);
+      for (const [good, [, hi]] of Object.entries(SALVAGE.cityStores.goods)) expect((stock.goods[good] ?? 0) + (stock.hidden.goods[good] ?? 0), `${compounds[k].id} ${good}`).toBe(hi);
+      expect((stock.supplies ?? 0) + stock.hidden.supplies, compounds[k].id).toBe(SALVAGE.cityStores.supplies[1]);
     }
   }, budget(30_000));
 
