@@ -168,6 +168,17 @@ describe('Language', () => {
     loadLanguage(new FakeStorage(), '', false, null);
   });
 
+  it('switches to pseudo live without storing it', () => {
+    const storage = new FakeStorage();
+    const root = { lang: '' };
+    const language = loadLanguage(storage, '', true, root);
+    language.set('pseudo');
+    expect(language.current()).toBe('pseudo');
+    expect(root.lang).toBe('en');
+    expect(storage.items.size).toBe(0);
+    loadLanguage(new FakeStorage(), '', false, null);
+  });
+
   it('keeps its key out of the save keys', () => {
     expect(LANGUAGE_KEY.startsWith('roam.save')).toBe(false);
     expect(new Language('en', null, null).current()).toBe('en');

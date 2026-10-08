@@ -4,8 +4,11 @@
 // reports it. Needs the dev server. See docs/architecture/text.md and docs/tools.md.
 import { mkdir, writeFile } from 'node:fs/promises';
 import { chromium } from 'playwright';
+import { gpuArgs, isSoftware, rendererOf } from './gpu.mjs';
 
-const url = process.argv[2] ?? 'http://localhost:5173';
+const url = process.argv.slice(2).find((a) => !a.startsWith('--')) ?? 'http://localhost:5173';
+const cpu = process.argv.includes('--cpu');
+const BOOT_LIMIT_MS = process.env.TEST_TIMEOUTS === 'off' ? 0 : cpu ? 240000 : 30000;
 const SEED = 4242;
 // LAYOUT_LOCALES=ru and LAYOUT_STATES=shop,trade narrow a run while fixing one screen.
 const LOCALES = process.env.LAYOUT_LOCALES?.split(',') ?? ['en', 'ru', 'pseudo'];
@@ -122,17 +125,17 @@ async function probe(page, locale) {
   if (!found) throw new Error(`The layout checker did not report the planted overflowing button (${locale})`);
 }
 
-async function boot(locale) {
-  const browser = await chromium.launch();
+async function boot() {
+  const browser = await chromium.launch({ args: cpu ? [] : gpuArgs() });
   const context = await browser.newContext({ viewport: { width: VIEWPORTS[0][0], height: VIEWPORTS[0][1] } });
-  if (locale !== 'pseudo') await context.addInitScript((lang) => localStorage.setItem('roam.lang', lang), locale);
   const page = await context.newPage();
-  page.setDefaultTimeout(240000);
+  page.setDefaultTimeout(BOOT_LIMIT_MS);
+  const renderer = await rendererOf(page);
+  if (!cpu && isSoftware(renderer)) throw new Error(`The layout check got the software renderer ${renderer}. Run with --cpu on a machine without a GPU.`);
   const errors = [];
   page.on('pageerror', (e) => errors.push(e.message));
-  await page.goto(`${url}/?seed=${SEED}${locale === 'pseudo' ? '&lang=pseudo' : ''}`);
-  await page.waitForFunction(() => window.__ROAM__?.state, null, { timeout: 240000 });
-  // The check measures the HTML overlay. The 3D view stays hidden, so software drawing does not slow every capture.
+  await page.goto(`${url}/?seed=${SEED}`);
+  await page.waitForFunction(() => window.__ROAM__?.state, null, { timeout: BOOT_LIMIT_MS });
   await page.addStyleTag({ content: '#game { display: none !important }' });
   return { browser, page, errors };
 }
@@ -174,24 +177,24 @@ async function capture(page, locale, [width, height], [name, state]) {
   await frames(page);
 }
 
-// A browser per language: leaving a page that has played can take minutes, and closing the browser does not wait.
-async function checkLocale(locale) {
-  const { browser, page, errors } = await boot(locale);
-  try {
-    console.log(`${locale}: booted at ${seconds()} s`);
-    await probe(page, locale);
-    for (const viewport of VIEWPORTS) {
-      await page.setViewportSize({ width: viewport[0], height: viewport[1] });
-      for (const entry of PICKED) await capture(page, locale, viewport, entry);
-    }
-    for (const e of errors) report.push({ state: '-', locale, viewport: '-', kind: 'page-error', path: '', text: e, sizes: '' });
-  } finally {
-    await browser.close();
+async function checkLocale(page, locale) {
+  await page.evaluate((l) => window.__ROAM__.language.set(l), locale);
+  await probe(page, locale);
+  for (const viewport of VIEWPORTS) {
+    await page.setViewportSize({ width: viewport[0], height: viewport[1] });
+    for (const entry of PICKED) await capture(page, locale, viewport, entry);
   }
 }
 
 await mkdir(OUT, { recursive: true });
-for (const locale of LOCALES) await checkLocale(locale);
+const { browser, page, errors } = await boot();
+console.log(`booted at ${seconds()} s`);
+try {
+  for (const locale of LOCALES) await checkLocale(page, locale);
+} finally {
+  await browser.close();
+}
+for (const e of errors) report.push({ state: '-', locale: '-', viewport: '-', kind: 'page-error', path: '', text: e, sizes: '' });
 await writeFile(`${OUT}/faults.json`, JSON.stringify(report, null, 1));
 for (const f of report) console.log(`${f.state} ${f.locale} ${f.viewport} ${f.kind} ${f.path}: ${JSON.stringify(f.text)} ${f.sizes}`);
 console.log(`${captures} captures, ${report.length} faults, ${seconds()} s. Screens in ${OUT}/.`);

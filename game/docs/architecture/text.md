@@ -68,7 +68,7 @@ All of them run in `npm test` and `npm run typecheck`. Together the text tests t
 
 ### The layout check
 
-`npm run layout` runs `scripts/layout-check.mjs` against the dev server. It boots a new game on seed 4242 through `?seed=`, and in English, Russian and pseudo at 1280×720 and 700×800 it opens eleven screens: the menu, the log with forty long lines, the inventory with an item card, the shop, the market, the trucks tab, a radio call on the hub and on a deal, the help guide, the character sheet and the save panel. `src/ui/dom.ts` measures each one and reports:
+`npm run layout` runs `scripts/layout-check.mjs` against the dev server. It boots one new game on seed 4242 through `?seed=` on the GPU, switches the language live, and in English, Russian and pseudo at 1280×720 and 700×800 it opens eleven screens: the menu, the log with forty long lines, the inventory with an item card, the shop, the market, the trucks tab, a radio call on the hub and on a deal, the help guide, the character sheet and the save panel. `src/ui/dom.ts` measures each one and reports:
 
 - `page-overflow`: the page scrolls sideways.
 - `clipped-text`: text overflows a box that clips it. Ellipsis passes only with the full text in a title.
@@ -78,7 +78,7 @@ All of them run in `npm test` and `npm run typecheck`. Together the text tests t
 - `missing-glyphs`: the Cyrillic face is not loaded.
 - `leak`: Latin words in Russian, apart from bound names, key caps and brands.
 
-Each fault prints the screen, language, window size, a CSS path, the text, the sizes and the kind, and `tmp/layout/faults.json` keeps them. Every screen is captured to `tmp/layout/<screen>-<language>-<w>x<h>.png`. Before the screens, the check plants a 40 px button with a long label and fails unless the checker reports it. A text check skips text a box scrolls, decoration hidden from screen readers and screen-reader-only labels. While a modal is open, only its controls count. The run takes about 8 minutes on a slow machine with software drawing.
+Each fault prints the screen, language, window size, a CSS path, the text, the sizes and the kind, and `tmp/layout/faults.json` keeps them. Every screen is captured to `tmp/layout/<screen>-<language>-<w>x<h>.png`. Before the screens, the check plants a 40 px button with a long label and fails unless the checker reports it. A text check skips text a box scrolls, decoration hidden from screen readers and screen-reader-only labels. While a modal is open, only its controls count. The run takes about 30 seconds.
 
 ## Excluded on purpose
 

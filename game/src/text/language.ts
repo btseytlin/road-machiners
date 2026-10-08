@@ -25,12 +25,21 @@ export class Language {
   }
 
   // Switches the language, stores the choice and tells every subscriber. Picking the active language does nothing.
-  set(locale: Locale): void {
+  set(locale: DevLocale): void {
     if (locale === this.#current) return;
     this.#current = locale;
-    this.storage?.setItem(LANGUAGE_KEY, locale);
-    if (this.root) this.root.lang = locale;
+    if (locale === 'pseudo') this.#mark('en');
+    else this.#store(locale);
     for (const fn of this.#subscribers) fn();
+  }
+
+  #store(locale: Locale): void {
+    this.storage?.setItem(LANGUAGE_KEY, locale);
+    this.#mark(locale);
+  }
+
+  #mark(lang: string): void {
+    if (this.root) this.root.lang = lang;
   }
 
   subscribe(fn: () => void): () => void {
