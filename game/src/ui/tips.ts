@@ -182,7 +182,7 @@ const TIPS: readonly Tip[] = [
   },
   {
     id: "aim",
-    text: "Click an enemy truck, then click one of its parts to aim your guns at it.",
+    text: "Click a truck to inspect it. Pick a weapon first to aim it at the body, or click a part in the card.",
     when: (w) => vehicleStats(w, playerVehicle(w)).weapons.length > 0 && hostileInSight(w),
     done: (w) => Object.values(playerVehicle(w).weaponOrders).some((o) => o.aim !== "body"),
   },

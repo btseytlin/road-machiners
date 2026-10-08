@@ -5,6 +5,9 @@ import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { groundPoint, toMap, type VehicleFrame } from '../../phys/frames';
 import type { Terrain } from '../../sim/terrain';
+import type { Vehicle, World } from '../../sim/types';
+import { playerVehicle } from '../../sim/damage';
+import { vehicleStats } from '../../sim/stats';
 
 const RING = { gap: 0.45, width: 0.06, alpha: 0.9, lift: 0.02 };
 
@@ -31,5 +34,11 @@ export class PickRing {
     }
     const p = groundPoint(terrain, toMap(frame.pos));
     this.mesh.position.set(p.x, p.y + RING.lift * S, p.z);
+  }
+
+  // Rings the visible truck under the pointer, but never the player's own.
+  follow(world: World, hovered: string | null, frames: Record<string, VehicleFrame>, hide: boolean): void {
+    const v: Vehicle | undefined = hovered && hovered !== playerVehicle(world).id ? world.vehicles.find((x) => x.id === hovered) : undefined;
+    this.place(world.terrain, hide || !v ? undefined : frames[v.id], v ? vehicleStats(world, v).radius : 0);
   }
 }

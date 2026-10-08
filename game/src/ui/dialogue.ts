@@ -1,6 +1,6 @@
 // The radio call panel and dialogue text. The panel shows who is on the line, what they said, and the
 // numbered replies. While it is open, keys 1 to 9 pick a reply and Escape hangs up. Otherwise T calls the
-// hovered truck and H honks.
+// inspected truck and H honks.
 
 import { DEAL_LINES, TIP_LINES } from '../data/dialogue';
 import { GOODS } from '../data/goods';
@@ -113,7 +113,7 @@ export function canCall(w: World, id: string): boolean {
 export type DialogueHost = {
   world(): World;
   talk(next: World): void; // apply a dialogue command and log its lines
-  hovered(): string | null; // the vehicle under the cursor
+  inspected(): string | null; // the pinned vehicle, else the one under the cursor
   busy(): boolean; // a turn plays
   commit(next: World): void; // take a honked world without pausing travel
   log(next: World): void; // log the events of a command
@@ -196,7 +196,7 @@ export class DialoguePanel {
   }
 
   private onFreeKey(code: string): boolean {
-    if (code === 'KeyT') return this.callHovered();
+    if (code === 'KeyT') return this.callInspected();
     return code === 'KeyH' && this.honk();
   }
 
@@ -230,9 +230,9 @@ export class DialoguePanel {
     this.host.talk(chooseOption(this.host.world(), index));
   }
 
-  // Calls the hovered truck when it can take a call. Returns whether a call was made.
-  private callHovered(): boolean {
-    const id = this.host.hovered();
+  // Calls the inspected truck when it can take a call. Returns whether a call was made.
+  private callInspected(): boolean {
+    const id = this.host.inspected();
     if (!id || !canCall(this.host.world(), id)) return false;
     this.host.talk(callVehicle(this.host.world(), id));
     return true;
