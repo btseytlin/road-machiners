@@ -149,19 +149,30 @@ async function rescue(browser, viewport) {
   page.on('dialog', (d) => d.accept());
   await page.goto(url);
   await cleared(page);
-  await page.evaluate(() => {
-    const key = Object.keys(localStorage).find((k) => /^roam\.save(\.[^:]*)?$/.test(k));
-    localStorage.setItem(key, JSON.stringify({ format: { major: 9999, minor: 0 }, savedAt: Date.now(), world: {} }));
+  await page.evaluate(async () => {
+    const [{ name }] = (await indexedDB.databases()).filter((d) => d.name?.startsWith('roam'));
+    const db = await new Promise((resolve, reject) => {
+      const open = indexedDB.open(name);
+      open.onsuccess = () => resolve(open.result);
+      open.onerror = () => reject(open.error);
+    });
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction('saves', 'readwrite');
+      tx.objectStore('saves').put({ format: { major: 9999, minor: 0 }, savedAt: Date.now(), world: {} }, 'auto');
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+    db.close();
   });
   await page.reload();
-  await page.waitForSelector('#ui .panel', { state: 'visible', timeout: BOOT_LIMIT_MS });
+  await page.waitForSelector('#ui .save-screen', { state: 'visible', timeout: BOOT_LIMIT_MS });
   expect(await page.evaluate(() => document.getElementById('boot').hidden), `${viewport.name}: #boot is hidden while the rescue panel waits`);
   await shot(page, `.playtest/boot-${viewport.name}-rescue.png`);
   await page.getByRole('button', { name: 'New game' }).click();
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
   await cleared(page);
   const log = await bootLog(page);
-  const hiddenAt = log.findIndex((s) => s.hidden);
-  expect(hiddenAt >= 0 && log.slice(hiddenAt).some((s) => !s.hidden && s.stage !== ''), `${viewport.name}: #boot returns after the choice`);
+  expect(stages(log).includes('Starting a new game'), `${viewport.name}: #boot returns after the choice and reads "Starting a new game"`);
   expect(errors.length === 0, `${viewport.name}: rescue has no page errors ${errors.join('; ')}`);
   await page.context().close();
 }
