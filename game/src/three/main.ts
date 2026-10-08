@@ -48,17 +48,20 @@ async function fetchMap(): Promise<BakedMap> {
 }
 
 // The world the boot request names, else the newest save, else a new one. A save that cannot load goes to the player:
-// migrate it or start over.
-async function bootWorld(): Promise<World> {
+// migrate it or start over. `fresh` is true for a new game, never for a loaded or rescued save.
+type Booted = { world: World; fresh: boolean };
+
+async function bootWorld(): Promise<Booted> {
   const request = takeBootRequest(window.sessionStorage, SAVE_KEY);
   if (typeof request === 'object' && request !== null) return freshRun(request.new);
   const slot = request ?? newestSlot(window.localStorage, SAVE_KEY, CONFIG.saveSlots);
   return slot === null ? newGameSaved(defaultSetup('roaming')) : bootSlot(slot);
 }
 
-async function bootSlot(slot: SlotId): Promise<World> {
+async function bootSlot(slot: SlotId): Promise<Booted> {
   try {
-    return loadWorld(window.localStorage, slot, map) ?? newGameSaved(defaultSetup('roaming'));
+    const loaded = loadWorld(window.localStorage, slot, map);
+    return loaded ? { world: loaded, fresh: false } : newGameSaved(defaultSetup('roaming'));
   } catch (err) {
     if (!(err instanceof SaveError)) throw err;
     return rescuedOrNew(err, slot);
@@ -67,27 +70,27 @@ async function bootSlot(slot: SlotId): Promise<World> {
 
 // A new run clears the old one's autosaves and tips. Its first save comes at once, so a reload before the next
 // autosave does not load an older run's save.
-function freshRun(setup: WorldSetup): World {
+function freshRun(setup: WorldSetup): Booted {
   clearGame(window.localStorage);
   return newGameSaved(setup);
 }
 
-function newGameSaved(setup: WorldSetup): World {
+function newGameSaved(setup: WorldSetup): Booted {
   const world = newGame(setup);
   // Full storage does not stop the new game. The first autosave that fails tells the player.
   tryWriteSave(window.localStorage, 'auto', world, Date.now());
-  return world;
+  return { world, fresh: true };
 }
 
 // Migrate carries the save over. New game opens the New game screen, whose Start reloads into the new game.
-async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<World> {
+async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<Booted> {
   const stored = storedSave(window.localStorage, slot);
   const canMigrate = typeof stored === 'object' && stored !== null && !Array.isArray(stored);
   await chooseSaveFate(error.message, canMigrate, browserNewGame((request) => requestBoot(window.sessionStorage, SAVE_KEY, request)));
   const rescued = rescueSave(window.localStorage, slot, map, startKit(CONFIG.startKit), freshSeed, Date.now());
   if (!rescued) throw new Error('The save became unreadable while migrating');
   await showCarryReport(rescued.report);
-  return rescued.world;
+  return { world: rescued.world, fresh: false };
 }
 
 function newGame(setup: WorldSetup): World {
@@ -102,7 +105,7 @@ mixer.unlockOn(window);
 const loading = Promise.all([initPhysics(), loadModels(), loadBank(mixer.ctx, SOUNDS)]);
 const map = await fetchMap();
 // The world and its ground build while physics, models and sounds load, since those wait mostly on the network and decoders.
-const world = await bootWorld();
+const { world, fresh } = await bootWorld();
 groundTexture(world);
 const [, , bank] = await loading;
 // UI code may use Math.random(), and the radio changes no rule.
@@ -112,6 +115,9 @@ radio.hear(world);
 const overlay = element('overlay');
 const game = new Game(world, element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute(), radio);
 const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game.follow.keyPan.setSpeed(factor) };
+// A new game opens with the kit's story line, once. A reload loads the save and never repeats it.
+const opening = startKit(CONFIG.startKit).opening;
+if (fresh && opening) game.hud.note(world, opening.log, "");
 const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
 keepRunningOnErrors((text) => debugConsole.error(text));
 onEveryError(() => game.holdSaves());

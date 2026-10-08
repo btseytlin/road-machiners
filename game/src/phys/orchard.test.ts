@@ -8,13 +8,12 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
 import { REGION, type TerritoryDef } from '../data/region';
 import { RULES } from '../data/rules';
-import { START_KITS } from '../data/start';
 import { onOrchardRoad } from '../data/territory';
 import { hangUp } from '../sim/dialogue';
 import { topGoal } from '../sim/npc-activities';
 import { salvageInRange } from '../sim/salvage';
 import { spotGoal, territoryEntries, territorySpots } from '../sim/territory';
-import { forceOption, addVehicle, npcBrain } from '../sim/testkit';
+import { forceOption, addVehicle, npcBrain, PLAIN_KIT } from '../sim/testkit';
 import { isFree } from '../sim/spawn';
 import { vehicleStats } from '../sim/stats';
 import type { MoveOrder, SalvageStock, Vehicle, World } from '../sim/types';
@@ -44,7 +43,7 @@ const SHELF_LEG_TURNS = 15;
 
 // The real map with no NPCs and no spawns, so only the drive under test plays.
 function orchardWorld(): World {
-  const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
+  const w = newWorld(1337, PLAIN_KIT, TEST_MAP, defaultSetup('roaming'));
   w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
   return w;

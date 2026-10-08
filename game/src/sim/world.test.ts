@@ -22,7 +22,7 @@ import { defaultSetup } from './settings';
 describe('townStart', () => {
   it('parks every chassis on a town pad with no vehicle on top of it', () => {
     for (const chassis of Object.keys(CHASSIS)) {
-      const kit = { ...START_KITS.standard, chassis, parts: [], cargo: {}, storage: [] };
+      const kit = { ...START_KITS.standard, chassis, parts: [], cargo: {}, storage: [], opening: null };
       const world = newWorld(7, kit, TEST_MAP, defaultSetup('roaming'), true, townStart());
       const truck = playerVehicle(world);
       expect(townAt(world), chassis).not.toBeNull();

@@ -1257,8 +1257,18 @@ body {
   scrollbar-width: thin;
 }
 #ui:has(.modal:not([style*="display: none"]))
-  > .panel:not(.modal):not(.toast):not(.instruments):not(.log) {
+  > .panel:not(.modal):not(.toast):not(.instruments):not(.log):not(.opening-tip) {
   visibility: hidden;
+}
+/* An opening tip stays readable while a modal is open, since it names what to do in the inventory. It takes the hidden
+   weapons panel's place, between the instruments and the log. */
+#ui:has(.modal:not([style*="display: none"])) > .opening-tip {
+  top: auto;
+  left: 457px;
+  bottom: 14px;
+  transform: none;
+  max-width: calc(100vw - 457px - 282px - 32px);
+  z-index: 21;
 }
 #ui:has(.modal:not([style*="display: none"])) > .top-left,
 #ui:has(.modal:not([style*="display: none"])) > .bottom-left > .weapons,

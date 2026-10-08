@@ -181,7 +181,7 @@ export class Game {
   // A rescue button pressed while a turn plays runs once the playback ends.
   private pending: ((w: World) => World | null) | null = null;
 
-  private readonly hud: Hud;
+  readonly hud: Hud;
   private readonly hitCard: HitCard;
   private readonly weapons: WeaponPanel;
   private readonly town: TownScreen;

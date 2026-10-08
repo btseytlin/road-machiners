@@ -30,6 +30,7 @@ import { isLootSpot, spotLookOf, spotTable, territoryOfStock } from './territory
 import { inTowReach } from './tow';
 import { playerCommand } from './world';
 import { dist, type Vec } from './vec';
+import { OPENING_WRECK_ID } from './opening';
 import { maxHp } from './wear';
 
 // Landmark and convoy sites, the loot spots of territories and the wrecks placed on roads get stock at world
@@ -64,11 +65,11 @@ export function isRoadWreck(o: { id: string }): boolean {
 export type SalvagePlace = 'pile' | 'site' | 'wreck' | 'spot';
 
 // What kind of place holds the stock: a dropped pile, a site's own stock, a wreck (a road wreck, a destroyed truck's
-// wreck or a loot spot with a wreck look), or any other loot spot of a territory.
+// wreck, the opening wreck or a loot spot with a wreck look), or any other loot spot of a territory.
 export function salvagePlace(stock: SalvageStock): SalvagePlace {
   if (stock.pile) return 'pile';
   if (isSiteStock(stock)) return 'site';
-  return isRoadWreck(stock) || isTruckWreck(stock) ? 'wreck' : spotPlace(stock);
+  return isRoadWreck(stock) || isTruckWreck(stock) || stock.id === OPENING_WRECK_ID ? 'wreck' : spotPlace(stock);
 }
 
 function spotPlace(stock: SalvageStock): 'wreck' | 'spot' {

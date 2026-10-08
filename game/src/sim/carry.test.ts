@@ -55,7 +55,7 @@ describe('carriedWorld', () => {
     expect(truck.name).toBe('Rusty');
     const mg = truck.items.find((it) => it.kind === 'part' && it.part.defId === 'mg');
     expect(mg?.kind === 'part' && [mg.part.wear, mg.part.hp]).toEqual([2, 5]);
-    expect(defIds(truck.items)).toEqual(expect.arrayContaining(['panniers', 'mg', 'stockEngine', 'cage']));
+    expect(defIds(truck.items)).toEqual(expect.arrayContaining(KIT.parts));
     expect(world.player.storage.map((p) => [p.defId, p.wear])).toEqual([['plates', 1]]);
     expect(truck.items.filter((it) => it.kind === 'good').length).toBe(4);
     expect(world.player.costBasis).toEqual({ scrap: 8 });
