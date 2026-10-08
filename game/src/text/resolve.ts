@@ -3,11 +3,11 @@
 // bad param, or a case or gender that a text does not have throws.
 import { EN } from './en';
 import { RU } from './ru';
-import { CASES, CONCAT, DATE, GENDERS, isNoun, LIST, Msg, NUM, VERBATIM, type Case, type DevLocale, type EnEntry, type Gender, type Locale, type Noun, type NumberKind, type Param, type ParamKind, type Schema } from './msg';
+import { ASKS, CONCAT, DATE, GENDERS, isNoun, isPlaceCase, LIST, Msg, NUM, VERBATIM, type Ask, type DevLocale, type EnEntry, type Gender, type Locale, type Noun, type NumberKind, type Param, type ParamKind, type Schema } from './msg';
 
 export type Part =
   | { kind: 'lit'; text: string }
-  | { kind: 'arg'; name: string; case: Case | null }
+  | { kind: 'arg'; name: string; case: Ask | null }
   | { kind: 'hash' }
   | { kind: 'plural'; name: string; forms: ReadonlyMap<string, readonly Part[]> }
   | { kind: 'gender'; name: string; forms: ReadonlyMap<Gender, readonly Part[]> };
@@ -78,9 +78,9 @@ class Parser {
     return this.fail('only plural, case and gender are supported');
   }
 
-  caseName(): Case {
+  caseName(): Ask {
     const name = this.word();
-    const found = CASES.find((c) => c === name);
+    const found = ASKS.find((c) => c === name);
     if (!found) this.fail(`bad case "${name}"`);
     this.expect('}');
     return found;
@@ -217,7 +217,7 @@ export function formatNumber(n: number, kind: NumberKind, locale: Locale): strin
   return formatsOf(locale)[kind].format(n);
 }
 
-type Mode = { readonly case: Case; readonly cap: boolean };
+type Mode = { readonly case: Ask; readonly cap: boolean };
 const SHOWN: Mode = { case: 'nom', cap: true };
 
 export function resolve(msg: Msg, locale: DevLocale): string {
@@ -240,15 +240,26 @@ function render(msg: Msg, locale: Locale, mode: Mode): string {
   if (internal) return internal(msg, locale, mode);
   const entry = entryOf(locale, msg.key);
   if (isNoun(entry)) return renderNoun(msg, entry, locale, mode);
-  if (mode.case !== 'nom' && names(msg, locale).length === 0) throw new Error(`Text "${msg.key}" has no ${mode.case} form in ${locale}`);
+  if (!phraseTakes(msg, locale, mode.case)) throw new Error(`Text "${msg.key}" has no ${mode.case} form in ${locale}`);
   const values = checkParams(msg, schemaOf(msg.key), locale);
   return renderParts({ msg, values, locale, mode, count: null }, partsOf(locale, msg.key));
 }
 
+function phraseTakes(msg: Msg, locale: Locale, ask: Ask): boolean {
+  if (isPlaceCase(ask)) return false;
+  return ask === 'nom' || names(msg, locale).length > 0;
+}
+
 function renderNoun(msg: Msg, entry: Noun, locale: Locale, mode: Mode): string {
   checkParams(msg, {}, locale);
-  const form = entry.forms[mode.case];
+  const form = nounForm(msg, entry, locale, mode.case);
   return mode.cap ? form.charAt(0).toUpperCase() + form.slice(1) : form;
+}
+
+function nounForm(msg: Msg, entry: Noun, locale: Locale, ask: Ask): string {
+  if (!isPlaceCase(ask)) return entry.forms[ask];
+  if (!entry.place) throw new Error(`Text "${msg.key}" is not a place in ${locale}, so it has no ${ask} form`);
+  return entry.place[ask];
 }
 
 function names(msg: Msg, locale: Locale): Msg[] {

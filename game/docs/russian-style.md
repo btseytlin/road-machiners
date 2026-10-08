@@ -38,6 +38,8 @@ A name inside a sentence takes the case the grammar needs, and the verb agrees w
 - `log.towOffer`: «…дотащить вас, пункт — {site}…» → «…дотащить вас до {site, case, gen}…».
 - `log.breakdown`: «Сломалось: {part}» → «{part} {part, gender, m {сломался} f {сломалась} n {сломалось} pl {сломались}}».
 
+A place takes its own preposition. Write «Сдать {site, case, at}», never «в {site, case, prep}» or «в пункте {site}». A new place gets `place()` with its three phrases.
+
 A new name entry is a `noun()` with all six forms and its gender. Write the forms in lower case unless the name is a proper name, like a place. Check each form in a sentence: «нет …», «дать …», «вижу …», «с …», «о …».
 
 ## Examples

@@ -47,7 +47,7 @@ describe('sim ids in words', () => {
   it('words notes with their numbers formatted for each language', () => {
     const leak: SimNote = { id: 'tankLeak', fuel: 1.25 };
     expect(both(noteText(leak))).toEqual({ en: 'Fuel tank leaks: fuel -1.3', ru: 'Бак течёт, топливо −1,3.' });
-    expect(both(noteText({ id: 'filledSupplies', site: 'dustwell' }))).toEqual({ en: 'Filled supplies at Dustwell', ru: 'Припасы пополнены в пункте Пыльный колодец' });
+    expect(both(noteText({ id: 'filledSupplies', site: 'dustwell' }))).toEqual({ en: 'Filled supplies at Dustwell', ru: 'Припасы пополнены у Пыльного колодца' });
   });
 
   it('words a tow fee with the towed truck', () => {

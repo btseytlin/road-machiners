@@ -98,6 +98,14 @@ describe('resolve', () => {
     expect(fixedBy(list([byId('part.mg'), byId('part.plates')]))).toBe('Пулемётная турель, стальные плиты починили ваш грузовик.');
   });
 
+  it('says where a place is with its own preposition and ending', () => {
+    const claim = (site: Msg) => resolve(t('contract.claimAt', { site }), 'ru');
+    expect(claim(byId('site.bowl'))).toBe('Награда в Чаше');
+    expect(claim(byId('site.nose'))).toBe('Награда на Носу');
+    expect(claim(byId('site.dustwell'))).toBe('Награда у Пыльного колодца');
+    expect(() => claim(byId('part.mg'))).toThrow(/not a place/);
+  });
+
   it('throws on a case of text with no case forms, and on the gender of text with none', () => {
     expect(() => resolve(t('job.repair', { part: t('menu.save') }), 'ru')).toThrow(/no gen form/);
     expect(() => resolve(t('log.patchDoneThem', { who: verbatim('Ray Nolan') }), 'ru')).toThrow(/no gender/);

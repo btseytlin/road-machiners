@@ -95,14 +95,24 @@ export function byId(key: string, params: Readonly<Record<string, Param>> = {}):
 
 export type Case = 'nom' | 'gen' | 'dat' | 'acc' | 'ins' | 'prep';
 export const CASES: readonly Case[] = ['nom', 'gen', 'dat', 'acc', 'ins', 'prep'];
+export type PlaceCase = 'at' | 'to' | 'from';
+export const PLACE_CASES: readonly PlaceCase[] = ['at', 'to', 'from'];
+export type Ask = Case | PlaceCase;
+export const ASKS: readonly Ask[] = [...CASES, ...PLACE_CASES];
 export type Gender = 'm' | 'f' | 'n' | 'pl';
 export const GENDERS: readonly Gender[] = ['m', 'f', 'n', 'pl'];
 
-export type Noun = { readonly forms: Readonly<Record<Case, string>>; readonly gender: Gender };
+export type Noun = { readonly forms: Readonly<Record<Case, string>>; readonly gender: Gender; readonly place?: Readonly<Record<PlaceCase, string>> };
 
 export function noun(gender: Gender, nom: string, gen: string, dat: string, acc: string, ins: string, prep: string): Noun {
   return { forms: { nom, gen, dat, acc, ins, prep }, gender };
 }
+
+export function place(name: Noun, at: string, to: string, from: string): Noun {
+  return { ...name, place: { at, to, from } };
+}
+
+export const isPlaceCase = (ask: Ask): ask is PlaceCase => (PLACE_CASES as readonly string[]).includes(ask);
 
 export function isNoun(entry: unknown): entry is Noun {
   return typeof entry === 'object' && entry !== null && 'forms' in entry;

@@ -69,6 +69,11 @@ describe('the catalog', () => {
     for (const key of RU_NOUN_KEYS) expect(KEYS).toContain(key);
   });
 
+  it('says where every Russian place is, where to and where from', () => {
+    const sites = KEYS.filter((key) => key.startsWith('site.'));
+    expect(sites.filter((key) => !nounOf('ru', key)?.place)).toEqual([]);
+  });
+
   it('has Russian words for every entry with words, never the English copied over', () => {
     const copied = KEYS.filter((key) => !SAME_AS_ENGLISH.has(key) && hasWords(entryText('en', key)) && entryText('ru', key) === entryText('en', key));
     expect(copied).toEqual([]);
