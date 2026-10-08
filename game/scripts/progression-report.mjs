@@ -1,6 +1,8 @@
 // Replays every trace in tmp/progression/ through the current XP rules and prints, per archetype, the in-game day
 // each activity family's earned XP covers the cumulative cost of each rank, its XP per day, and each miss against the
 // targets in src/data/skills.ts. It adds the wage per turn at each gear tier, the day each tier is first held, and the
+// fight and loss counts. Days show the median over seeds and the min-max range. A rank some seeds never reach shows how
+// many seeds reached it.
 import { createReadStream, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { MAX_RANK, SKILL_IDS } from '../src/data/skills.ts';

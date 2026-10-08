@@ -5,7 +5,7 @@ export type Pool = 'light' | 'implement' | 'test';
 const POOL_OF: Record<Queue, Pool> = { triage: 'light', design: 'light', branch: 'light', implement: 'implement', verify: 'implement', test: 'test' };
 
 export function poolOf(stage: JobStage): Pool {
-  return stage === 'merge' ? 'test' : POOL_OF[QUEUE_OF[stage]];
+  return stage === 'merge' || stage === 'candidate' ? 'test' : POOL_OF[QUEUE_OF[stage]];
 }
 
 const ORDER: Pool[] = ['light', 'implement', 'test'];

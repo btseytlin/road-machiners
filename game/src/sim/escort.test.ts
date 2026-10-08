@@ -1,18 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { NPC_BEHAVIOR, NPCS, type TraitId } from '../data/npcs';
-import { REGION } from '../data/region';
+import { REGION, type TerritoryDef } from '../data/region';
 import { RULES } from '../data/rules';
 import { planNpcOrders } from './ai';
 import { fireWeapons } from './combat';
 import { goalHolds, thinkNpc, topGoal } from './npc-activities';
 import { optionChances, optionWeights } from './npc-decisions';
-import { siteGates, sitePads, type Site } from './sites';
+import { GOAL_REACH, isTerritory, siteGap, siteGates, sitePads, type Site } from './sites';
+import { territoryEntries, territoryGrounds } from './territory';
 import { spawnNpcs } from './spawn';
 import { addState, advanceStates, endState, settleStates, stateOf } from './states';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive, rngStateForForcedRolls , startCombat } from './testkit';
 import { escortsOf, isOnRope, startEscort, towOf } from './tow';
-import type { GameEvent, NpcState, Vehicle, World } from './types';
+import type { GameEvent, NpcActivity, NpcState, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { refreshVision } from './vision';
 import { endTurn } from './world';
@@ -210,13 +211,13 @@ describe('escort tows', () => {
 });
 
 describe('escort pay', () => {
-  function hired(fee: number, money: number): { w: World; trader: Vehicle; merc: Vehicle } {
+  function hired(fee: number, money: number, site = 'bowl'): { w: World; trader: Vehicle; merc: Vehicle } {
     const w = emptyWorld({ x: 200, y: 200 });
     const trader = createNpc(w, 'trader', ['trader'], 'hauler', ['stockEngine'], { x: 60, y: 60 });
     trader.resources!.money = money;
     const merc = createNpc(w, 'merc', ['merc'], 'scout', ['mg', 'stockEngine'], { x: 50, y: 60 });
     merc.resources!.money = 3333;
-    startEscort(w, merc, trader, 'bowl', fee);
+    startEscort(w, merc, trader, site, fee);
     aged(escortOf(w, merc, trader));
     return { w, trader, merc };
   }
@@ -238,6 +239,53 @@ describe('escort pay', () => {
     advanceStates(w);
     expect(paid(w)).toHaveLength(1);
     expect(merc.resources!.money).toBe(5000);
+  });
+
+  describe.each(['orchard', 'fallen-sun'])('to the territory %s', (id) => {
+    const territory = REGION.locations.find((l) => l.id === id && isTerritory(l))! as TerritoryDef;
+    const entry = territoryEntries(territory)[0];
+    const outward = (gap: number): Vec => {
+      const len = dist(entry, territory.pos);
+      const ux = (entry.x - territory.pos.x) / len;
+      const uy = (entry.y - territory.pos.y) / len;
+      let step = 0;
+      let p = entry;
+      while (siteGap(territory, p) < gap) {
+        step += 0.25;
+        p = { x: entry.x + ux * step, y: entry.y + uy * step };
+      }
+      return p;
+    };
+
+    function leaderAt(pos: Vec) {
+      const h = hired(50, 1000, id);
+      h.trader.pos = { ...pos };
+      advanceStates(h.w);
+      return h;
+    }
+
+    it('is not paid while the leader is far away', () => {
+      const { w } = leaderAt({ x: 60, y: 60 });
+      expect(paid(w)).toEqual([]);
+    });
+
+    it('is paid once the leader reaches an entry', () => {
+      const { w, trader, merc } = leaderAt(entry);
+      expect(paid(w)).toEqual([{ t: 'escortPaid', by: merc.id, client: trader.id, fee: 50 }]);
+      expect(trader.resources!.money).toBe(950);
+      expect(merc.resources!.money).toBe(3383);
+      expect(escortOf(w, merc, trader)).toBeNull();
+    });
+
+    it('is paid when the leader is inside', () => {
+      const inside = territoryGrounds(territory).find((p) => siteGap(territory, p) < 0)!;
+      expect(paid(leaderAt(inside).w)).toHaveLength(1);
+    });
+
+    it('is paid just within the reach of the edge and not beyond it', () => {
+      expect(paid(leaderAt(outward(GOAL_REACH - 0.5)).w)).toHaveLength(1);
+      expect(paid(leaderAt(outward(GOAL_REACH + 0.5)).w)).toEqual([]);
+    });
   });
 
   it('pays no more than the leader holds', () => {
@@ -390,10 +438,10 @@ describe('hiring a merc', () => {
 });
 
 describe('a leader with escorts', () => {
-  function pair(escortX: number): { w: World; convoy: Vehicle } {
+  function pair(escortX: number, leaderGoal: NpcActivity = { kind: 'sell', targetId: 'nose', destination: { x: 150, y: 60 }, phase: 'travel', reason: 'test trip' }): { w: World; convoy: Vehicle } {
     const w = emptyWorld({ x: 200, y: 200 });
     const convoy = convoyAt(w, { x: 60, y: 60 });
-    convoy.brain!.goals = [{ kind: 'sell', targetId: 'nose', destination: { x: 150, y: 60 }, phase: 'travel', reason: 'test trip' }];
+    convoy.brain!.goals = [leaderGoal];
     const guard = guardAt(w, { x: escortX, y: 60 });
     startEscort(w, guard, convoy, null, 0);
     return { w, convoy };
@@ -417,5 +465,23 @@ describe('a leader with escorts', () => {
     guard.brain!.goals.push({ kind: 'resupply', targetId: 'bowl', destination: { ...BOWL.pos }, phase: 'travel', reason: 'low fuel' });
     planNpcOrders(w);
     expect(convoy.order?.kind).not.toBe('brake');
+  });
+
+  it('drives on while its escort lags beyond the catch-up gap', () => {
+    const { w, convoy } = pair(60 - NPC_BEHAVIOR.escortCatchUpGap - 1);
+    planNpcOrders(w);
+    expect(convoy.order?.kind).not.toBe('brake');
+  });
+
+  it('drives on to its own service stop while an escort lags', () => {
+    const { w, convoy } = pair(60 - NPC_BEHAVIOR.escortWaitGap - 1, { kind: 'resupply', targetId: 'bowl', destination: { ...BOWL.pos }, phase: 'travel', reason: 'low fuel' });
+    planNpcOrders(w);
+    expect(convoy.order?.kind).not.toBe('brake');
+  });
+
+  it('still waits for an escort at the catch-up gap', () => {
+    const { w, convoy } = pair(60 - NPC_BEHAVIOR.escortCatchUpGap);
+    planNpcOrders(w);
+    expect(convoy.order?.kind).toBe('brake');
   });
 });

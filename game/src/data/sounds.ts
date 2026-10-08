@@ -2,7 +2,6 @@
 // Deleting a file drops that variant.
 // Generated cues carry prompt subjects; scripts/sfx-gen.mjs puts the SOUND_STYLE of the cue's setup in front.
 
-
 export type Bus = "ui" | "sfx" | "ambient" | "music";
 
 export type CueDef = {

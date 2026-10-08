@@ -608,6 +608,8 @@ function inLootReach(world: World, v: Vehicle, targetId: string): boolean {
 
 export const CANNOT_HOLD = 'cargo cannot hold the loot';
 
+export const STRIPPED = 'salvage exhausted';
+
 export function lootTruckTurn(world: World, looter: Vehicle, target: Vehicle): string | null {
   if (looter.job?.kind === 'refit') return null;
   takeLooseItems(world, looter, target);

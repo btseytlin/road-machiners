@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it, onTestFinished } from 'vitest';
 import { NPC_UTILITY_PARTS, type UtilityRoll } from '../data/npc-utilities';
 import { CHASSIS } from '../data/chassis';
@@ -614,4 +615,19 @@ describe('NPC utility census (IV25)', () => {
       }
     }
   });
+});
+
+describe('loadout fingerprint', () => {
+  const sha = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16);
+
+  it('rolls the same loadouts and RNG streams for every template', () => {
+    const w = emptyWorld();
+    const loadouts = Object.values(NPCS).flatMap((template) => Array.from({ length: 5 }, () => generateNpcLoadout(w, template)));
+    expect(sha({ loadouts, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('5567917b7ce31784');
+  }, budget(180_000));
+
+  it('populates a new world the same way', () => {
+    const w = newWorld(7, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
+    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('fd7d53679332c8ea');
+  }, budget(60_000));
 });
