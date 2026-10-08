@@ -7,7 +7,7 @@ import { readLedger } from './ledger';
 import { readObservation, type SchedulerData } from './observability';
 import { resumedStage } from './sessions';
 import { checkJobs, chooseJobs, evaluateSchedule, tick, timeoutOf, type TickDeps } from './tick';
-import { EMPTY_STATE, readState, writeState } from './state';
+import { EMPTY_STATE, clearQueued, readState, updateState, writeState } from './state';
 import { FACTORY_MARK, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type ReleaseState, type Ctx, type IssueComment, type FactoryConfig, type FactoryState, type Job } from './types';
 
 const NOW = new Date('2026-01-10T12:00:00Z');
@@ -310,13 +310,20 @@ describe('timeoutOf', () => {
 });
 
 describe('tick', () => {
-  it('clears the queued ship of a ship job past its timeout, so it does not start again', async () => {
+  it('keeps the queued ship of a ship job past its timeout once, and clears it on the second timeout', async () => {
     const ship = job('2026-01-10T08:00:00Z', 'ship', 20);
     const h = harness(ship, true);
     writeState(h.ctx.statePath, state({ jobs: [ship], pendingShip: 'Ann' }));
     await checkJobs(h.ctx, h.deps);
     expect(h.killed).toEqual(['42 ship-job']);
-    expect(readState(h.ctx.statePath).pendingShip).toBeNull();
+    expect(readState(h.ctx.statePath)).toMatchObject({ jobs: [], pendingShip: 'Ann', retried: ['ship:20'], failures: [] });
+    updateState(h.ctx.statePath, (s) => ({ ...s, jobs: [ship] }));
+    await checkJobs(h.ctx, h.deps);
+    expect(readState(h.ctx.statePath)).toMatchObject({ jobs: [], pendingShip: null, retried: [], failures: [{ stage: 'ship' }] });
+  });
+
+  it('clears the retry mark of an order whose job ends', () => {
+    expect(clearQueued(state({ pendingShip: 'Ann', retried: ['ship:20', 'approve:5'] }), 'ship', 20).retried).toEqual(['approve:5']);
   });
 
   it('labels the batch of a merge job past its timeout stuck, so it does not start again', async () => {
@@ -591,10 +598,17 @@ describe('tick', () => {
     expect(before.labels).toEqual([]);
   });
 
-  it('labels the removed feature when a removal dies', async () => {
-    const h = harness(job('2026-01-10T11:50:00Z', 'remove', 8), false);
-    await tick(h.ctx, '/code', h.deps);
+  it('runs a removal that dies once more, and labels the removed feature when it dies again', async () => {
+    const remove = job('2026-01-10T11:50:00Z', 'remove', 8);
+    const h = harness(remove, false);
+    writeState(h.ctx.statePath, state({ jobs: [remove], pendingRemovals: [{ issue: 8, by: 'Ann', text: 't' }] }));
+    await checkJobs(h.ctx, h.deps);
+    expect(h.labels).toEqual([]);
+    expect(readState(h.ctx.statePath)).toMatchObject({ pendingRemovals: [{ issue: 8 }], retried: ['remove:8'] });
+    updateState(h.ctx.statePath, (s) => ({ ...s, jobs: [remove] }));
+    await checkJobs(h.ctx, h.deps);
     expect(h.labels).toEqual([`8:${STUCK_LABEL}`]);
+    expect(readState(h.ctx.statePath)).toMatchObject({ pendingRemovals: [], retried: [] });
   });
 
   describe('a job whose process died', () => {
@@ -654,7 +668,7 @@ describe('tick', () => {
       writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME)], interrupted: [5, 6] }));
       mkdirSync(sessions(h), { recursive: true });
       await tick(h.ctx, '/code', h.deps);
-      expect(h.killed).toEqual([]);
+      expect(h.killed).toEqual(['containers design-job']);
       expect(h.labels).toEqual([`5:${STUCK_LABEL}`]);
       const after = readState(h.ctx.statePath);
       expect(after.failures).toMatchObject([{ stage: 'design', issue: 5, error: 'job process died without finishing' }]);
@@ -670,7 +684,7 @@ describe('tick', () => {
       const logs: string[] = [];
       h.ctx.log = (_scope, _issue, message) => { logs.push(message); };
       await tick(h.ctx, '/code', h.deps);
-      expect(h.killed).toEqual(['42 design-job', 'containers design-job']);
+      expect(h.killed).toEqual(['42 design-job']);
       expect(logs).toContain('design timed out after 30 minutes, it resumes once on the next start');
       expect(args(h)).toEqual([['design', '5']]);
       expect(resumedStage(h.ctx.cfg.home, 5)).toBe('design');
@@ -691,9 +705,10 @@ describe('tick', () => {
       expect(readState(h.ctx.statePath)).toMatchObject({ interrupted: [], jobs: [], failures: [{ error: 'timed out after 30 minutes' }] });
     });
 
-    it('fails a branch job or a job without an issue that times out', async () => {
+    it('fails a branch job that times out a second time, or a job without an issue', async () => {
       const late = '2026-01-10T11:00:00Z';
       const branch = harness(job(late, 'approve', 5), true);
+      updateState(branch.ctx.statePath, (s) => ({ ...s, retried: ['approve:5'] }));
       await checkJobs(branch.ctx, branch.deps);
       expect(readState(branch.ctx.statePath)).toMatchObject({ interrupted: [], jobs: [], failures: [{ stage: 'approve', error: 'timed out after 30 minutes' }] });
       const bare = harness(job(late, 'merge', null), true);
@@ -701,10 +716,11 @@ describe('tick', () => {
       expect(readState(bare.ctx.statePath)).toMatchObject({ interrupted: [], jobs: [], failures: [{ stage: 'merge', error: 'timed out after 30 minutes' }] });
     });
 
-    it('fails a dead job past the timeout and never resumes it', async () => {
+    it('resumes a dead card job found past the timeout once, and removes its containers', async () => {
       const dead = harness(job('2026-01-10T11:00:00Z'), false);
-      await tick(dead.ctx, '/code', dead.deps);
-      expect(readState(dead.ctx.statePath)).toMatchObject({ interrupted: [], failures: [{ error: 'job process died without finishing' }] });
+      await checkJobs(dead.ctx, dead.deps);
+      expect(dead.killed).toEqual(['containers design-job']);
+      expect(readState(dead.ctx.statePath)).toMatchObject({ jobs: [], interrupted: [5], failures: [] });
     });
 
     it('clears a lingering mark and the sessions of a timed out job', async () => {
@@ -716,12 +732,12 @@ describe('tick', () => {
       expect(existsSync(sessions(h))).toBe(false);
     });
 
-    it('fails a dead branch job, and touches no mark or sessions of its issue', async () => {
+    it('fails a dead branch job that already ran its order twice, and touches no mark or sessions of its issue', async () => {
       const h = harness(job(IN_TIME, 'approve', 5), false);
-      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME, 'approve', 5)], interrupted: [5] }));
+      writeState(h.ctx.statePath, state({ jobs: [job(IN_TIME, 'approve', 5)], interrupted: [5], retried: ['approve:5'] }));
       mkdirSync(sessions(h), { recursive: true });
-      await tick(h.ctx, '/code', h.deps);
-      expect(h.killed).toEqual([]);
+      await checkJobs(h.ctx, h.deps);
+      expect(h.killed).toEqual(['containers approve-job']);
       expect(readState(h.ctx.statePath)).toMatchObject({ interrupted: [5], failures: [{ stage: 'approve' }], jobs: [] });
       expect(existsSync(sessions(h))).toBe(true);
     });

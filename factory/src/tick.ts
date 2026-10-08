@@ -12,7 +12,7 @@ import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
 import { openTasks } from './stages/release-common';
-import { clearQueued, readState, updateState } from './state';
+import { clearQueued, orderKey, readState, updateState } from './state';
 import { sweepTranscripts } from './transcript-archive';
 import { askedAt, isAnswered } from './questions';
 import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
@@ -244,13 +244,17 @@ function dropJob(ctx: Ctx, job: Job): void {
   }));
 }
 
-function minutesSince(ctx: Ctx, iso: string): number {
-  return (ctx.now().getTime() - new Date(iso).getTime()) / MINUTE_MS;
+function retryOrder(ctx: Ctx, job: Job, alive: boolean): void {
+  updateState(ctx.statePath, (state) => ({
+    ...state,
+    jobs: state.jobs.filter((other) => other.id !== job.id),
+    retried: [...state.retried, orderKey(job.stage, job.issue)],
+  }));
+  ctx.log('tick', job.issue, `${job.stage} ${alive ? 'timed out' : 'died'}, its order runs once more`);
 }
 
-function resumeCause(alive: boolean, inTime: boolean): 'died' | 'timeout' | null {
-  if (alive) return inTime ? null : 'timeout';
-  return inTime ? 'died' : null;
+function minutesSince(ctx: Ctx, iso: string): number {
+  return (ctx.now().getTime() - new Date(iso).getTime()) / MINUTE_MS;
 }
 
 async function checkJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<void> {
@@ -258,14 +262,25 @@ async function checkJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<void> {
   const alive = deps.isAlive(job.pid);
   const inTime = minutes <= timeoutOf(ctx.cfg, job.stage);
   if (alive && inTime) return ctx.log('tick', job.issue, `${job.stage} still running`);
-  const cause = resumeCause(alive, inTime);
-  if (cause !== null && canResume(ctx, job)) return resumeJob(ctx, job, deps, cause);
+  if (canResume(ctx, job)) return resumeJob(ctx, job, deps, alive ? 'timeout' : 'died');
   await failJob(ctx, job, alive, deps);
 }
 
-async function failJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Promise<void> {
+const RETRIED_ORDERS: JobStage[] = ['approve', 'remove', 'ship', 'incident'];
+
+function retriesOrder(ctx: Ctx, job: Job): boolean {
+  return RETRIED_ORDERS.includes(job.stage) && !readState(ctx.statePath).retried.includes(orderKey(job.stage, job.issue));
+}
+
+async function stopJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Promise<void> {
   if (alive) await deps.kill(ctx.run, job.pid, job.id);
+  else await deps.removeContainers(ctx.run, job.id);
   recordJob(ctx.cfg.home, ctx.cfg.tokenPrices, ctx.now(), job, alive ? 'timeout' : 'died');
+}
+
+async function failJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Promise<void> {
+  await stopJob(ctx, job, alive, deps);
+  if (retriesOrder(ctx, job)) return retryOrder(ctx, job, alive);
   dropJob(ctx, job);
   for (const issue of job.batch ?? []) await ctx.github.addLabel(issue, STUCK_LABEL);
   forgetResume(ctx, job);
@@ -307,7 +322,7 @@ function forgetResume(ctx: Ctx, job: Job): void {
 
 async function resumeJob(ctx: Ctx, job: Job & { issue: number }, deps: TickDeps, outcome: 'died' | 'timeout'): Promise<void> {
   if (outcome === 'timeout') await deps.kill(ctx.run, job.pid, job.id);
-  await deps.removeContainers(ctx.run, job.id);
+  else await deps.removeContainers(ctx.run, job.id);
   recordJob(ctx.cfg.home, ctx.cfg.tokenPrices, ctx.now(), job, outcome);
   markResumed(ctx.cfg.home, job.issue, job.stage);
   updateState(ctx.statePath, (state) => interruptJob(state, job));

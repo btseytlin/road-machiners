@@ -61,6 +61,9 @@ export async function killJob(run: Run, pid: number, id: string): Promise<void> 
 
 export async function removeJobContainers(run: Run, id: string): Promise<void> {
   for (const container of await jobContainers(run, id)) {
-    must(await run('docker', ['rm', '-f', container]), `docker rm ${container}`);
+    const result = await run('docker', ['rm', '-f', container]);
+    if (!GONE.test(result.stderr)) must(result, `docker rm ${container}`);
   }
 }
+
+const GONE = /already in progress|No such container/;

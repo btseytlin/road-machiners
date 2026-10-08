@@ -173,6 +173,7 @@ export type FactoryState = {
   devFailed: string | null;
   devError: string | null;
   interrupted: number[];
+  retried: string[];
   postOnly: number[];
   unroutedReplies: Record<string, UnroutedReply>;
   textPosts: string[];
