@@ -1,7 +1,6 @@
 // Travel for vehicles far from the player. They have no physics body: each turn they follow their
 // stored route at the speed the physics driver would plan and burn fuel for the distance, like the physics turn. They never
 // crash, but they cannot drive into another vehicle: a truck in the way stops them just short of it. A breakable prop
-// on the way breaks.
 
 import { chassisDef } from '../data/chassis';
 import { PERF } from '../data/perf';
@@ -18,18 +17,12 @@ import { isOnRope } from './tow';
 import type { MoveOrder, Obstacle, Pose, Vehicle, World } from './types';
 import { bearing, dist, segmentDist, type Vec } from './vec';
 
-// The player, and every vehicle within sight radius plus the live margin of the player, drives in physics.
-// A towed truck has no body: it follows its tower through followTower instead.
 export function isNear(w: World, v: Vehicle): boolean {
   if (isOnRope(w, v.id)) return false;
   if (v.id === w.player.vehicleId) return true;
   return dist(v.pos, playerVehicle(w).pos) <= TERRAIN.vision.radius + PERF.liveMargin;
 }
 
-// Fuel limits the engine like the 2D rules: under the low-fuel share of the tank the top
-// speed halves, and a tank that cannot cover this turn's drive still lets the truck crawl.
-// A pushed truck burns no fuel, so its tank limits nothing.
-// Shared by the physics driver and far travel, so both plan the same speed.
 export function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number, order: MoveOrder | null): VehicleStats {
   const fuel = getResources(w, v).fuel;
   const low = s.fuelPerTile > 0 && fuel > 0 && fuel < fuelCap(v) * RULES.lowFuelThreshold;
@@ -41,11 +34,6 @@ export function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number
   return { ...s, maxSpeed: cap, accel: Math.min(s.accel, s.limpAccel) };
 }
 
-// One turn of far travel. With no order or a brake order the vehicle slows by its brake and stays
-// in place: without physics it cannot coast into obstacles, so it does not coast at all.
-// A move order follows the stored route for the order's point, or plans a new one. The distance
-// is the mean of the start and end speeds, as under steady acceleration. A stop order ends at rest
-// on its point; a drive-through order keeps its speed.
 export function advanceFar(w: World, v: Vehicle): void {
   const full = vehicleStats(w, v);
   const start: Pose = { x: v.pos.x, y: v.pos.y, heading: v.heading };
@@ -59,9 +47,7 @@ export function advanceFar(w: World, v: Vehicle): void {
 
   const s = fuelLimited(w, v, full, v.speed, order);
   const next = order.kind === 'through' ? throughSpeed(s, v.speed, dist(v.pos, order.dest), order.pace) : Math.min(s.maxSpeed, v.speed + s.accel);
-  // Vehicles without a brain have nowhere to store the route, so they plan it every turn.
   const stored = v.brain?.farRoute;
-  // A new route steers around parked vehicles, like the physics driver's.
   const points = stored && stored.dest.x === order.dest.x && stored.dest.y === order.dest.y ? stored.points : route(w, v.pos, order.dest, full.radius, parkedVehicles(w, v.id), v);
 
   const planned = follow(v.pos, points, (v.speed + next) / 2);
@@ -69,8 +55,6 @@ export function advanceFar(w: World, v: Vehicle): void {
   const walk = block ? follow(v.pos, points, block.clear) : planned;
   const end = walk.path[walk.path.length - 1];
   const reach = order.kind === 'stopAt' ? RULES.arriveRadius : RULES.passRadius;
-  // A truck on the destination leaves the closest free spot as the arrival: either the planner's
-  // route ends there, or the walk stops against that truck.
   const routeEnd = walk.ahead.length === 0;
   const done = dist(end, order.dest) < reach || routeEnd || (block !== null && dist(block.other.pos, order.dest) < block.contact + reach);
   v.trail = sample(start, walk.path, walk.moved);
@@ -79,7 +63,6 @@ export function advanceFar(w: World, v: Vehicle): void {
   v.speed = block || (done && order.kind === 'stopAt') ? 0 : next;
   burnFuel(w, v, walk.moved);
   breakCrossed(w, v, walk.path, full.radius);
-  // A blocked truck drops its route, so next turn it plans one around the vehicles now parked.
   if (v.brain) v.brain.farRoute = done || block ? undefined : { dest: { ...order.dest }, points: walk.ahead };
   if (done) {
     w.events.push({ t: 'arrived', vehicle: v.id });
@@ -87,10 +70,8 @@ export function advanceFar(w: World, v: Vehicle): void {
   }
 }
 
-const CONTACT_STEP = 0.25; // tiles between overlap checks along a far walk, below the smallest vehicle radius
+const CONTACT_STEP = 0.25;
 
-// The first vehicle the walk would drive into, and how far the walk stays clear of it. Moving away from a
-// vehicle already overlapped is allowed, so two trucks that start on top of each other can separate.
 function firstContact(w: World, v: Vehicle, path: Vec[], radius: number): { other: Vehicle; clear: number; contact: number } | null {
   const others = w.vehicles.filter((o) => o.id !== v.id).map((o) => ({ o, contact: radius + chassisDef(o.chassisId).radius }));
   let walked = 0;
@@ -105,25 +86,22 @@ function firstContact(w: World, v: Vehicle, path: Vec[], radius: number): { othe
         const gap = dist(p, o.pos);
         if (gap < contact && gap < dist(path[0], o.pos)) return { other: o, clear: Math.max(0, walked + d - CONTACT_STEP), contact };
       }
-      if (d < len && d + CONTACT_STEP > len) d = len - CONTACT_STEP; // always check the segment's end
+      if (d < len && d + CONTACT_STEP > len) d = len - CONTACT_STEP;
     }
     walked += len;
   }
   return null;
 }
 
-// Breaks every breakable prop the truck body touches along the walk.
 function breakCrossed(w: World, v: Vehicle, path: Vec[], radius: number): void {
   const crossed = w.obstacles.filter((o) => isBreakable(o) && path.some((p, seg) => seg > 0 && touches(o, path[seg - 1], p, radius)));
   for (const o of crossed) breakProp(w, o.id, v.id);
 }
 
-// Whether a truck of this radius driving from a to b touches the prop's boxes. The reach test skips far props cheaply.
 function touches(o: Obstacle, a: Vec, b: Vec, radius: number): boolean {
   return segmentDist(o.pos, a, b) < propReach(o) + radius && propBoxes(o).some((box) => boxSegmentDistance(box, a, b) < radius);
 }
 
-// Walks up to `budget` tiles along the route. path starts at from and holds each corner passed and the end point.
 function follow(from: Vec, points: Vec[], budget: number): { path: Vec[]; moved: number; ahead: Vec[] } {
   const path: Vec[] = [from];
   let cur = from;
@@ -145,11 +123,10 @@ function follow(from: Vec, points: Vec[], budget: number): { path: Vec[]; moved:
   return { path, moved: budget - left, ahead: points.slice(i) };
 }
 
-// RULES.substeps + 1 poses spread evenly by distance along the walked path, facing along it.
 function sample(start: Pose, path: Vec[], moved: number): Pose[] {
   const trail: Pose[] = [start];
   let seg = 1;
-  let walked = 0; // distance to the start of path[seg - 1]
+  let walked = 0;
   let heading = start.heading;
   for (let i = 1; i <= RULES.substeps; i++) {
     const at = (i * moved) / RULES.substeps;

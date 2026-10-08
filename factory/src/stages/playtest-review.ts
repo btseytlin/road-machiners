@@ -2,12 +2,9 @@
 // The factory computes the facts, so a review cannot pass a run that crashed, ended early with no word on it or did nothing.
 
 export type Ending = 'complete' | 'death' | 'error';
-// The game's summary line, with the counts the gate checks. The agent reads the rest.
 export type LogSummary = { turns: number; shots: number; destroyed: number; knockouts: number; deaths: number; stalls: number; moneyIn: number; moneyOut: number; npcGoals: Record<string, number>; playerTiles: number };
 export type LogFacts = { seed: number; turns: number; sha: string | null; lines: number; events: number; ending: Ending; endTurn: number; message: string | null; summary: LogSummary; quiet: string[] };
 
-// `cause` is `release` when a change since the baseline caused the finding, and `old` when the baseline has it too.
-// `known` names the open bug issue an old finding matches, so the factory opens no second one.
 export type Finding = { id: string; severity: 'important' | 'minor'; title: string; evidence: string; cause: 'release' | 'old'; why: string; known: number | null };
 export type Review = {
   verdict: 'clean' | 'fixed' | 'blocked';
@@ -17,18 +14,15 @@ export type Review = {
   suspected: string[];
   limitations: string[];
   findings: Finding[];
-  fixes: string[]; // what the agent committed in this round
+  fixes: string[];
   explanations: { death: string | null; quiet: string | null };
   blocker: string | null;
 };
 export type Outcome = { outcome: 'clean' | 'replay' | 'blocked'; reason: string };
-// Whether the agent committed since the play it reviewed, and whether that play was the job's last.
 export type PlayState = { moved: boolean; last: boolean };
 
 type Line = Record<string, unknown> & { k?: string };
 
-// Reads the run log the harness wrote. A log without its header, end or summary, or one for another run, means the
-// harness broke, which fails the job: there is nothing to review.
 export function logFacts(text: string, want: { seed: number; turns: number; sha: string }): LogFacts {
   const lines = text.split('\n').filter((line) => line.trim() !== '').map((line) => JSON.parse(line) as Line);
   const header = only(lines, 'run');
@@ -47,7 +41,6 @@ function only(lines: Line[], kind: string): Line {
   return found[0];
 }
 
-// Kinds of activity the run never showed. A clean verdict must explain each one.
 export function quietParts(summary: LogSummary): string[] {
   const parts: string[] = [];
   if (summary.shots === 0) parts.push('no shots were fired');
@@ -62,7 +55,6 @@ const SEVERITIES = ['important', 'minor'];
 const CAUSES = ['release', 'old'];
 const LISTS = ['observations', 'suspected', 'limitations', 'findings', 'fixes'] as const;
 
-// Reads .factory/playtest.json. A missing or malformed review is an agent failure and fails the job.
 export function readReview(text: string | null): Review {
   if (text === null) throw new Error('The playtest agent wrote no .factory/playtest.json');
   const review = JSON.parse(text) as Review;
@@ -72,7 +64,6 @@ export function readReview(text: string | null): Review {
   return { ...review, findings: review.findings.map(readFinding), explanations: explanationsOf(review.explanations), blocker: review.blocker ?? null };
 }
 
-// The rules a finding must meet, in order. Each returns the reason it fails, or null.
 const FINDING_RULES: ((finding: Finding) => string | null)[] = [
   (finding) => (SEVERITIES.includes(finding.severity) ? null : `has severity ${String(finding.severity)}, not important or minor`),
   (finding) => (CAUSES.includes(finding.cause) ? null : `has cause ${String(finding.cause)}, not release or old`),
@@ -93,9 +84,6 @@ function explanationsOf(given: Partial<Review['explanations']> | undefined): Rev
   return { death: given?.death ?? null, quiet: given?.quiet ?? null };
 }
 
-// Turns the agent's verdict on one play into the gate's outcome. Commits since the play need a replay, and the last play has none
-// left, so it can only pass or block. A clean verdict passes only with a finished run, no important finding the release caused and a
-// reason for every death and every quiet part. Anything that does not hold blocks the release.
 export function judge(facts: LogFacts, review: Review, play: PlayState): Outcome {
   if (review.verdict === 'blocked') return { outcome: 'blocked', reason: review.blocker ?? review.summary };
   if (review.verdict === 'fixed' && !play.moved) return { outcome: 'blocked', reason: 'The review says it fixed findings but committed nothing.' };
@@ -109,7 +97,6 @@ function replay(review: Review, last: boolean): Outcome {
   return { outcome: 'replay', reason: `${review.fixes.length} fixes to replay` };
 }
 
-// The rules a clean verdict must meet, in order. Each returns the reason it fails, or null.
 const CLEAN_RULES: ((facts: LogFacts, review: Review) => string | null)[] = [
   (facts) => (facts.ending === 'error' ? `The run ended in an error at turn ${facts.endTurn}, so it cannot be clean: ${facts.message ?? 'no message'}` : null),
   (_facts, review) => {

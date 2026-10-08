@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Fading, SoundDesigner, type AccentPlan, type DesignerTuning } from "./designer";
 
-// One beat per second, four beats per bar, two slots per beat: slots every half second, bars at 0, 4, 8.
 const GRID = { start: 0, beat: 1, beatsPerBar: 4 };
 const TUNING: DesignerTuning = {
   subdivision: 2,
@@ -38,7 +37,7 @@ describe("SoundDesigner", () => {
 
   it("follows the stab with the rhythm's tail from the slot nearest the event", () => {
     const d = designer();
-    d.offer("a", LEAD, 5.2, 0.1, 0); // nearest slot is 5; x...x... puts the next hit two beats later
+    d.offer("a", LEAD, 5.2, 0.1, 0);
     expect(times(d.step(0.1, 9.9, false, 0))).toEqual([7]);
   });
 

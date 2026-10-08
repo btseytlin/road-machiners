@@ -10,7 +10,6 @@ let prompt = '';
 let effort: string | undefined;
 let related = '';
 let releaseInput = '';
-// The board the stage sees. Issue 7 is the card under triage.
 let cards: Card[] = [];
 
 beforeEach(() => {
@@ -279,7 +278,6 @@ describe('triage bundles', () => {
     expect(calls).toContain('addLabel 9 bundled');
     expect(calls).toContain('move 9 Done');
     expect(calls).toContain('move 10 Done');
-    // The routing note follows the reason and the bundle line.
     expect(calls.find((call) => call.startsWith('comment 7 Triage passed:'))).toMatch(/^comment 7 Triage passed: Both ask for a horn\.\n\nThis card also carries #9, #10\.\n\n/);
     expect(calls.at(-1)).toBe('move 7 Design');
     expect(readState(`${home}/state.json`).bundles).toEqual({ '7': [9, 10] });

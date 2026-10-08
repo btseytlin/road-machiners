@@ -1,7 +1,6 @@
 // Physics driving for every vehicle. The map's terrain and obstacles become Rapier colliders; each
 // vehicle is a ray-cast car. Time only moves inside simulateTurn. A turn restores the world from a
 // snapshot and runs it forward, so the same state and orders always give the same result: the
-// preview is the turn itself.
 
 import RAPIER from '@dimforge/rapier3d-compat';
 import { chassisDef } from '../data/chassis';
@@ -31,43 +30,32 @@ const T = PHYSICS.truck;
 const D = PHYSICS.driver;
 const DT = 1 / PHYSICS.stepsPerSecond;
 export const TURN_STEPS = Math.round(PHYSICS.turnSeconds * PHYSICS.stepsPerSecond);
-const TELEPORT_TILES = 0.5; // a sim position this far from its body was moved by the rules, not by driving
-const WALL = 50; // meters of wall thickness at the map edge
-export const EDGE = 'edge'; // the crash target name for the map border
-export const RAIL = 'rail'; // the crash target name for a Canyon Bridge rail
-export const GROUND = 'ground'; // the crash target name for the terrain and the bridge deck under a truck's body
+const TELEPORT_TILES = 0.5;
+const WALL = 50;
+export const EDGE = 'edge';
+export const RAIL = 'rail';
+export const GROUND = 'ground';
 
-// Tiles per turn to meters per second, and back.
 export const toMps = (tilesPerTurn: number) => (tilesPerTurn * S) / PHYSICS.turnSeconds;
 export const toTilesPerTurn = (mps: number) => (mps * PHYSICS.turnSeconds) / S;
 
-// The driver's memory between turns: current wheel angle, and whether it backed at the last step.
-// route is the rest of the route driven last turn, so a driver keeps following it instead of planning
-// the whole way again every turn.
-// ahead holds the drive-through point that was ahead of the nose on the last leg at the last step.
-// stall holds the seconds the truck has pushed forward at a point behind it without moving.
-// backFrom is the point, in tiles, where the current back-out from a blockage began, or null.
-// airborne is true when no wheel touched the ground at the last step, so a jump that spans two turns still lands.
 type Memory = { steer: number; reverse: boolean; route: (KeptRoute & { radius: number }) | null; ahead: Vec | null; stall: number; backFrom: Vec | null; airborne: boolean };
 
-// Everything a turn needs to start: the physics world, which body and collider belongs to which
-// vehicle or obstacle, and each driver's memory.
 export type Drive = {
   world: RAPIER.World;
-  bodies: Record<string, number>; // vehicle id to rigid body handle
-  obstacles: Record<string, number[]>; // obstacle id to its collider handles
+  bodies: Record<string, number>;
+  obstacles: Record<string, number[]>;
   memory: Record<string, Memory>;
-  terrain: number; // terrain collider handle
+  terrain: number;
   bridge: Bridge;
 };
 
-// Collider handles of the Canyon Bridge deck and its two rails.
 export type Bridge = { deck: number; rails: number[] };
 
-export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry }; // b is a vehicle id, an obstacle id, 'edge', 'rail' or 'ground'; impact in m/s
-export type Break = { prop: string; vehicle: string; step: number }; // a breakable prop the vehicle smashed through at this physics step
+export type Crash = { a: string; b: string; impact: number; contact: CrashGeometry };
+export type Break = { prop: string; vehicle: string; step: number };
 export type VehicleResult = { passed: boolean; arrived: boolean };
-export type Landing = { vehicle: string; impact: number }; // wheels touching down after a jump, impact in m/s downward
+export type Landing = { vehicle: string; impact: number };
 export type TurnResult = { next: Drive; frames: TurnFrames; crashes: Crash[]; breaks: Break[]; landings: Landing[]; results: Record<string, VehicleResult> };
 
 export type DriveSnapshot = Omit<Drive, "world"> & { snapshot: Uint8Array };
@@ -97,10 +85,6 @@ export function freeDrive(d: Drive): void {
   d.world.free();
 }
 
-// Brings the physics world in line with the sim: new and removed vehicles and obstacles, vehicle
-// masses after loadout changes, and vehicles moved outside physics, such as by a debug script.
-// Only near vehicles keep a body. A far vehicle loses its body and driver memory, and gets a new body
-// at its sim pose once it comes near again.
 export function syncDrive(d: Drive, w: World): void {
   const near = w.vehicles.filter((v) => isNear(w, v));
   const ids = new Set(near.map((v) => v.id));
@@ -117,9 +101,6 @@ export function syncDrive(d: Drive, w: World): void {
   }
 }
 
-// Only obstacles that block driving get colliders. Site props are scenery; the site boundary blocks instead. Every
-// physics step costs time per collider in the world, so a prop gets colliders only while a truck with a body could
-// reach it this turn: bodies stay within the near radius of the player, and PHYSICS.propLiveMargin covers a turn.
 function syncObstacles(d: Drive, w: World): void {
   const center = playerVehicle(w).pos;
   const range = TERRAIN.vision.radius + PERF.liveMargin + PHYSICS.propLiveMargin;
@@ -135,10 +116,6 @@ function syncObstacles(d: Drive, w: World): void {
   }
 }
 
-// A site's boundary blocks as a cylinder of its radius. A prop blocks by its model's boxes at the pose the view
-// draws it: turned by yaw and scaled on the ground height at its position. Boxes that start above truck roofs are
-// left out, so trucks pass under canopies. A box that starts lower than PHYSICS.rockSink reaches that far below the
-// ground, so slopes leave no gap under it.
 export function obstacleColliders(t: Terrain, o: Obstacle): RAPIER.ColliderDesc[] {
   const ground = heightAt(t, o.pos.x, o.pos.y) * S;
   if (o.kind === 'site') {
@@ -153,7 +130,6 @@ export function obstacleColliders(t: Terrain, o: Obstacle): RAPIER.ColliderDesc[
   });
 }
 
-// A stranded truck is set back on its wheels at its sim pose, which applyTurn has moved to free ground.
 function syncVehicle(d: Drive, w: World, v: Vehicle): void {
   const handle = d.bodies[v.id];
   if (handle === undefined) {
@@ -171,7 +147,6 @@ function syncVehicle(d: Drive, w: World, v: Vehicle): void {
 function addVehicle(world: RAPIER.World, w: World, v: Vehicle): number {
   const b = bodyOf(v.chassisId);
   const body = world.createRigidBody(RAPIER.RigidBodyDesc.dynamic().setCanSleep(false).setGravityScale(T.gravityScale));
-  // The boxes carry no density: setMass gives the body its mass, center and inertia.
   for (const box of b.boxes) {
     const collider = RAPIER.ColliderDesc.cuboid(box.half.x, box.half.y, box.half.z)
       .setTranslation(box.at.x, box.at.y, box.at.z)
@@ -184,11 +159,10 @@ function addVehicle(world: RAPIER.World, w: World, v: Vehicle): number {
   return body.handle;
 }
 
-// Mass from the vehicle's load, with box inertia per axis, scaled up, around a center of mass lowered toward the axles.
 function setMass(body: RAPIER.RigidBody, v: Vehicle): void {
   const h = bodyOf(v.chassisId).half;
   const mass = vehicleMass(v);
-  const k = (mass / 3) * T.inertiaScale; // m/12 * (2a)^2 = m/3 * a^2
+  const k = (mass / 3) * T.inertiaScale;
   const inertia = { x: k * (h.y * h.y + h.z * h.z), y: k * (h.x * h.x + h.z * h.z), z: k * (h.x * h.x + h.y * h.y) };
   body.setAdditionalMassProperties(mass, { x: 0, y: -T.comBelow, z: 0 }, inertia, { x: 0, y: 0, z: 0, w: 1 }, true);
   body.recomputeMassPropertiesFromColliders();
@@ -202,9 +176,6 @@ function placeBody(body: RAPIER.RigidBody, w: World, v: Vehicle): void {
   body.setAngvel({ x: 0, y: 0, z: 0 }, true);
 }
 
-// Runs one turn of the sim's orders from a copy of the physics world. The input drive stays untouched.
-// Call syncDrive first so the physics world matches the sim. Only vehicles with a body drive and get
-// frames; far vehicles travel through advanceFar instead.
 export function simulateTurn(d: Drive, w: World): TurnResult {
   return run(d, w, TURN_STEPS);
 }
@@ -227,7 +198,7 @@ function run(d: Drive, w: World, steps: number): TurnResult {
     const mem = memory[v.id];
     return { v, s, b, body, ctl: makeCar(world, body, b, s.mass), mem, plan: planTurn(w, v, s, body, v.order, mem), result: { passed: false, arrived: false } };
   });
-  const owner = new Map<number, string>(); // collider handle to vehicle id
+  const owner = new Map<number, string>();
   for (const c of cars) noteOwner(owner, c.body, c.v.id);
   const obstacleOf = new Map(Object.entries(d.obstacles).flatMap(([id, handles]) => handles.map((h) => [h, id] as const)));
 
@@ -253,7 +224,6 @@ function run(d: Drive, w: World, steps: number): TurnResult {
   return { next: { world, bodies: { ...d.bodies }, obstacles, memory, terrain: d.terrain, bridge: d.bridge }, frames, crashes: contacts.crashes, breaks: contacts.breaks, landings: landings.all(), results };
 }
 
-// The hardest landing of each truck this turn: its wheels touch the ground after a step with every wheel in the air.
 class Landings {
   private readonly hardest = new Map<string, number>();
 
@@ -278,8 +248,6 @@ function wheelsTouch(ctl: RAPIER.DynamicRayCastVehicleController): boolean {
   return false;
 }
 
-// The turn's crashes and breaks. A contact with a breakable prop at BREAKABLE.breakSpeed or faster breaks it
-// instead of crashing. Slower, the prop holds and the contact is a crash like any other. One crash per pair per turn.
 class Contacts {
   readonly crashes: Crash[] = [];
   readonly breaks: Break[] = [];
@@ -309,7 +277,6 @@ class Contacts {
     return this.breaks.some((b) => b.prop === id);
   }
 
-  // Breaks since the last call.
   takeNewBreaks(): Break[] {
     const out = this.fresh;
     this.fresh = [];
@@ -317,8 +284,6 @@ class Contacts {
   }
 }
 
-// Removes each broken prop's colliders and gives the truck that broke it back its motion from before the hit, less
-// the BREAKABLE.slowdown share of its speed, so it drives on through where the prop stood.
 function smash(world: RAPIER.World, d: Drive, breaks: Break[], cars: Car[], before: Map<string, ImpactMotion>): void {
   for (const b of breaks) smashOne(world, d, b, cars, before);
 }
@@ -338,12 +303,10 @@ function crashOf(h1: number, h2: number, owner: Map<number, string>, obstacleOf:
   if (a === undefined) return null;
   const [first, other] = owner.get(h1) === a ? [h1, h2] : [h2, h1];
   const va = before.get(a)!;
-  // The deck is ground, like the terrain.
   if (other === d.terrain || other === d.bridge.deck) return captureGroundCrash(physics, state, a, first, other, va);
   return captureCrash(physics, state, before, { a, b: crashTarget(other, owner, obstacleOf, d), first, other }, va);
 }
 
-// The name of what a truck hit: a vehicle id, an obstacle id, a rail or the map edge.
 function crashTarget(other: number, owner: Map<number, string>, obstacleOf: Map<number, string>, d: Drive): string {
   return owner.get(other) ?? obstacleOf.get(other) ?? (d.bridge.rails.includes(other) ? RAIL : EDGE);
 }
@@ -357,7 +320,6 @@ function captureCrash(physics: RAPIER.World, state: World, before: Map<string, I
   return hit ? { a: pair.a, b: pair.b, ...hit } : null;
 }
 
-// The truck's body, not its wheels, hitting the ground: a flip, a nose dive off a jump or a slam into a steep bank.
 function captureGroundCrash(physics: RAPIER.World, state: World, a: string, first: number, ground: number, motion: ImpactMotion): Crash | null {
   const vehicle = state.vehicles.find((v) => v.id === a);
   if (!vehicle) throw new Error(`Unknown crash vehicle ${a}`);
@@ -369,7 +331,6 @@ function captureGroundCrash(physics: RAPIER.World, state: World, a: string, firs
     const impact = Math.max(0, (v.x * raw.x + v.y * raw.y + v.z * raw.z) * sign);
     const points = readManifoldPoints(manifold, flipped);
     if (points.a.length === 0) return;
-    // The normal out of the truck in its own frame, so a truck on its side or roof takes the hit where it lands.
     const local = flipped ? manifold.localNormal2() : manifold.localNormal1();
     hits.push({ impact, contact: { a: locateCrashContact(vehicle.chassisId, points.a, { x: local.x, y: local.z }), b: null } });
   });
@@ -439,9 +400,6 @@ function makeCar(world: RAPIER.World, body: RAPIER.RigidBody, b: Body, mass: num
   return car;
 }
 
-// What a driver wants this turn, fixed at the start of the turn like the 2D rules: a destination to
-// steer at, and a speed from the throttle zone of the click. Without fuel the engine gives nothing.
-// route holds the planner's waypoints to dest, or null for a careless driver who drives straight.
 type Plan = { dest: Vec | null; route: Vec[] | null; target: number; stopAt: boolean; engine: boolean; maxSteer: number; engineForce: number; brakeForce: number; stopDecel: number };
 
 function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBody, order: MoveOrder | null, mem: Memory): Plan {
@@ -449,42 +407,32 @@ function planTurn(w: World, v: Vehicle, full: VehicleStats, body: RAPIER.RigidBo
   const speed = Math.max(0, toTilesPerTurn(forwardSpeed(body)));
   const s = fuelLimited(w, v, full, speed, order);
   const engine = s.maxSpeed > 0;
-  // The stats accel already falls with load, so the engine force stays fixed as mass grows.
-  // Brakes grip with a force sized for the handling mass, so a heavy truck brakes worse.
   const base = {
     engine,
     maxSteer: T.maxSteer * (s.turnSlow / (ch.turnSlow * DEG)),
     engineForce: (full.mass * T.engineAccel * (s.accel / ch.accel)) / 2,
     brakeForce: T.brakeForce * (ch.handlingMass / 1000),
-    stopDecel: D.stopDecel * (ch.handlingMass / full.mass), // the stop plan brakes as hard as this load allows
+    stopDecel: D.stopDecel * (ch.handlingMass / full.mass),
   };
   if (!order) return { ...base, dest: null, route: null, target: idleTarget(speed), stopAt: false };
   if (order.kind === 'brake') return { ...base, dest: null, route: null, target: 0, stopAt: false };
-  // Careful drivers follow the route planner, which keeps to roads and goes around obstacles and traffic; careless ones drive straight.
   const blockers = routeBlockers(w, v);
-  // A point that moved less than the arrival radius, like the stop point of a town seen from a new angle, is the same place.
   const stored = mem.route && dist(mem.route.dest, order.dest) < RULES.arriveRadius && mem.route.radius === s.radius ? continueRoute(w, v.pos, mem.route, order.dest, s.radius, blockers, v) : null;
-  const path = v.direct ? null : stored ?? [...route(w, v.pos, order.dest, s.radius, blockers, v)]; // copied, since driving consumes it
+  const path = v.direct ? null : stored ?? [...route(w, v.pos, order.dest, s.radius, blockers, v)];
   mem.route = path ? { ...keepRoute(w, order.dest, path, blockers), radius: s.radius } : null;
   if (order.kind === 'stopAt') return { ...base, dest: stopPoint(path, order.dest), route: path, target: toMps(Math.min(s.maxSpeed, speed + s.accel)), stopAt: true };
   const next = throughSpeed(s, speed, dist(v.pos, order.dest), order.pace);
   return { ...base, dest: order.dest, route: path, target: toMps(next), stopAt: false };
 }
 
-// A stop order arrives at the route's end, which is the closest point the planner reaches when the order point
-// itself cannot be reached, as in far travel. A careless driver has no route and stops on the order point.
 function stopPoint(path: Vec[] | null, dest: Vec): Vec {
   return path ? path[path.length - 1] : dest;
 }
 
-// Without an order a moving truck coasts on, and a parked one holds its brakes, so it does not roll down a slope.
 function idleTarget(speed: number): number {
   return speed <= RULES.parkedSpeed ? 0 : toMps(speed);
 }
 
-// Loose ground gives less grip, so wheels spin instead of converting engine force to speed. A skilled driver
-// loses less of it. Slope needs no separate handling: it already slows or speeds the climb through gravity on
-// the heightfield.
 function applyTerrainGrip(c: Car, terrain: Terrain): void {
   const p = c.body.translation();
   const type = terrain.types[tileAt(terrain, { x: p.x / S, y: p.z / S })];
@@ -492,9 +440,6 @@ function applyTerrainGrip(c: Car, terrain: Terrain): void {
   for (let i = 0; i < 4; i++) c.ctl.setWheelFrictionSlip(i, grip);
 }
 
-// One physics step of driving. Steer at the destination and hold the turn's speed. A stop order slows
-// to arrive. A drive-through point counts as passed once close, or once the truck drives forward past
-// it on the last leg, so a wide miss does not circle back. A side click behind the truck still steers.
 function driveStep(c: Car, terrain: Terrain): void {
   applyTerrainGrip(c, terrain);
   const speed = forwardSpeed(c.body);
@@ -508,13 +453,12 @@ function driveStep(c: Car, terrain: Terrain): void {
   applyPedals(c, command.target, speed);
 }
 
-type Command = { target: number; steerTo: number }; // target in m/s along the nose, steerTo in radians of wheel angle
+type Command = { target: number; steerTo: number };
 
 function reached(c: Car): boolean {
   return c.result.passed || c.result.arrived;
 }
 
-// Steer at the next route point far enough ahead, or at the destination.
 function commandToward(c: Car, dest: Vec, speed: number): Command {
   const { plan, body } = c;
   const p = body.translation();
@@ -526,9 +470,7 @@ function commandToward(c: Car, dest: Vec, speed: number): Command {
   const ang = angleDiff(heading, bearing(at, aim));
   c.mem.reverse = backs(c, at, ang, angleDiff(heading + Math.PI, bearing(at, dest)), dist(at, dest), target, speed);
   if (c.mem.reverse) {
-    // Backing up turns the truck the opposite way from the wheels.
     const rearAng = angleDiff(heading + Math.PI, bearing(at, aim));
-    // Backing out of a blockage swings the nose toward the aim instead.
     const gain = c.mem.backFrom ? D.steerGain : -D.steerGain;
     return { target: -Math.min(D.reverseSpeed, plan.target), steerTo: clamp(rearAng * gain, -plan.maxSteer, plan.maxSteer) };
   }
@@ -536,7 +478,6 @@ function commandToward(c: Car, dest: Vec, speed: number): Command {
   return { target: Math.min(target, corner), steerTo: clamp(ang * D.steerGain, -plan.maxSteer, plan.maxSteer) };
 }
 
-// The turn's target speed, capped by a stop order's braking curve. Marks the destination arrived or passed.
 function arrivalTarget(c: Car, dest: Vec, at: Vec, heading: number, speed: number): number {
   const far = dist(at, dest) * S;
   if (!c.plan.stopAt) {
@@ -547,11 +488,6 @@ function arrivalTarget(c: Car, dest: Vec, at: Vec, heading: number, speed: numbe
   return Math.min(c.plan.target, Math.sqrt(2 * c.plan.stopDecel * Math.max(0, far - RULES.arriveRadius * S)));
 }
 
-// Whether the truck backs up this step. It backs only while its aim is behind the nose and a reason holds.
-// Reason one: backsToDestination allows it. It starts below reverseBelow and holds while the rule holds.
-// Reason two: something in front stopped it. It backs RULES.reverse.distance tiles from where the back-out
-// began, then tries nose first again. Any other point behind turns the truck around nose first.
-// at: truck position in tiles. ang: aim off the nose. rearAng: destination off straight behind. Both in radians; far in tiles.
 function backs(c: Car, at: Vec, ang: number, rearAng: number, far: number, target: number, speed: number): boolean {
   if (Math.abs(ang) <= Math.PI / 2) {
     c.mem.stall = 0;
@@ -570,13 +506,11 @@ function backs(c: Car, at: Vec, ang: number, rearAng: number, far: number, targe
   return true;
 }
 
-// Reason one: backing to the destination. It starts on a slow truck and holds while backsToDestination does.
 function backsToPoint(c: Car, rearAng: number, far: number, target: number, speed: number): boolean {
   const starts = target > 0 && Math.abs(speed) < D.reverseBelow;
   return backsToDestination(c.v, far, rearAng) && (c.mem.reverse || starts);
 }
 
-// Counts the seconds a truck pushes forward without moving, and says whether that lasted long enough to back up.
 function blockedInFront(c: Car, target: number, speed: number): boolean {
   c.mem.stall = target > 0 && Math.abs(speed) < D.stallSpeed ? c.mem.stall + DT : 0;
   return c.mem.stall >= D.stallSeconds;
@@ -585,13 +519,10 @@ function blockedInFront(c: Car, target: number, speed: number): boolean {
 function turnWheels(c: Car, steerTo: number): void {
   const step = T.steerRate * DT;
   c.mem.steer = clamp(steerTo, c.mem.steer - step, c.mem.steer + step);
-  // Positive wheel steering turns toward -z; map headings grow toward +z.
   c.ctl.setWheelSteering(0, -c.mem.steer);
   c.ctl.setWheelSteering(1, -c.mem.steer);
 }
 
-// Throttle toward the target speed, plus the engine share that cancels gravity along the nose,
-// so a truck holds its speed on a slope. Without engine push the truck brakes.
 function applyPedals(c: Car, target: number, speed: number): void {
   const { plan, ctl } = c;
   const u = clamp((target - speed) * D.throttleGain + slopeThrottle(c, target), -1, 1);
@@ -602,21 +533,17 @@ function applyPedals(c: Car, target: number, speed: number): void {
   for (const i of [2, 3]) ctl.setWheelEngineForce(i, force);
 }
 
-// Throttle share that holds the truck against gravity along its nose. A truck holding still brakes instead.
 function slopeThrottle(c: Car, target: number): number {
   if (target === 0) return 0;
   const pull = T.gravityScale * PHYSICS.gravity * noseRise(c.body.rotation()) * c.s.mass;
   return pull / (2 * c.plan.engineForce);
 }
 
-// No brake while the engine pushes. A truck holding still brakes fully on top of the throttle's brake share.
 function brakeOf(plan: Plan, u: number, target: number, pushing: boolean): number {
   if (pushing) return 0;
   return Math.abs(u) * plan.brakeForce + (target === 0 ? plan.brakeForce : 0);
 }
 
-// Whether a drive-through point is passed: the truck is close, or it drove forward past the point
-// on the last leg. `at` is in physics meters. Records in mem whether the point is ahead now.
 function passedThrough(dest: Vec, route: Vec[] | null, mem: Memory, at: Vec, heading: number, speed: number): boolean {
   const dx = dest.x * S - at.x;
   const dz = dest.y * S - at.y;
@@ -639,19 +566,11 @@ function samePoint(a: Vec | null, b: Vec): boolean {
   return a !== null && a.x === b.x && a.y === b.y;
 }
 
-// The fastest speed that still curves onto a point `aimDist` meters away, `ang` off the nose. The arc
-// that leaves along the nose and ends on the point has radius aimDist / (2 sin ang). Without this cap a
-// fast truck circles a point inside its turning circle forever.
 function cornerSpeed(aimDist: number, ang: number): number {
   const sin = Math.abs(Math.sin(ang));
   return sin === 0 ? Infinity : Math.sqrt((D.cornerAccel * aimDist) / (2 * sin));
 }
 
-// The fastest speed now that still brakes in time for every route corner ahead. A corner turned by
-// theta is driven as an arc that starts cornerCut before it, of radius cornerCut / tan(theta / 2).
-// Theta runs to the route point cornerCut past the corner, so a sharp turn split into small steps counts whole.
-// Corners past the braking distance at the current speed cannot limit it, so the scan stops there.
-// A driver without a route drives straight and has no corners.
 function routeCornerSpeed(route: Vec[] | null, at: Vec, speed: number, decel: number): number {
   if (!route) return Infinity;
   const reach = (speed * speed) / (2 * decel) + D.cornerCut;
@@ -670,7 +589,6 @@ function routeCornerSpeed(route: Vec[] | null, at: Vec, speed: number, decel: nu
   return limit;
 }
 
-// The route point at least `d` tiles along the route after point k, or the last one.
 function pointAfter(route: Vec[], k: number, d: number): Vec {
   let along = 0;
   for (let i = k + 1; i < route.length; i++) {
@@ -680,26 +598,21 @@ function pointAfter(route: Vec[], k: number, d: number): Vec {
   return route[route.length - 1];
 }
 
-// The truck covers several route points in one turn. Points it has come close to or driven past
-// drop off the front of the route, so it never turns back for one behind it.
 export function routeAim(route: Vec[], at: Vec): Vec {
   while (route.length > 1 && (dist(at, route[0]) < RULES.minAimDistance || passed(at, route[0], route[1]))) route.shift();
   return route[0];
 }
 
-// Whether the truck is beyond point a along the segment from a to b.
 function passed(at: Vec, a: Vec, b: Vec): boolean {
   return (at.x - a.x) * (b.x - a.x) + (at.y - a.y) * (b.y - a.y) > 0;
 }
 
-// Speed along the truck's nose, m/s; negative when backing up.
 export function forwardSpeed(body: RAPIER.RigidBody): number {
   const v = body.linvel();
   const h = headingOf(body.rotation());
   return v.x * Math.cos(h) + v.z * Math.sin(h);
 }
 
-// velocityBefore: the body's velocity before this step, for the step's acceleration.
 function frameOf(car: RAPIER.DynamicRayCastVehicleController, body: RAPIER.RigidBody, velocityBefore: V3): VehicleFrame {
   const wheels = [];
   for (let i = 0; i < car.numWheels(); i++) {
@@ -712,8 +625,6 @@ function frameOf(car: RAPIER.DynamicRayCastVehicleController, body: RAPIER.Rigid
   return { pos: { x: t.x, y: t.y, z: t.z }, rot: { x: r.x, y: r.y, z: r.z, w: r.w }, acc, wheels };
 }
 
-// A vehicle standing on the ground at its sim pose, wheels at rest. For vehicles that have not
-// driven a turn yet, such as ones that spawned at the end of the last turn.
 export function restFrame(w: World, v: Vehicle): VehicleFrame {
   const b = bodyOf(v.chassisId);
   const q = headingQuat(v.heading);
@@ -721,13 +632,10 @@ export function restFrame(w: World, v: Vehicle): VehicleFrame {
   return { pos: { x: v.pos.x * S, y: rideHeight(w, v), z: v.pos.y * S }, rot: q, acc: { x: 0, y: 0, z: 0 }, wheels };
 }
 
-// Frames for a vehicle that jumped this turn, with no trail to follow: it stands at its sim pose all turn.
 export function restFrames(w: World, v: Vehicle): VehicleFrame[] {
   return Array.from({ length: TURN_STEPS }, () => restFrame(w, v));
 }
 
-// Frames for a vehicle that moved without physics: rest poses along its trail, one per physics step,
-// ending on its sim pose. Far vehicles get these so the view moves them smoothly, like driven ones.
 export function trailFrames(w: World, v: Vehicle): VehicleFrame[] {
   const last = v.trail.length - 1;
   if (last < 1) throw new Error(`Vehicle ${v.id} has no trail to frame`);
@@ -744,20 +652,17 @@ export function trailFrames(w: World, v: Vehicle): VehicleFrame[] {
   return frames;
 }
 
-// Height of the body center for a truck standing at its sim position with springs at rest.
 function rideHeight(w: World, v: Vehicle): number {
   const b = bodyOf(v.chassisId);
   return heightAt(w.terrain, v.pos.x, v.pos.y) * S + b.wheelRadius + T.suspensionRest - b.wheelY;
 }
 
-// Whether the vehicle's body rests high above the ground at its sim position, so its wheels hang in the air.
 export function isLifted(d: Drive, w: World, v: Vehicle): boolean {
   const handle = d.bodies[v.id];
   if (handle === undefined) throw new Error(`No physics body for ${v.id}`);
   return d.world.getRigidBody(handle).translation().y > rideHeight(w, v) + T.liftedRise;
 }
 
-// Map pose and speed of a vehicle's body, and whether it stands on its wheels.
 export function bodyState(d: Drive, id: string): { pos: Vec; heading: number; speed: number; upright: boolean } {
   const handle = d.bodies[id];
   if (handle === undefined) throw new Error(`No physics body for ${id}`);
@@ -768,8 +673,6 @@ export function bodyState(d: Drive, id: string): { pos: Vec; heading: number; sp
   return { pos: { x: t.x / S, y: t.z / S }, heading: headingOf(r), speed: forwardSpeed(body), upright };
 }
 
-// A heightfield over the (n + 1) x (n + 1) corner grid. Rapier rows run along z and columns along x,
-// stored column-major, and the field is centered on its collider, so it moves by half the map size.
 function addTerrain(world: RAPIER.World, w: World): number {
   const n = w.terrain.size;
   const heights = new Float32Array((n + 1) * (n + 1));
@@ -785,14 +688,12 @@ function addTerrain(world: RAPIER.World, w: World): number {
   return terrain;
 }
 
-// The Canyon Bridge deck, its top on the deck line from sim/terrain.ts, and a rail along each edge.
 function addBridge(world: RAPIER.World, w: World): Bridge {
   const B = PHYSICS.bridge;
   const { from } = TERRAIN.features.bridge;
   const [h0, h1] = deckEnds(w.terrain);
   const length = BRIDGE_LENGTH * S;
   const pitch = Math.atan2((h1 - h0) * S, length);
-  // Yaw turns local +x onto the deck axis, then pitch about local z raises the to end.
   const yaw = headingQuat(Math.atan2(BRIDGE_AXIS.y, BRIDGE_AXIS.x));
   const rot = { x: yaw.y * Math.sin(pitch / 2), y: yaw.y * Math.cos(pitch / 2), z: yaw.w * Math.sin(pitch / 2), w: yaw.w * Math.cos(pitch / 2) };
   const up = { x: -Math.sin(pitch) * BRIDGE_AXIS.x, y: Math.cos(pitch), z: -Math.sin(pitch) * BRIDGE_AXIS.y };
@@ -802,7 +703,6 @@ function addBridge(world: RAPIER.World, w: World): Bridge {
     y: ((h0 + h1) / 2) * S,
     z: (from.y + (BRIDGE_AXIS.y * BRIDGE_LENGTH) / 2) * S,
   };
-  // A box whose top face center sits `lift` meters along the deck's up from the deck line, `side` meters across.
   const box = (halfWidth: number, halfHeight: number, side: number, lift: number) => {
     const c = lift - halfHeight;
     const desc = RAPIER.ColliderDesc.cuboid(length / 2, halfHeight, halfWidth)

@@ -12,15 +12,12 @@ const SITES: readonly Site[] = [...REGION.towns, ...REGION.locations];
 const GATES = new Map<string, Vec[]>();
 const PADS = new Map<string, Vec[]>();
 
-// Gates lie on the site edge where roads cross it, in road order.
 export function siteGates(site: Site): Vec[] {
   let gates = GATES.get(site.id);
   if (!gates) {
     const crossings = REGION.roads.flatMap((road) => road.slice(1).flatMap((b, i) => edgeCrossings(road[i], b, site.pos, site.radius)));
-    // Roads that cross the edge close together share one gate.
     const all = crossings.filter((p, i) => !crossings.slice(0, i).some((q) => dist(q, p) < REGION.sites.gateSpacing));
     if (all.length === 0) throw new Error(`Site ${site.id} has no road into it`);
-    // Small locations have one gate, on the first road into them. Towns and large locations have one per road.
     gates = hasGatePerRoad(site) ? all : all.slice(0, 1);
     GATES.set(site.id, gates);
   }
@@ -31,7 +28,6 @@ function hasGatePerRoad(site: Site): boolean {
   return !('kind' in site) || site.radius >= REGION.sites.multiGateRadius;
 }
 
-// One pad center per gate, in gate order. Each pad lies outside the site with its inner edge on the gate.
 export function sitePads(site: Site): Vec[] {
   let pads = PADS.get(site.id);
   if (!pads) {
@@ -53,7 +49,6 @@ export function canUseSite(pos: Vec, site: Site): boolean {
   return sitePads(site).some((pad) => onPad(pos, pad, site.pos));
 }
 
-// Whether pos lies on the pad rectangle, which runs out from the site center.
 function onPad(pos: Vec, pad: Vec, center: Vec): boolean {
   const a = Math.atan2(pad.y - center.y, pad.x - center.x);
   const dx = pos.x - pad.x;
@@ -63,17 +58,14 @@ function onPad(pos: Vec, pad: Vec, center: Vec): boolean {
   return Math.abs(along) <= REGION.sites.pad.length / 2 && Math.abs(across) <= REGION.sites.pad.width / 2;
 }
 
-// The site whose edge encloses a point, or null.
 export function siteUnder(pos: Vec): Site | null {
   return SITES.find((s) => dist(pos, s.pos) < s.radius) ?? null;
 }
 
-// The town the parked player truck can use, or null.
 export function townAt(world: World): TownDef | null {
   return playerVehicle(world).speed <= RULES.parkedSpeed ? townNear(world) : null;
 }
 
-// The town in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
 export function townNear(world: World): TownDef | null {
   const pos = playerVehicle(world).pos;
   return REGION.towns.find((t) => canUseSite(pos, t)) ?? null;
@@ -95,7 +87,6 @@ export function nearestTown(world: World): TownDef {
   return [...REGION.towns].sort((a, b) => dist(pos, a.pos) - dist(pos, b.pos))[0];
 }
 
-// Points where segment a-b crosses the circle, ordered from a to b.
 function edgeCrossings(a: Vec, b: Vec, c: Vec, r: number): Vec[] {
   const d = { x: b.x - a.x, y: b.y - a.y };
   const f = { x: a.x - c.x, y: a.y - c.y };

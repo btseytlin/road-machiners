@@ -16,8 +16,8 @@ import { partValue } from './wear';
 export type NpcLoadout = {
   chassisId: string;
   level: GearLevel;
-  parts: PartSpec[]; // mounted, non-core, with rolled wear
-  spares: PartSpec[]; // loose parts carried but not mounted, traders only
+  parts: PartSpec[];
+  spares: PartSpec[];
   cargo: Record<string, number>;
 };
 type ArmedChoice = { engine: string; weapon: string; vehicle: Vehicle };
@@ -106,7 +106,6 @@ function validateGear(table: NpcLoadoutTable): void {
   if (!Number.isInteger(table.minGuns) || table.minGuns < 1) throw new Error(`minGuns ${table.minGuns} must be a whole number of at least 1`);
 }
 
-// The vehicle's chassis and mounted, non-core gear at its current, wear-discounted value (PC1, IV1).
 function computeEquipmentCost(v: Vehicle): number {
   return chassisDef(v.chassisId).value + v.items.reduce((sum, item) => {
     if (item.kind !== 'part' || partDef(item.part.defId).kind === 'core') return sum;
@@ -114,10 +113,6 @@ function computeEquipmentCost(v: Vehicle): number {
   }, 0);
 }
 
-// A part is refused when it leaves any gun with no open side in its arc, like a front gun behind the cab.
-// Probing checks feasibility at pristine wear, the most expensive and heaviest case a part can be. Any
-// wear later rolled onto the mounted part only lowers its value, so a feasible pristine fit stays feasible.
-// A fit that leaves any gun with no open side its arc reaches does not count, since that gun could never fire.
 function tryMountChoice(world: World, v: Vehicle, id: string, budget: number, mount?: Cell[]): Vehicle | null {
   if (computeEquipmentCost(v) + partDef(id).value > budget) return null;
   if (vehicleMass(v) + partDef(id).mass > chassisDef(v.chassisId).ratedMass) return null;
@@ -126,15 +121,11 @@ function tryMountChoice(world: World, v: Vehicle, id: string, budget: number, mo
   return everyGunFires(candidate) ? candidate : null;
 }
 
-// A part beyond the template minimum. It must also leave the truck above the NPC speed floor, so its weight and gun
-// draw never slow it below MIN_NPC_SPEED_SHARE.
 function tryMountExtra(world: World, v: Vehicle, id: string, budget: number, mount?: Cell[]): Vehicle | null {
   const next = tryMountChoice(world, v, id, budget, mount);
   return next && meetsSpeedFloor(next) ? next : null;
 }
 
-// One wear roll per mounted non-core part, shifted by the gear level and clamped so a spawned part is never junk.
-// Core parts stay wear 0.
 function rollWear(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle): void {
   for (const item of v.items) {
     if (item.kind !== 'part' || partDef(item.part.defId).kind === 'core') continue;
@@ -146,8 +137,6 @@ function wearOf(rng: Rng, table: NpcLoadoutTable, level: Level): number {
   return Math.min(CONDITION.maxWear, Math.max(0, sampleWeighted(rng, table.wear) + level.wearShift));
 }
 
-// The choices depend only on data, so they are keyed by every input read, like gridCache in grid.ts. Cached vehicles
-// are never handed out, see withFreshIds().
 const armedChoiceCache = new Map<string, ArmedChoice[]>();
 
 function armedChoiceKey(table: NpcLoadoutTable, chassisId: string, budget: number): string {
@@ -159,14 +148,12 @@ function armedChoices(probe: World, template: NpcTemplate, chassisId: string, bu
   const key = armedChoiceKey(template.loadout, chassisId, budget);
   let choices = armedChoiceCache.get(key);
   if (!choices) {
-    // A copy of the probe keeps the build's ids off the real counter.
     choices = buildArmedChoices({ ...probe }, template, chassisId, budget);
     armedChoiceCache.set(key, choices);
   }
   return choices;
 }
 
-// A copy with new item and part ids, so one generation never shares ids and rollWear() never writes into the cache.
 function withFreshIds(world: World, v: Vehicle): Vehicle {
   const items = v.items.map((item) => {
     const fresh = { ...item, id: newId(world, 'i') };
@@ -191,8 +178,6 @@ function buildArmedChoices(world: World, template: NpcTemplate, chassisId: strin
   return choices;
 }
 
-// Guns past the main one up to the template minimum, each the first of the extra gun pool that fits. Null when the
-// minimum does not fit.
 function addRequiredGuns(world: World, table: NpcLoadoutTable, v: Vehicle, budget: number): Vehicle | null {
   while (mountedItems(v, 'weapon').length < table.minGuns) {
     const next = table.extraGun.map((entry) => tryMountChoice(world, v, entry.value, budget)).find((x) => x !== null);
@@ -222,7 +207,6 @@ function chooseOptionalPart(world: World, rng: Rng, v: Vehicle, budget: number, 
   return sampleWeighted(rng, choices);
 }
 
-// Non-core mounted parts with the wear rolled onto each.
 function mountedNonCore(v: Vehicle): PartSpec[] {
   return v.items.flatMap((item) =>
     item.kind === 'part' && partDef(item.part.defId).kind !== 'core' ? [{ defId: item.part.defId, wear: item.part.wear, at: { x: item.x, y: item.y, rot: item.rot } }] : [],
@@ -231,7 +215,6 @@ function mountedNonCore(v: Vehicle): PartSpec[] {
 
 type Room = { cells: number; mass: number };
 
-// The level scales the rolled count, cut to what fits.
 function chooseGoods(rng: Rng, table: NpcLoadoutTable, level: Level, room: Room): CargoRoll | null {
   const goods = table.goods.filter(({ value }) => value === null || (value.count <= room.cells && GOODS[value.good].mass * value.count <= room.mass));
   if (!goods.length) throw new Error('No fitting cargo outcome for this NPC template');
@@ -241,8 +224,6 @@ function chooseGoods(rng: Rng, table: NpcLoadoutTable, level: Level, room: Room)
   return { good: roll.good, count };
 }
 
-// Repair parts, goods and spares, in that order of priority, loaded onto a copy of the truck with the same calls
-// the factory uses, so everything chosen fits at spawn. Rated mass caps the load too.
 function chooseCargo(world: World, rng: Rng, wearRng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle): { spares: PartSpec[]; carried: Record<string, number> } {
   const load = { ...v, items: [...v.items] };
   const massLeft = () => Math.min(chassisDef(v.chassisId).ratedMass - vehicleMass(load), npcMassRoom(load));
@@ -257,7 +238,6 @@ function chooseCargo(world: World, rng: Rng, wearRng: Rng, table: NpcLoadoutTabl
   return { spares: addSpareParts(world, wearRng, table, level, load, massLeft), carried };
 }
 
-// Loose parts a driver carries to sell, as many of the rolled count as fit the grid and rated mass.
 function addSpareParts(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, load: Vehicle, massLeft: () => number): PartSpec[] {
   if (!table.spares) return [];
   const added: PartSpec[] = [];
@@ -271,14 +251,9 @@ function addSpareParts(world: World, rng: Rng, table: NpcLoadoutTable, level: Le
   return added;
 }
 
-// Rolls the chassis with its engine and main gun, then one utility part, then extra guns and armor toward the
-// gear level's targets. The utility part comes first, so a full deck of guns never crowds out a hauler's cargo part.
-// Each part fits the level's budget and the rated mass at pristine wear.
 function chooseVehicle(probe: World, rng: Rng, template: NpcTemplate, chassisId: string | null, level: Level): Vehicle {
   const table = template.loadout;
   const budget = table.budget * level.budget;
-  // The required build and the utility part get at least the template budget, so a poor roll still drives, shoots
-  // and hauls. The level budget limits the extra guns and armor.
   const required = Math.max(budget, table.budget);
   const chassis = chassisId === null ? table.chassis : table.chassis.filter((entry) => entry.value === chassisId);
   const chassisChoices = chassis.map((entry) => ({ value: armedChoices(probe, template, entry.value, required), weight: entry.weight })).filter((entry) => entry.value.length > 0);
@@ -289,9 +264,6 @@ function chooseVehicle(probe: World, rng: Rng, template: NpcTemplate, chassisId:
   return addArmor(probe, rng, table, level, v, budget);
 }
 
-// Every free deck cell is a spot for one more gun, and each rolls the level's fill chance once. A roll that hits
-// mounts the first gun that fits, budget, rated mass and MAX_GUN_SLOWDOWN allowing. The template minimum is already
-// mounted.
 function addGuns(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle, budget: number): Vehicle {
   for (let spot = freeDeckCells(v); spot > 0; spot--) {
     if (nextRandom(rng) >= Math.min(1, level.fill * table.gunFill)) continue;
@@ -302,7 +274,6 @@ function addGuns(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v
   return v;
 }
 
-// The truck, or null when its guns slow it past MAX_GUN_SLOWDOWN on its pristine engine.
 function withinGunSlowdown(v: Vehicle | null): Vehicle | null {
   const engine = v && mountedItems(v, 'engine')[0];
   if (!v || !engine) return v;
@@ -315,7 +286,6 @@ function freeDeckCells(v: Vehicle): number {
   return cells.flatMap((row, y) => row.flatMap((c, x) => (c === 'D' && !taken.has(cellKey(x, y)) ? [1] : []))).length;
 }
 
-// A weighted pick among the pool entries that `mount` can fit, mounted. Null when none fits.
 function pickFitting(world: World, rng: Rng, pool: Weighted<string>[], mount: (id: string) => Vehicle | null): Vehicle | null {
   const fitting = pool.flatMap((entry) => {
     const vehicle = mount(entry.value);
@@ -327,8 +297,6 @@ function pickFitting(world: World, rng: Rng, pool: Weighted<string>[], mount: (i
 const SIDE_ORDER: Cell[][] = [['F'], ['L', 'R'], ['B']];
 const EDGES: readonly Cell[] = ['F', 'B', 'L', 'R'];
 
-// Armors sides in order, the front, both flanks, the rear, until the level's share of edge cells is armored. Each
-// side takes one armor type, picked among those that fit there. Flanks alternate pieces so both sides match.
 function addArmor(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle, budget: number): Vehicle {
   const target = Math.round(edgeCells(v.chassisId) * level.armor);
   for (const sides of SIDE_ORDER) {
@@ -362,15 +330,11 @@ function armoredCells(v: Vehicle): number {
   return mountedItems(v, 'armor').reduce((sum, item) => sum + itemCells(item).length, 0);
 }
 
-// A fresh loadout for the template at a rolled gear level, or at `level` when given. A given chassis keeps the
-// truck the driver already has.
 export function generateNpcLoadout(world: World, template: NpcTemplate, chassisId: string | null = null, level: GearLevel | null = null): NpcLoadout {
   const table = template.loadout;
   validateTable(table);
-  // Probes may allocate IDs, but only the completed selection advances the real world's RNG.
   const probe = { ...world };
   const rng = { rngState: world.rngState };
-  // Wear and spares draw from the market stream, so they never shift the main stream's decisions.
   const wearRng = { rngState: world.marketRng.rngState };
   const gear = level ?? sampleWeighted(rng, table.levels);
   const v = chooseVehicle(probe, rng, template, chassisId, GEAR_LEVELS[gear]);

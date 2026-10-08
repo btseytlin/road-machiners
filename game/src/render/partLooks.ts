@@ -5,7 +5,6 @@ import type { ModelName } from '../three/render/models';
 import { PARTS } from '../data/parts';
 import { hashStr } from './noise';
 
-// The base model each chassis is drawn from. Kit parts stand on its row surfaces.
 const BASE_MODELS: Record<string, ModelName> = {
   scout: 'base_scout',
   hauler: 'base_hauler',
@@ -28,7 +27,6 @@ export function baseModel(chassisId: string): ModelName {
   return base;
 }
 
-// Parts with no model of their own. The base model draws them: every cab.
 export const BODY_PARTS: ReadonlySet<string> = new Set(
   Object.values(PARTS).flatMap((p) => (p.kind === 'core' && p.role === 'cab' ? [p.id] : [])),
 );
@@ -93,7 +91,6 @@ export const PART_MODELS: Record<string, ModelName> = {
 
 export type WeaponPool = { mount: ModelName[]; receiver: ModelName[]; barrel: ModelName[]; extra: ModelName[] };
 
-// An empty extra pool means the weapon has no extra.
 export const WEAPON_POOLS: Record<string, WeaponPool> = {
   mg: {
     mount: ['wmount_ring_small', 'wmount_pintle'],
@@ -217,7 +214,6 @@ export function partModel(defId: string): ModelName {
 export function weaponLook(partId: string, defId: string): WeaponLook {
   const pool = WEAPON_POOLS[defId];
   if (!pool) throw new Error(`No weapon pool for ${defId}. Add it to WEAPON_POOLS.`);
-  // Each slot hashes with its own suffix, so slot picks do not move together.
   const pick = (slot: keyof WeaponPool): ModelName => {
     const options = pool[slot];
     return options[Math.floor(hashStr(`${partId}:${slot}`) * options.length)];

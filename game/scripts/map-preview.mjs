@@ -8,9 +8,6 @@ import { TYPE_IDS } from '../src/sim/terrain.ts';
 
 const OUTSIDE = 0x202020;
 const SITE_EDGE = 0x8a1e14;
-// Round props are discs of their radius. Long props are boxes along their facing, half as wide as long.
-// Road bridge decks are as wide as the road. Billboards are boards across their facing. Fence segments are
-// one-pixel lines along their facing, r to each side of the center. Road bridges go first, since other props never overlap them.
 const PROP_LOOKS = {
   rock: { color: 0x3a3028, shape: 'disc' },
   crag: { color: 0x6a5a48, shape: 'disc' },
@@ -45,7 +42,6 @@ export function paintMap(d, area, pxPerTile) {
   return pic;
 }
 
-// Half extents along and across a box-shaped prop's facing, from its radius and the size of half a pixel.
 const BOX_SHAPES = {
   box: (r) => [r * Math.SQRT1_2, r * Math.SQRT1_2],
   long: (r) => [r, r / 2],
@@ -57,7 +53,6 @@ const BOX_SHAPES = {
 function paintProp(pic, area, pxPerTile, prop) {
   const look = PROP_LOOKS[prop.kind];
   if (!look) throw new Error(`No preview look for prop kind ${prop.kind}`);
-  // Half a pixel at least, so a thin pole still covers one pixel.
   const halfPixel = 0.5 / pxPerTile;
   const r = Math.max(prop.r, halfPixel);
   if (look.shape === 'disc') return paintDisc(pic, area, pxPerTile, prop.pos, r, look.color, 0);
@@ -74,14 +69,12 @@ function groundColor(d, x, y) {
   const b = d.heights[j * w + i + 1];
   const c = d.heights[(j + 1) * w + i];
   const e = d.heights[(j + 1) * w + i + 1];
-  // Slope of the blended ground at the point, not the tile average, so close-ups shade smoothly.
   const gx = b - a + (a - b - c + e) * (y - j);
   const gy = c - a + (a - b - c + e) * (x - i);
   const light = 1 + (gx * TERRAIN.light.x + gy * TERRAIN.light.y) * TERRAIN.slopeShade;
   return shade(COLORS[d.types[j * d.size + i]], light);
 }
 
-// Fills the pixels whose centers lie within radius of center and at least inner from it.
 function paintDisc(pic, area, pxPerTile, center, radius, color, inner) {
   const x0 = Math.max(0, Math.floor((center.x - radius - area.x) * pxPerTile));
   const x1 = Math.min(pic.width - 1, Math.ceil((center.x + radius - area.x) * pxPerTile));
@@ -93,8 +86,6 @@ function paintDisc(pic, area, pxPerTile, center, radius, color, inner) {
   }
 }
 
-// Fills the pixels whose centers lie in the box around center, halfAlong tiles along the facing yaw and
-// halfAcross tiles across it.
 function paintBox(pic, area, pxPerTile, center, yaw, halfAlong, halfAcross, color) {
   const cos = Math.cos(yaw);
   const sin = Math.sin(yaw);

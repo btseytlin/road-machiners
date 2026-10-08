@@ -1,7 +1,6 @@
 // Stuck soak: plays a whole world of NPCs on the real map through the turn pipeline for many turns and collects every
 // stall the watchdog logged and any error. A stall means some rule left a driver with no way forward, so a clean run
 // has none. See watchStalls() in src/sim/npc-activities.ts. Every truck moves as it does beyond the player's sight,
-// along routes on the real map, with no physics. The game never imports this module.
 
 import { START_KITS } from '../data/start';
 import { isHostile } from '../sim/combat';
@@ -18,7 +17,6 @@ import { TEST_MAP } from './map';
 
 export type SoakReport = { seed: number; turns: number; stalls: string[]; error: string | null };
 
-// The player stays parked at its start town in god mode, so the world plays on around it.
 export function soak(seed: number, turns: number): SoakReport {
   let w = newWorld(seed, START_KITS.standard, TEST_MAP);
   w.player.god = true;
@@ -26,7 +24,6 @@ export function soak(seed: number, turns: number): SoakReport {
   let played = 0;
   try {
     for (; played < turns; played++) {
-      // The parked player never answers a radio call an NPC opens, so it hangs up and the world plays on.
       if (w.player.call) w = hangUp(w);
       const before = topGoals(w);
       w = endTurn(w, moveAllFar);
@@ -42,7 +39,6 @@ function moveAllFar(w: World): void {
   for (const v of w.vehicles) advanceFar(w, v);
 }
 
-// Each driver's top goal before the turn, so a stall report can say where the given-up goal pointed.
 function topGoals(w: World): Map<string, NpcActivity> {
   const tops = new Map<string, NpcActivity>();
   for (const v of w.vehicles) {
@@ -60,7 +56,6 @@ function describeStall(w: World, e: Extract<GameEvent, { t: 'stall' }>, goal: Np
   return `${at}${dest}\n  ${vehicleLine(w, v)} free cells ${freeCells(v)}\n  ${surroundings(w, v)}`;
 }
 
-// The order and route the driver holds, the trucks close by and the hostiles it sees.
 function surroundings(w: World, v: Vehicle): string {
   const near = w.vehicles.filter((o) => o.id !== v.id && dist(o.pos, v.pos) < 6)
     .map((o) => `${o.id}:${o.brain?.templateId ?? 'player'}@${Math.round(dist(o.pos, v.pos))} top ${o.brain?.goals.at(-1)?.kind ?? '-'}`);

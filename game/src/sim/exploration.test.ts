@@ -35,7 +35,6 @@ describe('Icarus exploration distances', () => {
     const toRoad = polylineDist(player.pos, REGION.roads[REGION.playerStart.road]);
     expect(toRoad).toBeLessThan(gray);
     expect(toRoad).toBeGreaterThan(TERRAIN.vision.radius * 2);
-    // Driving straight ahead crosses the road.
     const ahead = { x: player.pos.x + Math.cos(player.heading) * gray, y: player.pos.y + Math.sin(player.heading) * gray };
     expect(polylineDist(ahead, REGION.roads[REGION.playerStart.road])).toBeLessThan(gray - toRoad + REGION.roadWidth);
     for (const site of [...REGION.towns, ...REGION.locations]) expect(dist(player.pos, site.pos) - site.radius).toBeGreaterThan(TERRAIN.vision.radius);

@@ -1,8 +1,6 @@
 // Records progression traces: a bot plays each archetype on each seed, and every practice event goes to
 // tmp/progression/<archetype>-<seed>.jsonl. The first line holds the run, then one trace line per event. A run the
 // player did not survive ends early with a {"end":"death","turn":N} line.
-// Each run is a child process, and runs go in parallel up to the CPU count.
-// Usage: npm run progression:record -- --archetypes trader,fighter --seeds 1,2,3 --turns 2000
 import { spawn } from 'node:child_process';
 import { closeSync, mkdirSync, openSync, renameSync, writeSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
@@ -50,7 +48,6 @@ function parseSeed(text) {
   return seed;
 }
 
-// A job is one run, written as <archetype>:<seed>.
 function parseJob(text) {
   const [archetype, seedText] = text.split(':');
   if (!isArchetype(archetype)) throw new Error(`Unknown archetype in job ${text}`);
@@ -83,7 +80,6 @@ function runChild({ archetype, seed }, turns) {
   });
 }
 
-// Writes one trace, turn by turn, into a part file that becomes the trace only when the run finishes.
 function recordOne({ archetype, seed }, turns) {
   const name = `${archetype}-${seed}`;
   const path = `${OUT_DIR}/${name}.jsonl`;
@@ -100,7 +96,6 @@ function recordOne({ archetype, seed }, turns) {
     death = step.death;
     if ((world.turn - 1) % TIME.turnsPerDay === 0) console.log(`${name}: day ${(world.turn - 1) / TIME.turnsPerDay} done, ${count} events`);
   }
-  // A run the player did not survive ends with the death marker.
   if (death) writeSync(fd, `${JSON.stringify(death)}\n`);
   closeSync(fd);
   renameSync(`${path}.part`, path);

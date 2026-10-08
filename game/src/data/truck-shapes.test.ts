@@ -8,7 +8,6 @@ import SHAPES from './truck-shapes.json';
 const FILES = import.meta.glob<string>('/public/models/base_*.glb', { query: '?url&inline', import: 'default' });
 const DATA_URL = 'data:model/gltf-binary;base64,';
 
-// The same FNV-1a over the file bytes as scripts/shape-lib.mjs.
 function fnv1a(bytes: Uint8Array): string {
   let h = 0x811c9dc5;
   for (const b of bytes) h = Math.imul(h ^ b, 0x01000193) >>> 0;

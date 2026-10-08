@@ -5,9 +5,9 @@ import type { AlbumPhoto, InlineButton, Telegram } from './types';
 
 const MESSAGE_LIMIT = 4096;
 const CAPTION_LIMIT = 1024;
-const CALLBACK_DATA_LIMIT = 64; // bytes
-const ALBUM_MAX = 10; // Telegram's limit of one media group
-export const DOCUMENT_MAX_BYTES = 50 * 1024 * 1024; // the Bot API's limit for an uploaded file
+const CALLBACK_DATA_LIMIT = 64;
+const ALBUM_MAX = 10;
+export const DOCUMENT_MAX_BYTES = 50 * 1024 * 1024;
 
 type ApiReply = { ok: boolean; description?: string; result?: unknown };
 
@@ -31,7 +31,6 @@ export function botClient(token: string, fetchFn: typeof fetch): Telegram {
       }
       return ids[0]!;
     },
-    // A message with buttons cannot be split, since only one part could carry them.
     async sendButtons(chat, text, buttons) {
       if (text.length > MESSAGE_LIMIT) throw new Error(`Telegram message with buttons is ${text.length} chars, the limit is ${MESSAGE_LIMIT}.`);
       return callForId('sendMessage', JSON.stringify({ chat_id: chat, text, reply_markup: JSON.parse(keyboard(buttons)) }));
@@ -46,13 +45,11 @@ export function botClient(token: string, fetchFn: typeof fetch): Telegram {
       form.set('photo', new Blob([readFileSync(pngPath)], { type: 'image/png' }), basename(pngPath));
       return callForId('sendPhoto', form);
     },
-    // One photo goes as sendPhoto, 2 to 10 as one media group. Albums cannot carry buttons. Every file is checked before anything is sent.
     async sendPhotos(chat, photos, replyTo) {
       const { method, form } = albumRequest(chat, photos, replyTo);
       const result = await call(method, form);
       return method === 'sendPhoto' ? [messageId(method, result)] : groupIds(result, photos.length);
     },
-    // A file goes to the chat only as an upload, never as a link. The reply points at the message it answers.
     async sendDocument(chat, path, replyTo) {
       const stat = lstatSync(path, { throwIfNoEntry: false });
       if (!stat || !stat.isFile()) throw new Error(`Telegram document ${basename(path)} is missing or is not a regular file.`);
@@ -69,7 +66,6 @@ export function botClient(token: string, fetchFn: typeof fetch): Telegram {
     },
     async editCaption(chat, messageId, caption) {
       if (caption.length > CAPTION_LIMIT) throw new Error(`Telegram caption is ${caption.length} chars, the limit is ${CAPTION_LIMIT}.`);
-      // An empty keyboard drops the buttons, so a decided post cannot be pressed again.
       await call('editMessageCaption', JSON.stringify({ chat_id: chat, message_id: messageId, caption, reply_markup: { inline_keyboard: [] } }));
     },
   };
@@ -117,7 +113,6 @@ function keyboard(buttons: InlineButton[][]): string {
   return JSON.stringify({ inline_keyboard: buttons.map((row) => row.map(({ text, data }) => ({ text, callback_data: data }))) });
 }
 
-// Cuts at the last line break inside the limit, or at the limit when a line is longer.
 function splitText(text: string): string[] {
   const parts: string[] = [];
   let rest = text;

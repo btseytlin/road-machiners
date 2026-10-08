@@ -3,15 +3,10 @@
 
 import { CORES_2_1, CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 
-// A saved world as raw JSON. Steps read it without game types, since those change after a step is written.
 export type SavedJson = Record<string, unknown>;
 
-// Bump for a change old saves cannot follow, and empty MIGRATIONS with it. Boot then carries the player's progression over into a new world, since the save screen handles every save that cannot load. A new map needs no bump.
 export const SAVE_MAJOR = 2;
 
-// Step 1 to 2: the chassis grids follow the cab, transmission and tank rules. Cores move, and what stood on their new
-// cells moves to the nearest free deck spot. Parts are 1x1 unless listed here, a copy of the sizes at format 2.1
-// since the parts table changes later.
 const SIZES_2_1: Record<string, readonly [number, number]> = {
   shotgun: [1, 2],
   longRifle: [1, 2],
@@ -58,7 +53,6 @@ type Item = SavedJson & { x: number; y: number; rot: number; part?: SavedJson & 
 type Spot = { x: number; y: number; rot: number };
 type Player = SavedJson & { vehicleId: string; storage: SavedJson[]; money: number };
 
-// The money value of each good at format 2.1.
 const GOOD_VALUES_2_1: Record<string, number> = {
   scrap: 19, salt: 26, meds: 70, grain: 21, textiles: 35, tools: 110, batteries: 76, electronics: 155, parts: 20, fuelDrums: 28, water: 18,
 };
@@ -73,8 +67,6 @@ function cellsAt(item: Item, spot: Spot): Cell[] {
 
 const cellsOf = (item: Item) => cellsAt(item, item);
 
-// The nearest spot from the item's anchor where every cell is free deck, by distance, then row, then column. The
-// item's own turn comes first at each anchor.
 function nearestSpot(item: Item, free: Set<string>): Spot | null {
   const anchors = [...free].map((k) => ({ x: Number(k.split(',')[0]), y: Number(k.split(',')[1]) }));
   const dist = (c: Cell) => (c.x - item.x) ** 2 + (c.y - item.y) ** 2;
@@ -90,12 +82,10 @@ function nearestSpot(item: Item, free: Set<string>): Spot | null {
 
 const isWheel = (item: Item) => item.part?.defId.startsWith('wheel') ?? false;
 
-// The marked cells of the new layout of a chassis.
 function markedCells(layout: readonly string[], mark: string): Set<string> {
   return new Set(layout.flatMap((row, y) => [...row].flatMap((ch, x) => (ch === mark ? [key({ x, y })] : []))));
 }
 
-// Each old core item paired with its copy on the new cells, wearing the new part id. The wheels never moved.
 function relaidCores(vehicle: SavedJson): Map<Item, Item> {
   const before = CORES_2_1[vehicle.chassisId as string];
   const after = CORES_2_2[vehicle.chassisId as string];
@@ -109,14 +99,12 @@ function relaidCores(vehicle: SavedJson): Map<Item, Item> {
   return moved;
 }
 
-// What the player gets for an item that has no spot: the part into storage, the good as cash. Others get nothing.
 function refund(item: Item, player: Player | null): void {
   if (!player) return;
   if (item.part) player.storage.push(item.part);
   else player.money += GOOD_VALUES_2_1[item.good ?? ''] ?? 0;
 }
 
-// Where a displaced item goes: a deck spot, else a refund, else nowhere.
 function rehome(item: Item, free: Set<string>, player: Player | null): Item | null {
   const spot = nearestSpot(item, free);
   if (!spot) {
@@ -127,8 +115,6 @@ function rehome(item: Item, free: Set<string>, player: Player | null): Item | nu
   return { ...item, ...spot };
 }
 
-// A vehicle of a known chassis gets its cores on their new cells. Non-core items that lie on a core cell move to a
-// free deck spot. What has no spot goes to the player's storage or becomes cash, or is dropped for anyone else.
 function relayVehicle(vehicle: SavedJson, player: Player | null): SavedJson {
   const layout = LAYOUTS_2_2[vehicle.chassisId as string];
   if (!layout) return vehicle;
@@ -143,12 +129,10 @@ function relayVehicle(vehicle: SavedJson, player: Player | null): SavedJson {
   return { ...vehicle, items: [...items, ...homed.filter((item) => item !== null)], job: withoutRefit(vehicle.job) };
 }
 
-// Only a refit is tied to the old cells; other jobs do not touch the grid.
 function withoutRefit(job: unknown): unknown {
   return (job as SavedJson | null)?.kind === 'refit' ? null : job;
 }
 
-// Step 3 to 4: a frozen copy of the explored packer, a base64 bitset with the least significant bit first.
 function packExplored_3_4(list: unknown[]): string {
   const bytes = new Uint8Array(Math.ceil(list.length / 8));
   list.forEach((value, i) => {
@@ -162,30 +146,22 @@ function packExplored_3_4(list: unknown[]): string {
 
 const HANDOVER_TURNS_5_6 = 1;
 
-// MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
-// or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
-  // 0 to 1: the player gets townPatched, as a new game does.
   (world) => ({ ...world, player: { ...(world.player as SavedJson), townPatched: false } }),
-  // 1 to 2: chassis grids follow the cab, transmission and tank rules; cores move, and what stood on their new cells
-  // moves to a free deck spot or the garage.
   (world) => {
     const player = { ...(world.player as Player), storage: [...(world.player as Player).storage] };
     const vehicles = (world.vehicles as SavedJson[]).map((v) => relayVehicle(v, v.id === player.vehicleId ? player : null));
     const removed = (world.removed as SavedJson[]).map((v) => relayVehicle(v, null));
     return { ...world, player, vehicles, removed };
   },
-  // 2 to 3: the new aid XP source starts at 0, as in a new game.
   (world) => {
     const player = world.player as SavedJson;
     return { ...world, player: { ...player, xpBySource: { ...(player.xpBySource as SavedJson), aid: 0 } } };
   },
-  // 3 to 4: player.explored becomes a base64 bitset.
   (world) => {
     const player = world.player as SavedJson;
     return { ...world, player: { ...player, explored: packExplored_3_4(player.explored as unknown[]) } };
   },
-  // 4 to 5: a contract gets the turns it has left as its window, so no deadline or reward changes. A haul is no rush.
   (world) => {
     const turn = world.turn as number;
     const windowed = (c: SavedJson): SavedJson => {
@@ -198,7 +174,6 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     );
     return { ...world, player: { ...player, contracts: (player.contracts as SavedJson[]).map(windowed) }, shops };
   },
-  // 5 to 6: an aid deal waits for the player's [E] handover, one turn of work.
   (world) => {
     const handover = (s: SavedJson): SavedJson => {
       const data = s.data as SavedJson;

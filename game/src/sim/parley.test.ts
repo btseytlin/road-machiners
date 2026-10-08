@@ -376,7 +376,6 @@ describe('warning a looter off', () => {
   const WARN = 'This wreck is mine. Back off.';
   const INSIST = 'You heard me. Leave it.';
 
-  // The parked player at 30,30 beside a road wreck that a scavenger parked on its other side searches.
   function contested(): { w: World; npc: Vehicle; wreckId: string } {
     const w = quietWorld();
     const wreck = { id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 6 }, parts: [] };

@@ -1,7 +1,6 @@
 // Road look for the ground shader. The mask marks where roads lie on the map. The detail is a small
 // tiling image of packed dirt with gravel, cracked patches and potholes, drawn in pixels a third the size
 // of the ground paint pixels. The tone is slow noise that varies the road and wanders its edge, with a
-// period far from the detail's, so the detail never repeats in the same light.
 
 import { REGION } from "../data/region";
 import { bridgeCut, deckAlong } from "../sim/bridge";
@@ -10,21 +9,19 @@ import type { PaintCanvas } from "./groundPaint";
 import { hash2 } from "./noise";
 import { PAL, mix, shade } from "./palette";
 
-export const ROAD_DETAIL_SIDE = 256; // detail pixels per side of the tiling image
-export const ROAD_TONE_SIDE = 64; // tone pixels per side of its tiling image
-export const ROAD_TONE_PIXELS = 12; // detail pixels per tone pixel
+export const ROAD_DETAIL_SIDE = 256;
+export const ROAD_TONE_SIDE = 64;
+export const ROAD_TONE_PIXELS = 12;
 const SITES = [...REGION.towns, ...REGION.locations];
-const WIDTH = REGION.roadWidth * 0.9; // tiles across the painted road, before its edge wanders
-const BLUR = 2.4; // tiles of mask blur, so the tone can move the edge
-const STEP = 0.5; // tiles between points of a road line
-const CRACK_CELL = 16; // detail pixels between crack polygon centers
-const POTHOLES = 4; // potholes in one detail image
-const STONE_SHARE = 0.012; // share of detail pixels that are loose stones
+const WIDTH = REGION.roadWidth * 0.9;
+const BLUR = 2.4;
+const STEP = 0.5;
+const CRACK_CELL = 16;
+const POTHOLES = 4;
+const STONE_SHARE = 0.012;
 
 export type RoadImage = { side: number; pixels: Uint8ClampedArray };
 
-// Strokes every road white on black. Roads stop at site edges, where pads take over, and at Canyon
-// Bridge, whose deck is its own model.
 export function paintRoadMask(c: PaintCanvas): void {
   const ctx = c.ctx;
   ctx.fillStyle = "#000";
@@ -38,7 +35,6 @@ export function paintRoadMask(c: PaintCanvas): void {
     for (const run of drawnRuns(evenPoints(road)))
       run.forEach((p, i) => (i === 0 ? ctx.moveTo(c.toPx(p.x), c.toPx(p.y)) : ctx.lineTo(c.toPx(p.x), c.toPx(p.y))));
   ctx.stroke();
-  // One blur over the finished mask. The copy mode replaces the canvas with its own blurred image.
   ctx.filter = `blur(${BLUR * c.res}px)`;
   ctx.globalCompositeOperation = "copy";
   ctx.drawImage(ctx.canvas, 0, 0);
@@ -46,7 +42,6 @@ export function paintRoadMask(c: PaintCanvas): void {
   ctx.globalCompositeOperation = "source-over";
 }
 
-// Stretches of points off sites and off the bridge.
 function drawnRuns(points: Vec[]): Vec[][] {
   const runs: Vec[][] = [[]];
   for (const p of points) {
@@ -61,7 +56,6 @@ function drawn(p: Vec): boolean {
   return !SITES.some((site) => dist(site.pos, p) < site.radius);
 }
 
-// Points every STEP tiles along a road from its start, and its end.
 function evenPoints(road: readonly Vec[]): Vec[] {
   const out: Vec[] = [road[0]];
   let carry = 0;
@@ -76,7 +70,6 @@ function evenPoints(road: readonly Vec[]): Vec[] {
   return out;
 }
 
-// RGB is the road color in sRGB. Alpha is a per-pixel dither the shader uses to fray edges.
 export function paintRoadDetail(): RoadImage {
   const side = ROAD_DETAIL_SIDE;
   const pixels = new Uint8ClampedArray(side * side * 4);
@@ -105,7 +98,6 @@ function detailColor(x: number, y: number, cracks: Vec[], holes: Pothole[]): num
   return stoneColor(x, y) ?? color;
 }
 
-// Crack lines run where two crack polygons meet, only in cracked patches of the road.
 function cracked(x: number, y: number, centers: Vec[]): boolean {
   if (loopNoise(x / 32 + 3, y / 32 + 5, ROAD_DETAIL_SIDE / 32) < 0.62 || hash2(x + 61, y + 67) < 0.25) return false;
   const cells = ROAD_DETAIL_SIDE / CRACK_CELL;
@@ -133,7 +125,6 @@ function potholes(): Pothole[] {
   return Array.from({ length: POTHOLES }, (_, k) => ({ x: hash2(k, 401) * ROAD_DETAIL_SIDE, y: hash2(k, 402) * ROAD_DETAIL_SIDE, r: 2 + 2 * hash2(k, 403) }));
 }
 
-// A dark hollow with a pale lip on its far side, where the low sun catches the broken edge.
 function potholeColor(x: number, y: number, holes: Pothole[]): number | null {
   for (const h of holes) {
     const d = wrappedDist(x + 0.5, y + 0.5, h.x, h.y);
@@ -148,7 +139,6 @@ function stoneColor(x: number, y: number): number | null {
   return mix(PAL.road, hash2(x + 5, y + 3) < 0.5 ? PAL.sand[3] : PAL.rock.side, 0.5);
 }
 
-// Slow noise in R for tone and edge wander. It tiles, so the shader repeats it far apart.
 export function paintRoadTone(): RoadImage {
   const side = ROAD_TONE_SIDE;
   const pixels = new Uint8ClampedArray(side * side * 4);
@@ -161,7 +151,6 @@ export function paintRoadTone(): RoadImage {
   return { side, pixels };
 }
 
-// Smooth value noise in [0, 1] that repeats every `period` lattice cells.
 function loopNoise(x: number, y: number, period: number): number {
   const x0 = Math.floor(x);
   const y0 = Math.floor(y);

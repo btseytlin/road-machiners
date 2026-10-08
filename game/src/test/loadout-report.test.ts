@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
 import { templateStats } from './loadout-report';
 
-// Averages over enough rolls to sit well inside a band unless the tables or the generator drift.
 const ROLLS = 40;
 
 describe('NPC loadout bands', () => {

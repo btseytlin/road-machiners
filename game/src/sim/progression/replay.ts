@@ -8,12 +8,9 @@ import type { SkillId, XpSource } from '../types';
 import { isArchetype, type Archetype } from './bot';
 import type { RunEnd, TraceLine } from './record';
 
-// levels[i] is the first turn the skill reaches level i + 1, or null if it never does.
 export type SkillCurve = { levels: (number | null)[]; total: number; perDay: number };
 export type Curve = Record<SkillId, SkillCurve>;
 
-// `turns` is the number of turns the recording played, for the XP per day. A run of N turns ends on world turn N + 1.
-// For a run the player did not survive, pass the death turn.
 export function replay(trace: readonly TraceLine[], turns: number): Curve {
   requireTurnOrder(trace, turns);
   const progress = freshProgress();
@@ -43,7 +40,6 @@ function freshProgress(): SkillProgress {
   return { skills: zero(), xpToday: zero(), xpDay: 1, repeats: {} };
 }
 
-// A trace line read from a trace file. Throws on anything that is not a valid line.
 export function parseTraceLine(value: unknown): TraceLine {
   const { turn, source, amount, difficulty, target } = asRecord(value);
   if (!Number.isInteger(turn) || !isXpSource(source) || typeof amount !== 'number' || !isDifficulty(difficulty) || typeof target !== 'string') {
@@ -65,7 +61,6 @@ function isDifficulty(value: unknown): value is number | null {
   return value === null || typeof value === 'number';
 }
 
-// The death marker that ends a trace file, or null for any other entry. Throws on a malformed marker.
 export function parseRunEnd(value: unknown): RunEnd | null {
   const entry = asRecord(value);
   if (!('end' in entry)) return null;
@@ -73,8 +68,6 @@ export function parseRunEnd(value: unknown): RunEnd | null {
   return { end: 'death', turn: entry.turn as number };
 }
 
-// Each way a curve misses its targets in TARGET_DAYS, as one readable line. `turns` is the run length: a level whose
-// target window starts after the run ends only needs to stay unreached.
 export function targetMisses(curve: Curve, archetype: Archetype, turns: number): string[] {
   return SKILL_IDS.flatMap((skill) => {
     const table: Partial<Record<number, number>> = MAIN_SKILL[archetype] === skill ? TARGET_DAYS.main : TARGET_DAYS.off;
@@ -88,8 +81,6 @@ function levelMiss(skill: SkillId, level: number, day: number, reached: number |
   return verdict ? [`${skill} level ${level}: ${at}, target day ${day}, ${verdict}`] : [];
 }
 
-// A level reached before its window is too early. One reached after it, or unreached once the window closed within
-// the run, is too late.
 function missVerdict(target: number, reached: number | null, turns: number): 'too early' | 'too late' | null {
   const late = target * (1 + TARGET_TOLERANCE);
   if (reached === null) return late <= turns ? 'too late' : null;
@@ -97,8 +88,6 @@ function missVerdict(target: number, reached: number | null, turns: number): 'to
   return reached > late ? 'too late' : null;
 }
 
-// A recorded run read back from a trace file's parsed lines: a header, the trace lines, and a death marker last if
-// the player died. `turns` is the death turn for a run the player did not survive.
 export type Run = { archetype: Archetype; seed: number; turns: number; death: number | null; trace: TraceLine[] };
 
 export function parseRun(values: readonly unknown[], label: string): Run {

@@ -12,7 +12,6 @@ const at = (hoursAgo: number): string => new Date(NOW.getTime() - hoursAgo * HOU
 const card = (issue: number, hoursAgo: number, step: CardStep, to: Column, flow?: CardFlow): CardLine => ({ kind: 'card', issue, step, to, at: at(hoursAgo), ...(flow ? { flow } : {}) });
 const job = (issue: number, stage: JobStage, outcome: JobOutcome, hoursAgo: number): JobLine => ({ kind: 'job', id: `${stage}-${hoursAgo}`, stage, issue, startedAt: at(hoursAgo + 1), endedAt: at(hoursAgo), outcome, agents: [] });
 
-// One feature from intake to the merge into dev, 2 hours in Triage, 10 in Design, 5 in Implementation, 3 in preview, 24 in Approval, 4 in harden, 1 in the merge queue.
 function straight(issue: number, start: number): CardLine[] {
   return [
     card(issue, start, 'entered', 'Triage'), card(issue, start - 2, 'accepted', 'Design'), card(issue, start - 12, 'planned', 'Implementation'),
@@ -33,7 +32,6 @@ describe('summarizeDelivery', () => {
     expect(summary!.stages.map((row) => [row.stage, row.count, row.meanMs! / HOUR])).toEqual([
       ['triage', 1, 2], ['design', 1, 10], ['implementation', 1, 5], ['preview', 1, 3], ['approval', 1, 24], ['harden', 1, 4], ['merge', 1, 1],
     ]);
-    // Lead time starts at the triage acceptance, so the 2 hours in Triage are not in it.
     expect(summary!.lead).toEqual({ count: 1, meanMs: 47 * HOUR, medianMs: 47 * HOUR, open: 0, openMeanMs: null, missingStart: 0 });
     expect(summary!.looped).toBe(0);
     expect(summary!.rejections).toEqual([{ gate: 'triage', decided: 1, rejected: 0 }, { gate: 'design', decided: 1, rejected: 0 }, { gate: 'committee', decided: 1, rejected: 0 }]);
@@ -64,7 +62,6 @@ describe('summarizeDelivery', () => {
     expect(summary!.retries.find((row) => row.stage === 'verify')!.runs).toBe(1);
     expect(summary!.retries.find((row) => row.stage === 'checks')!.runs).toBe(0);
     expect(summary!.retries.find((row) => row.stage === 'implement')?.runs ?? 0).toBe(0);
-    // The first acceptance starts the lead time. Issue 2 is open again in Design, so it is open since that acceptance.
     expect(summary!.lead.count).toBe(1);
     expect(summary!.lead.open).toBe(1);
     expect(summary!.lead.openMeanMs).toBe(49 * HOUR);
@@ -90,7 +87,6 @@ describe('summarizeDelivery', () => {
     expect(gate(summary, 'triage')).toEqual({ gate: 'triage', decided: 6, rejected: 1 });
     expect(gate(summary, 'design')).toEqual({ gate: 'design', decided: 4, rejected: 1 });
     expect(gate(summary, 'committee')).toEqual({ gate: 'committee', decided: 2, rejected: 1 });
-    // Denied, refused and dropped cards are closed, so only the redesigned card stays open.
     expect(summary!.lead.open).toBe(1);
   });
 
@@ -131,7 +127,6 @@ describe('summarizeDelivery', () => {
     expect(stage(day, 'triage').count).toBe(0);
     expect(stage(day, 'design')).toMatchObject({ count: 1, meanMs: 170 * HOUR });
     expect(stage(day, 'implementation')).toMatchObject({ count: 0, meanMs: null, open: 1, openMeanMs: 20 * HOUR });
-    // The card had no line in the last day before its stage ended, so a window holds a stage it saw end.
     expect(summarizeDelivery(lines, [], new Date(NOW.getTime() - 21 * HOUR), 1)!.issues).toBe(0);
     expect(stage(summarizeDelivery(lines, [], NOW, 30), 'triage')).toMatchObject({ count: 1, meanMs: 10 * HOUR });
   });

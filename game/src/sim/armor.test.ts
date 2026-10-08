@@ -16,7 +16,6 @@ const partAt = (v: Vehicle, x: number, y: number) =>
   mountedItems(v).find((it) => itemCells(it).some((c) => c.x === x && c.y === y))!.part;
 const defOf = (v: Vehicle, defId: string) => mountedParts(v).find((p) => p.defId === defId)!;
 
-// A scout with plates on the nose: a 3x1 plate at (2,0), the engine at (2,1)-(3,2) behind it and the cab behind that.
 function plated() {
   const w = emptyWorld();
   const v = addVehicle(w, 'raiders', 'scout', ['plates', 'stockEngine'], { x: 40, y: 40 });
@@ -50,7 +49,7 @@ describe('walkLane', () => {
   it('enters each side from its own edge', () => {
     const { w, v } = plated();
     const last = gridOf(v).h - 1;
-    const round = { damage: 1, pen: 2, blast: false, armorShare: 1 }; // the scout's edge cells are empty, so a round needs to pass one cell
+    const round = { damage: 1, pen: 2, blast: false, armorShare: 1 };
     expect(walkLane(w, v, 'front', 2, round)[0].part).toBe(partAt(v, 2, 0).id);
     expect(walkLane(w, v, 'left', 1, round)[0].part).toBe(partAt(v, 1, 1).id);
     expect(walkLane(w, v, 'right', 1, round)[0].part).toBe(partAt(v, 5, 1).id);
@@ -225,7 +224,6 @@ describe('lane depth', () => {
 });
 
 describe('blast armor', () => {
-  // A scout with a rebar cage on the nose in front of its engine.
   function caged() {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'scout', ['cage', 'stockEngine'], { x: 40, y: 40 });
@@ -252,8 +250,6 @@ describe('blast armor', () => {
   });
 });
 
-// The longbed's cab fills columns 3 to 5 of rows 3 and 4, with a deck row behind it and a deck pair at (5,1) and (5,2)
-// beside the engine. The courier's open seat fills (2,5) and (3,5), with deck cells behind it.
 function truckWith(w: World, chassisId: string, parts: { defId: string; x: number; y: number; rot?: 0 | 1 }[]): Vehicle {
   const v = addVehicle(w, 'player', chassisId, ['stockEngine'], { x: 40, y: 40 });
   for (const [i, p] of parts.entries()) {
@@ -362,7 +358,6 @@ describe('side blockers', () => {
 });
 
 describe('gun layout', () => {
-  // A machine gun's 360 degree arc reaches every side. Score = covered sides * (4 * guns + 1) + open reached sides summed.
   it('scores one bed gun behind the cab by its three open sides', () => {
     const v = truckWith(emptyWorld(), 'longbed', [{ defId: 'mg', x: 3, y: 5 }]);
     expect(gunLayoutScore(v)).toBe(3 * 5 + 3);

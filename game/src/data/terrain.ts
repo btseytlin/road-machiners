@@ -23,8 +23,8 @@ export type TerrainType = {
   id: TerrainTypeId;
   name: string;
   speed: number;
-  wear: number; // multiplies part wear per tile driven
-  dust: number; // multiplies the range a moving truck's dust trail is seen from
+  wear: number;
+  dust: number;
   color: number;
 };
 
@@ -39,38 +39,23 @@ export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
   saltCrust: { id: "saltCrust", name: "Salt crust", speed: 0.95, wear: 0.8, dust: 1.2, color: 0xe0d8ba },
   asphalt: { id: "asphalt", name: "Cracked asphalt", speed: 0.98, wear: 0.6, dust: 0.3, color: 0x55565b },
   ash: { id: "ash", name: "Ash", speed: 0.6, wear: 1, dust: 1.6, color: 0x77737a },
-  // Dead fields: dry furrowed dirt. Furrows slow a truck like scrub and shake it a little more than
-  // hardpan, and the tilled dirt throws more dust than hardpan.
   field: { id: "field", name: "Dead field", speed: 0.8, wear: 1.1, dust: 1.4, color: 0x8e6e4a },
-  // Pools: shallow standing water over a mud bottom, so both drag a truck like mud and raise no dust.
-  // Toxic sludge eats at parts more than plain mud. Both wears stay below scree, the roughest ground.
-  // Last, so earlier type codes keep their values.
   dirtyWater: { id: "dirtyWater", name: "Dirty water", speed: 0.45, wear: 1.5, dust: 0.1, color: 0x55583a },
   toxic: { id: "toxic", name: "Toxic pool", speed: 0.45, wear: 1.8, dust: 0.1, color: 0x9aa83c },
 };
 
 export const TERRAIN = {
-  // Elevation noise: a fractal sum of value-noise octaves. freq is cycles per tile.
-  // seedOffset keeps each octave sampling a different part of the hash space.
   octaves: [
     { freq: 1 / (32 * MAP_SCALE), amp: 1.0, seedOffset: 0 },
     { freq: 1 / (14 * MAP_SCALE), amp: 0.7, seedOffset: 1000 },
     { freq: 1 / (5 * MAP_SCALE), amp: 0.38, seedOffset: 2000 },
     { freq: 1 / 7, amp: 0.14, seedOffset: 3000 },
   ],
-  // Tiles of falloff from a road edge, town edge or location edge down to zero elevation.
-  // Keeps bends and junction approaches drivable without flattening remote landforms.
   flattenMargin: 15,
-  // Steepest height change per tile along any road. A loaded hauler still gains speed on 0.2, and
-  // blends at junctions add a little across the road.
   roadGrade: 0.12,
-  // Steepest height change per tile of a cutting or bank beside a road: below the scree slope.
   bankGrade: 0.3,
-  // Noise elevation e (about -1..1) becomes height: e * hill, plus (e - mountainFrom) * mountain above
-  // mountainFrom. The steep extra term makes mountain faces too steep to drive.
   height: { hill: 2.1, mountainFrom: 0.32, mountain: 11 },
   relief: { broadFrequency: 1 / 65, broadAmplitude: 2.4, ridgeFrequency: 1 / 18, ridgeAmplitude: 1.2 },
-  // Fixed landforms shared by elevation and ground paint. Width is the flat channel half-width.
   features: {
     canyon: {
       path: [
@@ -84,14 +69,12 @@ export const TERRAIN = {
       bank: 18,
       depth: 2.9,
     },
-    // Canyon Bridge: a straight deck between two road points. The road's causeway is cut away under
-    // the deck, so the canyon runs below it.
     bridge: {
       from: scalePoint({ x: 97.9, y: 75.1 }),
       to: scalePoint({ x: 101.5, y: 71.5 }),
-      width: 8, // tiles between the rails; the widest truck keeps its clearance from both
-      abutment: 1, // tiles of causeway left under each deck end
-      ramp: 1.5, // tiles over which the cut ground falls to the canyon
+      width: 8,
+      abutment: 1,
+      ramp: 1.5,
     },
     dryRiver: {
       path: [
@@ -121,36 +104,30 @@ export const TERRAIN = {
       },
     ] as { center: Vec; radius: number; bank: number; depth: number }[],
   },
-  reliefPx: 45, // screen pixels per height unit
-  // Tile types. Roads and sites first, then old-world and new-world marks, then steep ground and the
-  // geology marks in GEOLOGY.ground, then hardpan.
+  reliefPx: 45,
   types: {
-    screeSlope: 0.35, // slope from which ground is scree
-    siteMargin: 1, // tiles around towns and locations that count as hardpan
+    screeSlope: 0.35,
+    siteMargin: 1,
   },
-  // Driving: grade is the slope along the driving direction.
   drive: {
-    maxSlope: 0.6, // tiles steeper than this are cliffs: impassable
+    maxSlope: 0.6,
   },
-  // Light direction in map space for hillshade, upper-left of the screen.
   light: { x: -0.6, y: -0.8 },
-  slopeShade: 0.9, // how strongly slope alignment with the light brightens or darkens ground
+  slopeShade: 0.9,
   vision: {
-    radius: 20, // tiles of sight from any vehicle, before weather and night
-    eyeHeight: 0.6, // height units above the ground for the viewer and targets, a truck cab at 2.4 m; hills taller than this block sight
-    samplesPerTile: 3, // height samples per tile along a sight line
-    closeRadius: 3, // tiles around a vehicle seen even behind rocks and hills, since its crew hears and sees over them
-    lingerTurns: 2, // turns a vehicle stays drawn, moving, after the player loses sight of it
-    grayFactor: 4, // gray vision reaches this many sight radii: ground and buildings show grey, vehicles do not, and nothing shows beyond
+    radius: 20,
+    eyeHeight: 0.6,
+    samplesPerTile: 3,
+    closeRadius: 3,
+    lingerTurns: 2,
+    grayFactor: 4,
   },
   fog: {
-    seen: { grey: 0.85, bright: 0.9 }, // explored but not visible now: share of color drained, brightness kept
-    unseen: { grey: 1, bright: 0.55 }, // never seen
+    seen: { grey: 0.85, bright: 0.9 },
+    unseen: { grey: 1, bright: 0.55 },
   },
 } as const;
 
-// Geology rules for the map bake. Heights and water are in height units. A slope is height units per
-// tile, and a unit and a tile are both 4 m, so a slope is also the tangent of the ground angle.
 export type RainRules = {
   steps: number;
   rainPerStep: number;
@@ -183,7 +160,6 @@ export type WindRules = {
   stepsPerCell: number;
 };
 
-// Dune ridges on deep sand. See dunes() in src/mapgen/geology.ts.
 export type DuneRules = {
   minSand: number;
   fullSand: number;
@@ -202,7 +178,6 @@ export type SandStart = {
   depth: number;
 };
 
-// Ground types from the geology marks, read per tile from its four corners.
 export type GroundRules = {
   washFlow: number;
   gravelSlope: number;
@@ -212,7 +187,6 @@ export type GroundRules = {
   looseSand: number;
 };
 
-// Boulders on corners at cliff bases and ridge tops.
 export type BoulderRules = {
   cliffBase: number;
   ridgeTop: number;
@@ -223,73 +197,70 @@ export type BoulderRules = {
 
 export const GEOLOGY: { rain: RainRules; slump: SlumpRules; wind: WindRules; dunes: DuneRules; sandStart: SandStart; ground: GroundRules; boulders: BoulderRules } = {
   rain: {
-    steps: 160, // rain passes over the whole map; each pass routes all water to the edge or a pool, so more passes cut deeper
-    rainPerStep: 0.01, // units of water falling on every corner per pass, so a gully's water is 0.01 per corner draining into it
-    focusSquarings: 3, // water splits between lower neighbors by slope squared this many times, slope^8; mostly down the steepest, so it gathers into gullies
-    evaporation: 0.04, // share of water lost at each corner it passes, so a wash dries out about 25 tiles below its sources
-    capacity: 4, // soil units carried per unit of water per unit of slope, so steep wet corners cut hardest
-    minSlope: 0.02, // slope floor for capacity, so water on near-flats still carries a little soil
-    pickupRate: 0.05, // share of the free capacity picked up at each corner; low keeps water hungry, so cuts deepen where water gathers
-    dropRate: 0.3, // share of the soil above capacity dropped at each corner, so fans spread over a few tiles below gully mouths
-    maxDig: 0.5, // share of the steepest slope down that one corner may dig per pass, so water never digs a pit
-    spreadPasses: 2, // passes that spread each rain pass's cuts to side neighbors; gullies come out about 3 to 5 tiles wide
-    spreadRate: 0.2, // share of the change difference traded between side neighbors per pass; under 0.25 keeps the spread stable
+    steps: 160,
+    rainPerStep: 0.01,
+    focusSquarings: 3,
+    evaporation: 0.04,
+    capacity: 4,
+    minSlope: 0.02,
+    pickupRate: 0.05,
+    dropRate: 0.3,
+    maxDig: 0.5,
+    spreadPasses: 2,
+    spreadRate: 0.2,
   },
   slump: {
-    steps: 40, // passes over the map; enough for fresh steps to settle into scree slopes
-    restSlope: 0.9, // steepest stable slope, about 42 degrees; above cliffs at 0.6, so cliffs stay
-    slideShare: 0.5, // share of the excess over the rest slope that slides per pass, so slopes settle smoothly
+    steps: 40,
+    restSlope: 0.9,
+    slideShare: 0.5,
   },
   wind: {
-    direction: 30, // degrees the wind blows toward, 0 = +x on the map, 90 = +y
-    slab: 0.06, // units of sand in one slab, 24 cm, the smallest dune step
-    hop: 5, // tiles a lifted slab travels before it may land; sets dune spacing with the shadow
-    depositOnSand: 0.6, // chance a slab lands on a corner with sand, so sand gathers into ridges
-    depositOnBare: 0.4, // chance a slab lands on bare ground, lower so bare ground stays bare
-    shadowSlope: 0.03, // units per tile below an upwind crest that count as wind shadow; the Werner 15 degrees in slab steps, so ridges form at this grid size
-    shadowReach: 16, // tiles upwind checked for shadow, a few dune spacings
-    sandSlope: 0.2, // steepest sand face before it avalanches, 3 slabs per tile; keeps dunes 0.1 to 0.5 units tall on 4 m tiles
-    stepsPerCell: 120, // slab lifts per starting sand corner; more steps give longer ridges and carry sand farther downwind
+    direction: 30,
+    slab: 0.06,
+    hop: 5,
+    depositOnSand: 0.6,
+    depositOnBare: 0.4,
+    shadowSlope: 0.03,
+    shadowReach: 16,
+    sandSlope: 0.2,
+    stepsPerCell: 120,
   },
   dunes: {
-    minSand: 0.15, // units of sand, 60 cm; thinner sand lies flat
-    fullSand: 0.5, // units of sand, 2 m; from here a corner carries a full ridge
-    maxSlope: 0.15, // units per tile; on steeper ground sand slides off before it builds ridges
-    height: 0.8, // units, 3.2 m; a full ridge hides a whole truck
-    wavelength: 14, // tiles from crest to crest, 56 m, a few truck lengths of cover
-    leeShare: 0.25, // share of a ridge's length taken by the steep lee face behind the crest
-    bend: 6, // tiles a crest line wanders along the wind, so ridges bend and break
-    bendFrequency: 1 / 40, // cycles per tile of the crest bend noise
-    bendSeedOffset: 6007, // keeps the bend noise apart from other noise from the map seed
+    minSand: 0.15,
+    fullSand: 0.5,
+    maxSlope: 0.15,
+    height: 0.8,
+    wavelength: 14,
+    leeShare: 0.25,
+    bend: 6,
+    bendFrequency: 1 / 40,
+    bendSeedOffset: 6007,
   },
   sandStart: {
-    below: -1.5, // units; corners lower than this start with sand, since basins collect blown sand; about the lowest tenth of the map
-    fade: 1, // units below `below` over which the start sand thickens to full depth
-    depth: 0.5, // units of start sand at full depth, 2 m
+    below: -1.5,
+    fade: 1,
+    depth: 0.5,
   },
   ground: {
-    washFlow: 40, // water units summed over all rain passes; a corner that carried more is a wash bed, about the wettest twentieth of the map
-    gravelSlope: 0.08, // units per tile; a wash bed at least this steep keeps gravel, fast water carries the sand on
-    lakeDepth: 0.4, // units, 1.6 m; deepest water a basin holds in this dry climate, so a lake fills only its basin's bottom; above mudDepth
-    saltDepth: 0.03, // units, 12 cm; a corner this far under its lake surface dries to salt crust
-    mudDepth: 0.25, // units, 1 m; deeper water lasts longer and leaves mud
-    looseSand: 0.1, // units of sand, 40 cm; deeper sand is loose sand, shallower sand shows the ground under it
+    washFlow: 40,
+    gravelSlope: 0.08,
+    lakeDepth: 0.4,
+    saltDepth: 0.03,
+    mudDepth: 0.25,
+    looseSand: 0.1,
   },
   boulders: {
-    cliffBase: 0.3, // chance a corner below a cliff face gets a boulder; boulders break off and roll to the foot
-    ridgeTop: 0.05, // chance a ridge-top corner gets a boulder; bare ridges hold weathered rock
-    ridgeCurvature: 0.08, // units per tile squared; a corner this far above the middle of two opposite neighbors is a ridge top
-    radius: [0.6, 1.6], // tiles of radius, 2.4 to 6.4 m
+    cliffBase: 0.3,
+    ridgeTop: 0.05,
+    ridgeCurvature: 0.08,
+    radius: [0.6, 1.6],
     crag: {
-      above: 12.5, // height units, 50 m; ridge tops this high are about the top tenth of all ridge tops, so only mountain crests carry spires
-      radius: [1.6, 2.6], // tiles of radius, 6.4 to 10.4 m; a spire stands out above the boulders around it
+      above: 12.5,
+      radius: [1.6, 2.6],
     },
   },
 };
 
-// Old-world rules for the map bake: what stood here before, placed from terrain, sites and roads. See
-// src/mapgen/oldworld.ts. Distances are in tiles of 4 m, heights in units of 4 m, slopes in units per tile.
-// Each rule draws its randomness from the map seed and its own seedOffset, so rules never shift each other.
 export type SettlementRules = {
   seedOffset: number;
   candidateStep: number;
@@ -336,7 +307,6 @@ export type BendRules = {
   gasShare: number;
 };
 
-// The old highway across the dry river. See highway() in src/mapgen/oldworld.ts.
 export type HighwayRules = {
   count: number;
   spacing: number;
@@ -424,149 +394,136 @@ export const OLD_WORLD: {
 } = {
   settlements: {
     seedOffset: 7001,
-    candidateStep: 4, // tiles between candidate spots; finer than the settlement radius, so no flat spot is missed
-    count: 14, // old settlements on the map, a little under today's 17 sites, so ruins stay a find, not a carpet
-    spacing: 45, // tiles, 180 m, between settlement centers; two never read as one town
-    anchorGap: [12, 80], // tiles from a site edge or road junction; people settle near where people still go, but not on top of it
-    jitter: 0.5, // share of the score from seeded noise, so the best spots do not always win
-    radius: 5, // tiles, 20 m; houses stand within this of the center
-    roadGap: 3, // tiles between a settlement's edge and a road edge
-    flatSlope: 0.12, // steepest tile under a settlement, about 7 degrees; people built on gentle ground
-    houses: [3, 7], // houses per settlement, a hamlet
-    houseRadius: [0.9, 1.3], // tiles, like today's town buildings
-    intactShare: 0.25, // share of houses that still stand whole; the rest are ruined shells
-    farmShare: 0.4, // share of settlements that farmed, with fields and a silo or water tower
-    towerShare: 0.5, // share of farms with a water tower instead of a silo
-    towerRadius: 1.2, // tiles of footprint for a silo or water tower
-    placeTries: 12, // tries to fit each house before it is left out
+    candidateStep: 4,
+    count: 14,
+    spacing: 45,
+    anchorGap: [12, 80],
+    jitter: 0.5,
+    radius: 5,
+    roadGap: 3,
+    flatSlope: 0.12,
+    houses: [3, 7],
+    houseRadius: [0.9, 1.3],
+    intactShare: 0.25,
+    farmShare: 0.4,
+    towerShare: 0.5,
+    towerRadius: 1.2,
+    placeTries: 12,
   },
   overlooks: {
     seedOffset: 7002,
-    step: 3, // tiles between checked corners
-    reach: 10, // tiles out to where the drop is measured, 40 m
-    drop: 2, // units, 8 m; the ground this far below the spot counts as a view
-    rise: 0.5, // units, 2 m; ground at reach may stand this far above the spot, so plateau edges with small bumps count as hilltops
-    directions: 3, // of 8 compass directions that must drop, so the view is wide, not down one gully
-    flatSlope: 0.15, // steepest tile the building stands on
-    count: 10, // lone buildings on overlooks
-    spacing: 60, // tiles between overlook buildings
-    roadGap: 3, // tiles between the footprint and a road edge
-    radius: [1, 1.4], // tiles of footprint
-    intactShare: 0.4, // share that still stand whole
+    step: 3,
+    reach: 10,
+    drop: 2,
+    rise: 0.5,
+    directions: 3,
+    flatSlope: 0.15,
+    count: 10,
+    spacing: 60,
+    roadGap: 3,
+    radius: [1, 1.4],
+    intactShare: 0.4,
   },
   bends: {
     seedOffset: 7003,
-    sample: 2, // tiles between checked road points
-    reach: 8, // tiles back and ahead along the road over which the turn is measured
-    angle: 35, // degrees of turn over that stretch that make a sharp bend
-    spacing: 40, // tiles between bend buildings
-    chance: 0.6, // chance a sharp bend has a building
-    gap: 2, // tiles between the footprint and the road edge
-    radius: [1, 1.4], // tiles of footprint
-    gasShare: 0.4, // share of bend buildings that are gas stations
+    sample: 2,
+    reach: 8,
+    angle: 35,
+    spacing: 40,
+    chance: 0.6,
+    gap: 2,
+    radius: [1, 1.4],
+    gasShare: 0.4,
   },
   oldRoads: {
-    cell: 4, // tiles between nodes of the route grid; old roads need no finer line
-    maxLink: 120, // tiles, the longest old road from a settlement to its neighbor or to a road of today
-    maxSlope: 0.35, // steepest step between nodes; old roads kept to grades below scree
-    slopeCost: 6, // cost multiplier 1 + slopeCost * (slope / maxSlope)^2; old roads went around hills
-    washCost: 4, // extra cost per tile of a step onto a wash bed, so old roads cross washes only where the way around is long
-    smoothEvery: 3, // route nodes per kept point, so the road runs straight between them instead of zigzagging
-    sample: 0.5, // tiles between points walked along an old road
-    width: 3, // tiles, 12 m, of cracked asphalt
-    spanRadius: 1.5, // tiles of footprint of a broken bridge span
-    spanRoadGap: 1, // tiles between a span and a road edge
-    spanBack: 12, // tiles a span may step back from its bank point to find open, gentle ground
-    minBridge: 6, // tiles, 24 m, across a wash where the old road had a bridge; narrower gullies just cut the asphalt
-    minDrop: 1, // height units, 4 m, from the lower bank to the wash floor; the broken span model hangs over a drop this deep
-    minGapRatio: 0.05, // gap depth per tile of bridge; a gap shallower than 1 in 20 of its length reads as flat ground
-    spanGap: 1.5, // height units, 6 m, of gap under a bridge that leaves broken ends standing; shallower ones just wash the road out
-    maxBridge: 40, // tiles, 160 m, the longest bridge an old road jumps a gully on
-    bridgeCost: 1.5, // cost per tile of a bridge over a road on flat ground; a bridge beats a detour 50% longer
-    bankBack: 3, // tiles back from a cut edge where a bank's height is read, past the gully side
+    cell: 4,
+    maxLink: 120,
+    maxSlope: 0.35,
+    slopeCost: 6,
+    washCost: 4,
+    smoothEvery: 3,
+    sample: 0.5,
+    width: 3,
+    spanRadius: 1.5,
+    spanRoadGap: 1,
+    spanBack: 12,
+    minBridge: 6,
+    minDrop: 1,
+    minGapRatio: 0.05,
+    spanGap: 1.5,
+    maxBridge: 40,
+    bridgeCost: 1.5,
+    bankBack: 3,
   },
   highway: {
-    count: 4, // old highways on the map, each with its great broken bridge; rare enough to stay landmarks
-    spacing: 80, // tiles, 320 m, between the deepest bridges of two highways, so they spread over the map
-    maxLength: 400, // tiles, 1.6 km, the longest highway between two settlements
-    bridgeCost: 1.2, // cost per tile of highway bridge over road on flat ground; a little dearer, so the bridge spans only the ravine
-    maxBridge: 80, // tiles, 320 m, the longest highway bridge; enough for a wide valley and its banks
+    count: 4,
+    spacing: 80,
+    maxLength: 400,
+    bridgeCost: 1.2,
+    maxBridge: 80,
   },
   powerLines: {
     seedOffset: 7005,
-    roadShare: 0.6, // share of long roads with a power line beside them
-    minLength: 60, // tiles; shorter roads are spurs and tracks with no line
-    spacing: 14, // tiles, 56 m, between poles
-    gap: 1, // tiles between a pole and the road edge
-    radius: 0.3, // tiles of pole footprint
-    missingShare: 0.15, // share of poles that fell or were taken, left as gaps in the line
+    roadShare: 0.6,
+    minLength: 60,
+    spacing: 14,
+    gap: 1,
+    radius: 0.3,
+    missingShare: 0.15,
   },
   billboards: {
     seedOffset: 7006,
-    approach: [25, 50], // tiles past a town edge along each road leaving it
-    straightStep: 20, // tiles between checked road points for straights
-    straightReach: 30, // tiles back and ahead measured for a straight
-    straightness: 0.985, // shortest share of the road length the chord keeps on a straight
-    straightChance: 0.3, // chance a straight point gets a billboard, so straights are not lined with them
-    spacing: 70, // tiles between billboards
-    gap: 1.5, // tiles between the footprint and the road edge
-    radius: 1.6, // tiles of footprint, as the old landmark billboards
+    approach: [25, 50],
+    straightStep: 20,
+    straightReach: 30,
+    straightness: 0.985,
+    straightChance: 0.3,
+    spacing: 70,
+    gap: 1.5,
+    radius: 1.6,
   },
   tanks: {
     seedOffset: 7007,
-    chance: 0.5, // chance an old road leaving a settlement has a group of hulks
-    along: [10, 30], // tiles along the old road from the settlement to the group
-    group: [2, 4], // hulks per group
-    spread: 4, // tiles a hulk lies from the group point, along and beside the road
-    gap: 1, // tiles between a hulk and the old road edge
-    radius: 1.5, // tiles of footprint, as the old landmark hulks
-    placeTries: 6, // tries to fit each hulk before it is left out
+    chance: 0.5,
+    along: [10, 30],
+    group: [2, 4],
+    spread: 4,
+    gap: 1,
+    radius: 1.5,
+    placeTries: 6,
   },
   fields: {
     seedOffset: 7008,
-    perFarm: [2, 4], // fields per farm
-    side: [6, 14], // tiles along each side of a field rectangle, 24 to 56 m
-    gap: 2, // tiles between the settlement edge and the nearest field
-    reach: 12, // tiles farther out a field may lie
-    flatSlope: 0.1, // steepest tile that was ploughed
-    lowRise: 0.5, // units, 2 m; fields lie no higher than this above the settlement ground, on the low land
-    minShare: 0.6, // share of a rectangle's tiles that must be good ground, or the field goes elsewhere
-    tries: 8, // tries to fit each field
+    perFarm: [2, 4],
+    side: [6, 14],
+    gap: 2,
+    reach: 12,
+    flatSlope: 0.1,
+    lowRise: 0.5,
+    minShare: 0.6,
+    tries: 8,
   },
 };
 
-// Map bake settings: the map seed, the map file and the pictures each bake writes.
-// A square close-up picture: its name, its center and its side, in tiles.
 export type MapSpot = { name: string; center: Vec; side: number };
 
-// Tiles of ground shown around a site in its close-up.
 const SITE_SURROUND = 20;
 
 export const MAPGEN = {
-  // Drives heights, ground types and rocks. The world seed drives all other randomness.
   seed: 1337,
-  // Map file path, under public/ on disk and at the site root in the browser.
   file: 'maps/icarus.bin',
-  // Stored height steps per height unit. Heights are 16-bit integers, so they reach +-32767 / heightScale.
   heightScale: 1000,
-  // Pixels per tile in the whole-map picture: 600 tiles give a 1200 px picture.
   overviewPxPerTile: 2,
   closeUpPxPerTile: 8,
   closeUps: [
     ...[...REGION.towns, ...REGION.locations].map((site) => ({ name: site.id, center: site.pos, side: 2 * (site.radius + SITE_SURROUND) })),
     { name: 'bridge', center: { x: (TERRAIN.features.bridge.from.x + TERRAIN.features.bridge.to.x) / 2, y: (TERRAIN.features.bridge.from.y + TERRAIN.features.bridge.to.y) / 2 }, side: 60 },
     { name: 'dry-river', center: scalePoint({ x: 48, y: 87 }), side: 120 },
-    // The canyon floor, where blown sand gathers most.
     { name: 'canyon', center: { x: 470, y: 240 }, side: 100 },
-    // The open ground with the most loose sand outside the canyon.
     { name: 'sand', center: { x: 390, y: 350 }, side: 100 },
   ] as MapSpot[],
 };
 
-// New-world rules for the map bake: what squatters and weather made of the old world since, placed from
-// terrain, water, sites and old-world props. See src/mapgen/newworld.ts. Distances are in tiles of 4 m,
-// heights in units of 4 m, slopes in units per tile. Each rule draws its randomness from the map seed and its
-// own seedOffset, so rules never shift each other.
 export type PoolRules = {
   minDepth: number;
   maxTiles: number;
@@ -642,67 +599,67 @@ export const NEW_WORLD: {
   fieldFences: FieldFenceRules;
   carWrecks: CarWreckRules;
 } = {
-  fenceLength: 1, // tiles, 4 m, of one fence segment; a fence line is a row of them, so it breaks segment by segment
+  fenceLength: 1,
   pools: {
-    minDepth: 0.05, // units, 20 cm; a tile with a corner this far under its basin's spill level holds water after rain
-    maxTiles: 40, // tiles, 640 m²; larger basins are lakes that dry to mud and salt crust, not pools
-    toxicReach: 12, // tiles, 48 m, past the footprint of a gas station, tank hulk or silo that its spills drain into a basin
+    minDepth: 0.05,
+    maxTiles: 40,
+    toxicReach: 12,
   },
   scrub: {
     seedOffset: 8002,
-    seedFlow: 0.4, // share of the wash flow; a tile beside a bed that carried this much water stays moist
-    seedChance: 0.5, // chance a moist tile starts scrub, so the first growth is patchy
-    poolReach: 2, // tiles around a pool where scrub starts
-    oasisReach: 12, // tiles past an oasis's site clearance where scrub starts
-    steps: 6, // growth steps; each lets scrub creep one tile further
-    spread: 0.35, // chance per step that scrub takes a flat, moist neighbor tile
-    dryShare: 0.15, // share of that chance left on dry ground, so scrub mostly follows the water
+    seedFlow: 0.4,
+    seedChance: 0.5,
+    poolReach: 2,
+    oasisReach: 12,
+    steps: 6,
+    spread: 0.35,
+    dryShare: 0.15,
   },
   camps: {
     seedOffset: 8003,
-    radius: 5, // tiles, 20 m; the fence ring of a camp, with the shacks and junk inside
-    siteGap: 2, // tiles between the camp ring and a site's clearance
-    roadGap: 2, // tiles between the camp ring and a road edge
-    flatSlope: 0.15, // steepest tile under a camp's center
-    spacing: 30, // tiles between camp centers, so camps never merge
-    tries: 16, // directions tried around a site or junction for open ground
-    siteChance: 0.7, // chance a town or oasis has a camp outside it
-    ruinChance: 0.5, // chance an old settlement has squatters among its ruins
-    junctionChance: 0.5, // chance a road junction has a camp beside it
-    junctionReach: 15, // tiles past the nearest camp spot to a junction that a camp may lie, out of the fork between its roads
-    clusterReach: 8, // tiles between houses of one old settlement; settlements have a radius of 5
-    clusterMin: 3, // houses and ruins that make an old settlement, not a lone building
-    shacks: [2, 5], // shacks per camp
-    shackRadius: [0.6, 0.9], // tiles of footprint, 5 to 7 m across
-    junk: [1, 3], // junk piles of barrels and tires per camp
-    junkRadius: [0.35, 0.6], // tiles of footprint
-    innerGap: 1.5, // tiles between the shacks and junk and the fence ring
-    placeTries: 12, // tries to fit each shack or junk pile before it is left out
-    fenceArc: [0.3, 0.65], // share of the ring a camp fences; the rest stays open
-    fenceMissing: 0.1, // share of fence segments fallen or taken, left as gaps
-    fenceRoadGap: 1, // tiles between a fence segment and a road edge
+    radius: 5,
+    siteGap: 2,
+    roadGap: 2,
+    flatSlope: 0.15,
+    spacing: 30,
+    tries: 16,
+    siteChance: 0.7,
+    ruinChance: 0.5,
+    junctionChance: 0.5,
+    junctionReach: 15,
+    clusterReach: 8,
+    clusterMin: 3,
+    shacks: [2, 5],
+    shackRadius: [0.6, 0.9],
+    junk: [1, 3],
+    junkRadius: [0.35, 0.6],
+    innerGap: 1.5,
+    placeTries: 12,
+    fenceArc: [0.3, 0.65],
+    fenceMissing: 0.1,
+    fenceRoadGap: 1,
   },
   fieldFences: {
     seedOffset: 8004,
-    minTiles: 12, // tiles; smaller patches of old field are scraps with no fence
-    angleStep: 2, // degrees between angles tried to fit a field's rectangle
-    edgeChance: 0.5, // chance each edge of a field keeps a fence; one edge always stays open
-    missingShare: 0.15, // share of fence segments fallen or taken, left as gaps
-    roadGap: 1, // tiles between a fence segment and a road edge
+    minTiles: 12,
+    angleStep: 2,
+    edgeChance: 0.5,
+    missingShare: 0.15,
+    roadGap: 1,
   },
   carWrecks: {
     seedOffset: 8005,
-    radius: 0.6, // tiles of footprint, a car 4.5 m long
-    roadStep: 25, // tiles between checked road points
-    roadChance: 0.25, // chance a road point has a burnt car on its shoulder
-    shoulder: [0.5, 2], // tiles between a wreck and the road edge
-    skew: 30, // degrees a roadside wreck turns off the road direction at most
-    oldRoadChance: 0.005, // chance per tile of old road that a car died there
-    oldRoadGap: 1, // tiles between an old-road wreck and a road edge
-    campChance: 0.6, // chance a camp has cars dragged in beside it
-    campGroup: [1, 3], // cars in a camp group
-    campSpread: 4, // tiles past the camp ring a car may lie
-    washChance: 0.003, // chance per wash-bed tile that a flood left a car there, nose down
-    placeTries: 8, // tries to fit each camp car before it is left out
+    radius: 0.6,
+    roadStep: 25,
+    roadChance: 0.25,
+    shoulder: [0.5, 2],
+    skew: 30,
+    oldRoadChance: 0.005,
+    oldRoadGap: 1,
+    campChance: 0.6,
+    campGroup: [1, 3],
+    campSpread: 4,
+    washChance: 0.003,
+    placeTries: 8,
   },
 };

@@ -8,7 +8,6 @@ import "./truck-condition.css";
 const CELL = 30;
 
 type ConditionPart = ReturnType<TruckConditionReadout["update"]>[number];
-// Gun numbers aiming at each part id, and the click that aims the chosen guns at a part.
 export type ConditionAim = { marks: ReadonlyMap<string, number[]>; pick: (partId: string) => void };
 
 export class TruckConditionView {
@@ -20,8 +19,6 @@ export class TruckConditionView {
   private readout = new TruckConditionReadout();
   private slots = el("div", { class: "condition-slots" });
   private nodes = new Map<string, HTMLElement>();
-  // The name label of the tile under the pointer. The panel is rebuilt on every refresh, which cancels the browser's
-  // own tooltip, so the hovered part is kept here and the label is redrawn with it.
   private tip = el("div", { class: "condition-tip" });
   private hoverId: string | null = null;
   private tiles: ConditionPart[] = [];
@@ -102,7 +99,6 @@ export class TruckConditionView {
 }
 
 
-// Makes a tile pick its part on a click, and badges it with the numbers of the guns aimed at it.
 function markAim(node: HTMLElement, partId: string, aim?: ConditionAim): void {
   node.classList.toggle("aimable", aim !== undefined);
   node.onclick = aim ? () => aim.pick(partId) : null;

@@ -9,7 +9,6 @@ export function kph(tilesPerTurn: number): number {
   return Math.round((tilesPerTurn * PHYSICS.metersPerTile) / PHYSICS.turnSeconds * MS_TO_KPH);
 }
 
-// Acceleration in tiles per turn per turn, as m/s².
 export function mps2(tilesPerTurn2: number): number {
   return Math.round((tilesPerTurn2 * PHYSICS.metersPerTile) / PHYSICS.turnSeconds ** 2 * 10) / 10;
 }
@@ -38,12 +37,10 @@ export function engineCelsius(engineHeat: number): number {
   return Math.round(UNITS.engineColdCelsius + engineHeat * (UNITS.engineHotCelsius - UNITS.engineColdCelsius));
 }
 
-// Part HP and player health are fractional in the sim. A working part never reads 0.
 export function hp(value: number): number {
   return Math.ceil(value);
 }
 
-// Damage is fractional in the sim. Any damage reads at least 1.
 export function damage(value: number): number {
   return Math.ceil(value);
 }

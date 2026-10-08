@@ -8,7 +8,6 @@ import { groundLayer, newDraft, type MapDraft } from './bake';
 const SEED = 1337;
 const G = GEOLOGY.ground;
 
-// Tiles near the map's top-left corner lie far from every road and site.
 const SMALL = 16;
 
 function typeAt(d: MapDraft, x: number, y: number): TerrainTypeId {
@@ -24,7 +23,6 @@ function setTile(mask: Float32Array | Uint8Array, d: MapDraft, x: number, y: num
   for (const k of cornersOf(d, x, y)) mask[k] = value;
 }
 
-// Flat ground with a slope along x of `slope` height units per tile.
 function tilt(d: MapDraft, slope: number): void {
   const n = d.size + 1;
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) d.heights[j * n + i] = i * slope;
@@ -78,7 +76,6 @@ describe('ground types from geology marks', () => {
   });
 
   it('dries a shallow pond to salt crust and a deep one to mud', () => {
-    // A stepped bowl in flat ground, shallower than a lake: corners 4 to 11 lie salt-deep, corners 7 to 8 mud-deep.
     const d = newDraft(SMALL);
     const n = SMALL + 1;
     for (let j = 4; j <= 11; j++) for (let i = 4; i <= 11; i++) d.heights[j * n + i] = -(G.saltDepth * 1.5);
@@ -92,7 +89,6 @@ describe('ground types from geology marks', () => {
   });
 
   it('fills only the bottom of a basin deeper than a lake', () => {
-    // A cone falling toward corner (8, 8), far deeper than a lake, whose rim at 8 tiles out meets flat ground.
     const d = newDraft(SMALL);
     const n = SMALL + 1;
     const fall = (G.lakeDepth * 4) / 8;
@@ -126,7 +122,6 @@ describe('ground types from geology marks', () => {
 });
 
 describe('built ground', () => {
-  // A full map draft where every corner carries every geology mark and the ground is steep.
   function marked(): MapDraft {
     const d = newDraft(REGION.size);
     tilt(d, TERRAIN.types.screeSlope * 2);

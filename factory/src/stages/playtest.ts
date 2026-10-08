@@ -12,10 +12,8 @@ import { mergeResolving } from './merge-resolve';
 import { judge, logFacts, readReview, type Finding, type LogFacts, type Outcome, type Review } from './playtest-review';
 import { openReleaseTasks, releaseLog, requireRelease } from './release-common';
 
-// The run logs inside a clone's game folder, where the harness writes them and the agent reads them.
 const LOG = `${OUT_DIR}/playtest/log.jsonl`;
 const BASELINE_LOG = `${OUT_DIR}/playtest/baseline.jsonl`;
-// A GitHub comment holds 65536 characters. The full reports stay in the audit folders.
 const COMMENT_LIMIT = 60_000;
 
 export type RunMeta = {
@@ -23,21 +21,13 @@ export type RunMeta = {
   outcome: Outcome['outcome']; reason: string; verdict: Review['verdict']; fixes: string[]; bugs: number[]; ending: LogFacts['ending'];
 };
 
-// The commit whose run tells an old finding from one the release caused: the last commit this release passed, or main before any pass.
 type Baseline = { branch: string; sha: string; kind: string };
-// One playtest job. Its agent keeps one session over every round, so its scope stays the one it found on the first play.
-// `bugs` maps the title of each old bug the job opened to its issue, since a replay may list the same finding again.
 type Session = { release: ReleaseState; dir: string; home: string; start: string; baseline: Baseline; log: string; bugs: Map<string, number>; agent: (prompt: string) => Promise<void> };
 type Ending = { outcome: 'clean' | 'blocked'; reason: string; head: string };
 type Next = { sha: string; prompt: string };
 type Step = Next | { end: Ending };
-// `play` counts the plays of this job, from 1. `meta.run` counts the plays of the whole release.
 type Round = { meta: RunMeta; outcome: Outcome; sha: string; head: string; play: number };
 
-// The release playtest in one job. It merges main into the release, plays the release head and the baseline side by side, and
-// has Opus sort the findings and fix the ones the release caused. The factory replays the seed on each fix in the same agent
-// session, up to FACTORY_PLAYTEST_RUNS plays. A clean end lands the fixes on the release after the factory checks, and passes
-// that commit. Old bugs become bug issues for dev. Any other end blocks the release for a member.
 export async function playtest(ctx: Ctx, issue: number): Promise<void> {
   const release = requireRelease(ctx);
   if (release.issue !== issue) throw new Error(`Issue #${issue} is not the tracking issue of the open release, #${release.issue} is`);
@@ -60,13 +50,10 @@ export async function playtest(ctx: Ctx, issue: number): Promise<void> {
   await ctx.github.comment(release.issue, comment(session, plays, end, next, report(session)));
 }
 
-// The full game suite runs with no cache, since the cache could hide an input its fingerprint misses.
-// It runs before the first play, so a failing suite fails the job for Hermes and spends no play.
 async function fullSuite(ctx: Ctx, dir: string): Promise<void> {
   await ctx.container.shell(dir, 'npm ci && npm test', releaseLog(ctx, 'playtest'));
 }
 
-// The release holds all of main before it plays, so a later Ship never brings unplayed game changes in.
 async function takeMain(ctx: Ctx, release: ReleaseState): Promise<void> {
   if (await ctx.repo.isMerged('main', release.branch)) return;
   await mergeResolving(ctx, 'playtest', [{ branch: 'main', into: release.branch, message: `Merge main into ${release.branch} before the playtest` }]);
@@ -74,8 +61,6 @@ async function takeMain(ctx: Ctx, release: ReleaseState): Promise<void> {
   ctx.log('playtest', release.issue, `merged main into ${release.branch} before the playtest`);
 }
 
-// The clone takes the branch tip, which may have moved since the factory read the head. The logs, the reviews and the
-// audit must name the commit that ran, so a clone of another commit plays nothing and spends no run. The next tick plays the new head.
 async function cloneAt(ctx: Ctx, dir: string, sha: string): Promise<boolean> {
   const head = must(await ctx.run('git', ['-C', dir, 'rev-parse', 'HEAD']), 'git rev-parse in the playtest clone').trim();
   if (head.startsWith(sha)) return true;
@@ -97,13 +82,11 @@ async function openSession(ctx: Ctx, release: ReleaseState, dir: string, start: 
   return { release, dir, home, start, baseline, log, bugs: new Map(), agent };
 }
 
-// Read before the release takes main, so the baseline commit is always in the release, even when main moves meanwhile.
 async function baselineOf(ctx: Ctx, release: ReleaseState): Promise<Baseline> {
   if (release.playtest.passed !== null) return { branch: release.branch, sha: release.playtest.passed, kind: 'the last commit this release passed' };
   return { branch: 'main', sha: await ctx.repo.headHash('main'), kind: 'main, since this release has not passed yet' };
 }
 
-// Plays until a play ends clean or blocked, at most FACTORY_PLAYTEST_RUNS times.
 async function rounds(ctx: Ctx, session: Session): Promise<{ plays: RunMeta[]; end: Ending }> {
   const plays: RunMeta[] = [];
   let next: Next = { sha: session.start, prompt: firstPrompt(ctx, session) };
@@ -116,7 +99,6 @@ async function rounds(ctx: Ctx, session: Session): Promise<{ plays: RunMeta[]; e
   }
 }
 
-// One play of the seed and the agent's review of it. The agent may commit fixes during the review.
 async function playRound(ctx: Ctx, session: Session, next: Next, play: number): Promise<Round> {
   const last = play === ctx.cfg.playtestRuns;
   const { run } = countPlay(ctx);
@@ -134,7 +116,6 @@ async function playRound(ctx: Ctx, session: Session, next: Next, play: number): 
   return { meta, outcome, sha: next.sha, head, play };
 }
 
-// A clean play of the head the job started on needs no landing. A clean play of the agent's fixes needs the factory checks first.
 async function afterRound(ctx: Ctx, session: Session, round: Round): Promise<Step> {
   const { outcome, sha, head, play } = round;
   if (outcome.outcome === 'blocked') return { end: { outcome: 'blocked', reason: outcome.reason, head: sha } };
@@ -147,7 +128,6 @@ async function afterRound(ctx: Ctx, session: Session, round: Round): Promise<Ste
   return fixChecks(ctx, session, sha, failure, play + 1);
 }
 
-// A failed check goes to the same agent, and its fix plays again like any other.
 async function fixChecks(ctx: Ctx, session: Session, sha: string, failure: string, play: number): Promise<Step> {
   writeFileSync(join(session.home, OUT_DIR, 'check-failure.md'), failure);
   await session.agent(fillPrompt('release-playtest-checks', { sha }));
@@ -156,7 +136,6 @@ async function fixChecks(ctx: Ctx, session: Session, sha: string, failure: strin
   return { sha: head, prompt: replayPrompt(ctx, session, head, play) };
 }
 
-// The first play runs the release head and the baseline side by side. The agent reads both logs.
 async function firstPlay(ctx: Ctx, session: Session): Promise<LogFacts> {
   const [facts] = await Promise.all([playRelease(ctx, session, session.start), playBaseline(ctx, session)]);
   return facts;
@@ -193,14 +172,12 @@ function readFacts(ctx: Ctx, release: ReleaseState, path: string, sha: string): 
   return logFacts(readFileSync(path, 'utf8'), { seed: release.playtest.seed, turns: ctx.cfg.playtestTurns, sha });
 }
 
-// The clone's head after the agent, in the short form the release head takes. Factory files the agent committed leave the commit first.
 async function cloneHead(ctx: Ctx, session: Session): Promise<string> {
   const untracked = await ctx.repo.untrackFactoryFiles(session.dir);
   if (untracked.length > 0) ctx.log('playtest', session.release.issue, `took factory files out of the fixes: ${untracked.join(', ')}`);
   return ctx.repo.headHash(await ctx.repo.fetchFromWork(session.dir, session.release.branch));
 }
 
-// The fixes pass the same diff checks and factory checks as any agent work before they reach the release. Returns the failure, or null.
 async function checkFixes(ctx: Ctx, session: Session, sha: string): Promise<string | null> {
   const dirty = must(await ctx.run('git', ['-C', session.dir, 'status', '--porcelain']), 'git status in the playtest clone').trim();
   if (dirty !== '') return `The clone has changes that are not committed, so the checks cannot run on the reviewed commit ${sha}. Commit them or remove them:\n${dirty}`;
@@ -218,12 +195,10 @@ async function checkFixes(ctx: Ctx, session: Session, sha: string): Promise<stri
   return checkUntilReal(check, (run) => ctx.log('playtest', session.release.issue, `the checks only timed out, run ${run}, running them again`));
 }
 
-// The play is counted before it starts, so a play that times out or crashes still names its audit folder.
 function countPlay(ctx: Ctx): { run: number } {
   return { run: setPlaytest(ctx, (playtest) => ({ ...playtest, runs: playtest.runs + 1 })).runs };
 }
 
-// A blocked job keeps the reviewed commit and the reason, comments and fails, so the tracking card takes the stuck label and Hermes sees it.
 async function block(ctx: Ctx, session: Session, plays: RunMeta[], end: Ending): Promise<void> {
   setPlaytest(ctx, (playtest) => ({ ...playtest, blocked: { sha: end.head, reason: end.reason } }));
   const next = `The release is blocked: ${end.reason} A member decides with factory retry on this issue.`;
@@ -231,7 +206,6 @@ async function block(ctx: Ctx, session: Session, plays: RunMeta[], end: Ending):
   throw new Error(`Release playtest blocked: ${end.reason}`);
 }
 
-// Lands the fixes and passes the head, only while it is still the release head. Returns the sentence for the comment.
 async function pass(ctx: Ctx, session: Session, head: string): Promise<string> {
   const { release } = session;
   if (head !== session.start && !(await land(ctx, session))) return `The release moved during the playtest, so the fixes were merged into it, and its new head plays next.`;
@@ -244,8 +218,6 @@ async function pass(ctx: Ctx, session: Session, head: string): Promise<string> {
   return `${landed}The candidate builds from ${head}.`;
 }
 
-// The reviewed commit goes onto the release as it is, so the release head is the commit the last play passed.
-// A release that moved meanwhile gets the fixes as a merge, and plays again. Returns whether the push went through.
 async function land(ctx: Ctx, session: Session): Promise<boolean> {
   const { release } = session;
   const commit = await ctx.repo.fetchFromWork(session.dir, release.branch);
@@ -266,7 +238,6 @@ function setPlaytest(ctx: Ctx, change: (playtest: PlaytestState) => PlaytestStat
   return next.release.playtest;
 }
 
-// An important bug the baseline has too does not block the release. It becomes a bug issue that waits for votes like any other.
 async function openOldBugs(ctx: Ctx, session: Session, sha: string, review: Review): Promise<number[]> {
   const fresh = review.findings.filter((finding) => finding.cause === 'old' && finding.severity === 'important' && finding.known === null && !session.bugs.has(finding.title));
   const opened: number[] = [];
@@ -306,7 +277,6 @@ function replayPrompt(ctx: Ctx, session: Session, sha: string, play: number): st
   return fillPrompt('release-playtest-replay', { sha, start: session.start, play: String(play), runs: String(ctx.cfg.playtestRuns) });
 }
 
-// The plays of earlier jobs and the members' decisions, so the review can tell a fixed problem from a new one.
 function history(ctx: Ctx, release: ReleaseState): string {
   const runs = Array.from({ length: release.playtest.runs }, (_, i) => i + 1).flatMap((run) => {
     const path = join(auditDir(ctx, release, run), 'meta.json');
@@ -322,7 +292,6 @@ export function auditDir(ctx: Ctx, release: ReleaseState, run: number): string {
   return join(ctx.cfg.home, 'playtest', release.day, `run-${run}`);
 }
 
-// Every play keeps its logs, facts, review, report and outcome, so a later reader sees what each commit did.
 function keepAudit(ctx: Ctx, release: ReleaseState, home: string, meta: RunMeta): void {
   const dir = auditDir(ctx, release, meta.run);
   mkdirSync(dir, { recursive: true });
@@ -333,7 +302,6 @@ function keepAudit(ctx: Ctx, release: ReleaseState, home: string, meta: RunMeta)
   writeFileSync(join(dir, 'meta.json'), `${JSON.stringify(meta, null, 2)}\n`);
 }
 
-// The agent's last report covers the whole job. A job whose agent wrote none says so.
 function report(session: Session): string {
   return readOutput(session.home, 'playtest.md') ?? 'The agent wrote no report in its last round.';
 }

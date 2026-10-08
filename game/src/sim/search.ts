@@ -9,14 +9,11 @@ import { canReachSalvage, collectSalvage, requireLootFree, salvageUnits } from '
 import type { Job, Vehicle, World } from './types';
 import { playerCommand } from './world';
 
-// Turns a search needs: the stock's units at unitsPerTurn a turn, cut by the player's machining.
 function estimateTurns(world: World, v: Vehicle, units: number): number {
   const cut = 1 - skillEffect(world, v, 'machining', 'search');
   return Math.max(1, Math.ceil((units / SALVAGE.unitsPerTurn) * cut));
 }
 
-// Mutates a draft world: starts a search job at the given stock. Shared by the player command and NPCs. A pile
-// takes a fixed number of turns.
 export function beginSearch(world: World, v: Vehicle, stockId: string): void {
   const stock = world.salvage.find((entry) => entry.id === stockId);
   if (!stock) throw new Error(`Unknown salvage ${stockId}`);
@@ -32,7 +29,6 @@ export function startSearch(world: World, stockId: string): World {
   });
 }
 
-// A truck nudged out of reach while it searches, like a blocked one creeping on toward its order, stops the search.
 export function isSearchStalled(world: World, v: Vehicle, job: Extract<Job, { kind: 'search' }>): boolean {
   const stock = world.salvage.find((entry) => entry.id === job.stockId);
   return !!stock && !canReachSalvage(v, stock);

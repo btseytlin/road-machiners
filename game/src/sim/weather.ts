@@ -6,7 +6,6 @@ import { chance, randInt, randRange } from './rng';
 import type { World, WeatherEvent } from './types';
 import { dist, type Vec } from './vec';
 
-// Multipliers on sight radius, top speed, wear and heat, and extra scatter in radians.
 export type WeatherEffects = { sight: number; spread: number; speed: number; wear: number; heat: number };
 
 const SIM = WEATHER.sim;
@@ -32,7 +31,6 @@ function moveStorm(world: World, e: Extract<WeatherEvent, { kind: 'storm' }>): v
   e.pos = { x: nx, y: ny };
 }
 
-// A heat wave and overcast cancel each other's heat, so neither starts while the other lasts.
 const EXCLUDES: Partial<Record<WeatherEvent['kind'], WeatherEvent['kind']>> = { heatwave: 'overcast', overcast: 'heatwave' };
 
 function spawnIfClear(world: World, kind: WeatherEvent['kind']): void {
@@ -44,7 +42,6 @@ function spawnIfClear(world: World, kind: WeatherEvent['kind']): void {
   world.events.push({ t: 'weather', event, outcome: 'started' });
 }
 
-// A new event with a random duration. A storm gets a random position, radius and drift.
 export function makeWeather(world: World, kind: WeatherEvent['kind']): WeatherEvent {
   const [lo, hi] = SIM.duration[kind];
   const turnsLeft = randInt(world, lo, hi);

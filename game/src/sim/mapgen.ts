@@ -12,8 +12,6 @@ import { angleDiff, bearing, dist, segmentDist, type Vec } from './vec';
 
 const O = REGION.obstacles;
 
-// Baked props come first and never change in play, so a save leaves them out and a load puts them back in
-// the same place in the list.
 export function generateObstacles(world: World, map: BakedMap): Obstacle[] {
   const baked = mapObstacles(map);
   const sites = placeSites(world);
@@ -22,8 +20,6 @@ export function generateObstacles(world: World, map: BakedMap): Obstacle[] {
   return out;
 }
 
-// The baked map's props as obstacles: rocks as rocks, every other kind as a landmark of that look. Ids are
-// rock<k> for rocks by prop order, <kind>-<group>-<step> for poles and <kind>-<k> for other props.
 export function mapObstacles(map: BakedMap): Obstacle[] {
   const out = map.props.map((p, k) => propObstacle(p, k));
   const ids = new Set<string>();
@@ -40,14 +36,12 @@ function propObstacle(p: BakedProp, k: number): Obstacle {
   return { id, pos: { ...p.pos }, r: p.r, kind: 'landmark', look: p.kind, yaw: p.yaw };
 }
 
-// Ids mapObstacles makes. No other obstacle id takes these forms.
 const BAKED_ID = new RegExp(`^(rock\\d+|pole-\\d+-\\d+|(${PROP_KINDS.filter((k) => k !== 'rock' && k !== 'pole').join('|')})-\\d+)$`);
 
 export function isBakedObstacle(o: Obstacle): boolean {
   return BAKED_ID.test(o.id);
 }
 
-// Buildings ring each town with gaps where roads leave. Wrecks sit at the convoy, a pond at the oasis.
 function placeSites(world: World): Obstacle[] {
   const S = REGION.sites;
   const out: Obstacle[] = [...REGION.towns, ...REGION.locations].map((s) => ({ id: `site-${s.id}`, pos: { ...s.pos }, r: s.radius, kind: 'site' }));
@@ -70,7 +64,6 @@ function placeSites(world: World): Obstacle[] {
   return out;
 }
 
-// Directions of roads leaving a point that lies on a road end or vertex.
 export function roadExits(p: Vec): number[] {
   const exits: number[] = [];
   for (const road of REGION.roads) {
@@ -90,8 +83,6 @@ function placeRoadWrecks(world: World, out: Obstacle[]): void {
   }
 }
 
-// A random spot on a road shoulder, clear of sites, the bridge deck, the given obstacles, and any spot `allowed`
-// rejects. The world RNG picks it.
 export function findRoadWreckSpot(world: World, obstacles: Obstacle[], allowed: (pos: Vec, r: number) => boolean): { pos: Vec; r: number } {
   for (let tries = 1; tries <= O.maxTries; tries++) {
     const road = REGION.roads[randInt(world, 0, REGION.roads.length - 1)];
@@ -99,7 +90,6 @@ export function findRoadWreckSpot(world: World, obstacles: Obstacle[], allowed: 
     const t = randRange(world, 0.2, 0.8);
     const a = road[seg];
     const b = road[seg + 1];
-    // On the shoulder, left or right of the center line, so traffic keeps an open lane past it.
     const side = (randInt(world, 0, 1) * 2 - 1) * randRange(world, O.roadWreckShoulder[0], O.roadWreckShoulder[1]) * (REGION.roadWidth / 2);
     const len = dist(a, b);
     const pos = { x: a.x + (b.x - a.x) * t - ((b.y - a.y) / len) * side, y: a.y + (b.y - a.y) * t + ((b.x - a.x) / len) * side };
@@ -113,35 +103,25 @@ function overlapsAny(out: Obstacle[], pos: Vec, r: number): boolean {
   return out.some((o) => o.kind !== 'site' && dist(pos, o.pos) < o.r + r + O.gap);
 }
 
-// Site props are scenery. The whole site boundary blocks traffic instead.
 export function isDriveObstacle(o: Obstacle): boolean {
   return o.kind !== 'building' && o.kind !== 'water' && !o.id.startsWith('cw-');
 }
 
-// Fences and junk piles break when a truck drives into them fast enough. See breakProp() in src/sim/salvage.ts.
 export function isBreakable(o: Obstacle): boolean {
   return o.kind === 'landmark' && BREAKABLE.kinds.includes(o.look);
 }
 
-// A prop on the narrow bridge deck would close the crossing.
 export function onBridge(pos: Vec, r: number): boolean {
   const bridge = TERRAIN.features.bridge;
   return segmentDist(pos, bridge.from, bridge.to) < bridge.width / 2 + r;
 }
 
-// Whether a prop keeps the extra site clearance from every town and location.
 export function clearOfSites(pos: Vec, r: number): boolean {
   return [...REGION.towns, ...REGION.locations].every((s) => dist(pos, s.pos) > s.radius + O.siteClearance + r);
 }
 
-// Prop poses: the model each obstacle shows, and its place, turn and scale. The views draw from the pose, and
-// collisions place the model's shape by it.
-
-// Scale from model meters on each model axis: x forward, y sideways, z up.
 export type PropScale = { x: number; y: number; z: number };
-// yaw turns the model's +x in radians from map +x toward +y.
 export type PropPose = { model: PropModel; pos: Vec; yaw: number; scale: PropScale };
-// One box of a model's collision shape, in model meters: x forward, y sideways, z up.
 export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
@@ -165,12 +145,9 @@ const LANDMARK_MODELS: Record<LandmarkLook, PropModel> = {
   junk: 'junk',
   carWreck: 'wreck',
 };
-// Footprint radius in meters each model is built at, for models that scale evenly to their obstacle radius. A
-// fence segment is 4 m long, so its radius is half that. The building model stretches to its footprint instead.
-// The pole, billboard and tank stand at their real size.
 const MODEL_RADIUS: Partial<Record<PropModel, number>> = { crag: 1, silo: 2.5, water_tower: 2, ruin_house: 4.8, gas_station: 7.2, bridge_broken: 6, wreck: 0.7 * M, shack: 3.6, junk: 2.4, fence: 2 };
-const WRECK_RADIUS = 0.7; // tiles, the reference size of the wreck model
-const BUILDING_FILL = 0.78; // share of the obstacle radius a building's footprint fills
+const WRECK_RADIUS = 0.7;
+const BUILDING_FILL = 0.78;
 const SHAPE_BOXES = new Map<string, readonly ShapeBox[]>(Object.entries(SHAPES).map(([name, shape]) => [name, shape.boxes]));
 
 export function propPose(o: Obstacle): PropPose {
@@ -182,14 +159,12 @@ export function propPose(o: Obstacle): PropPose {
   throw new Error(`Obstacle ${o.id} of kind ${o.kind} has no prop model`);
 }
 
-// The collision boxes of a prop model, from src/data/prop-shapes.json.
 export function propShape(model: string): readonly ShapeBox[] {
   const boxes = SHAPE_BOXES.get(model);
   if (boxes === undefined) throw new Error(`Prop model ${model} has no shape in prop-shapes.json. Run npm run models:shapes.`);
   return boxes;
 }
 
-// A landmark faces its baked yaw. A pole turns a quarter more, so its crossbar lies across its line.
 function landmarkPose(o: Landmark): PropPose {
   const model = LANDMARK_MODELS[o.look];
   const pos = { ...o.pos };
@@ -199,8 +174,6 @@ function landmarkPose(o: Landmark): PropPose {
   return { model, pos, yaw, scale: even(radius === undefined ? 1 : (o.r * M) / radius) };
 }
 
-// The building model has a 1 by 0.85 m footprint and 1 m walls. It stretches to the obstacle's footprint, at a
-// height from its id: 16 to 36 height units of the 2D relief scale, at 45 px per unit.
 function buildingScale(o: Obstacle): PropScale {
   const size = o.r * BUILDING_FILL * 2 * M;
   return { x: size, y: size, z: (16 + idHash(o.id) * 20) * (M / 45) };
@@ -210,11 +183,9 @@ function even(s: number): PropScale {
   return { x: s, y: s, z: s };
 }
 
-// A hash of an obstacle id in [0, 1), for turns and heights that must not draw on the world RNG.
 function idHash(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
-  // Final avalanche so ids that differ in one character land far apart.
   h ^= h >>> 16;
   h = Math.imul(h, 0x85ebca6b);
   h ^= h >>> 13;
@@ -223,37 +194,25 @@ function idHash(s: string): number {
   return (h >>> 0) / 4294967296;
 }
 
-// One box of a posed prop. Its ground outline is a rectangle in map tiles around center: half.x tiles each way
-// along axis, a unit vector, and half.y tiles each way across it. z0 and z1 are meters above the prop's ground point.
 export type PosedBox = { center: Vec; axis: Vec; half: Vec; z0: number; z1: number };
-// key: names the model, turn, scale and position, so equal keys mean equal boxes. reach: tiles from the prop's
-// position to the farthest corner of its boxes.
 type PosedShape = { key: string; reach: number; boxes: readonly PosedBox[] };
 
-// Shapes about the origin by model, turn and scale, and posed shapes by key. World clones copy obstacles, so the
-// key finds a clone's shape again. Obstacles never change after placement, so each object also keeps its shape.
 const LOCAL_SHAPES = new Map<string, PosedShape>();
 const POSED_BY_KEY = new Map<string, PosedShape>();
 const POSED_SHAPES = new WeakMap<Obstacle, PosedShape>();
 
-// The collision boxes of a prop at its pose.
 export function propBoxes(o: Obstacle): readonly PosedBox[] {
   return posedShape(o).boxes;
 }
 
-// Tiles from the prop's position to the farthest corner of its posed boxes. A circle of this radius holds the
-// whole shape, so a cheap test with it never misses a collision. The obstacle radius is only the placement footprint.
 export function propReach(o: Obstacle): number {
   return posedShape(o).reach;
 }
 
-// Tiles within which an obstacle can touch anything: its shape's reach for a prop, its radius for a site or a
-// pond, which have no model.
 export function obstacleReach(o: Obstacle): number {
   return o.kind === 'site' || o.kind === 'water' ? o.r : propReach(o);
 }
 
-// Names a prop's model, turn, scale and position: two props with one key have the same boxes.
 export function propKey(o: Obstacle): string {
   return posedShape(o).key;
 }
@@ -273,8 +232,6 @@ function posedShape(o: Obstacle): PosedShape {
   return shape;
 }
 
-// The view turns a model by -yaw about the up axis, and model sideways +y is three.js -z, which is map -y. So a
-// model point (x, y) lands at map offset (x cos + y sin, x sin - y cos) after scaling.
 function localShape(pose: PropPose): PosedShape {
   const { x: sx, y: sy, z: sz } = pose.scale;
   const key = `${pose.model}|${pose.yaw}|${sx}|${sy}|${sz}`;
@@ -295,20 +252,17 @@ function localShape(pose: PropPose): PosedShape {
   return shape;
 }
 
-// Point p in the box's frame: tiles along its axis and across it, from its center.
 function boxLocal(box: PosedBox, p: Vec): Vec {
   const dx = p.x - box.center.x;
   const dy = p.y - box.center.y;
   return { x: dx * box.axis.x + dy * box.axis.y, y: dy * box.axis.x - dx * box.axis.y };
 }
 
-// Tiles from p to the box's ground outline, 0 inside it.
 export function boxDistance(box: PosedBox, p: Vec): number {
   const q = boxLocal(box, p);
   return Math.hypot(Math.max(0, Math.abs(q.x) - box.half.x), Math.max(0, Math.abs(q.y) - box.half.y));
 }
 
-// Whether segment ab touches the box's ground outline. Clips the segment to the outline's slabs.
 export function segmentCrossesBox(box: PosedBox, a: Vec, b: Vec): boolean {
   const p = boxLocal(box, a);
   const q = boxLocal(box, b);
@@ -329,8 +283,6 @@ export function segmentCrossesBox(box: PosedBox, a: Vec, b: Vec): boolean {
   return true;
 }
 
-// Tiles from segment ab to the box's ground outline, 0 where it crosses. Apart, the nearest points are an end of
-// the segment or a corner of the outline.
 export function boxSegmentDistance(box: PosedBox, a: Vec, b: Vec): number {
   if (segmentCrossesBox(box, a, b)) return 0;
   const { center: c, axis: u, half: h } = box;

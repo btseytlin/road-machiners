@@ -229,9 +229,7 @@ describe('finite salvage', () => {
 
 const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
     const w = emptyWorld({ ...sitePads(convoy)[0] });
-    // Keep the built-ins so the truck still runs, but clear cargo so the search has room to fill.
     w.vehicles[0].items = w.vehicles[0].items.filter((item) => item.kind === 'part' && partDef(item.part.defId).kind === 'core');
-    // Empty the tank and stores so the convoy's fuel and supplies fit.
     w.player.fuel = 0;
     w.player.supplies = 0;
     const totalScrap = w.salvage.find((s) => s.id === convoy.id)!.goods.scrap;
@@ -387,7 +385,6 @@ function emptyStock(stock: SalvageStock): void {
   stock.supplies = 0;
 }
 
-// A world whose only road wreck is a looted one at `pos`, with the player at `playerPos`.
 function worldWithLootedWreck(playerPos: Vec, pos: Vec): World {
   const w = emptyWorld(playerPos);
   w.salvage = w.salvage.filter((stock) => !isRoadWreck(stock));
@@ -396,7 +393,6 @@ function worldWithLootedWreck(playerPos: Vec, pos: Vec): World {
   return w;
 }
 
-// Jumps to the last turn of each of the next `days` days and renews there.
 function runDays(w: World, days: number): void {
   for (let day = 0; day < days; day++) {
     w.turn = (Math.floor(w.turn / TIME.turnsPerDay) + 1) * TIME.turnsPerDay;
@@ -411,8 +407,6 @@ describe('site restock', () => {
     emptyStock(stock);
     runDays(w, 1);
     const firstDay = stock.goods.scrap;
-    // A unit comes back at SALVAGE.restockShare a day, so a year of days fills every range but for
-    // odds far below one in a million.
     runDays(w, 365);
     expect(firstDay).toBeLessThan(SALVAGE.convoy.goods.scrap[1]);
     expect(stock.goods.scrap).toBe(SALVAGE.convoy.goods.scrap[1]);
@@ -424,8 +418,6 @@ describe('site restock', () => {
     const w = emptyWorld();
     const stock = stockOf(w, convoy.id);
     emptyStock(stock);
-    // The daily chance is sparePartChance * restockShare, a few percent, so 1000 days refill it
-    // except with odds far below one in a million.
     let days = 0;
     while (stock.parts.length === 0 && days < 1000) {
       runDays(w, 1);
@@ -590,7 +582,6 @@ describe('who loots a target', () => {
   const at = { x: 30, y: 30 };
   const beside = { x: 30.5, y: 30 };
 
-  // The player parked at 30,30 on top of a wreck stock that nobody works yet.
   function wreckWorld(): { w: World; me: Vehicle; stock: SalvageStock } {
     const w = emptyWorld(at);
     const stock: SalvageStock = { id: 'wreck-test', pos: { ...at }, radius: 0.6, goods: { scrap: 3 }, parts: [] };
@@ -598,14 +589,12 @@ describe('who loots a target', () => {
     return { w, me: w.vehicles[0], stock };
   }
 
-  // A scavenger parked beside the player, with a brain and no goals.
   function scavenger(w: World, pos: Vec = beside): Vehicle {
     const npc = addVehicle(w, 'scavengers', 'scout', [], pos);
     npc.brain = npcBrain('scav', pos, []);
     return npc;
   }
 
-  // The player parked beside a knocked-out raider buggy.
   function downedWorld(): { w: World; me: Vehicle; buggy: Vehicle } {
     const w = emptyWorld(at);
     const gap = chassisDef('scout').radius + chassisDef('buggy').radius + 0.2;

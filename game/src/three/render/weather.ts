@@ -27,7 +27,6 @@ function createDustTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(canvas);
 }
 
-// A stable hash from a storm's id, so its puff layout does not reshuffle every sync.
 function idHash(id: string): number {
   let h = 0;
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
@@ -54,8 +53,6 @@ export class WeatherView {
     this.sync(world);
   }
 
-  // Adds a bank for each new sim storm, removes one for each that ended, and moves the rest to
-  // their storm's current position and size. Cheap: world.weather holds only a few events.
   sync(world: World): void {
     const active = new Set(world.weather.filter((e) => e.kind === 'storm').map((e) => e.id));
     for (const [id, bank] of this.storms) {
@@ -98,12 +95,10 @@ export class WeatherView {
     bank.group.position.set(bank.x * S, (heightAt(this.terrain, bank.x, bank.y) + bank.height) * S, bank.y * S);
   }
 
-  // Map tiles from a point to the nearest dust storm's center; Infinity with no storm.
   stormTilesFrom(x: number, y: number): number {
     return Math.min(...[...this.storms.values()].map((b) => Math.hypot(b.x - x, b.y - y)));
   }
 
-  // Only the decorative clouds drift on their own; storms are repositioned by sync from sim state.
   advance(dtMs: number): void {
     const span = this.terrain.size + WRAP_MARGIN * 2;
     for (const bank of this.clouds) {

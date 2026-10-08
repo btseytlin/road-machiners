@@ -30,7 +30,6 @@ function idOf(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
-// Each own entry with a finite non-negative number.
 function countsOf(value: unknown): Record<string, number> {
   const entries = Object.entries(objectOf(value) ?? {}).map(([key, n]) => [key, countOf(n)] as const);
   return Object.fromEntries(entries.filter((e): e is [string, number] => e[1] !== null));
@@ -81,7 +80,6 @@ const NO_CARRIED: Carried = {
   autoRepair: null, fuel: null, supplies: null, costBasis: {}, truck: null, storage: [],
 };
 
-// What a save holds of the player's progression. Never throws: anything of the wrong type reads as missing.
 export function readCarried(raw: unknown): Carried {
   const world = objectOf(objectOf(raw)?.world);
   const player = objectOf(world?.player);
@@ -104,8 +102,6 @@ export function readCarried(raw: unknown): Carried {
   };
 }
 
-// Builds a new world from the stored save and stores it, so the next boot loads it. Null when the stored
-// save is not a JSON object, which leaves nothing to carry.
 export function rescueSave(storage: Storage, slot: SlotId, map: BakedMap, kit: StartKit, freshSeed: () => number, savedAt: number): { world: World; report: CarryReport } | null {
   const parsed = storedSave(storage, slot);
   if (objectOf(parsed) === null) return null;

@@ -12,10 +12,9 @@ import { drawRoads } from "./roads";
 import type { RenderScope } from "./scope";
 
 const S = PHYSICS.metersPerTile;
-const TEXTURE_SIDE = 2048; // 16 MiB RGBA before mipmaps, independent of region area.
-export const TERRAIN_CHUNK = 32; // Roughly two normal camera widths, allowing offscreen terrain culling.
+const TEXTURE_SIDE = 2048;
+export const TERRAIN_CHUNK = 32;
 
-// A canvas over the whole map and its margin, one per ground layer.
 function mapCanvas(w: World): PaintCanvas {
   const from = -TERRAIN_MARGIN;
   const res = TEXTURE_SIDE / (w.size + 2 * TERRAIN_MARGIN);
@@ -34,7 +33,6 @@ function mapCanvas(w: World): PaintCanvas {
 
 const groundTextures = new WeakMap<Terrain, THREE.CanvasTexture>();
 
-// The painted ground of a terrain, painted once. main.ts paints it while assets load.
 export function groundTexture(w: World): THREE.CanvasTexture {
   let texture = groundTextures.get(w.terrain);
   if (!texture) {
@@ -49,13 +47,11 @@ function paintTexture(w: World): THREE.CanvasTexture {
   paintGroundCanvas(c, w.terrain, { hillshade: 0.35 });
   const texture = new THREE.CanvasTexture(c.ctx.canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  // Canvas row 0 is map y at the top edge, and the UVs grow with map y, so the image must not be flipped.
   texture.flipY = false;
   texture.magFilter = THREE.NearestFilter;
   return texture;
 }
 
-// The ground map's uv per meter. The map spans the world plus TERRAIN_MARGIN tiles on each side.
 export function groundUvPerMeter(size: number): number {
   return 1 / ((size + 2 * TERRAIN_MARGIN) * S);
 }
@@ -68,8 +64,6 @@ export type TerrainChunk = {
   mesh: THREE.Mesh;
 };
 
-// Terrain chunks register with the scope, so only chunks near the view are drawn. Returned for the fog,
-// which greys out the ground per corner. Roads are part of the ground material.
 export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
   const chunks: TerrainChunk[] = [];
   const material = new THREE.MeshLambertMaterial({ map: groundTexture(w) });
@@ -119,8 +113,6 @@ export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
   return chunks;
 }
 
-// An unseen flat quad on the Canyon Bridge deck, so a click on the deck picks the deck, not the canyon
-// floor under it. The bridge model draws the deck.
 function deckPick(t: Terrain, scope: RenderScope): void {
   const [h0, h1] = deckEnds(t);
   const [[a0, a1], [b0, b1]] = BRIDGE_RAILS;

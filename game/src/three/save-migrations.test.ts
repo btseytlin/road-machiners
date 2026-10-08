@@ -77,7 +77,6 @@ describe('save migration 1 to 2', () => {
     expect(next.removed.length).toBe(FORMAT_2_1.removed.length);
   });
 
-  // Delete this test at the next format step: it is the only guard that the step's copies match live data while 2.2 is current.
   it('holds copies of the layouts and cores that equal the live chassis data', () => {
     for (const c of Object.values(CHASSIS).filter((it) => LAYOUTS_2_2[it.id])) {
       expect(LAYOUTS_2_2[c.id], c.id).toEqual(c.layout);
@@ -85,7 +84,6 @@ describe('save migration 1 to 2', () => {
     }
   });
 
-  // Guns, racks and cannons may stand on any free cell, so only the other parts must stay mounted.
   it('puts every item of every truck on a free cell, and every non-core part still mounted', () => {
     for (const v of all) {
       const grid = baseGrid(v.chassisId);

@@ -4,7 +4,7 @@ import { activityFrom, type ActivityLine, type EndLine, type SummaryLine } from 
 import { startWorld } from './record';
 
 const SHORT_RUN = 12;
-const RUN_TIMEOUT = 120_000; // one world turn takes about 40 ms and a new world about 400 ms, and the suite runs beside other heavy files
+const RUN_TIMEOUT = 120_000;
 
 const run = (start = startWorld(1337), turns = SHORT_RUN, every = 5): ActivityLine[] =>
   [...activityFrom(start, { seed: 1337, archetype: 'mixed', turns, every, sha: 'abc1234' })];

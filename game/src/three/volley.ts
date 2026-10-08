@@ -7,7 +7,6 @@ import type { Fx3D } from "./render/fx";
 import { blastRadiusOf, planVolley, projectileOf, roundAims, type Muzzle } from "./render/projectiles";
 import type { SoundDirector } from "./sound";
 
-// What a volley draws on: the world it lands in, the effects and sounds it plays, and where an event's truck is seen.
 export type VolleyHost = {
   world: World;
   fx: Fx3D;
@@ -15,8 +14,6 @@ export type VolleyHost = {
   eventPoint: (vehicleId: string) => V3 | null;
 };
 
-// Plays one volley's bolts from the muzzle and sounds from a to b. Each round that damages parts shows its
-// damage over the target as it lands. Returns when the first round lands.
 export function playVolley(
   host: VolleyHost,
   a: V3,
@@ -27,7 +24,6 @@ export function playVolley(
   targetId: string,
   rows: Map<string, number>,
 ): number {
-  // Every round lands within the shot time, before the results show.
   const spec = projectileOf(weapon);
   const ground = (p: V3) => groundPoint(host.world.terrain, toMap(p)).y;
   const plans = planVolley(spec, a, roundAims(b, targetId, rounds, host.eventPoint), CONFIG.combatShotMs, ground);
@@ -43,7 +39,6 @@ export function playVolley(
   return Math.min(...plans.map((plan) => plan.delayMs + plan.flightMs));
 }
 
-// Damage text over a truck that shows, stacked in rows per truck.
 function damageLabel(host: VolleyHost, vehicleId: string, label: string | null, rows: Map<string, number>, atMs: number): void {
   const p = host.eventPoint(vehicleId);
   if (!label || !p) return;

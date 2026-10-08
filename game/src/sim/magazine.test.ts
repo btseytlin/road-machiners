@@ -5,7 +5,6 @@ import { vehicleStats } from './stats';
 import { reloadWeapon } from './world';
 import type { World } from './types';
 
-// The player's MG aimed at a raider buggy in range.
 function duel() {
   const w = emptyWorld();
   const me = w.vehicles[0];

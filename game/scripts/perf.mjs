@@ -14,10 +14,10 @@ const budgets = JSON.parse(readFileSync(new URL('./perf-budgets.json', import.me
 
 const TURNS = 5;
 const TRAVEL_TURNS = 6;
-const TURN_WAIT_MS = 2600; // movement plus combat playback, with margin
-const ORDER_OFFSETS = [[12, 4], [40, 25], [-30, 60], [150, 150]]; // short to long routes, in tiles
-const VIEW_ZOOM = 0.35; // widest zoom
-const SETTLE_MS = 800; // camera move and first frames after it
+const TURN_WAIT_MS = 2600;
+const ORDER_OFFSETS = [[12, 4], [40, 25], [-30, 60], [150, 150]];
+const VIEW_ZOOM = 0.35;
+const SETTLE_MS = 800;
 const SAMPLE_MS = 2000;
 
 const browser = await chromium.launch({ args: ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
@@ -76,7 +76,6 @@ for (const offset of ORDER_OFFSETS) {
 results.previewMs = Math.max(...previewMs);
 
 const travel = await page.evaluate(async () => {
-  // A far drive-through order, then a Space press starts automatic travel through several turns.
   const g = window.__ROAM__;
   const w = { ...g.state, vehicles: g.state.vehicles.map((v) => ({ ...v })) };
   const me = w.vehicles.find((v) => v.id === w.player.vehicleId);
@@ -117,7 +116,6 @@ const towns = await page.evaluate(async () => {
 const frameP95 = [];
 for (const t of towns) {
   frameP95.push(await page.evaluate(async ({ x, y, pad, zoom, settle, sample }) => {
-    // The camera cannot pan past gray vision, so the truck moves to the town's pad first. Trucks never enter a site.
     const g = window.__ROAM__;
     const w = { ...g.state, vehicles: g.state.vehicles.map((v) => (v.id === g.state.player.vehicleId ? { ...v, pos: pad, order: null } : v)) };
     g.apply(w);

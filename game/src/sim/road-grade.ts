@@ -1,9 +1,6 @@
 // Road grading. The ground on and beside every road is set so no step across the road surface is
 // steeper than TERRAIN.roadGrade per tile, and no step beside it steeper than TERRAIN.bankGrade,
 // while staying as close to the ungraded ground as that allows. Ground in the road margin blends
-// back to its own height, so hills become cuttings and dips become banks. Crossings and junctions
-// share one graded surface. Site ground grades like road surface, so it keeps its height unless
-// the road from a neighbor site cannot climb to it.
 
 import { REGION } from '../data/region';
 import { TERRAIN } from '../data/terrain';
@@ -14,12 +11,8 @@ import type { Terrain } from './terrain';
 
 const SITES = [...REGION.towns, ...REGION.locations];
 const HALF_WIDTH = REGION.roadWidth / 2;
-// Corners this far from a road get graded ground, then blend back over the margin.
 const REACH = HALF_WIDTH + TERRAIN.flattenMargin;
-// Corners up to this far from a road are road surface. The extra tile covers every tile a
-// point on the road reads its height from.
 const SURFACE = HALF_WIDTH + 1;
-// Neighbor steps between corners. Knight steps keep grades close to the same in every direction.
 const STEPS: [number, number][] = [
   [1, 0], [-1, 0], [0, 1], [0, -1],
   [1, 1], [1, -1], [-1, 1], [-1, -1],
@@ -27,11 +20,8 @@ const STEPS: [number, number][] = [
 ];
 const STEP_LENGTHS = STEPS.map(([dx, dy]) => Math.hypot(dx, dy));
 
-// Road surface and site ground hold the road grade and give their ungraded height as a target.
-// Margin ground holds the bank grade and gives no target.
 type Corners = { size: number; corner: Int32Array; at: Int32Array; roadDist: Float64Array; surface: Uint8Array };
 
-// Graded corner heights for terrain whose ungraded heights are in raw.
 export function gradeRoads(raw: Terrain): number[] {
   const c = corners(raw.size);
   const ground = Array.from(c.at, (k) => raw.heights[k]);
@@ -49,7 +39,6 @@ export function gradeRoads(raw: Terrain): number[] {
   return heights;
 }
 
-// Every corner within REACH of a road, numbered.
 function corners(size: number): Corners {
   const corner = new Int32Array((size + 1) * (size + 1)).fill(-1);
   const at: number[] = [];
@@ -66,15 +55,11 @@ function corners(size: number): Corners {
   return { size, corner, at: Int32Array.from(at), roadDist: Float64Array.from(roadDist), surface: Uint8Array.from(surface) };
 }
 
-// Under Canyon Bridge the ground is the canyon, so it is margin there.
 function isSurface(x: number, y: number, roadDist: number): boolean {
   if (SITES.some((s) => Math.hypot(s.pos.x - x, s.pos.y - y) < s.radius)) return true;
   return roadDist <= SURFACE && bridgeCut(x, y) === 0;
 }
 
-// For side 1, the highest heights within the grades that stay at or under every given height.
-// For side -1, the lowest that stay at or over them. Corners with no given height are no sources.
-// Where no source reaches, heights are Infinity for side 1 and -Infinity for side -1.
 function envelope(c: Corners, given: (number | null)[], side: 1 | -1): Float64Array {
   const best = Float64Array.from(given, (h) => (h === null ? Infinity : side * h));
   const queue = new MinQueue();
@@ -109,7 +94,6 @@ function neighbor(c: Corners, x: number, y: number): number {
   return c.corner[y * (c.size + 1) + x];
 }
 
-// Binary heap of items by key. Stale entries stay in, and the reader skips them.
 class MinQueue {
   private items = new Int32Array(1024);
   private keys = new Float64Array(1024);
@@ -139,7 +123,6 @@ class MinQueue {
     return top;
   }
 
-  // Moves the last entry down from the root to its place.
   private sink(item: number, key: number): void {
     const n = this.size;
     let i = 0;

@@ -17,14 +17,12 @@ export type TipId = "waypoint" | "drive" | "autoStop" | "stop" | "stopAt" | "man
 type Tip = {
   id: TipId;
   text: string;
-  after?: TipId; // shows only once this tip is seen
-  seenWhenOver?: true; // counts as seen once its moment ends while it shows
-  when: (w: World, auto: boolean) => boolean; // auto: turns follow each other without a key press
+  after?: TipId;
+  seenWhenOver?: true;
+  when: (w: World, auto: boolean) => boolean;
   done: (w: World) => boolean;
 };
 
-// Tiles from spawn for the farewell. Bots first see a trader 43 to 61 tiles from spawn, so this is the farthest of
-// those plus one sight radius.
 const FAREWELL_DISTANCE = 80;
 const spawn = startPose().pos;
 
@@ -39,7 +37,6 @@ const hasWaypoint = (w: World): boolean => {
   return kind === "through" || kind === "stopAt";
 };
 
-// List order is priority when two tips could show at once.
 const TIPS: readonly Tip[] = [
   {
     id: "waypoint",
@@ -110,12 +107,10 @@ const TIPS: readonly Tip[] = [
   },
 ];
 
-// Tips the player has just done, whether or not they were on screen.
 export function doneTips(world: World): TipId[] {
   return TIPS.filter((t) => t.done(world)).map((t) => t.id);
 }
 
-// The tip to show now. The shown tip keeps its place while its moment lasts, so a new tip never swaps it out.
 export function tipToShow(world: World, auto: boolean, seen: ReadonlySet<TipId>, shown: TipId | null): TipId | null {
   if (!playerCanAct(world)) return null;
   const open = TIPS.filter((t) => !seen.has(t.id) && (!t.after || seen.has(t.after)) && t.when(world, auto));
@@ -157,7 +152,6 @@ export class Tips {
     this.render();
   }
 
-  // The shown tip leaves the screen. A tip marked seenWhenOver has done its job.
   private passShown(): void {
     const tip = TIPS.find((t) => t.id === this.shown);
     if (tip?.seenWhenOver) this.markSeen(tip.id);

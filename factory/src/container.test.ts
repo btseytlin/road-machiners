@@ -12,10 +12,8 @@ const HOME = resolve('tmp/factory-container-test');
 const tokenPrices: FactoryConfig['tokenPrices'] = { opus: { input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5, cacheWrite1h: 8 } };
 const cfg = { image: 'img:1', oauthToken: 'secret-token', elevenlabsKey: 'sound-key', sfxMaxGenerations: 6, agentJobMaxMinutes: 30, home: HOME, tokenPrices } as FactoryConfig;
 
-// A finished agent run ends with this event, which the job's ledger line reads.
 const AGENT_RESULT = JSON.stringify({ type: 'result', duration_ms: 60_000, total_cost_usd: 1 });
 
-// Setup calls (network, proxy) answer per `setup`. Only the `docker run --rm` call answers with `code`.
 function fakeRun(code = 0, setup: Record<string, { code: number; stdout?: string }> = {}, stderr = 'boom'): { run: Run; calls: Call[] } {
   const calls: Call[] = [];
   const run: Run = async (cmd, args, opts) => {
@@ -322,7 +320,6 @@ describe('agent usage', () => {
 });
 
 describe('usage limit', () => {
-  // The result line of a real run that hit the weekly limit, cut to the fields the factory reads. The real message separates its parts with a middle dot.
   const LIMIT_RESULT = JSON.stringify({ type: 'result', subtype: 'success', is_error: true, api_error_status: 429, total_cost_usd: 0, result: "You've hit your weekly limit, resets 11pm (UTC)" });
   const limitRun = (stdout: string): Run => async (_cmd, args) => (args[0] === 'run' && args[1] === '--rm' ? { code: 1, stdout, stderr: '' } : { code: 0, stdout: args[0] === 'inspect' ? 'true sha:1' : 'sha:1\n', stderr: '' });
   const pause = `${HOME}/paused`;

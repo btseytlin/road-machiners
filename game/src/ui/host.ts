@@ -4,12 +4,12 @@ import type { World } from "../sim/types";
 
 export type UiHost = {
   world(): World;
-  apply(next: World): void; // replace the world after a command and refresh the UI
+  apply(next: World): void;
   selectedWeapon(): string | null;
   selectWeapon(id: string | null): void;
-  pressTurn(): void; // a turn press, as Space keydown
-  releaseTurn(): void; // as Space keyup
-  runKey(code: string): void; // runs a key's action under that key's gates
+  pressTurn(): void;
+  releaseTurn(): void;
+  runKey(code: string): void;
   autoTravel(): boolean;
   getTurnPhase(): "Moving" | "Firing" | "Results" | null;
 };

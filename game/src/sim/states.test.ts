@@ -9,7 +9,6 @@ import { canVehicleSee } from './vision';
 const NONE = { kind: 'none' } as const;
 const FEUD = { kind: 'feud', robbery: false } as const;
 
-// Two NPCs far enough apart that neither sees the other, so nothing refreshes a feud.
 function apart(): { w: World; a: string; b: string } {
   const w = emptyWorld({ x: 30, y: 30 });
   const a = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 100, y: 100 });
@@ -20,7 +19,6 @@ function apart(): { w: World; a: string; b: string } {
   return { w, a: a.id, b: b.id };
 }
 
-// One turn of the state step alone, with a fresh event list like update() gives.
 function turn(w: World): void {
   w.turn++;
   w.events = [];

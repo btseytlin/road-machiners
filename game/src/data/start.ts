@@ -6,8 +6,8 @@ import { RULES } from './rules';
 export type StartKit = {
   name: string;
   chassis: string;
-  parts: string[]; // mounted in order on the first free fitting mount
-  storage: string[]; // spare parts in the town garage
+  parts: string[];
+  storage: string[];
   money: number;
   fuel: number;
   supplies: number;
@@ -16,7 +16,6 @@ export type StartKit = {
 };
 
 export const START_KITS: Record<string, StartKit> = {
-  // The normal start: a light scout with one gun and some scrap to trade.
   standard: {
     name: 'Your truck',
     chassis: 'scout',
@@ -28,7 +27,6 @@ export const START_KITS: Record<string, StartKit> = {
     cargo: { scrap: 2, parts: 2 },
     costBasis: { scrap: 10 },
   },
-  // For testing combat: both weapons, a front ram and armor, with spares in the town garage.
   combat: {
     name: 'Your truck',
     chassis: 'hauler',

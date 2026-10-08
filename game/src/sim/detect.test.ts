@@ -16,8 +16,6 @@ import { vehicleStats } from './stats';
 import { playerVehicle } from './damage';
 import type { World } from './types';
 
-// Raises a small hill between x=32 and x=36 at y=30, tall enough to block a plain sight line
-// but not the wider systems (sound, radio) that ignore hills.
 function raiseHill(w: ReturnType<typeof emptyWorld>): void {
   editableTerrain(w);
   const size = w.terrain.size;
@@ -58,12 +56,11 @@ describe('soundRange and dustRange', () => {
 
   it('own speed shortens hearing', () => {
     const w = emptyWorld({ x: 2, y: 30 });
-    w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!; // night: no dust
+    w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
     const observer = w.vehicles[0];
     const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 2, y: 30 });
     target.speed = 2;
     observer.speed = 2;
-    // Just inside plain hearing range, but past what a listener moving at speed 2 can hear.
     target.pos = { x: 2 + soundRange(w, target) - DETECT.sound.ownPenalty, y: 30 };
     expect(target.pos.x).toBeLessThan(w.size);
     const movingContacts = contactsOf(w, observer, Infinity);
@@ -86,24 +83,24 @@ describe('hills and the scanner', () => {
   it('a hill blocks sight but not sound', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     raiseHill(w);
-    refreshVision(w); // the stored view was taken before the hill rose
+    refreshVision(w);
     const observer = w.vehicles[0];
     const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     target.speed = 4;
     const contacts = contactsOf(w, observer, Infinity);
     const contact = contacts.find((c) => c.vehicleId === target.id);
     expect(contact?.sources).toContain('sound');
-    expect(contact?.sources).not.toContain('dust'); // taller terrain than the dust eye height blocks it too
+    expect(contact?.sources).not.toContain('dust');
   });
 
   it('the scanner works through hills', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     raiseHill(w);
-    refreshVision(w); // the stored view was taken before the hill rose
+    refreshVision(w);
     const observer = w.vehicles[0];
-    observer.items = observer.items.filter((it) => it.kind === 'good' || it.part.defId !== 'mg'); // frees a deck cell
+    observer.items = observer.items.filter((it) => it.kind === 'good' || it.part.defId !== 'mg');
     const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
-    target.speed = 0.2; // below the parked threshold used by sound, so only the scanner should trigger
+    target.speed = 0.2;
     expect(scannerRange(observer)).toBe(0);
     const before = contactsOf(w, observer, Infinity);
     expect(before.find((c) => c.vehicleId === target.id)).toBeUndefined();
@@ -119,7 +116,7 @@ describe('a worn scanner', () => {
   it('reaches less far', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const observer = w.vehicles[0];
-    observer.items = observer.items.filter((it) => it.kind === 'good' || it.part.defId !== 'mg'); // frees a deck cell
+    observer.items = observer.items.filter((it) => it.kind === 'good' || it.part.defId !== 'mg');
     const scanner = makePart(w, 'scanner', 0);
     if (!mountPart(w, observer, scanner)) throw new Error('No free mount for the test scanner');
     const fresh = scannerRange(observer);
@@ -140,7 +137,7 @@ describe('contact fuzz', () => {
         w.turn = turn;
         const contacts = contactsOf(w, observer, Infinity);
         const contact = contacts.find((c) => c.vehicleId === target.id);
-        if (!contact) continue; // some combinations of seed/turn do not change detection, only the fuzz
+        if (!contact) continue;
         expect(dist(contact.center, target.pos)).toBeLessThanOrEqual(contact.radius);
       }
     }
@@ -148,15 +145,14 @@ describe('contact fuzz', () => {
 });
 
 describe('dust clouds', () => {
-  // A daylight world with a dusty raider moving east at speed 4, 30 tiles from the observer.
   function dustyWorld() {
     const w = emptyWorld({ x: 10, y: 30 });
     w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => sunAt(t))!;
     const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
     v.speed = 4;
     v.heading = 0;
-    v.trail = [0, 1, 2, 3, 4].map((i) => ({ x: 36 + i, y: 30, heading: 0 })); // drove east into x=40 this turn
-    editableTerrain(w).types.fill('sand'); // test ground is road, which raises little dust
+    v.trail = [0, 1, 2, 3, 4].map((i) => ({ x: 36 + i, y: 30, heading: 0 }));
+    editableTerrain(w).types.fill('sand');
     expect(dustRange(w, v)).toBeGreaterThan(40);
     return { w, v, observer: w.vehicles[0] };
   }
@@ -177,7 +173,7 @@ describe('dust clouds', () => {
     v.speed = 0;
     const start = { ...w.dustClouds[0].pos };
     advanceDust(w);
-    expect(w.dustClouds[0].pos.x).toBeLessThan(start.x); // the truck heads east, so its dust drifts west
+    expect(w.dustClouds[0].pos.x).toBeLessThan(start.x);
     for (let t = 0; t < DETECT.dust.lifetime; t++) advanceDust(w);
     expect(w.dustClouds).toHaveLength(0);
   });
@@ -195,7 +191,7 @@ describe('dust clouds', () => {
     const { w, v, observer } = dustyWorld();
     for (let t = 0; t <= DETECT.dust.riseTurns; t++) advanceDust(w);
     v.pos = { x: 48, y: 36 };
-    v.speed = 0; // silent now, so only its dust gives it away
+    v.speed = 0;
     const c = contactsOf(w, observer, Infinity).find((x) => x.vehicleId === v.id)!;
     expect(c.sources).toEqual(['dust']);
     expect(dist(c.center, v.pos)).toBeLessThanOrEqual(c.radius);
@@ -203,7 +199,6 @@ describe('dust clouds', () => {
 });
 
 describe('the emergency beacon', () => {
-  // A parked player behind the hill at x=32..36, beaconing, and a parked raider east of the hill.
   function beaconing(observerX: number) {
     const w = emptyWorld({ x: 30, y: 30 });
     raiseHill(w);
@@ -257,7 +252,6 @@ describe('the emergency beacon', () => {
 describe('perception hearing and contact fix', () => {
   const night = () => Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
 
-  // A moving buggy a little past plain hearing range of a parked listener, at night so it raises no dust.
   function pastHearing(listenerPos = { x: 2, y: 30 }) {
     const w = emptyWorld(listenerPos);
     w.turn = night();
@@ -322,8 +316,6 @@ describe('a stalled engine', () => {
 describe('the cold running perk', () => {
   const night = () => Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
 
-  // The player driving at `share` of its top speed, at night so it raises no dust, and a parked NPC listener past its
-  // sight but inside the player's plain sound range.
   function coldWorld(share: number) {
     const w = emptyWorld({ x: 10, y: 30 });
     w.turn = night();
@@ -368,7 +360,6 @@ describe('the cold running perk', () => {
 });
 
 describe('the dust screen perk', () => {
-  // A daylight world on sand with a truck driving east at `share` of its top speed.
   function screenWorld(share: number, npc = false) {
     const w = emptyWorld({ x: 40, y: 30 });
     w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => sunAt(t))!;
@@ -410,7 +401,6 @@ describe('the dust screen perk', () => {
 });
 
 describe('the spotter perk', () => {
-  // A seen, parked raider next to the player, which has no scanner.
   function spotterWorld() {
     const w = emptyWorld({ x: 30, y: 30 });
     const target = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 35, y: 30 });
@@ -420,7 +410,6 @@ describe('the spotter perk', () => {
     return { w, target };
   }
 
-  // Moves the marked truck far out of the player's sight, parked and silent.
   function driveOff(w: World, id: string): void {
     w.vehicles.find((v) => v.id === id)!.pos = { x: 90, y: 90 };
     refreshVision(w);
@@ -484,7 +473,7 @@ describe('the spotter perk', () => {
     const marked = markVehicle(w, target.id);
     const v = marked.vehicles.find((x) => x.id === target.id)!;
     v.pos = { x: 30 + sightRadius(marked, playerVehicle(marked)) + 2, y: 30 };
-    v.speed = 4; // heard, and no dust cloud rises outside a turn
+    v.speed = 4;
     refreshVision(marked);
     expect(marked.player.contacts.find((c) => c.vehicleId === target.id)?.sources).toEqual(['sound', 'mark']);
   });

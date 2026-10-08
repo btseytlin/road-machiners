@@ -38,7 +38,6 @@ export function checkKnockout(world: World): void {
   const p = world.player;
   const me = playerVehicle(world);
   if (p.state !== "active" || corePart(me, "cab").hp > 0 || fightsThrough(world, me)) return;
-  // Only a knockout with a hostile truck in sight teaches toughness. A cab broken on purpose does not.
   const watchers = world.vehicles.filter((v) => isHostile(world, v, me) && canVehicleSee(world, v, me.pos));
   if (watchers.length > 0) practice(world, "knockout", 1, null, "driver");
   me.defeat = { phase: "out", turns: 0, unseen: 0, foes: withLastHitter(world, me, watchers.map((v) => v.id)) };
@@ -48,7 +47,6 @@ export function checkKnockout(world: World): void {
   stopKnockedOut(world, me);
   me.trail = [];
   const robbers = robbersOf(world, me);
-  // Whoever fought the player got what the feud was for.
   for (const s of world.states.filter((x) => x.kind === "feud" && x.other === me.id))
     endState(world, s, "fulfilled");
   sendToLoot(world, me, robbers);
@@ -56,12 +54,10 @@ export function checkKnockout(world: World): void {
   world.events.push({ t: "knockout" });
 }
 
-// The Fight through perk keeps the driver going on a broken cab while health stays above its share.
 function fightsThrough(world: World, me: Vehicle): boolean {
   return vehicleHasPerk(world, me, "fightThrough") && world.player.health > maxHealthOf(world) * PERK_NUMBERS.fightThrough.health;
 }
 
-// The trucks that fought the player keep the driver down while they watch, so a robber strips the truck in peace.
 export function advanceKnockout(world: World): void {
   const p = world.player;
   if (p.state !== "knockedOut") return;
@@ -75,7 +71,6 @@ export function advanceKnockout(world: World): void {
   world.events.push({ t: "wake" });
 }
 
-// Other junk core parts stay broken. A junk cab cannot wake, so restorePart stops the game with the reason.
 export function patchBrokenCore(me: Vehicle): void {
   const cab = corePart(me, "cab");
   const broken = mountedParts(me, "core").filter((part) => part.hp === 0 && (part === cab || !isJunk(part)));
@@ -83,18 +78,14 @@ export function patchBrokenCore(me: Vehicle): void {
     restorePart(part, Math.max(1, Math.round(maxHp(part) * RULES.defeatPatch)));
 }
 
-// The truck lost a fight: its driver lies out, or an NPC has not refitted at home yet.
 export function isDefeated(v: Vehicle): boolean {
   return v.defeat !== undefined;
 }
 
-// The driver lies knocked out, so trucks beside it can strip it.
 export function isKnockedOut(v: Vehicle): boolean {
   return v.defeat?.phase === "out";
 }
 
-// A knocked-out driver whose cab still works gave up: a knockout always breaks the cab, and nothing repairs it while
-// the driver lies out.
 export function gaveUp(v: Vehicle): boolean {
   return isKnockedOut(v) && corePart(v, "cab").hp > 0;
 }
@@ -104,7 +95,6 @@ function layDown(world: World, v: Vehicle, foes: string[]): void {
   stopKnockedOut(world, v);
 }
 
-// A driver that gives up lies as if knocked out, with no knockout event, death or grudge.
 export function standDown(world: World, v: Vehicle, winnerId: string): void {
   layDown(world, v, [...new Set([...foesOf(world, v), winnerId])]);
 }
@@ -116,8 +106,6 @@ export function knockOutNpc(world: World, v: Vehicle): void {
     addState(world, "revenge", v.id, world.player.vehicleId, { kind: "none" });
 }
 
-// The driver is out, so the truck brakes to a stop instead of coasting on. Every gun aimed at it drops its order,
-// so finishing it off takes a new manual order.
 function stopKnockedOut(world: World, v: Vehicle): void {
   v.order = { kind: "brake" };
   v.weaponOrders = {};
@@ -125,21 +113,17 @@ function stopKnockedOut(world: World, v: Vehicle): void {
   for (const other of world.vehicles) dropOrdersAt(other, v.id);
 }
 
-// The trucks that attacked the NPC, and the one that dealt the last blow.
 function foesOf(world: World, v: Vehicle): string[] {
   if (!v.brain) throw new Error(`${v.id} has no NPC brain to knock out`);
   return withLastHitter(world, v, Object.keys(v.brain.attackers));
 }
 
-// The given foes and the truck that dealt the last blow, while it is still in the world.
 function withLastHitter(world: World, v: Vehicle, ids: string[]): string[] {
   const foes = new Set(ids);
   if (v.lastHitBy && world.vehicles.some((x) => x.id === v.lastHitBy)) foes.add(v.lastHitBy);
   return [...foes];
 }
 
-// The foes that come for the player's cargo: raiders, and drivers that want it. A won robbery already sent its robber.
-// Read before the feuds end, since a robbery feud is what marks a robber.
 function robbersOf(world: World, me: Vehicle): Vehicle[] {
   return world.vehicles.filter((v) => v.brain && me.defeat!.foes.includes(v.id) && (v.faction === "raiders" || wantsLoot(world, v, me)));
 }
@@ -153,7 +137,6 @@ function isLooting(v: Vehicle, targetId: string): boolean {
   return top?.kind === "loot" && top.targetId === targetId;
 }
 
-// The truck that knocked the player out settles any grudge it held.
 function settleRevenge(world: World, me: Vehicle): void {
   const held = me.lastHitBy ? stateOf(world, "revenge", me.lastHitBy, me.id) : null;
   if (held) endState(world, held, "fulfilled");
@@ -164,7 +147,6 @@ function dropOrdersAt(shooter: Vehicle, targetId: string): void {
     if (order.targetId === targetId) delete shooter.weaponOrders[weaponId];
 }
 
-// The player's knockout runs in advanceKnockout.
 export function advanceNpcKnockouts(world: World): void {
   for (const v of world.vehicles.filter((x) => x.id !== world.player.vehicleId)) {
     if (v.defeat?.phase === "out") advanceNpcKnockout(world, v);
@@ -172,7 +154,6 @@ export function advanceNpcKnockouts(world: World): void {
   }
 }
 
-// Looters that did not fight it do not keep the driver down.
 function advanceNpcKnockout(world: World, v: Vehicle): void {
   const defeat = v.defeat!;
   defeat.turns++;
@@ -186,10 +167,6 @@ function attackerWatches(world: World, v: Vehicle, foes: string[]): boolean {
   return world.vehicles.some((x) => foes.includes(x.id) && canVehicleSee(world, x, v.pos));
 }
 
-// ---- The retreat home. The NPC drives or crawls to its home site, and towers may tow it there. Out of the player's
-// sight for long enough, it appears at the home pad instead. At home it refits and the defeat ends.
-
-// A truck on a tow rope or waiting for a tower stays where the tow puts it.
 function advanceRetreat(world: World, v: Vehicle): void {
   const defeat = v.defeat!;
   defeat.unseen = inPlayerView(world, v.pos) ? 0 : defeat.unseen + 1;
@@ -206,7 +183,6 @@ function inPlayerView(world: World, pos: Vec): boolean {
   return dist(playerVehicle(world).pos, pos) <= grayRadius(world, pos);
 }
 
-// A free pad of the home site beyond the player's gray vision, nearest the truck first, or null.
 function hiddenHomeSpot(world: World, v: Vehicle): Vec | null {
   const home = homeOf(v);
   const radius = chassisDef(v.chassisId).radius;
@@ -229,8 +205,6 @@ function teleportHome(world: World, v: Vehicle, spot: Vec): void {
   refitAtHome(world, v);
 }
 
-// The truck at its home site gets a fresh loadout for its template on the same chassis, and spawn fuel, supplies
-// and health. The driver keeps its money, name, traits and goals. The defeat ends.
 export function refitAtHome(world: World, v: Vehicle): void {
   const template = NPCS[v.brain!.templateId];
   const loadout = generateNpcLoadout(world, template, v.chassisId);

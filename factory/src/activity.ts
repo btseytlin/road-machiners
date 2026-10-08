@@ -27,7 +27,6 @@ function readToolResultActivity(content: unknown): ActivityUpdate {
   const reported = text === null ? null : readReportedStatus(text);
   return reported ? { ...reported, source: 'agent' } : { activity: 'model', source: 'runner' };
 }
-// Agents chain factory-status with other commands, so its line arrives mixed with their output. A milestone outranks an activity because the runner replaces activities at the next tool call.
 function readReportedStatus(text: string): ReturnType<typeof parseAgentStatus> {
   const reports = text.split('\n').map((line) => parseAgentStatus(line.trim())).filter((report) => report !== null);
   return reports.filter((report) => 'milestone' in report).at(-1) ?? reports.at(-1) ?? null;

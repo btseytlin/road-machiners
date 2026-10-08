@@ -19,8 +19,6 @@ const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
 const engineOf = (v: Vehicle) => mountedParts(v, 'engine')[0];
 const share = (p: PartInstance) => p.hp / maxHp(p);
 
-// The player at the Bowl pad with a broken transmission, a worn engine, no money and nothing to sell. The truck
-// keeps only its built-in parts and its engine.
 function strandedBroke(pos = sitePads(bowl)[0]): World {
   const w = emptyWorld(pos);
   const me = w.vehicles[0];

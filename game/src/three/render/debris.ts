@@ -17,32 +17,30 @@ import { model, type ModelName } from './models';
 
 const S = PHYSICS.metersPerTile;
 const DT = 1 / PHYSICS.stepsPerSecond;
-const MAX_STEPS_PER_FRAME = 4; // a slow frame drops time rather than stepping a backlog
-export const FLY_REACH = 10; // meters a piece can end up from where its prop stood, for render bounds and colliders
-const PATCH_CELLS = 6; // ground heightfield cells per side under a burst, 24 m, which holds FLY_REACH around it
-const DENSITY = 600; // kg per cubic meter, dry wood and thin scrap
+const MAX_STEPS_PER_FRAME = 4;
+export const FLY_REACH = 10;
+const PATCH_CELLS = 6;
+const DENSITY = 600;
 const FRICTION = 0.8;
 const BOUNCE = 0.2;
-const FLING = [0.5, 1.1]; // share of the truck's velocity a piece takes, least and most
-const LIFT = 0.25; // upward speed as a share of the truck's speed, at most
-const SPREAD = 0.3; // sideways speed as a share of the truck's speed, at most
-const SPIN = 1.2; // radians per second of spin per m/s of truck speed, at most
-const TOPPLE = 1.5; // m/s of the push that tips over a prop broken out of view
-const REST_SPEED = 0.15; // m/s below which a piece counts as still
-const REST_SPIN = 0.5; // rad/s below which a piece counts as still
-const REST_STEPS = 0.4 * PHYSICS.stepsPerSecond; // a piece must stay still for 0.4 seconds before it freezes
-const MAX_FLIGHT = 8 * PHYSICS.stepsPerSecond; // steps after which a piece freezes wherever it is
-const WELD = 1000; // vertex positions closer than a millimeter join one part
+const FLING = [0.5, 1.1];
+const LIFT = 0.25;
+const SPREAD = 0.3;
+const SPIN = 1.2;
+const TOPPLE = 1.5;
+const REST_SPEED = 0.15;
+const REST_SPIN = 0.5;
+const REST_STEPS = 0.4 * PHYSICS.stepsPerSecond;
+const MAX_FLIGHT = 8 * PHYSICS.stepsPerSecond;
+const WELD = 1000;
 
-// One separate part of a model, in model meters around its own center. parts hold its triangles per material.
 type PieceSource = { parts: { geometry: THREE.BufferGeometry; material: THREE.Material }[]; center: THREE.Vector3; box: THREE.Box3 };
-type Flying = { body: RAPIER.RigidBody; mesh: THREE.Object3D; still: number; age: number }; // still and age in steps
+type Flying = { body: RAPIER.RigidBody; mesh: THREE.Object3D; still: number; age: number };
 type Burst = { pieces: Flying[]; fixed: RAPIER.Collider[] };
 export type TruckBox = { id: string; chassisId: string; pos: V3; rot: Quat };
 
 const sources = new Map<ModelName, PieceSource[]>();
 
-// A render-only physics world for flying pieces. Trucks enter as kinematic boxes, so they shove pieces they drive into.
 export class DebrisSim {
   private readonly world = new RAPIER.World({ x: 0, y: -PHYSICS.gravity, z: 0 });
   private readonly bursts: Burst[] = [];
@@ -53,8 +51,6 @@ export class DebrisSim {
     this.world.timestep = DT;
   }
 
-  // The prop's pieces at its pose, as a group of meshes in world meters. push: the breaking truck's velocity in m/s,
-  // or null for a prop broken out of view, which topples over.
   burst(o: Obstacle, push: V3 | null, near: readonly Obstacle[]): THREE.Group {
     const group = new THREE.Group();
     const pose = propPose(o);
@@ -77,7 +73,6 @@ export class DebrisSim {
     return group;
   }
 
-  // Moves the truck boxes to their drawn poses. Trucks exist in this world only while pieces fly.
   moveTrucks(trucks: readonly TruckBox[]): void {
     if (this.bursts.length === 0) return;
     const ids = new Set(trucks.map((t) => t.id));
@@ -93,7 +88,6 @@ export class DebrisSim {
     }
   }
 
-  // Advances the pieces by dt seconds of real time.
   step(dt: number): void {
     if (this.bursts.length === 0) return;
     this.clock = Math.min(this.clock + dt, MAX_STEPS_PER_FRAME * DT);
@@ -103,7 +97,6 @@ export class DebrisSim {
     }
   }
 
-  // Runs until every piece has frozen, for props broken out of view.
   settle(): void {
     for (let i = 0; i < MAX_FLIGHT && this.bursts.length > 0; i++) this.tick();
     if (this.bursts.length > 0) throw new Error('Debris pieces kept moving past their longest flight');
@@ -125,8 +118,6 @@ export class DebrisSim {
     this.trucks.clear();
   }
 
-  // Moves the piece's mesh to its body. A piece that has rested long enough, or flown too long, freezes and leaves
-  // the world. Returns whether it still flies.
   private fly(p: Flying): boolean {
     place(p.mesh, p.body);
     const v = p.body.linvel();
@@ -148,13 +139,11 @@ export class DebrisSim {
   }
 }
 
-// A still prop gets one push for all its pieces, in a direction from its id, so it falls over as one.
 function topple(id: string): V3 {
   const a = hashStr(`${id}:topple`) * Math.PI * 2;
   return { x: Math.cos(a) * TOPPLE, y: 0, z: Math.sin(a) * TOPPLE };
 }
 
-// Each piece takes part of the push, some lift and a sideways share across it, and a spin, seeded by its key.
 function launch(body: RAPIER.RigidBody, push: V3, key: string): void {
   const r = (k: string) => hashStr(`${key}:${k}`);
   const speed = Math.hypot(push.x, push.z);
@@ -174,7 +163,6 @@ function place(mesh: THREE.Object3D, body: RAPIER.RigidBody): void {
   mesh.updateMatrix();
 }
 
-// The piece's triangles at the prop's scale, one mesh per material under one object that the body moves.
 function pieceMesh(src: PieceSource, scale: THREE.Vector3): THREE.Object3D {
   const obj = new THREE.Group();
   obj.matrixAutoUpdate = false;
@@ -188,7 +176,6 @@ function pieceMesh(src: PieceSource, scale: THREE.Vector3): THREE.Object3D {
   return obj;
 }
 
-// The convex hull of the piece's vertices at the prop's scale.
 function hull(src: PieceSource, scale: THREE.Vector3): RAPIER.ColliderDesc {
   const points = src.parts.flatMap((part) => Array.from(part.geometry.getAttribute('position').array));
   const scaled = new Float32Array(points.map((p, i) => p * [scale.x, scale.y, scale.z][i % 3]));
@@ -197,8 +184,6 @@ function hull(src: PieceSource, scale: THREE.Vector3): RAPIER.ColliderDesc {
   return desc.setDensity(DENSITY).setFriction(FRICTION).setRestitution(BOUNCE);
 }
 
-// A heightfield over the terrain corners around a map point, the same surface as the drive's terrain collider.
-// The window shifts to stay inside the map.
 function groundPatch(t: Terrain, at: { x: number; y: number }): RAPIER.ColliderDesc {
   const n = t.size;
   const k = PATCH_CELLS;
@@ -211,8 +196,6 @@ function groundPatch(t: Terrain, at: { x: number; y: number }): RAPIER.ColliderD
   return RAPIER.ColliderDesc.heightfield(k, k, heights, { x: k * S, y: S, z: k * S }).setTranslation((x0 + k / 2) * S, 0, (y0 + k / 2) * S).setFriction(FRICTION);
 }
 
-// The model's separate parts. Triangles that share a vertex position form one part, and a part mostly inside
-// another joins it, like a rim inside its tire.
 function piecesOf(name: ModelName): PieceSource[] {
   const cached = sources.get(name);
   if (cached) return cached;
@@ -231,7 +214,6 @@ function piecesOf(name: ModelName): PieceSource[] {
   return out;
 }
 
-// Triangle index groups that share vertex positions.
 function connected(tris: Float32Array[]): number[][] {
   const parent = tris.map((_, i) => i);
   const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
@@ -249,8 +231,6 @@ function connected(tris: Float32Array[]): number[][] {
   return [...byRoot.values()];
 }
 
-// Joins a group into a bigger one when at least half of its bounding box lies inside the other's. Smaller groups
-// go first, so a rim joins its tire before the tire is checked against the stack.
 function mergeInside(groups: number[][], tris: Float32Array[]): number[][] {
   const boxes = groups.map((ids) => boxOf(ids.map((i) => tris[i])));
   const order = groups.map((_, i) => i).sort((a, b) => volume(boxes[a]) - volume(boxes[b]));
@@ -271,7 +251,6 @@ function boxOf(tris: Float32Array[]): THREE.Box3 {
   return box;
 }
 
-// Cubic meters, with every side at least a centimeter, so a flat plate still has a volume.
 function volume(box: THREE.Box3): number {
   if (box.isEmpty()) return 0;
   const size = box.getSize(new THREE.Vector3()).max(new THREE.Vector3(0.01, 0.01, 0.01));

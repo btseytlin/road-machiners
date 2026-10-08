@@ -15,7 +15,6 @@ function job(stage: JobStage, issue: number | null, startedAt: string, endedAt: 
 const opus = (costUsd: number, minutes: number) => ({ model: 'opus', costUsd, minutes });
 const sonnet = (costUsd: number, minutes: number) => ({ model: 'sonnet', costUsd, minutes });
 
-// Issue 131: implement, a long wait, verify with its post, then a redesign route and another design.
 const LEDGER: LedgerLine[] = [
   job('implement', 131, '2026-10-02T15:32:00Z', '2026-10-02T16:02:00Z', [opus(4, 30)]),
   job('verify', 131, '2026-10-02T19:16:00Z', '2026-10-02T20:30:00Z', [opus(3, 17), opus(5, 47)]),
@@ -25,7 +24,6 @@ const LEDGER: LedgerLine[] = [
   job('verify', 7, '2026-10-03T10:30:00Z', '2026-10-03T10:40:00Z', [sonnet(0.2, 10)], 'failed'),
   job('verify', 7, '2026-10-03T11:00:00Z', '2026-10-03T11:10:00Z', [sonnet(0.2, 10)]),
   job('dev', null, '2026-10-03T12:00:00Z', '2026-10-03T12:05:00Z'),
-  // Ended before the window, so it does not count.
   job('design', 9, '2026-09-20T00:00:00Z', '2026-09-20T01:00:00Z', [opus(9, 60)]),
 ];
 

@@ -8,7 +8,6 @@ import type { Vehicle, World } from './types';
 import { refreshVision } from './vision';
 import { endTurn } from './world';
 
-// A raider in sight of a player with loot, noted at the end of a turn.
 function raiderInSight(): { w: World; raider: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 36, y: 30 }, Math.PI);

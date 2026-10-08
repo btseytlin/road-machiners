@@ -10,14 +10,12 @@ function git(gameDir: string, args: string[]): string {
   return execFileSync('git', args, { cwd: gameDir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 }
 
-// The format recorded in HEAD, so uncommitted edits never change the version.
 function savedFormat(gameDir: string): string {
   const shape = JSON.parse(git(gameDir, ['show', `HEAD:./${SHAPE_FILE}`])) as { format?: unknown };
   if (typeof shape.format !== 'string') throw new Error(`${SHAPE_FILE} in HEAD has no format string`);
   return shape.format;
 }
 
-// The latest commit whose change adds the format string. The search matches what `npm run save:shape` writes.
 function formatCommit(gameDir: string, format: string): string {
   if (git(gameDir, ['rev-parse', '--is-shallow-repository']) === 'true') {
     throw new Error('Cannot work out the game version in a shallow clone. Fetch the full git history.');

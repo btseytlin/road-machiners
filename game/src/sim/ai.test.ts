@@ -34,7 +34,6 @@ describe('NPC driving', () => {
 });
 
 describe('face offs', () => {
-  // Two traders parked nose to nose. The first has the lower id, so it is the one that may wait.
   function noseToNose(): { w: World; first: Vehicle; second: Vehicle } {
     const w = emptyWorld({ x: 30, y: 30 });
     const first = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 100, y: 100 });
@@ -70,7 +69,6 @@ describe('face offs', () => {
   });
 });
 
-// The NPC drives east from (100, 100) toward (130, 100). The player truck is placed with a heading and a speed.
 function scene(x: number, y: number, heading: number, speed: number): { w: World; npc: Vehicle } {
   const w = emptyWorld({ x, y });
   const me = w.vehicles[0];
@@ -85,7 +83,6 @@ function scene(x: number, y: number, heading: number, speed: number): { w: World
 
 const DEST = { x: 130, y: 100 };
 
-// Rocks lining both sides of the NPC's way, from x 90 to 140, leave a lane just wide enough for one truck.
 function corridor(w: World): void {
   for (let x = 90; x <= 140; x++) {
     w.obstacles.push({ id: `n${x}`, kind: 'rock', pos: { x, y: 97 }, r: 1 });
@@ -156,7 +153,6 @@ describe('NPC traffic', () => {
 });
 
 describe('oncoming NPCs', () => {
-  // Two traders on open ground closing head-on, each bound past the other. The first has the lower id.
   function headOn(): { w: World; first: Vehicle; second: Vehicle } {
     const w = emptyWorld({ x: 100, y: 130 });
     const first = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 100, y: 100 });
@@ -202,7 +198,6 @@ describe('oncoming NPCs', () => {
 });
 
 describe('getting unstuck', () => {
-  // A leader bound east whose following escort lags far behind, so the leader waits for it.
   function waitingLeader(): { w: World; leader: Vehicle } {
     const w = emptyWorld({ x: 30, y: 30 });
     const leader = addVehicle(w, 'convoys', 'hauler', ['mg', 'workhorseDiesel'], { x: 100, y: 100 });

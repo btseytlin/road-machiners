@@ -10,7 +10,6 @@ export function bearing(from: Vec, to: Vec): number {
   return Math.atan2(to.y - from.y, to.x - from.x);
 }
 
-// Signed smallest angle from a to b, in (-PI, PI].
 export function angleDiff(a: number, b: number): number {
   let d = (b - a) % (2 * Math.PI);
   if (d > Math.PI) d -= 2 * Math.PI;
@@ -26,7 +25,6 @@ export function lerp(a: number, b: number, t: number): number {
   return a + (b - a) * t;
 }
 
-// Distance from p to segment ab.
 export function segmentDist(p: Vec, a: Vec, b: Vec): number {
   const dx = b.x - a.x;
   const dy = b.y - a.y;

@@ -20,13 +20,13 @@ import type { RenderScope } from './scope';
 import { TERRAIN_CHUNK } from './terrain';
 
 const S = PHYSICS.metersPerTile;
-const CRATES_RADIUS = 1.5; // meters, the reference radius of tools/blender/crates.py
-const PILE_FULL_UNITS = 20; // loot units at which a pile reaches the crates model's full size, about a full pickup bed
-const PILE_MIN_SIZE = 0.5; // share of full size for a small pile, so it still reads at the default zoom
+const CRATES_RADIUS = 1.5;
+const PILE_FULL_UNITS = 20;
+const PILE_MIN_SIZE = 0.5;
 
 export class ObstacleViews {
   private readonly byId = new Map<string, THREE.Object3D>();
-  private rockIds: Set<string> | null = null; // map rocks, fixed at the first sync with the power lines
+  private rockIds: Set<string> | null = null;
   private readonly piles = new Map<string, { obj: THREE.Object3D; units: number }>();
   private readonly debris = new Map<string, THREE.Object3D>();
   private readonly flying: DebrisSim;
@@ -72,16 +72,12 @@ export class ObstacleViews {
     }
   }
 
-  // Props break at the step their truck hits them, and once the movement is over every break of the turn has come.
-  // Pieces fly against the trucks at their drawn poses. step: the physics step shown, or null after the movement.
-  // dt: seconds since the last drawn frame.
   play(anim: { result: TurnResult } | null, step: number | null, world: World, frames: Record<string, VehicleFrame>, dt: number): void {
     if (anim) this.smash(anim.result, step ?? Infinity, world.broken);
     this.flying.moveTrucks(world.vehicles.filter((v) => frames[v.id]).map((v) => ({ id: v.id, chassisId: v.chassisId, ...frames[v.id] })));
     this.flying.step(dt);
   }
 
-  // Each prop broken this turn bursts into flying pieces at its hit step. The standing view goes.
   private smash(result: TurnResult, step: number, broken: readonly BrokenProp[]): void {
     for (const b of result.breaks) {
       if (b.step > step || this.debris.has(b.prop)) continue;
@@ -97,8 +93,6 @@ export class ObstacleViews {
     }
   }
 
-  // Each broken prop lies as pieces where they came to rest until it grows back. Pieces block nothing. A prop broken
-  // out of view, or before a load, topples over at once.
   private syncDebris(broken: readonly BrokenProp[]): void {
     const ids = new Set(broken.map((b) => b.obstacle.id));
     for (const [id, obj] of this.debris) {
@@ -121,7 +115,6 @@ export class ObstacleViews {
     this.debris.set(o.id, pieces);
   }
 
-  // A pile is drawn while it holds loot. Its footprint grows with its loot, so its size follows the square root of the units.
   private syncPiles(salvage: SalvageStock[]): void {
     const shown = salvage.filter((stock) => stock.pile && hasSalvage(stock));
     const ids = new Set(shown.map((stock) => stock.id));
@@ -152,7 +145,6 @@ export class ObstacleViews {
     return pile;
   }
 
-  // One instanced rock model per chunk, with the placement and tint of rockPlacement.
   private addRocks(rocks: Obstacle[]): Set<string> {
     const byChunk = new Map<string, Obstacle[]>();
     for (const o of rocks) {
@@ -172,12 +164,10 @@ export class ObstacleViews {
   }
 }
 
-// Tiles from an obstacle's position that its view can cover. A prop's boxes may reach past its radius.
 function viewReach(o: Obstacle): number {
   return o.kind === 'water' || o.kind === 'site' ? o.r : propReach(o);
 }
 
-// The truck's velocity in m/s around a physics step of its turn frames.
 function velocityAt(frames: VehicleFrame[] | undefined, step: number): V3 {
   if (!frames || frames.length < 2) throw new Error(`Break at step ${step} by a truck with no turn frames`);
   const a = frames[Math.max(0, step - 1)].pos;
@@ -198,7 +188,6 @@ function disposeTree(obj: THREE.Object3D): void {
 
 function buildObstacle(t: Terrain, o: Obstacle): THREE.Object3D {
   if (o.kind === 'water') return buildWater(t, o);
-  // A site's boundary blocks traffic but has no model of its own; buildSites draws the site.
   if (o.kind === 'site') return new THREE.Group();
   return buildProp(t, o);
 }
@@ -209,15 +198,12 @@ function seat(t: Terrain, o: Obstacle): THREE.Group {
   return g;
 }
 
-// A boulder from tools/blender/rock.py, modeled at a 1 m radius. Each rock gets its own tint.
 function rockPlacement(t: Terrain, o: Obstacle): { matrix: THREE.Matrix4; tint: number } {
   const g = posed(t, propPose(o));
   g.updateMatrix();
   return { matrix: g.matrix, tint: 0.9 + hashStr(o.id) * 0.2 };
 }
 
-// A group at the prop's pose. A three.js turn by -yaw points the model's +X at map direction yaw. Model
-// sideways is three.js z and model up is three.js y.
 function posed(t: Terrain, pose: PropPose): THREE.Group {
   const g = new THREE.Group();
   g.position.set(pose.pos.x * S, heightAt(t, pose.pos.x, pose.pos.y) * S, pose.pos.y * S);
@@ -226,7 +212,6 @@ function posed(t: Terrain, pose: PropPose): THREE.Group {
   return g;
 }
 
-// Wrecks, settlement buildings and baked landmarks. A building gets a roof color from its id.
 function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   const pose = propPose(o);
   const g = posed(t, pose);
@@ -264,10 +249,9 @@ function buildWater(t: Terrain, o: Obstacle): THREE.Object3D {
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
 const WIRES = ['wire0', 'wire1', 'wire2'];
-const SAG = 0.7; // meters a wire hangs below its ends at mid-span
+const SAG = 0.7;
 const WIRE_POINTS = 8;
 
-// Wires between neighboring poles of one line: poles whose ids name the same line and following steps.
 export function addPowerLines(t: Terrain, obstacles: Obstacle[], scope: RenderScope): void {
   const poles = new Map(obstacles.filter((o): o is Landmark => o.kind === 'landmark' && o.look === 'pole').map((o) => [o.id, o]));
   const material = new THREE.MeshLambertMaterial({ color: PAL.wheel });
@@ -282,7 +266,6 @@ export function addPowerLines(t: Terrain, obstacles: Obstacle[], scope: RenderSc
   }
 }
 
-// Pole ids end in their step along the line.
 function nextId(id: string): string {
   const cut = id.lastIndexOf('-');
   return `${id.slice(0, cut)}-${Number(id.slice(cut + 1)) + 1}`;

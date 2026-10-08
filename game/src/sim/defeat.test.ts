@@ -19,7 +19,6 @@ import { refreshVision } from './vision';
 import type { Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
 
-// Every goods unit and part id a vehicle and the stocks hold, for checking that nothing is lost or copied.
 function inventory(w: World, v: Vehicle): { goods: Record<string, number>; parts: string[] } {
   const goods: Record<string, number> = { ...goodsCount(v) };
   const parts = v.items.flatMap((it) => (it.kind === 'part' ? [it.part.id] : []));
@@ -40,7 +39,6 @@ function knockedOut(): { w: World; me: Vehicle } {
   return { w, me };
 }
 
-// A raider that dealt the knockout blow and watches the truck, so it keeps the driver down.
 function knockedOutByRaider(parts: string[] = []): { w: World; me: Vehicle; raider: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   w.salvage = [];
@@ -183,7 +181,6 @@ describe('knockout', () => {
 });
 
 describe('fight through', () => {
-  // The player truck with a broken cab and health at a share of max health.
   function brokenCab(healthShare: number, perks: World['player']['perks']): World {
     const w = emptyWorld({ x: 30, y: 30 });
     w.player.perks = perks;

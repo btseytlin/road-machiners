@@ -64,7 +64,7 @@ describe('engine heat', () => {
     const hp = engine(w).hp;
     advanceEngineHeat(w);
     const sunCooled = 1 - w.player.engineHeat;
-    w.turn = NIGHT; // heat 1, the same as shade
+    w.turn = NIGHT;
     w.player.engineHeat = 1;
     advanceEngineHeat(w);
     expect(1 - w.player.engineHeat).toBeCloseTo(ENGINE_HEAT.coolParked);
@@ -106,7 +106,6 @@ describe('heat practice', () => {
 });
 
 describe('machining on engine heat', () => {
-  // Heat one turn of top speed in the noon sun adds to a cold engine.
   function heating(machining: number): number {
     const w = emptyWorld();
     w.turn = NOON;
@@ -141,7 +140,6 @@ describe('engine heat by engine', () => {
 });
 
 describe('engine heat on the road', () => {
-  // Point d tiles along the polyline, or null past its end.
   function along(points: Vec[], d: number): Vec | null {
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1];
@@ -261,7 +259,6 @@ describe('dousing the engine', () => {
 });
 
 describe('desert rat', () => {
-  // Engine heat after one turn of top speed from a cold engine at a turn.
   function heating(turn: number, perks: ReturnType<typeof emptyWorld>['player']['perks']): number {
     const w = emptyWorld();
     w.turn = turn;

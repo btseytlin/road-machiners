@@ -7,13 +7,8 @@ import { POST_MARK, postCheckpoint, publishAndPost } from './checks';
 import { hardenPrompt } from './harden';
 import { HOTFIX_BASE, agentHome, baseBranchFor, docsOnly, fillPrompt, guardAndPush, mergeBase, playtestCommand, prepareOutputs, readOutput, requireBaseMerged, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 
-// The one agent session of the Testing column. Each round of this job continues it.
 const ROUND = 'test';
 
-// Testing in one job. The testing session plays the build, fixes what it finds and writes the post. The factory then runs the post checkpoint.
-// A failure goes back into the same session until the checks pass or the session spent the Testing budget. Then the build is posted.
-// A hotfix ships on approval, so its session first runs the harden prompt and its checkpoint runs the suite.
-// The only way back is `.factory/needs-redesign.md`, when the plan itself is wrong.
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const item = await ctx.github.issue(issue);
   const base = baseBranchFor(ctx, item.labels);
@@ -34,7 +29,6 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   await publishAndPost(ctx, issue, readApproval(home), home, base, build, false);
 }
 
-// The session's first prompts, and what they cost. A hotfix hardens first, in the same session, so the test round sees its fixes.
 async function firstRounds(ctx: Ctx, issue: number, base: string, hotfix: boolean): Promise<number> {
   let spent = 0;
   if (hotfix) spent += runCost(await runAgent(ctx, issue, 'verify', ROUND, await hardenPrompt(ctx, issue, base)));
@@ -43,7 +37,6 @@ async function firstRounds(ctx: Ctx, issue: number, base: string, hotfix: boolea
   return spent;
 }
 
-// A committee reply routed as a patch is the last feedback after the last post. It is the whole task of this round.
 export function taskText(comments: IssueComment[]): string {
   const sincePost = [...comments].reverse();
   const lastPost = sincePost.findIndex((comment) => comment.body.startsWith(POST_MARK));
@@ -58,7 +51,6 @@ export function taskText(comments: IssueComment[]): string {
   ].join('\n');
 }
 
-// The agent found that the plan itself is wrong. Design reads its reason next to the committee feedback.
 async function redesigned(ctx: Ctx, issue: number, home: string): Promise<boolean> {
   throwIfNeedsCommittee(home);
   const reason = readOutput(home, 'needs-redesign.md');
@@ -68,14 +60,12 @@ async function redesigned(ctx: Ctx, issue: number, home: string): Promise<boolea
   return true;
 }
 
-// Pushes the session's work and returns the head the checkpoint checks.
 async function pushed(ctx: Ctx, issue: number, base: string, merged: string): Promise<string> {
   await guardAndPush(ctx, issue, base, 'verify');
   await requireBaseMerged(ctx, issue, base, merged);
   return ctx.repo.headHash(BRANCH(issue));
 }
 
-// The post needs the approval text too, so a missing one is a failure the session fixes like a failed check.
 async function checkpoint(ctx: Ctx, issue: number, base: string, build: string, kind: 'preview' | 'full', home: string): Promise<string | null> {
   try {
     readApproval(home);
@@ -92,7 +82,6 @@ async function fixRound(ctx: Ctx, issue: number, home: string, failure: string):
   return stream;
 }
 
-// A docs change has nothing to play. The factory pushes the base merge, writes the post text itself and only builds.
 async function docsRound(ctx: Ctx, issue: number, base: string, home: string, merged: string): Promise<void> {
   await guardAndPush(ctx, issue, base, 'verify');
   await requireBaseMerged(ctx, issue, base, merged);

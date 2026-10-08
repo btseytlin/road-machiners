@@ -7,11 +7,8 @@ import { record, recordFrom, recordTurns, StallWatch, type TraceLine } from './r
 import { replay } from './replay';
 
 const SHORT_RUN = 60;
-// A nondeterminism bug (stray Math.random, object-identity leaks, iteration-order drift) shows up within a
-// handful of turns; it does not need thousands to surface. Short enough to keep this check cheap, long enough
-// to have run through several bot decisions.
 const DETERMINISM_RUN = 15;
-const RUN_TIMEOUT = 120_000; // one world turn takes about 40 ms and a new world about 400 ms; the suite runs these beside other heavy files, which triples the time
+const RUN_TIMEOUT = 120_000;
 
 describe('record', () => {
   it('gives the same trace for the same seed and archetype', () => {
@@ -29,7 +26,6 @@ describe('record', () => {
     for (const step of recordTurns(1337, 'scavenger', SHORT_RUN)) {
       lines.push(...step.lines);
       last = step.world;
-      // A minute of turns without a yield would starve the worker's status messages to the runner.
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     if (!last) throw new Error('The recording ran no turns');

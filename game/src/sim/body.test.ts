@@ -8,7 +8,6 @@ import TRUCK_SHAPES from '../data/truck-shapes.json';
 import { baseGrid } from './grid';
 
 const ids = Object.keys(CHASSIS);
-// How far below the cab roof or the model top a part must stand to count as lower.
 const CLEAR = 0.15;
 
 const coreCellsOf = (id: string, role: CoreDef['role']) => CHASSIS[id].core.flatMap((c) => {
@@ -127,7 +126,6 @@ describe('model surface', () => {
   });
 
   it('leaves out a wall that stands over a row edge', () => {
-    // The scout cab's rear wall and the wagon windshield end just past a row edge, and neither belongs to the row behind.
     expect(surfaceAt('scout', cellRect('scout', [{ x: 3, y: 5 }, { x: 3, y: 6 }]))).toBeLessThan(0.1);
     expect(surfaceAt('wagon', cellRect('wagon', [{ x: 2, y: 4 }, { x: 3, y: 4 }, { x: 2, y: 5 }, { x: 3, y: 5 }]))).toBeLessThan(0.7);
   });
@@ -220,7 +218,6 @@ describe('resting parts', () => {
   type Map = { cell: number; i0: number; j0: number; top: (number | null)[][] };
   const TOLERANCE = 0.05;
   const SIZES = [[1, 1], [1, 2], [2, 1], [2, 2], [1, 3], [3, 1], [2, 3], [3, 2]];
-  // The height samples fully inside a rect: body x and z of each sample center, and its top in meters.
   const samplesIn = (map: Map, r: { x0: number; x1: number; z0: number; z1: number }) => {
     const range = (lo: number, hi: number) => {
       const first = Math.ceil((lo - 1e-6) / map.cell);

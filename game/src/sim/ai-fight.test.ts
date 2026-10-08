@@ -13,20 +13,17 @@ import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { Vehicle, World } from './types';
 import { angleDiff, bearing, type Vec } from './vec';
 
-// A fighter of `templateId` at `pos`, with the player at (40, 30) as its target.
 function fighter(w: World, templateId: string, parts: string[], pos: Vec, chassis = 'hauler'): Vehicle {
   const v = addVehicle(w, 'raiders', chassis, parts, pos, 0);
   v.brain = npcBrain(templateId, pos, ['raider']);
   return v;
 }
 
-// Whether each of v's guns bears on the target after a turn of driving toward p.
 function bearsFrom(w: World, v: Vehicle, target: Vehicle, p: Vec): boolean {
   const me = afterTurn(w, v, p);
   return vehicleStats(w, v).weapons.every((mw) => inArc(me, mw, target));
 }
 
-// Whether any gun of v bears on the target after a turn of driving toward p.
 function inReachAfter(w: World, v: Vehicle, target: Vehicle, p: Vec): boolean {
   const me = afterTurn(w, v, p);
   return vehicleStats(w, v).weapons.some((mw) => dist(me.pos, target.pos) <= mw.def.range && inArc(me, mw, target));
@@ -58,7 +55,7 @@ describe('fight driving', () => {
     const w = emptyWorld({ x: 40, y: 30 });
     const heavy = addVehicle(w, 'player', 'hauler', ['stockEngine', 'mg', 'plowRam'], { x: 40, y: 30 }, 0);
     heavy.id = w.vehicles[0].id;
-    heavy.speed = 4; // charging, so its ram catches the fighter's spots this turn
+    heavy.speed = 4;
     w.vehicles = [heavy, ...w.vehicles.slice(1, -1)];
     const v = fighter(w, 'gunwagon', ['stockEngine', 'mg'], { x: 46, y: 30 }, 'buggy');
     v.speed = 1;
@@ -77,7 +74,7 @@ describe('fight driving', () => {
     trader.heading = Math.PI;
     trader.speed = 4;
     trader.brain!.traits = ['trader'];
-    const lined = { x: 45, y: 30 }; // on the raider's nose line
+    const lined = { x: 45, y: 30 };
     expect(scorePoint(w, raider, me, me.pos, 6, lined, 0)).toBeGreaterThan(scorePoint(w, trader, me, me.pos, 6, lined, 0));
   });
 
@@ -108,8 +105,8 @@ describe('fight driving', () => {
     const w = emptyWorld({ x: 40, y: 30 });
     const me = w.vehicles[0];
     const v = fighter(w, 'convoyGuard', ['stockEngine', 'shotgun'], { x: 48.3, y: 30 });
-    v.heading = 0; // the shotgun points away from the target
-    for (const part of mountedParts(v)) if (PARTS[part.defId].kind === 'core') part.hp = 0; // a limping truck
+    v.heading = 0;
+    for (const part of mountedParts(v)) if (PARTS[part.defId].kind === 'core') part.hp = 0;
     const start = vehicleStats(w, v);
     expect(inReachAfter(w, v, me, v.pos)).toBe(false);
     const p = fightPoint(w, v, me, start.weapons[0].def.range);
@@ -139,7 +136,6 @@ describe('fight driving', () => {
   });
 });
 
-// A buggy at (34, 30) already fighting the player at (40, 30), decided on it, so no new roll interrupts.
 function inFight(): { w: World; v: Vehicle } {
   const w = emptyWorld({ x: 40, y: 30 });
   const v = fighter(w, 'buggy', ['stockEngine', 'mg'], { x: 34, y: 30 }, 'buggy');
@@ -170,8 +166,6 @@ describe('reaction delay', () => {
 });
 
 describe('exposure', () => {
-  // The player's hauler with a forward cannon at (40, 30) facing +x, and a fighter at (48, 30) facing it, so the
-  // fighter's front faces the cannon. `keep` names the one side whose plates stay.
   function faceOff(keep: SideLetter | null) {
     const w = emptyWorld({ x: 40, y: 30 });
     const gun = addVehicle(w, 'player', 'hauler', ['stockEngine', 'cannon'], { x: 40, y: 30 }, 0);
@@ -180,7 +174,6 @@ describe('exposure', () => {
     const plates = Array.from({ length: 20 }, () => 'steelPlate');
     const v = fighter(w, 'gunwagon', ['stockEngine', 'mg', ...plates], { x: 48, y: 30 });
     v.heading = Math.PI;
-    // Every lane needs a working part ahead of the rear plates, so the gun stands on the first lane the wheels leave open.
     const mg = v.items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
     mg.x = 2;
     mg.y = 1;
@@ -246,7 +239,7 @@ describe('fight whims', () => {
       w.rngState = seed * 7919;
       thinkNpc(w, v);
       if (v.brain!.whim!.kind !== 'veer') continue;
-      flipped = (v.brain!.fightTurn as number) === -1; // thinkNpc may flip it
+      flipped = (v.brain!.fightTurn as number) === -1;
       const a = v.brain!.whim!.angle;
       planNpcOrders(w);
       const dest = v.order?.kind === 'through' ? v.order.dest : null;

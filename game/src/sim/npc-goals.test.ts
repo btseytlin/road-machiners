@@ -21,7 +21,6 @@ describe('goal stack', () => {
     const { w, npc } = scavengerWorld();
     pushGoal(w, npc, goal('scavenge', 'podfield'));
     npc.job = { kind: 'search', stockId: 'podfield', turnsLeft: 3, total: 3 };
-    // A goal on the same stock keeps the search.
     pushGoal(w, npc, goal('loot', 'podfield'));
     expect(npc.job).not.toBeNull();
     pushGoal(w, npc, goal('resupply', 'bowl'));

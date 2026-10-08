@@ -25,15 +25,11 @@ import type { BakedProp, PropKind } from '../sim/terrain';
 import { angleDiff, bearing, clamp, DEG, dist, polylineDist, segmentDist, type Vec } from '../sim/vec';
 import { tileSteepness, type MapDraft } from './bake';
 
-// Codes in d.built, per tile.
 export const BUILT_NONE = 0;
 export const BUILT_OLD_ROAD = 1;
 export const BUILT_FIELD = 2;
 
-// An old settlement. ground is the height at its center, so fields can keep to lower land.
 export type OldSettlement = { pos: Vec; radius: number; farm: boolean; ground: number };
-// An old road, starting at the settlement it leaves.
-// bridges holds each bridge jump of the road as its two bank points.
 export type OldRoad = { line: RoadLine; width: number; bridges: [Vec, Vec][] };
 
 export function oldWorldLayer(seed: number, d: MapDraft): MapDraft {
@@ -49,7 +45,6 @@ export function oldWorldLayer(seed: number, d: MapDraft): MapDraft {
   return d;
 }
 
-// A polyline walked by distance along it, in tiles.
 export class RoadLine {
   readonly points: Vec[];
   readonly length: number;
@@ -63,7 +58,6 @@ export class RoadLine {
     this.length = this.cum[this.cum.length - 1];
   }
 
-  // The point s tiles along the line, with s clamped to the line.
   pointAt(s: number): Vec {
     const k = this.segmentAt(s);
     const a = this.points[k];
@@ -72,7 +66,6 @@ export class RoadLine {
     return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
   }
 
-  // The unit direction of the line s tiles along it.
   dirAt(s: number): Vec {
     const k = this.segmentAt(s);
     return unit(this.points[k], this.points[k + 1]);
@@ -84,8 +77,6 @@ export class RoadLine {
     return k;
   }
 }
-
-// Shared placement.
 
 const HALF = REGION.roadWidth / 2;
 const O = REGION.obstacles;
@@ -103,8 +94,6 @@ export function ruleRng(seed: number, offset: number): Rng {
   return { rngState: Math.floor(hashRandom(seed, offset) * 2 ** 32) | 0 };
 }
 
-// Inside the map margin, roadGap tiles past every road edge, clear of sites with their pads, and off the
-// Canyon Bridge deck and its ramps.
 export function clearGround(size: number, pos: Vec, r: number, roadGap: number): boolean {
   if (Math.min(pos.x, pos.y, size - pos.x, size - pos.y) < O.edgeMargin + r) return false;
   const reach = HALF + roadGap + r;
@@ -112,9 +101,6 @@ export function clearGround(size: number, pos: Vec, r: number, roadGap: number):
   return clearOfSites(pos, r) && !onBridge(pos, HALF + r);
 }
 
-// Adds the prop where it stands on clear ground, off cliffs and apart from every prop already placed.
-// Roadside props pass a road gap of 0: they stand at their own gap from their road, and only the road
-// surface must stay clear.
 export function place(d: MapDraft, p: BakedProp, roadGap: number): boolean {
   if (!clearGround(d.size, p.pos, p.r, roadGap)) return false;
   if (tileSteepness(d.heights, d.size, tileOf(d.size, p.pos)) > TERRAIN.drive.maxSlope) return false;
@@ -123,13 +109,11 @@ export function place(d: MapDraft, p: BakedProp, roadGap: number): boolean {
   return true;
 }
 
-// Ground today's world built on: roads, the bridge deck, and sites with their pads.
 export function builtGround(c: Vec): boolean {
   if (deckAlong(c.x, c.y) !== null) return true;
   return ROAD_INDEX.nearestWithin(c.x, c.y, HALF) < HALF || !clearOfSites(c, 0);
 }
 
-// A wash bed or the canyon floor: water cut the ground there, so old roads break and fields stop.
 export function isCutTile(d: MapDraft, tile: number): boolean {
   const w = d.size + 1;
   const k = Math.floor(tile / d.size) * w + (tile % d.size);
@@ -151,7 +135,6 @@ function tileHeight(d: MapDraft, tile: number): number {
   return (d.heights[k] + d.heights[k + 1] + d.heights[k + w] + d.heights[k + w + 1]) / 4;
 }
 
-// Tiles whose centers lie within r of c, inside the map.
 export function tilesWithin(size: number, c: Vec, r: number): number[] {
   const out: number[] = [];
   for (let y = Math.max(0, Math.floor(c.y - r)); y <= Math.min(size - 1, Math.floor(c.y + r)); y++) {
@@ -162,7 +145,6 @@ export function tilesWithin(size: number, c: Vec, r: number): number[] {
   return out;
 }
 
-// The best spots first, each at least spacing from every spot kept before it, up to count spots.
 function spaced<T extends Scored>(spots: T[], spacing: number, count: number): T[] {
   const out: T[] = [];
   for (const s of [...spots].sort((a, b) => b.score - a.score)) {
@@ -172,7 +154,6 @@ function spaced<T extends Scored>(spots: T[], spacing: number, count: number): T
   return out;
 }
 
-// Distances along a line of the given length, step apart, from 0.
 export function stations(length: number, step: number): number[] {
   const out: number[] = [];
   for (let k = 0; k * step <= length; k++) out.push(k * step);
@@ -189,7 +170,6 @@ export function offset(p: Vec, dir: Vec, by: number): Vec {
   return { x: p.x + dir.x * by, y: p.y + dir.y * by };
 }
 
-// The unit normal of dir to one side: +1 turns dir a quarter toward +y, -1 away.
 export function sideOf(dir: Vec, side: number): Vec {
   return { x: -dir.y * side, y: dir.x * side };
 }
@@ -201,10 +181,6 @@ export function facing(dir: Vec): number {
 export function range(rng: Rng, [lo, hi]: readonly [number, number]): number {
   return randRange(rng, lo, hi);
 }
-
-// Settlements: flat, dry spots near today's sites and junctions, where people still pass. The spots
-// closest to a site or junction score highest, with seeded noise. Each keeps a cluster of houses, most of
-// them ruined, and a farm keeps a silo or a water tower.
 
 type Anchor = { pos: Vec; radius: number };
 
@@ -235,12 +211,10 @@ function settlementScore(seed: number, d: MapDraft, rules: SettlementRules, anch
   return closeness * (1 - rules.jitter) + hashRandom(seed, rules.seedOffset, pos.x, pos.y) * rules.jitter;
 }
 
-// Today's sites, and the road junctions.
 function siteAnchors(): Anchor[] {
   return [...SITES.map((s) => ({ pos: s.pos, radius: s.radius })), ...roadJunctions().map((pos) => ({ pos, radius: 0 }))];
 }
 
-// The road ends that meet another road, once per road that ends there.
 export function roadJunctions(): Vec[] {
   return REGION.roads
     .flatMap((road) => [road[0], road[road.length - 1]])
@@ -253,7 +227,6 @@ function flatAndDry(d: MapDraft, pos: Vec, rules: SettlementRules): boolean {
 
 function settle(d: MapDraft, rng: Rng, rules: SettlementRules, pos: Vec): OldSettlement {
   const farm = chance(rng, rules.farmShare);
-  // The farm tower goes first, so the houses fit around it.
   if (farm) placeWithin(d, rng, rules, pos, chance(rng, rules.towerShare) ? 'waterTower' : 'silo', rules.towerRadius);
   const houses = randInt(rng, rules.houses[0], rules.houses[1]);
   for (let k = 0; k < houses; k++) {
@@ -263,7 +236,6 @@ function settle(d: MapDraft, rng: Rng, rules: SettlementRules, pos: Vec): OldSet
   return { pos, radius: rules.radius, farm, ground: tileHeight(d, tileOf(d.size, pos)) };
 }
 
-// Tries spots inside the settlement until the prop fits, or leaves it out.
 function placeWithin(d: MapDraft, rng: Rng, rules: SettlementRules, center: Vec, kind: PropKind, r: number): void {
   for (let t = 0; t < rules.placeTries; t++) {
     const a = randRange(rng, 0, TURN);
@@ -272,9 +244,6 @@ function placeWithin(d: MapDraft, rng: Rng, rules: SettlementRules, center: Vec,
     if (place(d, prop(kind, pos, r, randRange(rng, 0, TURN)), rules.roadGap)) return;
   }
 }
-
-// Overlooks: flat hilltop edges where the ground falls away over a wide arc get a lone building facing
-// the view.
 
 type View = Scored & { yaw: number };
 
@@ -300,8 +269,6 @@ function overlookSpots(seed: number, d: MapDraft, rules: OverlookRules): View[] 
   return out;
 }
 
-// The view from corner (i, j): the directions whose ground at reach lies drop below it, scored by their
-// count. Null off flat ground, where ground at reach rises above rise, or where too few directions drop.
 function viewFrom(d: MapDraft, rules: OverlookRules, i: number, j: number): View | null {
   const pos = { x: i, y: j };
   if (tileSteepness(d.heights, d.size, j * d.size + i) > rules.flatSlope) return null;
@@ -314,8 +281,6 @@ function viewFrom(d: MapDraft, rules: OverlookRules, i: number, j: number): View
   const toward = drops.reduce((s, c) => ({ x: s.x + c.x, y: s.y + c.y }), { x: 0, y: 0 });
   return { pos, score: drops.length, yaw: Math.atan2(toward.y, toward.x) };
 }
-
-// Bend buildings: on the outer side of a sharp road bend, a building or a gas station faces the road.
 
 type Bend = Scored & { outer: Vec };
 
@@ -330,8 +295,6 @@ export function bendBuildings(seed: number, d: MapDraft, rules: BendRules): void
   }
 }
 
-// Road points where the road turns at least the bend angle between reach behind and reach ahead. The
-// chord between those two points lies inside the bend, so the outer side points away from its middle.
 function sharpBends(line: RoadLine, rules: BendRules): Bend[] {
   const out: Bend[] = [];
   for (let s = rules.reach; s <= line.length - rules.reach; s += rules.sample) {
@@ -343,11 +306,6 @@ function sharpBends(line: RoadLine, rules: BendRules): Bend[] {
   }
   return out;
 }
-
-// Old roads: least-cost routes on a coarse corner grid link each settlement to its nearest neighbor and to
-// the nearest road of today. Slope and wash beds cost more, so the routes follow gentle ground. The road
-// lays cracked asphalt, not graded ground, and breaks where it crosses a wash bed or the canyon: no
-// asphalt there, and a broken span on each bank faces across.
 
 type Link = { from: Vec; to: Vec };
 
@@ -362,10 +320,6 @@ export function oldRoads(d: MapDraft, towns: OldSettlement[], rules: OldRoadRule
   return out;
 }
 
-// Old highways: of all settlement pairs within reach, those whose roads jump the deepest gaps on bridges,
-// deepest first, up to count highways with their bridges at least spacing apart. So each great broken
-// bridge stands over one of the map's most striking drops. The canyon has Canyon Bridge, so no highway
-// bridge crosses it. Only bridges deep enough to leave broken ends count.
 export function highway(d: MapDraft, towns: OldSettlement[], roads: OldRoadRules, rules: HighwayRules): OldRoad[] {
   const grid = new RouteGrid(d, { ...roads, bridgeCost: rules.bridgeCost, maxBridge: rules.maxBridge });
   const pairs = towns.flatMap((a, k) => towns.slice(k + 1).map((b) => [a.pos, b.pos] as const));
@@ -384,20 +338,15 @@ export function highway(d: MapDraft, towns: OldSettlement[], roads: OldRoadRules
   return chosen.map((c) => layOldRoad(d, { line: new RoadLine(c.path.points), width: roads.width, bridges: c.path.bridges.filter((br) => !overCanyon(br)) }, roads));
 }
 
-// The real bridge of a route over the deepest gap, with its depth and midpoint, or null.
 function deepestBridge(d: MapDraft, bridges: [Vec, Vec][], rules: OldRoadRules): { gap: number; mid: Vec } | null {
   const real = realBridges(d, bridges, rules).map(([a, b]) => ({ gap: gapDepth(d, [a, b]), mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } }));
   return real.length === 0 ? null : real.reduce((x, y) => (y.gap > x.gap ? y : x));
 }
 
-// The jumps that span a gap a player can see. The route grid reads heights only at its nodes, so a jump
-// may cross shallower ground on the actual line, and a long bridge over a gentle dip reads as flat ground.
-// Such jumps are plain road.
 function realBridges(d: MapDraft, bridges: [Vec, Vec][], rules: OldRoadRules): [Vec, Vec][] {
   return bridges.filter((br) => gapDepth(d, br) >= Math.max(rules.minDrop, dist(br[0], br[1]) * rules.minGapRatio));
 }
 
-// How far the lowest ground under a bridge lies below its lower end, in height units.
 function gapDepth(d: MapDraft, [a, b]: [Vec, Vec]): number {
   const at = (p: Vec) => d.heights[Math.round(p.y) * (d.size + 1) + Math.round(p.x)];
   const steps = Math.ceil(dist(a, b));
@@ -411,7 +360,6 @@ function overCanyon([a, b]: [Vec, Vec]): boolean {
   return polylineDist(mid, CANYON.path) < CANYON.width + CANYON.bank;
 }
 
-// Each settlement to its nearest neighbor within reach, each pair once.
 function townLinks(towns: OldSettlement[], rules: OldRoadRules): Link[] {
   const pairs = new Set<string>();
   const out: Link[] = [];
@@ -452,7 +400,6 @@ function closestOnSegment(p: Vec, a: Vec, b: Vec): Vec {
   return { x: a.x + dx * t, y: a.y + dy * t };
 }
 
-// Steps to the 8 neighbors: node offsets and length in cells.
 const STEPS: [number, number, number][] = [
   [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
   [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2],
@@ -462,7 +409,6 @@ type RoutePath = { points: Vec[]; bridges: [Vec, Vec][] };
 
 type SearchState = { cost: Float64Array; parent: Int32Array; bridged: Uint8Array; open: NodeHeap };
 
-// Nodes on every cell-th corner. A node inside a site is closed. Costs are in tiles.
 class RouteGrid {
   private readonly n: number;
   private readonly heights: Float32Array;
@@ -483,9 +429,6 @@ class RouteGrid {
     }
   }
 
-  // Corner points from the node nearest from to the node nearest to, both replaced by the exact ends, with
-  // only every smoothEvery-th node kept between them. Null when no route exists.
-  // Both ends of every bridge jump stay, so the road runs straight over each bridge.
   route(from: Vec, to: Vec): RoutePath | null {
     const goal = this.nodeNear(to);
     const found = this.search(this.nodeNear(from), goal);
@@ -500,8 +443,6 @@ class RouteGrid {
     return { points: [from, ...inner.map((node) => this.posOf(node)), to], bridges };
   }
 
-  // A* over the nodes. The parent of each reached node, -1 at the start, and whether a bridge led there, or
-  // null when goal is out of reach.
   private search(start: number, goal: number): { parent: Int32Array; bridged: Uint8Array } | null {
     const cost = new Float64Array(this.n * this.n).fill(Infinity);
     const parent = new Int32Array(this.n * this.n).fill(-1);
@@ -521,8 +462,6 @@ class RouteGrid {
     return null;
   }
 
-  // Old roads crossed deep gullies on bridges: a straight jump over sunken ground to a bank of about the
-  // same height, at bridgeCost per tile.
   private relaxBridges(a: number, goal: number, s: SearchState): void {
     for (const [di, dj, len] of STEPS) {
       const b = this.bridgeEnd(a, di, dj);
@@ -537,8 +476,6 @@ class RouteGrid {
     }
   }
 
-  // The first node past a run of nodes at least minDrop below node a along a direction, when it is open and
-  // within the slope limit of a, or -1. The run must start next to a and stay within the longest bridge.
   private bridgeEnd(a: number, di: number, dj: number): number {
     let low = Infinity;
     for (let k = 1; k * this.rules.cell <= this.rules.maxBridge; k++) {
@@ -550,21 +487,16 @@ class RouteGrid {
     return -1;
   }
 
-  // Whether a bridge from a to b, over ground whose lowest point is low, spans a real gap: the floor lies
-  // minDrop below a, b is back on the far rim within minDrop of a's height, and a and b are within the slope
-  // limit.
   private spansGap(a: number, b: number, low: number, cells: number): boolean {
     const drop = this.rules.minDrop;
     return low <= this.heights[a] - drop && this.heights[b] >= this.heights[a] - drop && this.reachable(a, b, cells);
   }
 
-  // The node at (i, j) when it is on the grid and open, or -1.
   private openNode(i: number, j: number): number {
     const node = this.nodeAt(i, j);
     return node >= 0 && !this.closed[node] ? node : -1;
   }
 
-  // Whether a bridge of the given length in cells may join nodes a and b.
   private reachable(a: number, b: number, cells: number): boolean {
     return this.stepCost(a, b, cells * this.rules.cell) < Infinity;
   }
@@ -610,7 +542,6 @@ class RouteGrid {
   }
 }
 
-// A binary min-heap of nodes by key.
 class NodeHeap {
   private readonly nodes: number[] = [];
   private readonly keys: number[] = [];
@@ -662,11 +593,9 @@ function layOldRoad(d: MapDraft, route: OldRoad, rules: OldRoadRules): OldRoad {
   const road = { ...route, bridges: realBridges(d, route.bridges, rules) };
   const along = stations(road.line.length, rules.sample);
   for (const p of along.map((s) => road.line.pointAt(s))) {
-    // Water cuts the asphalt on the ground. A bridge fell, so its span leaves no road.
     if (isCutTile(d, tileOf(d.size, p)) || road.bridges.some(([x, y]) => segmentDist(p, x, y) < road.width / 2)) continue;
     markTiles(d, tilesWithin(d.size, p, road.width / 2), BUILT_OLD_ROAD);
   }
-  // A fallen bridge over a shallower gully left only a washed-out gap. A great one left its broken ends.
   for (const [x, y] of road.bridges.filter((br) => gapDepth(d, br) >= rules.spanGap)) {
     placeSpan(d, x, y, rules);
     placeSpan(d, y, x, rules);
@@ -674,8 +603,6 @@ function layOldRoad(d: MapDraft, route: OldRoad, rules: OldRoadRules): OldRoad {
   return road;
 }
 
-// A broken span on the bank at `bank`, facing the far bank. Where the bank point itself is taken or too
-// steep, the span steps back from the gap along the bridge line, up to spanBack tiles.
 function placeSpan(d: MapDraft, bank: Vec, far: Vec, rules: OldRoadRules): void {
   const yaw = bearing(bank, far);
   for (let back = 0; back <= rules.spanBack; back++) {
@@ -688,16 +615,12 @@ function markTiles(d: MapDraft, tiles: number[], code: number): void {
   for (const tile of tiles) if (markable(d, tile)) d.built[tile] = code;
 }
 
-// Old-world ground marks go only on unmarked tiles off built ground and off wash beds.
 export function markable(d: MapDraft, tile: number): boolean {
   return d.built[tile] === BUILT_NONE && !isCutTile(d, tile) && !builtGround(tileCenter(d.size, tile));
 }
 
 
 
-
-// Power lines: poles at even steps along one side of a share of the long roads. Each line is its own
-// group, the road index plus 1, and steps count every spot, so a missing pole leaves a gap in the steps.
 
 export function powerLines(seed: number, d: MapDraft, rules: PowerLineRules): void {
   REGION.roads.forEach((road, r) => {
@@ -714,9 +637,6 @@ export function powerLines(seed: number, d: MapDraft, rules: PowerLineRules): vo
   });
 }
 
-// Billboards: on the approaches to towns, and on long straights by chance, spaced apart, each on a
-// seeded side of its road and facing it.
-
 type RoadSpot = Scored & { dir: Vec };
 
 export function billboards(seed: number, d: MapDraft, rules: BillboardRules): void {
@@ -728,7 +648,6 @@ export function billboards(seed: number, d: MapDraft, rules: BillboardRules): vo
   });
 }
 
-// Points approach tiles past a town's edge along each road leaving it. They score above every straight.
 function approachSpots(rules: BillboardRules): RoadSpot[] {
   const out: RoadSpot[] = [];
   for (const town of REGION.towns) {
@@ -741,7 +660,6 @@ function approachSpots(rules: BillboardRules): RoadSpot[] {
   return out;
 }
 
-// Road points where the chord over reach behind and ahead keeps the straightness share of the road length.
 function straightSpots(seed: number, rules: BillboardRules): RoadSpot[] {
   const out: RoadSpot[] = [];
   REGION.roads.forEach((road, r) => {
@@ -753,9 +671,6 @@ function straightSpots(seed: number, rules: BillboardRules): RoadSpot[] {
   });
   return out;
 }
-
-// Tank hulks: by chance, a small group lies beside an old road a little way out from the settlement it
-// leaves.
 
 export function tankHulks(seed: number, d: MapDraft, roads: OldRoad[], rules: TankRules): void {
   const rng = ruleRng(seed, rules.seedOffset);
@@ -776,15 +691,11 @@ function placeHulk(d: MapDraft, rng: Rng, rules: TankRules, road: OldRoad, s: nu
   }
 }
 
-// Fields: rectangles of flat low ground beside each farm, all turned to one angle per farm. A field is
-// kept where enough of its tiles are good ground, and only those tiles are marked.
-
 type Rect = { center: Vec; angle: number; w: number; h: number };
 
 export function fields(seed: number, d: MapDraft, towns: OldSettlement[], rules: FieldRules): void {
   const rng = ruleRng(seed, rules.seedOffset);
   for (const town of towns.filter((t) => t.farm)) {
-    // A rectangle looks the same turned a quarter, so a quarter turn covers every angle.
     const angle = randRange(rng, 0, Math.PI / 2);
     const count = randInt(rng, rules.perFarm[0], rules.perFarm[1]);
     for (let f = 0; f < count; f++) layField(d, rng, rules, town, angle);
@@ -801,7 +712,6 @@ function layField(d: MapDraft, rng: Rng, rules: FieldRules, town: OldSettlement,
   }
 }
 
-// A rectangle whose far corner stays gap tiles out from the settlement edge, turned to the farm angle.
 function fieldRect(rng: Rng, rules: FieldRules, town: OldSettlement, angle: number): Rect {
   const w = range(rng, rules.side);
   const h = range(rng, rules.side);

@@ -23,20 +23,19 @@ const CAB_SIDES: readonly CabSide[] = ['front', 'rear', 'left', 'right'];
 export type TemplateStats = {
   id: string;
   rolls: number;
-  levels: Record<GearLevel, number>; // share of rolls at each level
-  guns: number; // per truck
-  armor: number; // share of chassis edge cells armored
-  cab: Record<CabSide, number>; // share of cab lanes on each side with armor between the edge and the cab
-  value: number; // chassis and gear, wear counted
-  mass: number; // share of rated mass
-  drag: number; // share of top speed the guns' power draw takes
-  speed: number; // top speed as a share of the chassis top speed
-  cargo: number; // value of goods and loose spares
+  levels: Record<GearLevel, number>;
+  guns: number;
+  armor: number;
+  cab: Record<CabSide, number>;
+  value: number;
+  mass: number;
+  drag: number;
+  speed: number;
+  cargo: number;
 };
 
 let base: World | undefined;
 
-// One world to draw ids from, with its randomness reset per roll.
 function worldFor(seed: number): World {
   base ??= newWorld(1, START_KITS.standard, TEST_MAP);
   return { ...base, vehicles: [], rngState: seed * 7919 + 1, marketRng: { rngState: seed * 104729 + 1 } };
@@ -77,7 +76,6 @@ function gearValue(v: Vehicle): number {
   return chassisDef(v.chassisId).value + mountedItems(v).reduce((sum, item) => (partDef(item.part.defId).kind === 'core' ? sum : sum + partValue(item.part)), 0);
 }
 
-// For each side, the share of lanes crossing the cab with an armor cell between the edge and the cab.
 function cabCover(v: Vehicle): Record<CabSide, number> {
   const g = gridOf(v);
   const armor = new Set(mountedItems(v, 'armor').flatMap(itemCells).map((c) => `${c.x},${c.y}`));

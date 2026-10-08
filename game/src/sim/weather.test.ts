@@ -28,7 +28,6 @@ describe('advanceWeather', () => {
     const w = emptyWorld();
     w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 10, y: 10 }, radius: 5, vel: { x: 1, y: 0 }, turnsLeft: 1 }];
     advanceWeather(w);
-    // A new event may start the same turn, so check for this one.
     expect(w.weather.some((e) => e.id === 'w1')).toBe(false);
     expect(w.events.some((e) => e.t === 'weather' && e.outcome === 'ended' && e.event.id === 'w1')).toBe(true);
   });

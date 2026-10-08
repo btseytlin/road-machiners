@@ -39,13 +39,11 @@ describe('runAgent network', () => {
 
 describe('runAgent sessions', () => {
   const HOME = 'tmp/factory-common-test';
-  // The tick marks the sessions of a job whose process died.
   const markedCtx = (issues: number[]) => {
     for (const issue of issues) markResumed(HOME, issue, 'verify');
     return agentCtx(['bug']);
   };
   beforeEach(() => { rmSync(`${HOME}/sessions`, { recursive: true, force: true }); });
-  // What Claude Code writes in the container once the run starts.
   const saved = (run: AgentRun) => {
     if (!run.session) throw new Error('the run had no session');
     mkdirSync(`${run.session.dir}/-work-game`, { recursive: true });
@@ -266,7 +264,6 @@ describe('stage prompts for reference images', () => {
     expect(text).toContain('with or without a reference image');
     expect(text).toContain('Capture real in-game screenshots');
     expect(text).toContain('Read every screenshot with the Read tool');
-    // The agent works in game/, so the path is relative to it.
     expect(text).toContain('`docs/DESIGN.md`');
     expect(text).toContain('placeholder shapes');
     expect(text).toContain('behind it');
@@ -274,7 +271,6 @@ describe('stage prompts for reference images', () => {
     expect(text).toContain('Do not commit them');
     expect(text).toContain('Never use a drawn or invented render');
     expect(text).toContain('needs no screenshots');
-    // The reference-image rules stay.
     expect(text).toContain('Read every available image with the Read tool before you build.');
     expect(text).toContain('When the task file asks for a visual acceptance check');
   });

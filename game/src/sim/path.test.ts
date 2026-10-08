@@ -17,9 +17,6 @@ import { dist, polylineDist, segmentDist, type Vec } from './vec';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
 
-// Shared read-only across every test below that needs a real generated map on this seed: newWorld
-// repeats obstacle generation, NPC spawns and vision on top of the terrain build, so building it once
-// saves that work everywhere it is only read, never mutated.
 const w1337 = newWorld(1337, START_KITS.standard, TEST_MAP);
 
 describe("route", () => {
@@ -50,7 +47,6 @@ describe("route", () => {
     }
   });
 
-  // A fence segment one tile long, standing along map y. Its rails are 0.05 tiles thick.
   const fence = { id: "fence-0", pos: { x: 40, y: 30 }, r: 0.5, kind: "landmark" as const, look: "fence" as const, yaw: Math.PI / 2 };
 
   it("drives straight along a fence's side, closer to it than its radius would allow", () => {
@@ -103,7 +99,6 @@ describe("route", () => {
     }
   });
 
-  // A ring of thin rocks holds a small closed pocket. The truck stands in the ring's clearance, nearer the pocket.
   function pocketWorld(): { w: World; center: Vec } {
     const w = emptyWorld();
     const center = { x: 50, y: 30 };
@@ -155,8 +150,6 @@ describe("route", () => {
       length += routeLength(from, pts);
       straight += dist(from, to);
     }
-    // Issue 36, measured on this seed: slopeCost 3 gave 4003 waypoints and 1.32 times straight, the current
-    // rules 1277 and 1.14 on TEST_MAP.
     expect(waypoints).toBeLessThanOrEqual(2000);
     expect(length).toBeLessThanOrEqual(1.28 * straight);
   });
@@ -168,13 +161,11 @@ describe('driver taste', () => {
   const from = siteGates(nose)[0];
   const to = siteGates(bowl)[0];
   const w = w1337;
-  // Largest distance of either route's corners from the other route.
   const apart = (p: Vec[], q: Vec[]) => Math.max(...p.map((x) => polylineDist(x, q)), ...q.map((x) => polylineDist(x, p)));
 
   it('sends drivers between the same towns along different ways', () => {
     const routes = Array.from({ length: 10 }, (_, i) => [from, ...route(w, from, to, 0.8, [], { id: `v${100 + i}`, brain })]);
     const ways = routes.filter((r, i) => routes.slice(0, i).every((q) => apart(r, q) > 10));
-    // Bowl and Nose have two roads of close length, the north trunk and the middle road past Pump Station.
     expect(ways.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -189,7 +180,6 @@ describe('driver taste', () => {
 });
 
 describe('kept routes', () => {
-  // A row of rocks along the way forces a bend at each end, so the route has corners before its end.
   function bent(): { w: World; from: Vec; to: Vec; points: Vec[] } {
     const w = emptyWorld();
     w.obstacles = [36, 40, 44].map((x) => ({ id: `r${x}`, pos: { x, y: 30 }, r: 1.5, kind: 'rock' as const }));
@@ -206,7 +196,6 @@ describe('kept routes', () => {
     expect(again[0]).toEqual(points[0]);
     for (const p of again) expect(points).toContainEqual(p);
     const past = { x: points[0].x + (points[1].x - points[0].x) * 0.1, y: points[0].y + (points[1].y - points[0].y) * 0.1 };
-    // From there it may shortcut past later corners too, but only to corners of the kept route.
     const rest = continueRoute(w, past, kept, to, 0.6, [])!;
     expect(rest.length).toBeGreaterThan(0);
     for (const p of rest) expect(points.slice(1)).toContainEqual(p);
@@ -215,7 +204,6 @@ describe('kept routes', () => {
 
   it('straightens only the road ahead and keeps the corners past the lookahead', () => {
     const w = emptyWorld();
-    // A zigzag over open ground: a fresh plan would drive straight, so every kept corner is removable.
     const points = Array.from({ length: 40 }, (_, i) => ({ x: 32 + i * 4, y: i % 2 === 0 ? 30 : 32 }));
     const from = { x: 30, y: 30 };
     const again = continueRoute(w, from, keepRoute(w, points.at(-1)!, points, []), points.at(-1)!, 0.6, [])!;
@@ -232,13 +220,11 @@ describe('kept routes', () => {
     expect(continueRoute(w, from, kept, near, 0.6, [])!.at(-1)).toEqual(near);
     const onLeg = { x: (points[1].x + points[2].x) / 2, y: (points[1].y + points[2].y) / 2 };
     expect(continueRoute(w, from, kept, to, 0.6, [{ pos: onLeg, r: 0.8 }])).toBeNull();
-    // The same vehicle parked there when the route was planned is part of the plan.
     expect(continueRoute(w, from, keepRoute(w, to, points, [{ pos: onLeg, r: 0.8 }]), to, 0.6, [{ pos: onLeg, r: 0.8 }])).not.toBeNull();
   });
 });
 
 describe('routes prefer roads', () => {
-  // Flat hardpan with one road of the given center line and the map's road width.
   function roadWorld(road: Vec[]): World {
     const w = emptyWorld();
     const t = editableTerrain(w);
@@ -247,7 +233,6 @@ describe('routes prefer roads', () => {
     return w;
   }
 
-  // Share of the route length that runs on road tiles, sampled every quarter tile.
   function roadShare(w: World, from: Vec, points: Vec[]): number {
     let on = 0;
     let all = 0;
@@ -284,7 +269,6 @@ describe('routes prefer roads', () => {
     const w = emptyWorld();
     const rock = { x: 40, y: 30 };
     w.obstacles = [{ id: 'r', pos: rock, r: 3, kind: 'rock' }];
-    // 0.2 tiles from the rock edge, while the planner keeps the truck radius plus clearance, 1 tile.
     const from = { x: 36.8, y: 30 };
     const pts = route(w, from, { x: 44, y: 30 }, 0.6, []);
     expect(pts.length).toBeGreaterThan(1);
@@ -306,7 +290,6 @@ describe('routes prefer roads', () => {
     const w = emptyWorld();
     const t = editableTerrain(w);
     const n = t.size + 1;
-    // A cone of slope 0.58 between the ends, gentler than a cliff.
     for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) t.heights[j * n + i] = Math.max(0, 4 - Math.hypot(i - 35, j - 30)) * 0.58;
     const pts = route(w, { x: 30, y: 30 }, { x: 40, y: 30 }, 0.6, []);
     expect(polylineDist({ x: 35, y: 30 }, [{ x: 30, y: 30 }, ...pts])).toBeGreaterThan(3);
@@ -333,9 +316,6 @@ describe('routes prefer roads', () => {
   });
 });
 
-// The grid rules before the nav layers, kept as a reference: cliff probes, obstacle stamping,
-// weighted A*, nearest free cell and shortcuts. New routes must match them. Props block by the ground outlines of
-// their boxes below truck roofs, and site edges and parked vehicles by circles.
 namespace Ref {
   export const CELL = 0.5;
   export const CLEARANCE = 0.4;
@@ -346,8 +326,6 @@ namespace Ref {
     return probes.some((q) => isCliff(t, tileAt(t, q)));
   }
 
-  // Route cost per tile: 1 / terrain speed, times offRoadCost off the road and away from sites, times
-  // the slope multiplier.
   function tileCost(t: Terrain, p: Vec, flat = false): number {
     const tile = tileAt(t, p);
     const type = t.types[tile];
@@ -375,7 +353,6 @@ namespace Ref {
     const n = layer.n;
     const blocked = layer.cliff.slice();
     const grow = radius + CLEARANCE;
-    // A circle marks the cells around its center, a box the cells around its own center within its half diagonal.
     const circles = blockers.flatMap((o) => (o.prop ? o.prop.boxes.map((b) => ({ pos: b.center, r: Math.hypot(b.half.x, b.half.y), inside: (p: Vec) => boxDistance(b, p) < grow })) : [{ pos: o.pos, r: o.r, inside: (p: Vec) => dist(p, o.pos) < o.r + grow }]));
     for (const o of circles) {
       const reach = o.r + grow;
@@ -387,7 +364,6 @@ namespace Ref {
     return { n, blocked, slow: layer.slow };
   }
 
-  // A prop's r is its reach, so a line clear of its circle is clear of its boxes.
   function touches(o: Blocker, a: Vec, b: Vec, reach: number): boolean {
     if (segmentDist(o.pos, a, b) >= o.r + reach) return false;
     return !o.prop || o.prop.boxes.some((box) => boxSegmentDistance(box, a, b) < reach);
@@ -430,7 +406,6 @@ namespace Ref {
     return null;
   }
 
-  // Free cells joined to the start by 8-neighbour steps. A blocked start joins through a free neighbour.
   export function reachable(g: Grid, start: number): Uint8Array {
     const out = new Uint8Array(g.n * g.n);
     const seed = g.blocked[start] ? neighbors(g, start).find((c) => !g.blocked[c]) : start;
@@ -452,7 +427,6 @@ namespace Ref {
     return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
   }
 
-  // A plain binary heap; ties may pop in any order, so only the path cost is compared.
   export function astar(g: Grid, start: number, goal: number): number[] | null {
     const cost = new Float64Array(g.n * g.n).fill(Infinity);
     const from = new Int32Array(g.n * g.n).fill(-1);
@@ -516,9 +490,6 @@ namespace Ref {
     return total;
   }
 
-  // Route cost of the straight line: length times the mean tile cost of its samples. Infinity when it
-  // touches an obstacle or, with a reach, a cliff, or crosses a tile costlier than maxCost, measured
-  // without the slope multiplier unless capFull is set.
   export function lineCost(t: Terrain, obstacles: Blocker[], a: Vec, b: Vec, reach: number | null, maxCost: number, capFull = false): number {
     if (reach !== null && obstacles.some((o) => touches(o, a, b, reach))) return Infinity;
     const n = Math.ceil(dist(a, b) * 4);
@@ -539,7 +510,6 @@ namespace Ref {
     return Math.max(...pts.map((p) => tileCost(t, p, true)));
   }
 
-  // A shortcut must be clear, cross no tile costlier than the path it replaces, and cost no more than that path.
   function fits(t: Terrain, obstacles: Blocker[], cur: Vec, replaced: Vec[], reach: number): boolean {
     let pathCost = 0;
     let prev = cur;
@@ -585,8 +555,6 @@ namespace Ref {
     const g = grid(layer, all, radius);
     const start = cellOf(g, from);
     const statics = grid(layer, blockers(w, []), radius);
-    // A start with no free neighbour first drives out to a free cell. One on the target's side within its reach
-    // wins, else the nearest.
     let exit: number | null = start;
     let reach = reachable(statics, start);
     if (![start, ...neighbors(g, start)].some((c) => !g.blocked[c])) {
@@ -596,8 +564,6 @@ namespace Ref {
       exit = (side && nearestFree(g, start, side, ring)) ?? nearestFree(g, start)!;
       reach = reachable(statics, exit);
     }
-    // Reachability follows static blockers only. Parked vehicles can still wall the goal off, and then the
-    // route ends at the reachable cell nearest it.
     const goal = nearestFree(g, cellOf(g, to), reach)!;
     const found = astar(g, exit, goal) ?? astar(g, exit, nearestReachable(g, exit, goal))!;
     const cells = exit === start ? found : [start, ...found];
@@ -606,7 +572,6 @@ namespace Ref {
     return shortcut(w.terrain, all, from, [...cells.slice(1, -1).map((c) => centerOf(g, c)), end], radius + CLEARANCE);
   }
 
-  // The free cell joined to start, counting parked vehicles, nearest to goal.
   function nearestReachable(g: Grid, start: number, goal: number): number {
     const reach = reachable(g, start);
     let best = start;
@@ -624,7 +589,6 @@ namespace Ref {
   }
 }
 
-// Searches whose ends lie farther apart than this many cells go through the coarse corridor.
 const LONG_CELLS = 32;
 
 function cellSpan(n: number, a: number, b: number): number {
@@ -642,14 +606,11 @@ describe('nav layers match the old grid rules', () => {
   const w = newWorld(1, START_KITS.standard, TEST_MAP);
   const rand = mulberry(7);
   const at = (lo: number, hi: number) => lo + (hi - lo) * rand();
-  // Kill wrecks come and go in play; they must block like any other obstacle.
   for (let i = 0; i < 4; i++) w.obstacles.push({ id: `wreck-t${i}`, pos: { x: at(40, w.size - 40), y: at(40, w.size - 40) }, r: 1, kind: 'wreck' });
   const pairs = Array.from({ length: 10 }, (_, i) => {
     const from = { x: at(5, w.size - 5), y: at(5, w.size - 5) };
-    // Half the pairs are short, so straight lines are often clear; the rest cross the map.
     const reach = i % 2 === 0 ? 30 : w.size;
     const to = { x: Math.min(w.size - 5, Math.max(5, from.x + at(-reach, reach))), y: Math.min(w.size - 5, Math.max(5, from.y + at(-reach, reach))) };
-    // A parked vehicle halfway along forces a detour around a blocker outside the map obstacles.
     const extra: Blocker[] = [{ pos: { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 }, r: 0.9 }];
     return { from, to, extra, radius: i % 3 === 0 ? 0.8 : 0.6 };
   });
@@ -678,12 +639,10 @@ describe('nav layers match the old grid rules', () => {
       expect(got[0]).toBe(start);
       expect(got[got.length - 1]).toBe(goal);
       for (let i = 1; i < got.length; i++) expect(g.blocked[got[i]]).toBe(0);
-      // Long searches run inside a coarse corridor and may cost up to 5% more; short ones stay within 1%.
       const tolerance = cellSpan(g.n, start, goal) > LONG_CELLS ? 0.05 : 0.01;
       expect(Ref.pathCost(g, got) - Ref.pathCost(g, ref)).toBeLessThanOrEqual(tolerance * Ref.pathCost(g, ref));
       if (tolerance === 0.01) expect(Ref.pathCost(g, ref) - Ref.pathCost(g, got)).toBeLessThanOrEqual(0.01 * Ref.pathCost(g, ref));
     }
-    // Random points often land in closed cliff basins; some pairs still need a real search.
     expect(searched).toBeGreaterThanOrEqual(4);
   }, 60_000);
 
@@ -692,7 +651,6 @@ describe('nav layers match the old grid rules', () => {
     for (const { from, to, extra, radius } of pairs) {
       const expected = Ref.clearLine(w.terrain, Ref.blockers(w, extra), from, to, radius + Ref.CLEARANCE, Infinity);
       expect(straightClear(w, from, to, radius, extra)).toBe(expected);
-      // Without the parked vehicle in the middle, short lines are often clear.
       const open = Ref.clearLine(w.terrain, Ref.blockers(w, []), from, to, radius + Ref.CLEARANCE, Infinity);
       expect(straightClear(w, from, to, radius, [])).toBe(open);
       if (open) clear++;
@@ -715,8 +673,6 @@ describe('nav layers match the old grid rules', () => {
         expect(again).toEqual(ref);
         continue;
       }
-      // Corridor routes may take other bends; they end at the same point and stay near the reference length.
-      // Their cost stays within 5%, checked above, but the cheapest way can run longer past road banks.
       expect(again[again.length - 1]).toEqual(ref[ref.length - 1]);
       expect(routeLength(from, again)).toBeLessThanOrEqual(1.1 * routeLength(from, ref));
     }
@@ -737,9 +693,6 @@ describe('nav layers match the old grid rules', () => {
 });
 
 describe('long routes search a coarse corridor', () => {
-  // Shared across this describe's tests: newWorld repeats obstacle generation, NPC spawns and vision
-  // on top of the terrain build, none of which these tests exercise. Tests that reshape obstacles copy
-  // the array first, so they never mutate this shared world.
   const w = newWorld(1, START_KITS.standard, TEST_MAP);
 
   it('coarse regions are the connected pieces of each block, linked where their cells touch', () => {
@@ -751,7 +704,6 @@ describe('long routes search a coarse corridor', () => {
     const linked = (a: number, b: number) => edges.subarray(edgeStart[a], edgeStart[a + 1]).includes(b);
     const slowSum = new Float64Array(block.length);
     const size = new Uint32Array(block.length);
-    // Counted, not asserted per cell: a million expect calls take half a minute.
     let wrong = 0;
     for (let y = 0; y < n; y++)
       for (let x = 0; x < n; x++) {
@@ -768,7 +720,6 @@ describe('long routes search a coarse corridor', () => {
           if (nx < 0 || nx >= n || ny >= n) continue;
           const o = region[ny * n + nx];
           if (o === 0) continue;
-          // Touching free cells share a region inside a block and are linked across block edges.
           if (blockOfCell(nx, ny) === blockOfCell(x, y)) {
             if (o !== r) wrong++;
           } else if (o !== r && !(linked(r, o) && linked(o, r))) wrong++;
@@ -776,13 +727,11 @@ describe('long routes search a coarse corridor', () => {
       }
     expect(wrong).toBe(0);
     for (let r = 1; r < block.length; r++) expect(slow[r]).toBeCloseTo(slowSum[r] / size[r], 5);
-    // Cliff ridges split some blocks into several regions.
     expect(block.length - 1).toBeGreaterThan(new Set(block.subarray(1)).size);
   });
 
   it('free cells share a component exactly when a step path joins them', () => {
     const w = emptyWorld();
-    // A closed ring of rocks splits the flat map into inside and outside.
     const center = { x: 100, y: 100 };
     for (let i = 0; i < 64; i++) {
       const a = (i / 64) * 2 * Math.PI;
@@ -803,7 +752,6 @@ describe('long routes search a coarse corridor', () => {
   });
 
   it('unreachable goals return null in under 5 ms, like the full search', () => {
-    // A spot with no cliff tile near it, so the ring alone decides reachability.
     const flatAround = (p: Vec) => {
       for (let y = p.y - 14; y <= p.y + 14; y++) for (let x = p.x - 14; x <= p.x + 14; x++) if (isCliff(w.terrain, tileAt(w.terrain, { x, y }))) return false;
       return true;
@@ -815,7 +763,6 @@ describe('long routes search a coarse corridor', () => {
       const a = (i / 64) * 2 * Math.PI;
       obstacles.push({ id: `ring-${i}`, pos: { x: center.x + 10 * Math.cos(a), y: center.y + 10 * Math.sin(a) }, r: 1, kind: 'rock' });
     }
-    // A local copy: the shared world's own obstacles stay untouched for the other tests here.
     const local = { ...w, obstacles };
     const radius = 0.6;
     const layer = navLayer(local.terrain, local.obstacles, radius);
@@ -835,7 +782,6 @@ describe('long routes search a coarse corridor', () => {
 
   it('a corridor cut by a kill wreck wall falls back to the full search', () => {
     const w = emptyWorld();
-    // Wrecks are not in the static layer, so the coarse path runs straight through the wall.
     for (let y = 16; y < w.size; y += 1.5) w.obstacles.push({ id: `wreck-w${y}`, pos: { x: 80, y }, r: 1, kind: 'wreck' });
     const radius = 0.6;
     const layer = navLayer(w.terrain, w.obstacles, radius);
@@ -849,7 +795,6 @@ describe('long routes search a coarse corridor', () => {
     expect(got).not.toBeNull();
     expect(got![got!.length - 1]).toBe(goal);
     for (const c of got!) expect(layer.blocked[c] === 0 && overlay.stamp[c] !== overlay.gen).toBe(true);
-    // The only way round is the gap under the wall.
     expect(Math.min(...Array.from(got!, (c) => Math.floor(c / n)))).toBeLessThan(32);
   });
 
@@ -869,7 +814,6 @@ describe('long routes search a coarse corridor', () => {
       found++;
     }
     expect(found).toBeGreaterThanOrEqual(5);
-    // Without kill wrecks or parked vehicles a chain of linked regions always holds a fine path.
     expect(perfSnapshot()['route-corridor-miss']).toBeUndefined();
   }, 60_000);
 });

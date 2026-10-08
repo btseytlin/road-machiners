@@ -3,7 +3,6 @@ import { reportObservation, reportScheduler } from './observability';
 import { updateState } from './state';
 import type { Ctx } from './types';
 
-// Runs one tick. A crash records its summary for Hermes's incident watch, then crashes on, so the timer sees it too. The factory posts nothing.
 export async function guardTick(ctx: Ctx, tickOnce: () => Promise<void>): Promise<void> {
   reportObservation(ctx.cfg.home, 'tick', { type: 'activity', activity: 'starting', phase: 'running', source: 'runner' }, ctx.now());
   try {

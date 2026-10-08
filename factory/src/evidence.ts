@@ -4,7 +4,6 @@ import { join, sep } from 'node:path';
 import { readPhoto } from './photo-file';
 import { OUT_DIR } from './types';
 
-// Telegram takes at most 10 photos in one media group. The primary screenshot counts in them.
 export const EVIDENCE_MAX = 10;
 export const PRIMARY_FILE = 'screenshot.png';
 export const MANIFEST_FILE = 'evidence.json';
@@ -12,17 +11,11 @@ const DESCRIPTION_LIMIT = 200;
 const SAFE_PATH = /^[A-Za-z0-9_][A-Za-z0-9_.-]*(\/[A-Za-z0-9_][A-Za-z0-9_.-]*)*$/;
 
 export type EvidenceImage = { path: string; description: string };
-// The ordered images of one post. The first is the primary, `.factory/screenshot.png`.
 export type Evidence = { images: EvidenceImage[] };
-// What a post shows. `problem` names what was missing or left out, and the post and the issue say it too.
 export type Shown = { evidence: Evidence | null; problem: string | null };
 
 type Listed = { file: string; description: string };
 
-// The agent's optional manifest `.factory/evidence.json` orders its other images:
-// {"images": [{"file": "view-gate.png", "description": "Gate and approach"}]}
-// The post shows what the agent listed, as written. An image Telegram cannot take, a duplicate, or a file outside `.factory/` is left out, and only that image.
-// With no screenshot the post is text. Evidence never blocks a card.
 export function readShown(home: string): Shown {
   const out = join(home, OUT_DIR);
   const problems: string[] = [];
@@ -34,7 +27,6 @@ export function readShown(home: string): Shown {
   return { evidence: { images }, problem: problems.length === 0 ? null : problems.join(' ') };
 }
 
-// The listed images after the primary that the post can show, with duplicates dropped, up to the album limit.
 function others(out: string, listed: Listed[], primaryHash: string, problems: string[]): EvidenceImage[] {
   const images: EvidenceImage[] = [];
   const seen = new Set([primaryHash]);
@@ -61,7 +53,6 @@ function manifest(out: string, problems: string[]): Listed[] {
   }
 }
 
-// An image the post can show, or null with the reason added to `problems`.
 function usable(out: string, file: string, description: string, problems: string[]): EvidenceImage | null {
   try {
     const path = safePath(out, file);
@@ -78,7 +69,6 @@ function cutDescription(description: string): string {
   return text.length > DESCRIPTION_LIMIT ? `${text.slice(0, DESCRIPTION_LIMIT - 1).trimEnd()}…` : text;
 }
 
-// The file lives inside .factory/ by a plain relative name. Links that point outside are refused.
 function safePath(out: string, file: string): string {
   if (!SAFE_PATH.test(file)) throw new Error(`"${file}" is not a plain relative name inside .factory/`);
   const path = join(out, file);

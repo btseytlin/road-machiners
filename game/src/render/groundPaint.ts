@@ -8,28 +8,24 @@ import { type Vec } from "../sim/vec";
 import { hash2 } from "./noise";
 import { PAL, mix, shade } from "./palette";
 
-export const TERRAIN_MARGIN = 10; // tiles of dim ground drawn past the map edge
-const TYPE_JITTER = 0.6; // tiles; jittered sampling frays the blend between tile types
-const JITTER_GRID = 6; // samples per tile for the type-jitter hash, independent of paint resolution
+export const TERRAIN_MARGIN = 10;
+const TYPE_JITTER = 0.6;
+const JITTER_GRID = 6;
 
-// A map-space canvas: canvas pixel (px, py) covers map point (from + px / res, from + py / res).
 export type PaintCanvas = {
   ctx: CanvasRenderingContext2D;
-  size: number; // canvas side in pixels
-  res: number; // pixels per tile
-  from: number; // map coordinate of the canvas top-left corner, same for x and y
-  toPx: (tiles: number) => number; // map coordinate to canvas pixel coordinate
+  size: number;
+  res: number;
+  from: number;
+  toPx: (tiles: number) => number;
 };
 
 export type PaintOptions = {
-  // Multiplier on the painted hillshade. 1 is the old 2D look. Lower it (or 0) where scene
-  // lighting already shades slopes, so the two effects do not double up.
   hillshade: number;
 };
 
 const DEFAULT_OPTIONS: PaintOptions = { hillshade: 1 };
 
-// Paints ground, oasis/convoy discs and terrain features onto the canvas. The caller uploads the texture.
 export function paintGroundCanvas(
   c: PaintCanvas,
   t: Terrain,
@@ -79,7 +75,6 @@ export function paintGroundCanvas(
   }
 }
 
-// Per-tile inputs of the ground color, computed once per paint instead of once per pixel.
 type TileLook = { t: Terrain; color: Int32Array; shade: Float64Array; broad: CellNoise; fine: CellNoise };
 
 function tileLook(t: Terrain, hillshadeStrength: number): TileLook {
@@ -93,8 +88,6 @@ function tileLook(t: Terrain, hillshadeStrength: number): TileLook {
   return { t, color, shade: shadeBy, broad: new CellNoise(), fine: new CellNoise() };
 }
 
-// valueNoise that keeps the corner hashes of the last lattice cell. Neighbouring pixels share a cell, so most
-// calls skip the four hashes. Same arithmetic as valueNoise.
 class CellNoise {
   private x0 = NaN;
   private y0 = NaN;
@@ -125,7 +118,6 @@ function smooth(t: number): number {
   return t * t * (3 - 2 * t);
 }
 
-// Hillshade: brighten slopes turned toward the light, darken slopes turned away.
 function hillshade(t: Terrain, tile: number, strength: number): number {
   const s = groundSlope(t, tile);
   return (
@@ -136,14 +128,12 @@ function hillshade(t: Terrain, tile: number, strength: number): number {
   );
 }
 
-// Same clamping as tileAt.
 function tileIndex(size: number, x: number, y: number): number {
   const i = Math.min(Math.max(Math.floor(x), 0), size - 1);
   const j = Math.min(Math.max(Math.floor(y), 0), size - 1);
   return j * size + i;
 }
 
-// Type colors blend between tile centers, with a little jitter so borders look worn, not ruled.
 function typeColor(look: TileLook, x: number, y: number): number {
   const jx =
     x +
@@ -164,14 +154,12 @@ function typeColor(look: TileLook, x: number, y: number): number {
   const b = look.color[tileIndex(size, i + 1.5, j + 0.5)];
   const c = look.color[tileIndex(size, i + 0.5, j + 1.5)];
   const d = look.color[tileIndex(size, i + 1.5, j + 1.5)];
-  // Inside one type all four match, and blending equal colors returns the color.
   if (a === b && a === c && a === d) return a;
   const fx = jx - i;
   const fy = jy - j;
   return mix(mix(a, b, fx), mix(c, d, fx), fy);
 }
 
-// Road tiles paint as hardpan, since the ground shader draws the road over it with its own edge.
 function paintColor(type: TerrainTypeId): number {
   return TERRAIN_TYPES[type === "road" ? "hardpan" : type].color;
 }
@@ -220,7 +208,6 @@ function css(color: number, alpha: number): string {
   return `rgba(${(color >> 16) & 0xff},${(color >> 8) & 0xff},${color & 0xff},${alpha})`;
 }
 
-// A polyline stroke in map units, shifted sideways by offset tiles along each segment's normal.
 function stroke(
   c: PaintCanvas,
   line: Vec[],

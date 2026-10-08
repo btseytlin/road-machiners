@@ -6,7 +6,6 @@ import type { Obstacle, World } from "./types";
 import { heightAt } from "./terrain";
 import { clamp, dist, type Vec } from "./vec";
 
-// dir is the unit map direction toward the sun. elevation is its height above the horizon in radians.
 export type Sun = { dir: Vec; elevation: number };
 
 export function clockOf(turn: number): { day: number; hour: number } {
@@ -14,8 +13,6 @@ export function clockOf(turn: number): { day: number; hour: number } {
   return { day: Math.floor(hours / 24) + 1, hour: hours % 24 };
 }
 
-// The sun rises in the east (+x), crosses the north (-y) at noon and sets in the west. Null at night.
-// North is the far side from the camera, so terrain shadows fall toward the viewer.
 export function sunAt(turn: number): Sun | null {
   const { hour } = clockOf(turn);
   if (hour <= TIME.sunrise || hour >= TIME.sunset) return null;
@@ -28,15 +25,10 @@ export function sunAt(turn: number): Sun | null {
   };
 }
 
-// The obstacles that can shade a point within `radius` of center. Obstacles farther than the shade reach can
-// never block. A caller that checks many points near one spot filters once and passes the result to inShade,
-// since filtering the whole map per point stalled every turn.
 export function shadeCasters(world: World, center: Vec, radius: number): Obstacle[] {
   return world.obstacles.filter((o) => TIME.obstacleShade[o.kind] !== undefined && dist(center, o.pos) <= radius + TIME.shadeReach + o.r);
 }
 
-// Whether pos sits in shade: steps toward the sun and checks the terrain and blocking obstacles
-// against the ray. `near` must hold every obstacle that can shade pos, and may hold more.
 export function inShade(world: World, pos: Vec, sun: Sun, near: Obstacle[] = shadeCasters(world, pos, 0)): boolean {
   const base = heightAt(world.terrain, pos.x, pos.y);
   const rise = Math.tan(sun.elevation);
@@ -50,30 +42,24 @@ export function inShade(world: World, pos: Vec, sun: Sun, near: Obstacle[] = sha
   return false;
 }
 
-// Whether obstacle o covers ray point p and stands above the ray there.
 function obstacleBlocks(world: World, o: Obstacle, p: Vec, rayHeight: number): boolean {
   return dist(p, o.pos) <= o.r && heightAt(world.terrain, o.pos.x, o.pos.y) + TIME.obstacleShade[o.kind] > rayHeight;
 }
 
-// 1 in shade and at night, above 1 in full sun. Weather multiplies the sun-driven share above 1:
-// overcast cancels it, a heat wave amplifies it.
 export function heatAt(world: World, pos: Vec): number {
   return cappedHeatAt(world, pos, 1);
 }
 
-// Heat at pos with the sun height share capped at `cap`, so a high sun heats like a lower one.
 export function cappedHeatAt(world: World, pos: Vec, cap: number): number {
   const sun = sunAt(world.turn);
   if (!sun || inShade(world, pos, sun)) return 1;
   return heatOfShare(world, pos, Math.min(cap, sunShare(sun)));
 }
 
-// Heat at pos if it stands in the sun. For callers that already know pos is not in shade.
 export function sunHeatAt(world: World, pos: Vec, sun: Sun): number {
   return heatOfShare(world, pos, sunShare(sun));
 }
 
-// The sun height as a share of its noon height, 0 to 1.
 function sunShare(sun: Sun): number {
   return clamp(sun.elevation / (TIME.noonElevation * (Math.PI / 180)), 0, 1);
 }

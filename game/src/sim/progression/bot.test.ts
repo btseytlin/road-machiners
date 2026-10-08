@@ -17,7 +17,6 @@ function town(id: string) {
   return found;
 }
 
-// An empty world with the player parked on a pad of a town, its cargo gone, and both towns known.
 function parkedAt(id: string) {
   const site = town(id);
   const w = emptyWorld(nearestPad(site, site.pos));
@@ -28,7 +27,6 @@ function parkedAt(id: string) {
   return w;
 }
 
-// Salt flooded at Nose and short at Bowl, so it is the clear best haul whatever the tuned prices.
 function saltGlut(w: World): World {
   w.shops.nose.pressure.salt = -PRESSURE_MAX;
   w.shops.bowl.pressure.salt = PRESSURE_MAX;
@@ -46,7 +44,6 @@ describe('botOrders', () => {
     expect(turn.events).toEqual([]);
   });
 
-  // Nose sells salt cheap, and Bowl pays well for it.
   it('has a trader buy the most profitable good in the town it stands at', () => {
     const w = saltGlut(parkedAt('nose'));
 
@@ -92,7 +89,6 @@ describe('botOrders', () => {
     expect(playerVehicle(turn.world).order).toEqual({ kind: 'stopAt', dest: nearestPad(home, me.pos) });
   });
 
-  // A knockout strips the engine, and the stranded truck is stuck until it gets one.
   function withoutEngine(w: ReturnType<typeof parkedAt>) {
     const me = playerVehicle(w);
     me.items = me.items.filter((it) => it.kind !== 'part' || !mountedParts(me, 'engine').includes(it.part));
@@ -144,7 +140,6 @@ describe('botOrders', () => {
     expect(playerVehicle(turn.world).order?.kind).toBe('stopAt');
   });
 
-  // A parked raider can hold the exact point of a ground, so the stop order ends a little short of it.
   it('has a fighter whose stop ended near a hunting ground go on to the next one', () => {
     const ground = raiderHuntGrounds()[1];
     const w = parkedAt('bowl');

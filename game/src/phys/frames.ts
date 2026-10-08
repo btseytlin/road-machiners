@@ -7,12 +7,10 @@ import type { Vec } from "../sim/vec";
 
 export type V3 = { x: number; y: number; z: number };
 export type Quat = { x: number; y: number; z: number; w: number };
-export type WheelFrame = { steer: number; spin: number; suspension: number }; // radians, radians, meters
-// acc: world-space acceleration over the last physics step, m/s^2. The view sways the body with it.
-export type VehicleFrame = { pos: V3; rot: Quat; acc: V3; wheels: WheelFrame[] }; // wheels follow wheelMounts order
-export type TurnFrames = Record<string, VehicleFrame[]>; // by vehicle id
+export type WheelFrame = { steer: number; spin: number; suspension: number };
+export type VehicleFrame = { pos: V3; rot: Quat; acc: V3; wheels: WheelFrame[] };
+export type TurnFrames = Record<string, VehicleFrame[]>;
 
-// Offsets a round across the line of fire in meters, positive to the shooter's right.
 export function computeRoundPoint(a: V3, b: V3, offset: number): V3 {
   const dx = b.x - a.x;
   const dz = b.z - a.z;
@@ -31,22 +29,18 @@ export function toMap(p: V3): Vec {
   return { x: p.x / S, y: p.z / S };
 }
 
-// Ground point under a map point, in physics space.
 export function groundPoint(t: Terrain, p: Vec): V3 {
   return toPhys(p, heightAt(t, p.x, p.y));
 }
 
-// Map heading grows from +x toward +z. A rotation about y by -heading turns +x onto it.
 export function headingQuat(heading: number): Quat {
   return { x: 0, y: Math.sin(-heading / 2), z: 0, w: Math.cos(-heading / 2) };
 }
 
-// Sine of the nose pitch: positive when the nose points uphill.
 export function noseRise(q: Quat): number {
   return 2 * (q.x * q.y + q.w * q.z);
 }
 
-// Vertical part of the body's up axis: 1 when level, 0 on its side, -1 upside down.
 export function upOf(q: Quat): number {
   return 1 - 2 * (q.x * q.x + q.z * q.z);
 }

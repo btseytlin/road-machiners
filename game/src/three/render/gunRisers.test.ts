@@ -17,7 +17,7 @@ await loadModels(async (name) => {
 });
 
 const GUNS = Object.values(PARTS).filter((def) => def.kind === 'weapon');
-const TOLERANCE = 0.02; // meters
+const TOLERANCE = 0.02;
 
 describe('gun risers', () => {
   it.each(Object.keys(CHASSIS))('%s: a post on any deck spot stands on the surface inside the gun footprint', (id) => {
@@ -68,7 +68,6 @@ describe('placing any item on any cell', () => {
     const problems: string[] = [];
     for (const id of Object.keys(CHASSIS)) {
       const { w, h, cells } = baseGrid(id);
-      // One part per kind and size: placement reads nothing else of a part.
       const shapes = [...new Map(Object.values(PARTS).map((def) => [`${def.kind}${def.w}x${def.h}`, def])).values()];
       const items = [
         ...shapes.map((def) => ({ label: def.id, item: (x: number, y: number, rot: 0 | 1) => ({ id: 'g', kind: 'part', x, y, rot, part: { id: 'p', defId: def.id, hp: 1, wear: 0 } }) })),
