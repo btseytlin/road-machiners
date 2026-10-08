@@ -1,5 +1,5 @@
 {
- "format": "2.33",
+ "format": "2.34",
  "shape": {
   "broken": [],
   "craters": [],
@@ -51,6 +51,15 @@
    "money": "number",
    "overdrive": "boolean",
    "perks": [],
+   "quests": {
+    "local": {},
+    "session": {
+     "checkpoint": "string",
+     "quest": "string",
+     "seed": "number"
+    },
+    "world": {}
+   },
    "ranks": {
     "driving": "number",
     "machining": "number",
@@ -1487,5 +1496,26 @@
    }
   ],
   "weather": []
+ },
+ "quests": {
+  "world": {
+   "sample_wagon_heard": "boolean"
+  },
+  "local": {
+   "sample_bowl": {
+    "paid": "boolean",
+    "trust": "number"
+   },
+   "sample_nose": {}
+  },
+  "checkpoints": {
+   "sample_bowl": [
+    "start",
+    "start.talk"
+   ],
+   "sample_nose": [
+    "start"
+   ]
+  }
  }
 }

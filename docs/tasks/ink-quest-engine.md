@@ -171,3 +171,7 @@ UK3 is resolved here: the sample quests are real files in `game/src/data/quests/
 - PH2: `resumeQuest(world) -> World` became `restoreQuest(world): void` — load rebuilds derived state in place like `refreshVision()`, without `update()` side effects.
 - PH2: IV2 holds for choices and variables. The lines on view after a restore are the lines played since the checkpoint, not the lines before it.
 - PH2: the sample guards "Heard any rumors?" with a variable instead of a once-only choice. A used-up once-only choice returns after a restore, since visit counts are not saved.
+- PH3: a fifth helper, `dropQuest(world, quest)`, removes a whole quest. Stage 2 needs it to retire the sample quests.
+
+### Deferred (needs user input)
+- Rescue drops quest state — `carriedWorld()` in `game/src/sim/world.ts` rebuilds a new game and carries progression, but not `player.quests`. Rescue runs exactly when saved state may not match the content, so carrying quest variables means dropping the names `questProblems()` rejects. Decide whether rescue should carry the valid quest variables.

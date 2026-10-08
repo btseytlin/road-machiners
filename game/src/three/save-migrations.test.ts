@@ -43,7 +43,8 @@ import FORMAT_2_32 from './save-fixtures/format-2-32.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
-import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
+import { dropQuest, dropQuestVar, endQuestSession, MIGRATIONS, moveQuestCheckpoint, pooledSkills_9_10, renameQuestVar, type SavedJson } from './save-migrations';
+import FORMAT_2_33 from './save-fixtures/format-2-33.json';
 
 describe('save migrations', () => {
   it('0 to 1 gives the player townPatched false and keeps every other field', () => {
@@ -757,5 +758,63 @@ describe('save migration 32 to 33', () => {
     const { contacts: _c, clouds: _s, ...player } = FORMAT_2_32.player;
 
     expect(next).toEqual({ ...FORMAT_2_32, player });
+  });
+});
+
+describe('save migration 33 to 34', () => {
+  it('gives the player empty quest state with no open quest', () => {
+    const next = MIGRATIONS[33](FORMAT_2_33);
+
+    expect(next).toEqual({ ...FORMAT_2_33, player: { ...FORMAT_2_33.player, quests: { world: {}, local: {}, session: null } } });
+  });
+});
+
+describe('quest migration helpers', () => {
+  const saved = (): SavedJson => ({
+    turn: 3000,
+    player: {
+      vehicleId: 'v1',
+      quests: {
+        world: { wagon_heard: true },
+        local: { bowl: { trust: 2, paid: true } },
+        session: { quest: 'bowl', checkpoint: 'start.talk', seed: 77 },
+      },
+    },
+  });
+  const questsIn = (world: SavedJson) => (world.player as { quests: unknown }).quests;
+
+  it('renames a world variable and keeps its value', () => {
+    expect(questsIn(renameQuestVar(saved(), null, 'wagon_heard', 'heard_of_wagon'))).toMatchObject({ world: { heard_of_wagon: true } });
+  });
+
+  it('renames a quest variable', () => {
+    expect(questsIn(renameQuestVar(saved(), 'bowl', 'trust', 'faith'))).toMatchObject({ local: { bowl: { faith: 2, paid: true } } });
+  });
+
+  it('leaves a save without the variable as it was', () => {
+    expect(renameQuestVar(saved(), 'bowl', 'missing', 'other')).toEqual(saved());
+  });
+
+  it('refuses to rename onto a variable that holds a value', () => {
+    expect(() => renameQuestVar(saved(), 'bowl', 'trust', 'paid')).toThrow('Quest variable paid already holds a value');
+  });
+
+  it('drops a quest variable and the quest entry once it is empty', () => {
+    const once = dropQuestVar(saved(), 'bowl', 'trust');
+    expect(questsIn(once)).toMatchObject({ local: { bowl: { paid: true } } });
+    expect(questsIn(dropQuestVar(once, 'bowl', 'paid'))).toMatchObject({ local: {} });
+  });
+
+  it('moves the open session to a renamed checkpoint', () => {
+    expect(questsIn(moveQuestCheckpoint(saved(), 'bowl', 'start.talk', 'start.chat'))).toMatchObject({ session: { quest: 'bowl', checkpoint: 'start.chat', seed: 77 } });
+  });
+
+  it('ends the session of a quest and leaves another quest session open', () => {
+    expect(questsIn(endQuestSession(saved(), 'bowl'))).toMatchObject({ session: null });
+    expect(endQuestSession(saved(), 'nose')).toEqual(saved());
+  });
+
+  it('drops a whole quest with its session and variables but keeps world variables', () => {
+    expect(questsIn(dropQuest(saved(), 'bowl'))).toEqual({ world: { wagon_heard: true }, local: {}, session: null });
   });
 });

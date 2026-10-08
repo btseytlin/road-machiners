@@ -1,7 +1,8 @@
 import type { BakedMap } from '../sim/terrain';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
-import type { BrokenProp, Obstacle, Player, Vehicle, World, WorldSetup } from '../sim/types';
+import type { BrokenProp, Obstacle, Player, QuestState, Vehicle, World, WorldSetup } from '../sim/types';
+import { QUESTS, questProblems, restoreQuest } from '../sim/quests';
 import { refreshVision } from '../sim/vision';
 import { parseSetup } from '../sim/settings';
 import { clearTips } from '../ui/tips';
@@ -75,7 +76,7 @@ export function loadWorld(slots: SaveSlots, slot: SlotId, map: BakedMap): World 
   const gone = new Set(world.broken.map((b) => b.id));
   const loaded: World = {
     ...world,
-    player: { ...world.player, explored, visible: [], contacts: [], clouds: [] },
+    player: { ...world.player, explored, visible: [], contacts: [], clouds: [], quests: savedQuests(world.player.quests) },
     vehicles: world.vehicles.map((v) => ({ ...v, trail: [] })),
     obstacles: [...baked.filter((o) => !gone.has(o.id)), ...world.obstacles],
     broken,
@@ -85,7 +86,24 @@ export function loadWorld(slots: SaveSlots, slot: SlotId, map: BakedMap): World 
   };
   refreshVision(loaded);
   settleAims(loaded);
+  restoreQuest(loaded, QUESTS);
   return loaded;
+}
+
+function savedQuests(value: unknown): QuestState {
+  if (!isQuestState(value)) throw new SaveError('Invalid saved quest state');
+  const problems = questProblems(value, QUESTS);
+  if (problems.length > 0) throw new SaveError(`Game save holds quest state this version does not know. ${problems.join('. ')}`);
+  return { ...value, live: null };
+}
+
+function isQuestState(value: unknown): value is QuestState {
+  if (!isJsonObject(value) || !isJsonObject(value.world) || !isJsonObject(value.local)) return false;
+  return Object.values(value.local).every(isJsonObject) && (value.session === null || isQuestSession(value.session));
+}
+
+function isQuestSession(value: unknown): boolean {
+  return isJsonObject(value) && typeof value.quest === 'string' && typeof value.checkpoint === 'string' && Number.isInteger(value.seed);
 }
 
 function brokenProps(baked: readonly Obstacle[], broken: readonly SavedBroken[]): BrokenProp[] {
@@ -183,11 +201,11 @@ export function writeSave(slots: SaveSlots, slot: SlotId, world: World, runId: s
 
 export function saveOf(world: World): { format: typeof SAVE_FORMAT; world: object } {
   const { terrain: _terrain, events: _events, removed: _removed, ...saved } = world;
-  const { visible: _visible, contacts: _contacts, clouds: _clouds, ...player } = saved.player;
+  const { visible: _visible, contacts: _contacts, clouds: _clouds, quests: { live: _live, ...quests }, ...player } = saved.player;
   const vehicles = saved.vehicles.map(({ trail: _trail, ...vehicle }) => vehicle);
   const obstacles = saved.obstacles.filter((o) => !isBakedObstacle(o));
   const broken = saved.broken.map(({ obstacle, turn }) => ({ id: obstacle.id, turn }));
-  return { format: SAVE_FORMAT, world: { ...saved, player: { ...player, explored: packExplored(player.explored) }, vehicles, obstacles, broken } };
+  return { format: SAVE_FORMAT, world: { ...saved, player: { ...player, quests, explored: packExplored(player.explored) }, vehicles, obstacles, broken } };
 }
 
 export function packExplored(explored: Uint8Array): string {
