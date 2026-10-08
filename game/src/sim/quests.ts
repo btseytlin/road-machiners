@@ -5,12 +5,16 @@
 import { Story } from 'inkjs';
 import { CHECKPOINT_TAG, type CompiledQuest, type QuestBundle, type QuestValue, type QuestValueType, type QuestVarDecl } from '../data/quests';
 import BUNDLE from '../data/quests.json';
+import type { NoteId } from '../data/locals';
+import { REGION } from '../data/region';
 import { UNITS } from '../data/units';
+import { boardFull, holdsNote, isNoteId, learnNote, takeTownWork, townWork } from './dialogue-rules';
 import { hashRandom } from './rng';
+import { storyStock } from './salvage';
 import type { QuestLine, QuestSession, QuestState, QuestVars, World } from './types';
 import { update } from './world';
 
-export type QuestView = { lines: QuestLine[]; choices: string[]; ended: boolean };
+export type QuestView = { quest: string; lines: QuestLine[]; choices: string[]; ended: boolean };
 export type QuestQuery = (world: World, args: readonly unknown[]) => QuestValue;
 export type QuestEffect = (world: World, args: readonly unknown[]) => void;
 
@@ -19,8 +23,15 @@ type Runner = { story: Story; world: World | null; restoring: string | null };
 const INK_SEED_RANGE = 2 ** 31;
 const runners = new WeakMap<CompiledQuest, Runner>();
 
+const SITES = new Set([...REGION.towns, ...REGION.locations].map((s) => s.id));
+
 export const QUEST_QUERIES: Record<string, QuestQuery> = {
   money: (world) => Math.floor(world.player.money / UNITS.centsPerM),
+  has_note: (world, args) => holdsNote(world, noteArg('has_note', args)),
+  found: (world, args) => world.player.discovered.includes(siteArg('found', args)),
+  searched: (world, args) => world.player.scavenged.includes(storyStock(world, textArg('searched', args, 0)).id),
+  has_work: (world) => townWork(world) !== null,
+  board_full: (world) => boardFull(world),
 };
 
 export const QUEST_EFFECTS: Record<string, QuestEffect> = {
@@ -29,12 +40,32 @@ export const QUEST_EFFECTS: Record<string, QuestEffect> = {
     if (amount < 0) throw new Error(`give_money takes no negative amount, got ${amount}`);
     world.player.money += amount * UNITS.centsPerM;
   },
+  note: (world, args) => learnNote(world, noteArg('note', args)),
+  take_work: (world) => takeTownWork(world),
 };
 
 function wholeArg(fn: string, args: readonly unknown[], index: number): number {
   const value = args[index];
   if (typeof value !== 'number' || !Number.isInteger(value)) throw new Error(`${fn} needs a whole number as argument ${index + 1}, got ${String(value)}`);
   return value;
+}
+
+function textArg(fn: string, args: readonly unknown[], index: number): string {
+  const value = args[index];
+  if (typeof value !== 'string') throw new Error(`${fn} needs text as argument ${index + 1}, got ${String(value)}`);
+  return value;
+}
+
+function noteArg(fn: string, args: readonly unknown[]): NoteId {
+  const id = textArg(fn, args, 0);
+  if (!isNoteId(id)) throw new Error(`${fn} names no note ${id}`);
+  return id;
+}
+
+function siteArg(fn: string, args: readonly unknown[]): string {
+  const id = textArg(fn, args, 0);
+  if (!SITES.has(id)) throw new Error(`${fn} names no town or location ${id}`);
+  return id;
 }
 
 export function parseBundle(value: unknown): QuestBundle {
@@ -103,10 +134,18 @@ export function restoreQuest(world: World, bundle: QuestBundle): void {
   if (loaded !== saved) throw new Error(`Loading checkpoint ${session.checkpoint} changed its variables from ${saved} to ${loaded}. A checkpoint may not change variables before its first choice.`);
 }
 
+export function leaveQuest(world: World): World {
+  return update(world, (w) => {
+    if (!w.player.quests.live) throw new Error('No quest is on view');
+    w.player.quests.session = null;
+    w.player.quests.live = null;
+  });
+}
+
 export function questView(world: World): QuestView {
   const { live, session } = world.player.quests;
   if (!live) throw new Error('No quest is on view');
-  return { lines: live.lines, choices: live.choices, ended: session === null };
+  return { quest: live.quest, lines: live.lines, choices: live.choices, ended: session === null };
 }
 
 export function questProblems(state: QuestState, bundle: QuestBundle): string[] {
@@ -206,7 +245,7 @@ function settle(w: World, bundle: QuestBundle, questId: string, story: Story, li
   const local = storedVars(story, questOf(bundle, questId).vars, `quest ${questId}`);
   state.local = Object.keys(local).length > 0 ? { ...others, [questId]: local } : others;
   const choices = story.currentChoices.map((choice) => choice.text);
-  state.live = { ink: story.state.toJson(), lines, choices };
+  state.live = { quest: questId, ink: story.state.toJson(), lines, choices };
   if (choices.length === 0) state.session = null;
 }
 

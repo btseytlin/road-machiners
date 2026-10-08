@@ -1,5 +1,5 @@
 {
- "format": "2.35",
+ "format": "2.36",
  "shape": {
   "broken": [],
   "craters": [],
@@ -1512,23 +1512,39 @@
   "weather": []
  },
  "quests": {
-  "world": {
-   "sample_wagon_heard": "boolean"
-  },
+  "world": {},
   "local": {
-   "sample_bowl": {
-    "paid": "boolean",
-    "trust": "number"
-   },
-   "sample_nose": {}
+   "bowl_dag": {},
+   "bowl_hattie": {},
+   "bowl_ruben": {},
+   "nose_ibo": {},
+   "nose_kovac": {},
+   "nose_lena": {}
   },
   "checkpoints": {
-   "sample_bowl": [
+   "bowl_dag": [
     "start",
-    "start.talk"
+    "start.hub"
    ],
-   "sample_nose": [
-    "start"
+   "bowl_hattie": [
+    "start",
+    "start.hub"
+   ],
+   "bowl_ruben": [
+    "start",
+    "start.hub"
+   ],
+   "nose_ibo": [
+    "start",
+    "start.hub"
+   ],
+   "nose_kovac": [
+    "start",
+    "start.hub"
+   ],
+   "nose_lena": [
+    "start",
+    "start.hub"
    ]
   }
  }

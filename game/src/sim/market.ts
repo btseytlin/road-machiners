@@ -383,26 +383,34 @@ function requireParkedAt(world: World, shopId: string): void {
 }
 
 export function acceptContract(world: World, contractId: string): World {
-  return playerCommand(world, (w) => {
-    const shopId = shopAt(w);
-    if (!shopId) throw new Error('Not parked at a shop');
-    const board = shopState(w, shopId).contracts;
-    const contract = board.find((c) => c.id === contractId);
-    if (!contract) throw new Error(`No contract ${contractId} at ${shopId}`);
-    if (isExpired(w, contract)) throw new Error(`Offer ${contractId} has expired`);
-    if (w.player.contracts.length >= CONTRACTS.maxActive) throw new Error(`You already hold ${CONTRACTS.maxActive} contracts`);
-    if (contract.kind === 'haul') loadHaul(w, contract);
-    contract.deadline = w.turn + contract.window;
-    board.splice(board.indexOf(contract), 1);
-    w.player.contracts.push(contract);
-    w.events.push({ t: 'contract', contract: { ...contract }, outcome: 'accepted' });
-  });
+  return playerCommand(world, (w) => takeContract(w, contractId));
+}
+
+export function takeContract(w: World, contractId: string): void {
+  const shopId = shopAt(w);
+  if (!shopId) throw new Error('Not parked at a shop');
+  const board = shopState(w, shopId).contracts;
+  const contract = board.find((c) => c.id === contractId);
+  if (!contract) throw new Error(`No contract ${contractId} at ${shopId}`);
+  if (isExpired(w, contract)) throw new Error(`Offer ${contractId} has expired`);
+  if (w.player.contracts.length >= CONTRACTS.maxActive) throw new Error(`You already hold ${CONTRACTS.maxActive} contracts`);
+  if (contract.kind === 'haul') loadHaul(w, contract);
+  contract.deadline = w.turn + contract.window;
+  board.splice(board.indexOf(contract), 1);
+  w.player.contracts.push(contract);
+  w.events.push({ t: 'contract', contract: { ...contract }, outcome: 'accepted' });
+}
+
+export function haulBlock(world: World, c: Contract): string | null {
+  if (c.kind !== 'haul') return null;
+  if (world.player.money < 0) return 'Cannot take on a haul while in debt';
+  return freeCells(playerVehicle(world)) < c.units ? `Needs ${c.units} free cells for the cargo` : null;
 }
 
 function loadHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void {
-  if (world.player.money < 0) throw new Error('Cannot take on a haul while in debt');
+  const block = haulBlock(world, c);
+  if (block) throw new Error(block);
   const v = playerVehicle(world);
-  if (freeCells(v) < c.units) throw new Error(`Needs ${c.units} free cells for the cargo`);
   const held = goodsCount(v)[c.good] ?? 0;
   if (addGoods(world, v, c.good, c.units) !== c.units) throw new Error('Cargo capacity invariant failed');
   const paid = world.player.costBasis[c.good] ?? 0;

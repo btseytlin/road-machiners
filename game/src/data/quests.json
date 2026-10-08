@@ -1,37 +1,63 @@
 {
- "world": {
-  "sample_wagon_heard": {
-   "type": "boolean",
-   "init": false
-  }
- },
+ "world": {},
  "externals": [
+  "board_full",
+  "found",
   "give_money",
-  "money"
+  "has_note",
+  "has_work",
+  "money",
+  "note",
+  "searched",
+  "take_work"
  ],
  "quests": {
-  "sample_bowl": {
-   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"^Hattie sets her bucket down by the well.\",\"\\n\",{\"->\":\".^.talk\"},{\"talk\":[[\"#\",\"^checkpoint: start.talk\",\"/#\",\"ev\",\"str\",\"^Heard any rumors?\",\"/str\",{\"VAR?\":\"sample_wagon_heard\"},\"!\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":5},\"ev\",\"str\",\"^Can you spare some coin for the road?\",\"/str\",{\"VAR?\":\"trust\"},0,\">\",{\"VAR?\":\"paid\"},\"!\",\"&&\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":5},\"ev\",\"str\",\"^Leave.\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},{\"c-0\":[\"\\n\",\"^A scavenger came through selling an Army radio. Said he pulled it off a dead wagon north-east of here.\",\"\\n\",\"ev\",true,\"/ev\",{\"VAR=\":\"sample_wagon_heard\",\"re\":true},\"ev\",{\"VAR?\":\"trust\"},1,\"+\",{\"VAR=\":\"trust\",\"re\":true},\"/ev\",{\"->\":\".^.^.^\"},null],\"c-1\":[\"\\n\",\"^Hattie counts out a few coins. \\\"Bring me news from Nose.\\\"\",\"\\n\",\"ev\",5,{\"x()\":\"give_money\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",\"ev\",true,\"/ev\",{\"VAR=\":\"paid\",\"re\":true},{\"->\":\".^.^.^\"},null],\"c-2\":[\"\\n\",\"end\",null]}],null]}],\"global decl\":[\"ev\",false,{\"VAR=\":\"sample_wagon_heard\"},0,{\"VAR=\":\"trust\"},false,{\"VAR=\":\"paid\"},\"/ev\",\"end\",null]}],\"listDefs\":{}}",
-   "vars": {
-    "paid": {
-     "type": "boolean",
-     "init": false
-    },
-    "trust": {
-     "type": "number",
-     "init": 0
-    }
-   },
-   "checkpoints": [
-    "start",
-    "start.talk"
-   ]
-  },
-  "sample_nose": {
-   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[[\"#\",\"^checkpoint: start\",\"/#\",\"^Sergeant Kovac looks up from the dispatch board.\",\"\\n\",\"ev\",\"str\",\"^About that scavenger with the Army radio.\",\"/str\",{\"VAR?\":\"sample_wagon_heard\"},\"/ev\",{\"*\":\".^.c-0\",\"flg\":5},\"ev\",\"str\",\"^I have coin. Any work?\",\"/str\",{\"x()\":\"money\"},0,\">\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":5},\"ev\",\"str\",\"^Nothing. Bye.\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},{\"c-0\":[\"\\n\",\"^\\\"That set came off wagon Seven. Nobody went to look.\\\"\",\"\\n\",\"end\",null],\"c-1\":[\"\\n\",\"^\\\"Board is empty. Try tomorrow.\\\"\",\"\\n\",\"end\",null],\"c-2\":[\"\\n\",\"end\",null]}],null],\"global decl\":[\"ev\",false,{\"VAR=\":\"sample_wagon_heard\"},\"/ev\",\"end\",null]}],\"listDefs\":{}}",
+  "bowl_dag": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"^Dag, Farmers patrol. Keep your guns cold inside the gates and we will get along fine.\",\"\\n\",{\"->\":\".^.hub\"},{\"hub\":[[\"#\",\"^checkpoint: start.hub\",\"/#\",\"ev\",\"str\",\"^Any trouble around here?\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^What about the raiders?\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^What do you make of Nose?\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},\"ev\",\"str\",\"^Any work?\",\"/str\",\"/ev\",{\"*\":\".^.c-3\",\"flg\":4},\"ev\",\"str\",\"^Goodbye.\",\"/str\",\"/ev\",{\"*\":\".^.c-4\",\"flg\":4},{\"c-0\":[\"\\n\",\"^Raiders sniffing at the roads again. Nothing we cannot run off. The dust is worse. A truck that breaks down out there waits a long while for a friendly face.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-1\":[\"\\n\",\"^Kiln Camp sits out east, south of the crater. Scrapjaw is far up north, beyond Dustwell. Most days they would rather rob you than kill you. Pay them or outrun them, but <b>do not shoot first</b> if you want to grow old.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-2\":[\"\\n\",\"^The Army is all right on the road. Off it, they act like the basin is theirs and we are only borrowing it. Bowl was feeding people long before Nose put up its first fence.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-3\":[\"\\n\",[\"ev\",{\"x()\":\"board_full\"},\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"\\n\",\"^You are carrying enough promises already. Finish a few first.\",\"\\n\",{\"->\":\"start.hub\"},{\"->\":\".^.^.^.3\"},null]}],[\"ev\",{\"x()\":\"has_work\"},\"!\",\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"\\n\",\"^Nothing on the board today. Come back in a couple of days.\",\"\\n\",{\"->\":\"start.hub\"},{\"->\":\".^.^.^.3\"},null]}],\"nop\",\"\\n\",\"^Could be. Interested? \",\"#\",\"^work_offer\",\"/#\",\"\\n\",[\"ev\",\"str\",\"^I will take it.\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^Not now.\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},{\"c-0\":[\"\\n\",\"ev\",{\"x()\":\"take_work\"},\"pop\",\"/ev\",\"\\n\",\"^Good. Bowl remembers who delivers.\",\"\\n\",{\"->\":\"start.hub\"},null],\"c-1\":[\"\\n\",{\"->\":\"start.hub\"},null]}],null],\"c-4\":[\"\\n\",\"end\",null]}],null]}]}],\"listDefs\":{}}",
    "vars": {},
    "checkpoints": [
-    "start"
+    "start",
+    "start.hub"
+   ]
+  },
+  "bowl_hattie": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"^Water is for paying folk, but talk is free. I am Hattie. Bucket down, ears open.\",\"\\n\",{\"->\":\".^.hub\"},{\"hub\":[[\"#\",\"^checkpoint: start.hub\",\"/#\",\"ev\",\"str\",\"^Heard any rumors?\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^Seen any strangers come through?\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^Any local legends?\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},\"ev\",\"str\",\"^What do you make of Nose?\",\"/str\",\"/ev\",{\"*\":\".^.c-3\",\"flg\":4},\"ev\",\"str\",\"^Goodbye.\",\"/str\",\"/ev\",{\"*\":\".^.c-4\",\"flg\":4},{\"c-0\":[\"\\n\",\"^Funny you ask. A scavenger came through a few days back, trying to sell a <b>Nose Army radio</b>. Said he pulled it off an Army wagon sitting dead in the hills north-east of here. When the Farmers asked him where, exactly, he filled his tank and left for Nose in a hurry.\",\"\\n\",\"ev\",\"str\",\"^wagonBowl\",\"/str\",{\"x()\":\"note\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-1\":[\"\\n\",\"^Every day. Traders, couriers, folk with a tank of fuel and a story. The ones that worry me are the quiet ones who ask where the seed stores are.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-2\":[\"\\n\",\"^You know Glass Flats, out east? There is an Old World tank out there that <shake>still runs</shake>. Rolls out at night with its lights off. My cousin saw it. Well. Heard it.\",\"\\n\",\"ev\",\"str\",\"^glassTank\",\"/str\",{\"x()\":\"note\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-3\":[\"\\n\",\"^Soldiers playing at a town. They eat our grain and send us orders back. Polite enough, mind you, whenever they want something.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-4\":[\"\\n\",\"end\",null]}],null]}]}],\"listDefs\":{}}",
+   "vars": {},
+   "checkpoints": [
+    "start",
+    "start.hub"
+   ]
+  },
+  "bowl_ruben": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"^Sit a while, the shade is free. I am Ruben. I keep the canal gates. What is on your mind?\",\"\\n\",{\"->\":\".^.hub\"},{\"hub\":[[\"#\",\"^checkpoint: start.hub\",\"/#\",\"ev\",\"str\",\"^What is this place?\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^Who runs Bowl?\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^Tell me about the Old World.\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},\"ev\",\"str\",\"^What about the Fallen Sun?\",\"/str\",\"/ev\",{\"*\":\".^.c-3\",\"flg\":4},\"ev\",\"str\",\"^What is the Fallen Sun really?\",\"/str\",\"str\",\"^fallen-sun\",\"/str\",{\"x()\":\"found\",\"exArgs\":1},\"/ev\",{\"*\":\".^.c-4\",\"flg\":5},\"ev\",\"str\",\"^Goodbye.\",\"/str\",\"/ev\",{\"*\":\".^.c-5\",\"flg\":4},{\"c-0\":[\"\\n\",\"^Bowl sits at the low end of the basin, where the old canals still carry water. Water runs downhill, and so do people. Folk came for the canals and stayed for the seed.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-1\":[\"\\n\",\"^The canal families. Every gate has a family, and every family has a say. It is a slow way to decide things, but nobody ever starved waiting on a quick answer. The Farmers keep the roads for us.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-2\":[\"\\n\",\"^My grandmother said the whole basin was orchards, wall to wall, and the canals ran full in every season. Then the sky fell and the fruit went with it. She never could agree with herself on which came first.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-3\":[\"\\n\",\"^A ship, they say, bigger than Bowl. It came down <color=rust>burning</color> and dug that crater. Some say it brought the end with it. I say the end was already here, and the ship just landed on top of it.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-4\":[\"\\n\",\"^You have stood in that crater, then. You tell me. Nose calls it a warship. Hattie calls it a seed ship that lost its way. I only know <i>nothing grows near it</i>, and that is the worst thing I can say of any place.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-5\":[\"\\n\",\"end\",null]}],null]}]}],\"listDefs\":{}}",
+   "vars": {},
+   "checkpoints": [
+    "start",
+    "start.hub"
+   ]
+  },
+  "nose_ibo": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"^Eh? Pull up a crate. Ibo. I listen to the air for the Army, and to everything else for myself.\",\"\\n\",{\"->\":\".^.hub\"},{\"hub\":[[\"#\",\"^checkpoint: start.hub\",\"/#\",\"ev\",\"str\",\"^Tell me about the Old World.\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^Where does J.J. broadcast from?\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^What do you make of Bowl?\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},\"ev\",\"str\",\"^Heard anything on the air?\",\"/str\",\"/ev\",{\"*\":\".^.c-3\",\"flg\":4},\"ev\",\"str\",\"^What happened at Burnt Convoy?\",\"/str\",\"str\",\"^burnt-convoy\",\"/str\",{\"x()\":\"found\",\"exArgs\":1},\"/ev\",{\"*\":\".^.c-4\",\"flg\":5},\"ev\",\"str\",\"^Goodbye.\",\"/str\",\"/ev\",{\"*\":\".^.c-5\",\"flg\":4},{\"c-0\":[\"\\n\",\"^Bowl folk will tell you it was all orchards. Rubbish. There were highways, power lines, towns bigger than both of ours put together. The orchards were only what they could see from the canals.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-1\":[\"\\n\",\"^Jill Jane's mast? Everybody wants to know. Her signal is strongest at night and <i>drifts like it is on wheels</i>. I would wager she moves it. Do not tell the Sergeant I listen.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-2\":[\"\\n\",\"^Good people, slow talkers. They would hold a meeting to decide whether to hold a meeting. Their grain keeps us fed, so the Army minds its manners.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-3\":[\"\\n\",\"^Scavengers chatter about Burnt Convoy now and then. Picked clean, they say. Nothing left there but ash and bent rims. Not worth the fuel.\",\"\\n\",\"ev\",\"str\",\"^burntConvoy\",\"/str\",{\"x()\":\"note\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-4\":[\"\\n\",\"^A whole convoy went up in one night. Some say raiders, some say a fuel truck blew and took the rest with it. I heard the last calls on the air. Nobody said who started it.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-5\":[\"\\n\",\"end\",null]}],null]}]}],\"listDefs\":{}}",
+   "vars": {},
+   "checkpoints": [
+    "start",
+    "start.hub"
+   ]
+  },
+  "nose_kovac": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"^Sergeant Kovac, dispatch. <b>Be brief.</b>\",\"\\n\",{\"->\":\".^.hub\"},{\"hub\":[[\"#\",\"^checkpoint: start.hub\",\"/#\",\"ev\",\"str\",\"^What is this place?\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^Who runs Nose?\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^Any work?\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},\"ev\",\"str\",\"^About that scavenger with the Army radio.\",\"/str\",\"str\",\"^wagonBowl\",\"/str\",{\"x()\":\"has_note\",\"exArgs\":1},\"/ev\",{\"*\":\".^.c-3\",\"flg\":5},\"ev\",\"str\",\"^We found wagon Seven.\",\"/str\",\"str\",\"^story-wagon-seven\",\"/str\",{\"x()\":\"searched\",\"exArgs\":1},\"/ev\",{\"*\":\".^.c-4\",\"flg\":5},\"ev\",\"str\",\"^Goodbye.\",\"/str\",\"/ev\",{\"*\":\".^.c-5\",\"flg\":4},{\"c-0\":[\"\\n\",\"^Nose. Army post, now a town. We hold the north-east road and the canyon crossing. Anyone moves freight through here, we know.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-1\":[\"\\n\",\"^The Army. Command gives orders, dispatch hands them out, everyone else follows. Simple. Works.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-2\":[\"\\n\",[\"ev\",{\"x()\":\"board_full\"},\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"\\n\",\"^You are overcommitted. Clear your sheet first.\",\"\\n\",{\"->\":\"start.hub\"},{\"->\":\".^.^.^.3\"},null]}],[\"ev\",{\"x()\":\"has_work\"},\"!\",\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"\\n\",\"^Board is empty. Try tomorrow.\",\"\\n\",{\"->\":\"start.hub\"},{\"->\":\".^.^.^.3\"},null]}],\"nop\",\"\\n\",\"^Board has this. Yes or no? \",\"#\",\"^work_offer\",\"/#\",\"\\n\",[\"ev\",\"str\",\"^Yes.\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^No.\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},{\"c-0\":[\"\\n\",\"ev\",{\"x()\":\"take_work\"},\"pop\",\"/ev\",\"\\n\",\"^Logged. Do not be late.\",\"\\n\",{\"->\":\"start.hub\"},null],\"c-1\":[\"\\n\",{\"->\":\"start.hub\"},null]}],null],\"c-3\":[\"\\n\",\"^Him. Sold us our own radio back, the nerve. That set came off <b>wagon Seven</b>. She went dark on the Pump Station run down to Bowl. Crew walked in with raiders on their heels, no wagon. The scavenger swore she sits a short hop off the track. Nobody went to look. Too far off our road to spare a truck.\",\"\\n\",\"ev\",\"str\",\"^wagonNose\",\"/str\",{\"x()\":\"note\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-4\":[\"\\n\",\"^Heard. Wagon Seven is written off. Whatever was left on her is yours. Do not make a habit of picking over Army property.\",\"\\n\",\"ev\",\"str\",\"^wagonFound\",\"/str\",{\"x()\":\"note\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-5\":[\"\\n\",\"end\",null]}],null]}]}],\"listDefs\":{}}",
+   "vars": {},
+   "checkpoints": [
+    "start",
+    "start.hub"
+   ]
+  },
+  "nose_lena": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"^Lena. If it is broken, put it on the bench. If it is talk, keep it quick. My hands are busy.\",\"\\n\",{\"->\":\".^.hub\"},{\"hub\":[[\"#\",\"^checkpoint: start.hub\",\"/#\",\"ev\",\"str\",\"^Tell me about trucks and parts.\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^What is at the Salvage Yard?\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^Heard any rumors?\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},\"ev\",\"str\",\"^What about the Fallen Sun?\",\"/str\",\"/ev\",{\"*\":\".^.c-3\",\"flg\":4},\"ev\",\"str\",\"^Goodbye.\",\"/str\",\"/ev\",{\"*\":\".^.c-4\",\"flg\":4},{\"c-0\":[\"\\n\",\"^Every part does one job and fails at another. Heavy plate stops rounds and kills your speed. Big guns eat your deck. Pick what you need, not what shines.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-1\":[\"\\n\",\"^South down the road from Broken Wing. Scrappers strip whatever gets towed in. Good place for a cheap part, if you can stand the smell of burnt oil.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-2\":[\"\\n\",\"^One worth knowing. The water at Green Pit runs <color=sky>clean</color>, and nobody guards it. Fill your cans if you are out that way.\",\"\\n\",\"ev\",\"str\",\"^greenPit\",\"/str\",{\"x()\":\"note\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-3\":[\"\\n\",\"^Best metal in the basin and the worst place to get it. That hull is no warship, whatever the brass says. No gun mounts anywhere. <b>Cargo holds, all of it.</b>\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-4\":[\"\\n\",\"end\",null]}],null]}]}],\"listDefs\":{}}",
+   "vars": {},
+   "checkpoints": [
+    "start",
+    "start.hub"
    ]
   }
  }

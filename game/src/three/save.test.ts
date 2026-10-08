@@ -241,16 +241,17 @@ describe('game save', () => {
   it('saves quest variables and the checkpoint but never ink state, and resumes there on load', () => {
     const slots = makeSlots();
     const start = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
-    const mid = chooseQuestOption(startQuest(start, QUESTS, 'sample_bowl', 'start'), QUESTS, 0);
+    const mid = chooseQuestOption(startQuest(start, QUESTS, 'bowl_hattie', 'start'), QUESTS, 0);
     writeSave(slots, 'auto', mid, 'run', 1);
     const stored = JSON.stringify(slots.get('auto'));
     expect(stored).not.toContain('"live"');
     expect(stored).not.toContain('inkVersion');
     const loaded = loadWorld(slots, 'auto', TEST_MAP);
     expect(loaded?.player.quests.session).toEqual(mid.player.quests.session);
-    expect(loaded?.player.quests.world).toEqual({ sample_wagon_heard: true });
+    expect(loaded?.player.notes).toEqual(mid.player.notes);
     expect(loaded && questView(loaded).choices).toEqual(questView(mid).choices);
     expect(loaded?.player.money).toBe(mid.player.money);
+    expect(loaded?.events).toEqual([]);
   });
 
   it('rejects a save holding a quest variable or checkpoint this version does not know', () => {
@@ -258,7 +259,7 @@ describe('game save', () => {
     const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     const cases = [
       [{ world: { gone: true }, local: {}, session: null }, /World variable gone is not declared/],
-      [{ world: {}, local: {}, session: { quest: 'sample_bowl', checkpoint: 'nowhere', seed: 1 } }, /Quest sample_bowl has no checkpoint nowhere/],
+      [{ world: {}, local: {}, session: { quest: 'bowl_hattie', checkpoint: 'nowhere', seed: 1 } }, /Quest bowl_hattie has no checkpoint nowhere/],
       [{ world: {}, local: [], session: null }, /Invalid saved quest state/],
     ] as const;
     for (const [quests, error] of cases) {

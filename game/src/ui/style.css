@@ -1998,7 +1998,7 @@ canvas.view {
   text-align: left;
 }
 
-/* People tab: the town's locals as buttons, then a conversation in the radio dialogue's look. */
+/* People tab: the town's locals as buttons. */
 .people {
   display: flex;
   flex-direction: column;
@@ -2012,48 +2012,115 @@ canvas.view {
   text-align: left;
 }
 .people .person .icon,
-.talk .talk-head .icon {
+.quest-screen .talk-head .icon {
   width: 22px;
   height: 22px;
 }
-.talk {
-  margin-top: 8px;
-  padding: 10px 12px;
-  max-width: 560px;
-  background: var(--metal);
+
+/* Talk window: over every other screen while a quest is live. Older exchanges stay above, fully shown. */
+#ui .modal.quest-screen {
+  z-index: 22;
+  top: 64px;
+  width: min(640px, calc(100vw - 32px));
+  height: auto;
+  max-height: calc(100dvh - 250px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: hidden;
   border-left: 4px solid var(--edge);
 }
-.talk .talk-head {
+.quest-screen .talk-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 6px;
 }
-.talk .talk-line {
-  margin-bottom: 10px;
-  line-height: 1.4;
+.quest-screen .quest-log {
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  scrollbar-width: thin;
 }
-.talk .talk-ask {
+.quest-screen .qt-line {
+  line-height: 1.45;
+  margin-bottom: 4px;
+}
+.quest-screen .talk-ask {
   color: var(--muted);
   margin-bottom: 4px;
 }
-.talk .talk-ask::before {
+.quest-screen .talk-ask::before {
   content: "> ";
 }
-.talk .talk-topics,
-.talk .talk-offer {
+.quest-screen .talk-offer {
+  margin: 4px 0 8px;
+  padding: 6px 10px;
+  background: var(--metal);
+}
+.quest-screen .quest-choices {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-.talk .talk-offer {
-  margin-bottom: 10px;
-}
-#ui .talk .talk-topics button,
-#ui .talk .talk-offer button {
+#ui .quest-screen .quest-choice {
   text-align: left;
   padding: 4px 10px;
   min-height: 0;
+}
+.quest-screen .error:empty {
+  display: none;
+}
+
+/* Quest text: each word or letter fades in after its delay. Marks add a look or a motion. */
+.qt-unit {
+  opacity: 0;
+  animation: qt-in 140ms ease-out forwards;
+}
+.qt-done .qt-unit {
+  animation: none;
+  opacity: 1;
+}
+.qt-b {
+  font-weight: 700;
+  color: var(--cond-pristine);
+}
+.qt-i {
+  font-style: italic;
+}
+.qt-shake,
+.qt-pop {
+  display: inline-block;
+}
+.qt-shake {
+  animation:
+    qt-in 140ms ease-out forwards,
+    qt-shake 90ms linear 6 alternate;
+}
+.qt-pop {
+  animation: qt-pop 260ms ease-out forwards;
+}
+.qt-color-rust { color: #c8673a; }
+.qt-color-sand { color: #d8c08a; }
+.qt-color-blood { color: #c0453c; }
+.qt-color-sky { color: #8fb6c9; }
+.qt-color-ash { color: #9a9590; }
+@keyframes qt-in {
+  to { opacity: 1; }
+}
+@keyframes qt-shake {
+  from { opacity: 1; transform: translateX(-1px); }
+  to { opacity: 1; transform: translateX(1px); }
+}
+@keyframes qt-pop {
+  0% { opacity: 0; transform: scale(1.6); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qt-unit {
+    animation: none;
+    opacity: 1;
+  }
 }
 
 /* Journal: one card per note, newest first. */

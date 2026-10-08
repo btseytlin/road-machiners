@@ -47,6 +47,7 @@ import { searchStream } from '../sim/search';
 import { packExplored } from './save';
 import { dropQuest, dropQuestVar, endQuestSession, MIGRATIONS, moveQuestCheckpoint, pooledSkills_9_10, renameQuestVar, type SavedJson } from './save-migrations';
 import FORMAT_2_34 from './save-fixtures/format-2-34.json';
+import FORMAT_2_35 from './save-fixtures/format-2-35.json';
 
 describe('save migrations', () => {
   it('0 to 1 gives the player townPatched false and keeps every other field', () => {
@@ -791,6 +792,17 @@ describe('save migration 34 to 35', () => {
     const next = MIGRATIONS[34](FORMAT_2_34);
 
     expect(next).toEqual({ ...FORMAT_2_34, player: { ...FORMAT_2_34.player, quests: { world: {}, local: {}, session: null } } });
+  });
+});
+
+describe('save migration 35 to 36', () => {
+  it('drops the sample quests and their world variable and keeps every other quest name', () => {
+    const next = MIGRATIONS[35](FORMAT_2_35);
+
+    expect(next).toEqual({
+      ...FORMAT_2_35,
+      player: { ...FORMAT_2_35.player, quests: { world: { kept_flag: true }, local: { kept_quest: { n: 2 } }, session: null } },
+    });
   });
 });
 

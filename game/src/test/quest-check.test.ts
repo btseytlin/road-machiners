@@ -3,24 +3,31 @@ import { START_KITS } from '../data/start';
 import { defaultSetup } from '../sim/settings';
 import { newWorld } from '../sim/world';
 import { TEST_MAP } from './map';
-import { checkQuests, QUEST_STATE_LIMIT, type QuestReport } from './quest-check';
+import { checkQuests, gameScenes, QUEST_STATE_LIMIT, type QuestReport } from './quest-check';
 import { readQuestSources, type QuestSources } from './quest-compile';
 
-const WORLD = 'VAR heard = false\nEXTERNAL money()\nEXTERNAL give_money(amount)\n';
+const WORLD = `VAR heard = false\n${readQuestSources('src/data/quests')['world.ink']}`;
 const LIMIT = 200;
 
 const world = () => newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'), false);
 
 function check(quest: string, worldInk = WORLD): string[] {
   const sources: QuestSources = { 'world.ink': worldInk, 'q.ink': `INCLUDE world.ink\n${quest}` };
-  return checkQuests(sources, world(), LIMIT).flatMap((report: QuestReport) => report.problems);
+  return checkQuests(sources, () => [world()], LIMIT).flatMap((report: QuestReport) => report.problems);
 }
 
 describe('checkQuests', () => {
   it('passes the game quests', () => {
-    const reports = checkQuests(readQuestSources('src/data/quests'), world(), QUEST_STATE_LIMIT);
+    const reports = checkQuests(readQuestSources('src/data/quests'), gameScenes(world()), QUEST_STATE_LIMIT);
     expect(reports.flatMap((r) => r.problems)).toEqual([]);
-    expect(reports.find((r) => r.quest === 'sample_bowl')?.states).toBeGreaterThan(2);
+    expect(reports.find((r) => r.quest === 'bowl_hattie')?.states).toBeGreaterThan(2);
+  });
+
+  it('walks a branch on a game query both ways across the scenes', () => {
+    const sources = readQuestSources('src/data/quests');
+    const one = checkQuests({ 'world.ink': sources['world.ink'], 'nose_kovac.ink': sources['nose_kovac.ink'] }, (id) => gameScenes(world())(id).slice(0, 1), QUEST_STATE_LIMIT);
+    const both = checkQuests({ 'world.ink': sources['world.ink'], 'nose_kovac.ink': sources['nose_kovac.ink'] }, gameScenes(world()), QUEST_STATE_LIMIT);
+    expect(both[1].states).toBeGreaterThan(one[1].states);
   });
 
   it('passes a quest with a hub that loops back and an exit', () => {
@@ -46,6 +53,13 @@ describe('checkQuests', () => {
 
   it('fails a list variable', () => {
     expect(check('LIST moods = calm, angry\n=== start ===\n# checkpoint: start\nHi.\n-> END\n').join('\n')).toContain('List moods cannot be saved');
+  });
+
+  it('fails unknown or unclosed markup and an unknown line tag, and names the picks', () => {
+    const problems = check('=== start ===\n# checkpoint: start\n+ [Go.]\n  A <glow>bright</glow> sky. # mood:dark\n  So <b>bold.\n  -> END\n').join('\n');
+    expect(problems).toContain('q: after Go.: Unknown markup <glow>');
+    expect(problems).toContain('Unknown line tag # mood:dark');
+    expect(problems).toContain('Markup <b> is never closed');
   });
 
   it('fails an external with no game function behind it', () => {

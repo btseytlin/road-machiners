@@ -5,14 +5,14 @@ import { START_KITS } from '../src/data/start.ts';
 import { defaultSetup } from '../src/sim/settings.ts';
 import { newWorld } from '../src/sim/world.ts';
 import { TEST_MAP } from '../src/test/map.ts';
-import { checkQuests, QUEST_STATE_LIMIT } from '../src/test/quest-check.ts';
+import { checkQuests, gameScenes, QUEST_STATE_LIMIT } from '../src/test/quest-check.ts';
 import { compileBundle, readQuestSources } from '../src/test/quest-compile.ts';
 
 const DIR = 'src/data/quests';
 const BUNDLE_FILE = 'src/data/quests.json';
 const sources = readQuestSources(DIR);
 const world = newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'), false);
-const reports = checkQuests(sources, world, QUEST_STATE_LIMIT);
+const reports = checkQuests(sources, gameScenes(world), QUEST_STATE_LIMIT);
 const problems = reports.flatMap((report) => report.problems);
 if (problems.length === 0 && JSON.stringify(compileBundle(sources)) !== JSON.stringify(JSON.parse(readFileSync(BUNDLE_FILE, 'utf8')))) {
   problems.push(`${BUNDLE_FILE} is stale. Run npm run quests:build`);

@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
+import type { NoteId } from '../data/locals';
 import { CONTRACTS } from '../data/market';
-import { LOCAL_TOPICS } from '../data/locals';
 import { REGION } from '../data/region';
 import { WAGON_SEVEN } from '../data/salvage';
-import { askLocal, holdsNote, learnNote, localsAt, localTopics, localWork, takeLocalWork, workLine } from './dialogue-rules';
+import { holdsNote, learnNote, localsAt, townWork } from './dialogue-rules';
 import { acceptContract, type Contract } from './market';
+import { chooseQuestOption, QUESTS, questView, startQuest } from './quests';
 import { sitePads } from './sites';
+import { compileBundle, readQuestSources } from '../test/quest-compile';
 import { emptyWorld } from './testkit';
 import type { World } from './types';
-import type { NoteId } from '../data/locals';
 
 const site = (id: string) => [...REGION.towns, ...REGION.locations].find((s) => s.id === id)!;
 
@@ -16,14 +17,28 @@ function parkedAt(town: string): World {
   return emptyWorld(sitePads(site(town))[0]);
 }
 
-const topicIds = (w: World, local: Parameters<typeof localTopics>[1]) => localTopics(w, local).map((t) => t.id);
-
-// The world as talk may not touch it: everything but the journal and the events.
-function untouched(w: World): unknown {
-  return { ...w, player: { ...w.player, notes: null }, events: null };
+function talk(w: World, quest: string, picks: readonly string[]): World {
+  return picks.reduce((at, pick) => chooseQuestOption(at, QUESTS, pickIndex(at, pick)), startQuest(w, QUESTS, quest, 'start'));
 }
 
-const haul = (id: string, reward: number): Contract => ({ id, shop: 'bowl', kind: 'haul', good: 'salt', units: 1, to: 'nose', reward, deadline: 500, window: 500, rush: false, tier: 1 });
+function pickIndex(w: World, text: string): number {
+  const index = questView(w).choices.indexOf(text);
+  if (index < 0) throw new Error(`No choice ${text} in ${questView(w).choices.join(', ')}`);
+  return index;
+}
+
+const choices = (w: World, quest: string) => questView(startQuest(w, QUESTS, quest, 'start')).choices;
+const lastLine = (w: World) => questView(w).lines.at(-1)?.text;
+
+function untouched(w: World): unknown {
+  return { ...w, player: { ...w.player, notes: null, quests: null }, events: null };
+}
+
+const haul = (id: string, reward: number): Extract<Contract, { kind: 'haul' }> => ({ id, shop: 'bowl', kind: 'haul', good: 'salt', units: 1, to: 'nose', reward, deadline: 500, window: 500, rush: false, tier: 1 });
+
+const WAGON = 'About that scavenger with the Army radio.';
+const WAGON_FOUND = 'We found wagon Seven.';
+const WORK = 'Any work?';
 
 describe('settlement locals', () => {
   it('lists three locals at each town and none at a stall', () => {
@@ -32,32 +47,32 @@ describe('settlement locals', () => {
     expect(localsAt('salvage-yard')).toEqual([]);
   });
 
-  it('opens a topic only once its fact holds', () => {
+  it('opens a question only once its fact holds', () => {
     const w = parkedAt('nose');
-    expect(topicIds(w, 'ibo')).not.toContain('ibo.burntConvoy');
-    expect(topicIds(w, 'kovac')).not.toContain('kovac.wagon');
-    expect(topicIds(w, 'kovac')).not.toContain('kovac.wagonFound');
+    expect(choices(w, 'nose_ibo')).not.toContain('What happened at Burnt Convoy?');
+    expect(choices(w, 'nose_kovac')).not.toContain(WAGON);
+    expect(choices(w, 'nose_kovac')).not.toContain(WAGON_FOUND);
 
     w.player.discovered.push('burnt-convoy');
     w.player.notes.push({ id: 'wagonBowl', turn: 0 });
     w.player.scavenged.push(WAGON_SEVEN);
 
-    expect(topicIds(w, 'ibo')).toContain('ibo.burntConvoy');
-    expect(topicIds(w, 'kovac')).toEqual(['kovac.place', 'kovac.rulers', 'kovac.work', 'kovac.wagon', 'kovac.wagonFound']);
+    expect(choices(w, 'nose_ibo')).toContain('What happened at Burnt Convoy?');
+    expect(choices(w, 'nose_kovac')).toEqual(['What is this place?', 'Who runs Nose?', WORK, WAGON, WAGON_FOUND, 'Goodbye.']);
   });
 
   it('opens the Fallen Sun question once the crater is found', () => {
     const w = parkedAt('bowl');
-    expect(topicIds(w, 'ruben')).not.toContain('ruben.fallenSunReal');
+    expect(choices(w, 'bowl_ruben')).not.toContain('What is the Fallen Sun really?');
     w.player.discovered.push('fallen-sun');
-    expect(topicIds(w, 'ruben')).toContain('ruben.fallenSunReal');
+    expect(choices(w, 'bowl_ruben')).toContain('What is the Fallen Sun really?');
   });
 
   it('writes a rumor into the journal and changes nothing else', () => {
     const w = parkedAt('bowl');
     w.turn = 77;
 
-    const next = askLocal(w, 'hattie', 'hattie.rumors');
+    const next = talk(w, 'bowl_hattie', ['Heard any rumors?']);
 
     expect(next.player.notes).toEqual([{ id: 'wagonBowl', turn: 77 }]);
     expect(next.events).toEqual([{ t: 'note', id: 'wagonBowl' }]);
@@ -67,78 +82,76 @@ describe('settlement locals', () => {
   it('answers a lore question with no note and no change', () => {
     const w = parkedAt('bowl');
 
-    const next = askLocal(w, 'ruben', 'ruben.oldWorld');
+    const next = talk(w, 'bowl_ruben', ['Tell me about the Old World.']);
 
     expect(next.player.notes).toEqual([]);
     expect(next.events).toEqual([]);
     expect(untouched(next)).toEqual(untouched(w));
   });
-
-  it('refuses talk away from the town, about a closed topic, or about an unknown one', () => {
-    const away = parkedAt('nose');
-    const bowl = parkedAt('bowl');
-    const nose = parkedAt('nose');
-
-    expect(() => askLocal(away, 'hattie', 'hattie.rumors')).toThrow(/Not parked at bowl/);
-    expect(() => askLocal(nose, 'kovac', 'kovac.wagon')).toThrow(/does not take up/);
-    expect(() => askLocal(bowl, 'hattie', 'ruben.place')).toThrow(/does not take up/);
-    expect(() => askLocal(bowl, 'hattie', 'nonsense' as keyof typeof LOCAL_TOPICS)).toThrow(/No local topic/);
-  });
 });
 
 describe('the lost wagon chain', () => {
   it('leads from Hattie at Bowl to Kovac at Nose, and closes once the wagon is searched', () => {
-    let w = parkedAt('bowl');
-    w = askLocal(w, 'hattie', 'hattie.rumors');
+    let w = talk(parkedAt('bowl'), 'bowl_hattie', ['Heard any rumors?', 'Goodbye.']);
     w.vehicles[0].pos = { ...sitePads(site('nose'))[0] };
 
-    w = askLocal(w, 'kovac', 'kovac.wagon');
-    expect(topicIds(w, 'kovac')).not.toContain('kovac.wagonFound');
+    w = talk(w, 'nose_kovac', [WAGON, 'Goodbye.']);
+    expect(choices(w, 'nose_kovac')).not.toContain(WAGON_FOUND);
     w.player.scavenged.push(WAGON_SEVEN);
-    w = askLocal(w, 'kovac', 'kovac.wagonFound');
+    w = talk(w, 'nose_kovac', [WAGON_FOUND, 'Goodbye.']);
 
     expect(w.player.notes.map((n) => n.id)).toEqual(['wagonBowl', 'wagonNose', 'wagonFound']);
   });
 
   it('asks again with no second note', () => {
-    let w = parkedAt('bowl');
-    w = askLocal(w, 'hattie', 'hattie.rumors');
+    const once = talk(parkedAt('bowl'), 'bowl_hattie', ['Heard any rumors?']);
 
-    w = askLocal(w, 'hattie', 'hattie.rumors');
+    const twice = chooseQuestOption(once, QUESTS, pickIndex(once, 'Heard any rumors?'));
 
-    expect(w.player.notes.map((n) => n.id)).toEqual(['wagonBowl']);
-    expect(w.events).toEqual([]);
+    expect(twice.player.notes.map((n) => n.id)).toEqual(['wagonBowl']);
+    expect(twice.events).toEqual([]);
   });
 });
 
 describe('work by talk', () => {
-  it('names the best-paying open offer on the town board', () => {
+  it('offers the best-paying open offer on the town board', () => {
     const w = parkedAt('bowl');
     w.shops.bowl.contracts = [haul('ct-low', 100), haul('ct-high', 300), { ...haul('ct-gone', 900), deadline: -1 }];
 
-    expect(localWork(w, 'dag')?.id).toBe('ct-high');
-    expect(workLine(w, 'dag', 'dag.work')).toBe(LOCAL_TOPICS['dag.work'].work!.offer);
+    expect(townWork(w)?.id).toBe('ct-high');
+    const offer = talk(w, 'bowl_dag', [WORK]);
+    expect(questView(offer).lines.at(-1)).toEqual({ text: 'Could be. Interested?', tags: ['work_offer'] });
   });
 
-  it('has nothing when the board is empty or the player holds the most contracts', () => {
+  it('passes over a haul the truck has no room for', () => {
+    const w = parkedAt('bowl');
+    w.shops.bowl.contracts = [haul('ct-small', 100), { ...haul('ct-huge', 300), units: 999 }];
+
+    expect(townWork(w)?.id).toBe('ct-small');
+  });
+
+  it('says so when the board is empty or the player holds the most contracts', () => {
     const empty = parkedAt('bowl');
     empty.shops.bowl.contracts = [];
     const full = parkedAt('bowl');
     full.shops.bowl.contracts = [haul('ct-high', 300)];
     full.player.contracts = Array.from({ length: CONTRACTS.maxActive }, (_, k) => haul(`held${k}`, 10));
 
-    expect(localWork(empty, 'dag')).toBeNull();
-    expect(workLine(empty, 'dag', 'dag.work')).toBe(LOCAL_TOPICS['dag.work'].work!.empty);
-    expect(localWork(full, 'dag')).toBeNull();
-    expect(workLine(full, 'dag', 'dag.work')).toBe(LOCAL_TOPICS['dag.work'].work!.full);
+    expect(lastLine(talk(empty, 'bowl_dag', [WORK]))).toBe('Nothing on the board today. Come back in a couple of days.');
+    expect(lastLine(talk(full, 'bowl_dag', [WORK]))).toBe('You are carrying enough promises already. Finish a few first.');
   });
 
   it('takes the offer exactly as the board does', () => {
     const w = parkedAt('bowl');
     w.shops.bowl.contracts = [haul('ct-low', 100), haul('ct-high', 300)];
 
-    expect(takeLocalWork(w, 'dag', 'ct-high')).toEqual(acceptContract(w, 'ct-high'));
-    expect(() => takeLocalWork(w, 'dag', 'ct-low')).toThrow(/does not offer/);
+    const taken = talk(w, 'bowl_dag', [WORK, 'I will take it.']);
+    const board = acceptContract(w, 'ct-high');
+
+    expect(taken.player.contracts).toEqual(board.player.contracts);
+    expect(taken.shops).toEqual(board.shops);
+    expect(taken.vehicles).toEqual(board.vehicles);
+    expect(taken.events).toEqual(board.events);
   });
 });
 
@@ -177,5 +190,14 @@ describe('journal notes', () => {
 
     expect(() => learnNote(w, 'nonsense' as NoteId)).toThrow(/nonsense/);
     expect(w.player.notes).toEqual([]);
+  });
+
+  it('refuses a quest that names a note, site or wreck that does not exist', () => {
+    const w = parkedAt('bowl');
+    const bad = (text: string) => `INCLUDE world.ink\n=== start ===\n# checkpoint: start\n{${text}: yes}\n+ [Bye.] -> END\n`;
+    for (const [text, error] of [['has_note("nonsense")', /names no note nonsense/], ['found("atlantis")', /names no town or location atlantis/], ['searched("story-none")', /No story wreck stock story-none/]] as const) {
+      const bundle = compileBundle({ 'world.ink': readQuestSources('src/data/quests')['world.ink'], 'q.ink': bad(text) });
+      expect(() => startQuest(w, bundle, 'q', 'start')).toThrow(error);
+    }
   });
 });

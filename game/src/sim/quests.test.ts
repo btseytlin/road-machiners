@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { START_KITS } from '../data/start';
 import { UNITS } from '../data/units';
 import { TEST_MAP } from '../test/map';
-import { chooseQuestOption, QUESTS, questProblems, questView, restoreQuest, startQuest } from './quests';
+import { chooseQuestOption, fittingQuestVars, leaveQuest, questProblems, questView, restoreQuest, startQuest } from './quests';
 import { defaultSetup } from './settings';
 import type { QuestBundle } from '../data/quests';
-import { compileBundle } from '../test/quest-compile';
+import { compileBundle, readQuestSources } from '../test/quest-compile';
 import type { World } from './types';
 import { newWorld } from './world';
 
+const QUESTS = compileBundle(readQuestSources('src/test/quests'));
 const RUMORS = 'Heard any rumors?';
 const COIN = 'Can you spare some coin for the road?';
 const LEAVE = 'Leave.';
@@ -31,6 +32,7 @@ describe('startQuest', () => {
   it('plays the checkpoint lines and offers its choices', () => {
     const w = startQuest(world(), QUESTS, 'sample_bowl', 'start');
     expect(questView(w)).toEqual({
+      quest: 'sample_bowl',
       lines: [{ text: 'Hattie sets her bucket down by the well.', tags: [] }],
       choices: ['Heard any rumors?', 'Leave.'],
       ended: false,
@@ -70,7 +72,7 @@ describe('chooseQuestOption', () => {
   it('closes the session at the end and keeps the last lines on view', () => {
     const done = play(world(), 'sample_bowl', 'start', [RUMORS, LEAVE]);
     expect(done.player.quests.session).toBeNull();
-    expect(questView(done)).toEqual({ lines: [], choices: [], ended: true });
+    expect(questView(done)).toEqual({ quest: 'sample_bowl', lines: [], choices: [], ended: true });
   });
 
   it('leaves the world unchanged when a pick is out of range', () => {
@@ -129,6 +131,35 @@ describe('restoreQuest', () => {
     const w = world();
     restoreQuest(w, QUESTS);
     expect(w.player.quests.live).toBeNull();
+  });
+});
+
+describe('leaveQuest', () => {
+  it('closes an open quest midway and keeps the variables it set', () => {
+    const left = leaveQuest(play(world(), 'sample_bowl', 'start', [RUMORS]));
+    expect(left.player.quests).toEqual({ world: { sample_wagon_heard: true }, local: { sample_bowl: { trust: 1 } }, session: null, live: null });
+  });
+
+  it('clears the last lines of an ended quest', () => {
+    expect(leaveQuest(play(world(), 'sample_bowl', 'start', [LEAVE])).player.quests.live).toBeNull();
+  });
+
+  it('refuses when no quest is on view', () => {
+    expect(() => leaveQuest(world())).toThrow('No quest is on view');
+  });
+});
+
+describe('fittingQuestVars', () => {
+  it('keeps the variables that still fit and lists the rest as lost', () => {
+    const carried = {
+      world: { sample_wagon_heard: true, retired_flag: true },
+      local: { sample_bowl: { trust: 2, paid: 'yes' }, gone_quest: { n: 1 } },
+    };
+    expect(fittingQuestVars(carried, QUESTS)).toEqual({
+      world: { sample_wagon_heard: true },
+      local: { sample_bowl: { trust: 2 } },
+      lost: ['retired_flag', 'sample_bowl.paid', 'gone_quest.n'],
+    });
   });
 });
 

@@ -1,9 +1,18 @@
 // Checks quest sources without the game: compile rules, game hooks both ways, every checkpoint, and a walk over
 // every choice through the sim runner that finds ink errors, loops with no way out and sections never reached.
 
+import { NOTES } from '../data/locals';
 import type { QuestBundle } from '../data/quests';
-import { chooseQuestOption, QUEST_EFFECTS, QUEST_QUERIES, questView, restoreQuest, startQuest } from '../sim/quests';
+import { REGION } from '../data/region';
+import { STORY_WRECKS } from '../data/salvage';
+import { playerVehicle } from '../sim/damage';
+import { isNoteId, learnNote, localOfQuest, takeTownWork, townWork } from '../sim/dialogue-rules';
+import { shopAt } from '../sim/market';
+import { chooseQuestOption, QUEST_EFFECTS, QUEST_QUERIES, questView, restoreQuest, startQuest, type QuestView } from '../sim/quests';
+import { sitePads } from '../sim/sites';
 import type { World } from '../sim/types';
+import { cloneWorld } from '../sim/world';
+import { markupProblems } from '../ui/quest-text';
 import { compileSources, type QuestSources } from './quest-compile';
 
 export type QuestReport = { quest: string; states: number; problems: string[] };
@@ -12,15 +21,45 @@ type Walk = { key: string; world: World; picks: string[] };
 type Seen = { picks: string[]; next: string[]; ended: boolean };
 type InkState = { flows: Record<string, { callstack: { threads: { callstack: unknown }[] }; currentChoices: { text: string; targetPath: string }[] }>; currentFlowName: string; variablesState: unknown; visitCounts: Record<string, number>; previousRandom: number };
 
-export const QUEST_STATE_LIMIT = 5000;
-export const QUEST_VISIT_CAP = 3;
+export type QuestScenes = (questId: string) => World[];
+type SceneWalk = { states: number; stopped: boolean; problems: string[] };
 
-export function checkQuests(sources: QuestSources, world: World, limit: number): QuestReport[] {
+export const QUEST_STATE_LIMIT = 5000;
+
+export function checkQuests(sources: QuestSources, scenes: QuestScenes, limit: number): QuestReport[] {
   const { bundle, errors, warnings, sections } = compileSources(sources, true);
   const hooks = hookProblems(bundle);
   const shared: QuestReport = { quest: 'all', states: 0, problems: [...errors, ...warnings, ...hooks] };
   if (hooks.length > 0) return [shared];
-  return [shared, ...Object.keys(bundle.quests).map((id) => exploreQuest(world, bundle, id, sections[id] ?? [], limit))];
+  return [shared, ...Object.keys(bundle.quests).map((id) => exploreQuest(scenes(id), bundle, id, sections[id] ?? [], limit))];
+}
+
+export function gameScenes(base: World): QuestScenes {
+  const shared = { ...base, terrain: Object.freeze({ ...base.terrain }) };
+  return (questId) => {
+    const local = localOfQuest(questId);
+    const fresh = cloneWorld(shared);
+    if (local) parkAt(fresh, local.town);
+    return [fresh, veteran(fresh)];
+  };
+}
+
+function parkAt(world: World, town: string): void {
+  const site = REGION.towns.find((t) => t.id === town);
+  if (!site) throw new Error(`No town ${town}`);
+  const truck = playerVehicle(world);
+  truck.pos = { ...sitePads(site)[0] };
+  truck.speed = 0;
+}
+
+function veteran(fresh: World): World {
+  const w = cloneWorld(fresh);
+  for (const id of Object.keys(NOTES)) if (isNoteId(id)) learnNote(w, id);
+  w.player.discovered = [...REGION.towns, ...REGION.locations].map((s) => s.id);
+  w.player.scavenged = [...w.player.scavenged, ...STORY_WRECKS.map((s) => s.id)];
+  while (shopAt(w) && townWork(w)) takeTownWork(w);
+  w.events = [];
+  return w;
 }
 
 function hookProblems(bundle: QuestBundle): string[] {
@@ -34,18 +73,25 @@ function hookProblems(bundle: QuestBundle): string[] {
   ];
 }
 
-function exploreQuest(start: World, bundle: QuestBundle, id: string, sections: readonly string[], limit: number): QuestReport {
+function exploreQuest(scenes: World[], bundle: QuestBundle, id: string, sections: readonly string[], limit: number): QuestReport {
+  const visited = new Set<string>();
+  const walks = scenes.map((scene) => walkScene(scene, bundle, id, visited, limit));
+  const states = walks.reduce((sum, walk) => sum + walk.states, 0);
+  const problems = [...new Set(walks.flatMap((walk) => walk.problems))];
+  if (walks.some((walk) => walk.stopped)) return { quest: id, states, problems: [...problems, `${id}: stopped after ${limit} states, so loops and reach are unchecked`] };
+  return { quest: id, states, problems: [...problems, ...sections.filter((s) => !visited.has(s)).map((s) => `${id}: section ${s} is never reached`)] };
+}
+
+function walkScene(start: World, bundle: QuestBundle, id: string, visited: Set<string>, limit: number): SceneWalk {
   const problems: string[] = [];
   const seen = new Map<string, Seen>();
-  const visited = new Set<string>();
   const queue = bundle.quests[id].checkpoints.flatMap((checkpoint) => attempt(problems, `${id}: checkpoint ${checkpoint}`, () => walkOf(startQuest(start, bundle, id, checkpoint), [])));
   while (queue.length > 0 && seen.size < limit) {
     const walk = queue.shift() as Walk;
     if (!seen.has(walk.key)) queue.push(...step(walk, bundle, id, seen, visited, problems));
   }
-  const report = (more: string[]) => ({ quest: id, states: seen.size, problems: [...problems, ...more] });
-  if (queue.length > 0) return report([`${id}: stopped after ${limit} states, so loops and reach are unchecked`]);
-  return report([...trapProblems(id, seen), ...sections.filter((s) => !visited.has(s)).map((s) => `${id}: section ${s} is never reached`)]);
+  const stopped = queue.length > 0;
+  return { states: seen.size, stopped, problems: stopped ? problems : [...problems, ...trapProblems(id, seen)] };
 }
 
 function step(walk: Walk, bundle: QuestBundle, id: string, seen: Map<string, Seen>, visited: Set<string>, problems: string[]): Walk[] {
@@ -53,12 +99,17 @@ function step(walk: Walk, bundle: QuestBundle, id: string, seen: Map<string, See
   for (const path of Object.keys(inkOf(walk.world).visitCounts)) visited.add(path);
   const node: Seen = { picks: walk.picks, next: [], ended: view.ended };
   seen.set(walk.key, node);
+  problems.push(...markupOf(view).map((problem) => `${id}: after ${walk.picks.join(' > ') || 'the start'}: ${problem}`));
   if (!view.ended) attempt(problems, `${id}: after ${walk.picks.join(' > ') || 'the start'}: a load here fails`, () => reloaded(walk, bundle));
   return view.choices.flatMap((text, index) => attempt(problems, `${id}: after ${[...walk.picks, text].join(' > ')}`, () => {
     const next = walkOf(chooseQuestOption(walk.world, bundle, index), [...walk.picks, text]);
     node.next.push(next.key);
     return next;
   }));
+}
+
+function markupOf(view: QuestView): string[] {
+  return [...view.lines.flatMap((line) => markupProblems(line.text, line.tags)), ...view.choices.flatMap((choice) => markupProblems(choice, []))];
 }
 
 function attempt(problems: string[], where: string, run: () => Walk): Walk[] {
@@ -85,7 +136,7 @@ function trapProblems(id: string, seen: Map<string, Seen>): string[] {
 }
 
 function reloaded(walk: Walk, bundle: QuestBundle): Walk {
-  const loaded = structuredClone(walk.world);
+  const loaded = cloneWorld(walk.world);
   loaded.player.quests.live = null;
   restoreQuest(loaded, bundle);
   return walk;
@@ -104,7 +155,7 @@ function inkOf(world: World): InkState {
 function stateKey(world: World): string {
   const ink = inkOf(world);
   const flow = ink.flows[ink.currentFlowName];
-  const visits = Object.fromEntries(Object.entries(ink.visitCounts).map(([path, count]) => [path, Math.min(count, QUEST_VISIT_CAP)]));
+  const visited = Object.keys(ink.visitCounts).sort();
   const choices = flow.currentChoices.map((c) => [c.text, c.targetPath]);
-  return JSON.stringify([flow.callstack.threads.map((t) => t.callstack), choices, ink.variablesState, visits, ink.previousRandom, world.player.quests.session, world.player.money]);
+  return JSON.stringify([flow.callstack.threads.map((t) => t.callstack), choices, ink.variablesState, visited, ink.previousRandom, world.player.quests.session, world.player.money, world.player.notes.map((n) => n.id), world.player.contracts.map((c) => c.id)]);
 }

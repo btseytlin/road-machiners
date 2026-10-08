@@ -19,7 +19,7 @@ describe('the quest bundle', () => {
   });
 
   it('parses into the typed bundle the game reads', () => {
-    expect(parseBundle(BUNDLE).quests.sample_bowl.checkpoints).toEqual(['start', 'start.talk']);
+    expect(parseBundle(BUNDLE).quests.bowl_hattie.checkpoints).toEqual(['start', 'start.hub']);
   });
 
   it('rejects a bundle variable whose initial value does not match its type', () => {
