@@ -3,15 +3,17 @@ digraph release {
   rankdir=LR; nodesep=0.3; ranksep=0.6; bgcolor=white; pad=0.3;
   node [shape=box, style="rounded,filled", fillcolor="#eef2ff", color="#6366f1", fontname="Helvetica", fontsize=13, margin="0.2,0.1", penwidth=1.3, width=1.3];
   edge [color="#374151", penwidth=1.8, arrowsize=0.8, fontname="Helvetica", fontsize=11];
-  C [label="Release cut\nevery FACTORY_RELEASE_DAYS"]; T [label="Release tasks\nrun the card stages"]; G [label="Release playtest\none seed, Opus review"]; B [label="Candidate\nbuild at /rc/"];
+  C [label="Release cut\nevery FACTORY_RELEASE_DAYS"]; T [label="Release tasks\nrun the card stages"]; G [label="Release playtest\nplays, fixes, replays"]; B [label="Candidate\nbuild at /rc/"];
   P [label="Committee plays\nthe candidate", fillcolor="#fde68a", color="#b45309"]; S [label="Ship\nmain and itch.io"];
-  BL [label="Blocked\nfactory retry", fillcolor="#fde68a", color="#b45309"];
+  BL [label="Blocked\nfactory retry", fillcolor="#fde68a", color="#b45309"]; D [label="Bug issue\nfor dev"];
   C -> T -> G -> B -> P -> S [weight=100];
   edge [color="#dc2626", fontcolor="#dc2626", style=dashed, penwidth=1.3, dir=back, weight=0];
   T -> P [label="new release task"];
   B -> P [label="remove #N"];
-  T -> G [label="findings: fix task"];
   G -> P [label="release moved"];
+  edge [color="#dc2626", fontcolor="#dc2626", style=dashed, penwidth=1.3, dir=forward, weight=0];
+  G -> G [label="fix and replay"];
   edge [color="#6b7280", fontcolor="#6b7280", style=dashed, penwidth=1.3, dir=forward, weight=0];
-  G -> BL [label="blocked or run limit"];
+  G -> BL [label="blocked or play limit"];
+  G -> D [label="old bug"];
 }

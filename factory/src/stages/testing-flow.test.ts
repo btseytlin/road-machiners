@@ -34,6 +34,7 @@ let commentBodies: string[] = [];
 let priorComments: { login: string; body: string }[] = [];
 let shellScript = '';
 let shellEnv: Record<string, string> | undefined;
+let shellMounts: Record<string, string> | undefined;
 let photoButtons: unknown;
 let albums: { path: string; caption: string }[][] = [];
 let albumFails = false;
@@ -73,7 +74,7 @@ beforeEach(() => {
   openPr = null;
   labels = [];
   bases = [];
-  writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } } });
+  writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } } });
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
@@ -117,9 +118,10 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
         const findings = reviews.length > 0 ? reviews.shift() : [];
         return findings ? reportStream(findings) : '';
       },
-      shell: async (_dir: string, script: string, _log: string, env?: Record<string, string>) => {
+      shell: async (_dir: string, script: string, _log: string, env?: Record<string, string>, mounts?: Record<string, string>) => {
         shellScript = script;
         shellEnv = env;
+        shellMounts = mounts;
         calls.push('checks');
         if (failuresLeft-- > 0) throw new Error(failureText);
       },
@@ -199,6 +201,17 @@ describe('testing stage', () => {
     await runStage(ctx, 7);
     expect(shellScript).toContain('\nnpm run playtest -- --no-fps-gate\n');
     expect(shellScript).not.toContain('--cpu');
+  });
+
+  it('runs the cached tests with the cache folder mounted, and the full suite on a branch without the script', async () => {
+    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' } });
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' })));
+    await runStage(ctx, 7);
+    expect(shellScript).toContain('npm run test:cached -- --cache /test-cache');
+    expect(shellScript).toContain(`grep -q '"test:cached"' package.json`);
+    expect(shellScript).toContain('step "branch has no test:cached, full suite"\n  npm test\n');
+    expect(shellMounts).toEqual({ [`${home}/test-cache`]: '/test-cache' });
+    expect(existsSync(`${home}/test-cache`)).toBe(true);
   });
 
   it('posts one photo with everything in the caption, records it and moves to Approval', async () => {
@@ -440,21 +453,28 @@ describe('testing stage', () => {
       expect(bases).not.toContain('merge dev');
     });
 
-    it('runs no checks when hardening left the head on the build the committee played', async () => {
-      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'abc123' } });
+    it('runs the preview checks of a new card with no game suite', async () => {
       await runStage(fakeCtx(agent), 7);
-      expect(calls).not.toContain('checks');
-      expect(calls.at(-1)).toBe('move 7 Approval');
-      expect(queued()).toEqual({ 7: 'Ann' });
-      expect(readState(`${home}/state.json`).testPhase).toEqual({});
+      expect(shellScript).toContain('npm run typecheck');
+      expect(shellScript).toContain('npm run playtest');
+      expect(shellScript).toContain('npm run build');
+      expect(shellScript).not.toContain('npm test');
+      expect(shellScript).not.toContain('test:cached');
     });
 
-    it('runs the checks when hardening moved the head past the played build', async () => {
-      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'old0001' } });
+    it('runs the game suite before the merge even when hardening left the head on the played build', async () => {
+      writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'Ann' }, builds: { 7: 'abc123' } });
       await runStage(fakeCtx(agent), 7);
       expect(calls.filter((call) => call === 'checks')).toHaveLength(1);
+      expect(shellScript).toContain('npm run test:cached -- --cache /test-cache');
       expect(calls.at(-1)).toBe('move 7 Approval');
       expect(queued()).toEqual({ 7: 'Ann' });
+    });
+
+    it('runs the game suite before a hotfix post, since approve merges it at once', async () => {
+      labels = ['hotfix'];
+      await runStage(fakeCtx(agent), 7);
+      expect(shellScript).toContain('npm run test:cached -- --cache /test-cache');
     });
 
     it('refuses to harden a card with no recorded approval', async () => {
@@ -741,14 +761,14 @@ describe('testing stage', () => {
       changed = ['game/docs/wiki/items.md'];
       await runStage(fakeCtx(agent), 7);
       expect(rounds).toEqual(['This is the testing stage of the ROAM factory.']);
-      expect(shellScript).toContain('npm test');
+      expect(shellScript).toContain('npm run playtest');
     });
 
     it('counts a branch with any other file as code', async () => {
       changed = ['game/docs/tools.md', 'game/scripts/playtest.mjs'];
       await runStage(fakeCtx(agent), 7);
       expect(rounds).toEqual(['This is the testing stage of the ROAM factory.']);
-      expect(shellScript).toContain('npm test');
+      expect(shellScript).toContain('npm run playtest');
     });
   });
 });

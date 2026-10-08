@@ -1,15 +1,11 @@
-// Hardening column. An approved card is reviewed, and checked again only when hardening changed the code. Red: loops back. Grey: leaves Hardening or enters from outside.
+// Hardening column. An approved card is reviewed, then checked with the game suite before its merge. Red: loops back. Grey: leaves Hardening or enters from outside.
 digraph hardening {
   rankdir=LR; nodesep=0.35; ranksep=0.55; bgcolor=white; pad=0.3;
   node [shape=box, style="rounded,filled", fillcolor="#eef2ff", color="#6366f1", fontname="Helvetica", fontsize=13, margin="0.2,0.1", penwidth=1.3, width=1.3];
   edge [color="#374151", penwidth=1.8, arrowsize=0.8, fontname="Helvetica", fontsize=11];
   HM [label="Merge new\nbranch commits"]; HH [label="Harden round\nverify, review, cost"]; HR [label="/code-review\non Sonnet"];
-  HS [label="Head still the\nplayed build?", shape=diamond, margin="0.05,0.05"];
-  HC [label="Checks\ntests, playtest, build\ndocs only: build"]; HQ [label="Queue merge\nno post"];
-  HM -> HH -> HR -> HS [weight=100];
-  HS -> HQ [label="yes", weight=100];
-  HS -> HC [label="no"];
-  HC -> HQ;
+  HC [label="Checks\ngame suite, typecheck,\nplaytest, build\ndocs only: build"]; HQ [label="Queue merge\nno post"];
+  HM -> HH -> HR -> HC -> HQ [weight=100];
   XA [label="Approve", fillcolor="#f3f4f6", color="#6b7280"];
   XC [label="Approve\nconflicts with the base", fillcolor="#f3f4f6", color="#6b7280"];
   HX [label="Merge the base\nmerge agent resolves"];

@@ -1,6 +1,6 @@
 import { availableParallelism } from 'node:os';
 import { join } from 'node:path';
-import { sweepLogs, sweepWork } from './cleanup';
+import { sweepLogs, sweepTestCache, sweepWork } from './cleanup';
 import { POOL_OF, cpuSets, vitestWorkersOf } from './cpus';
 import { removeStaleBuilds } from './deploy';
 import { freeGb } from './health';
@@ -11,6 +11,7 @@ import { reportAttempt, reportScheduler } from './observability';
 import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
+import { openTasks } from './stages/release-common';
 import { readState, updateState } from './state';
 import { sweepTranscripts } from './transcript-archive';
 import { askedAt, isAnswered } from './questions';
@@ -118,10 +119,9 @@ export function readReleaseGate(state: FactoryState, cards: Card[], releaseHead:
   const tracking = cards.find((card) => card.issue === release.issue);
   if (!tracking) return { reason: 'tracking-missing', issues: [] };
   if (tracking.labels.includes(STUCK_LABEL)) return { reason: 'failed', issues: [release.issue] };
-  return playtestGate(cards, release.playtest, releaseHead);
+  return playtestGate(openTasks(cards, release.tasks), release.playtest, releaseHead);
 }
-function playtestGate(cards: Card[], playtest: PlaytestState, releaseHead: string | null): ReleaseGate {
-  const issues = cards.filter((card) => card.labels.includes(RELEASE_TASK_LABEL) && card.column !== 'Done').map((card) => card.issue);
+function playtestGate(issues: number[], playtest: PlaytestState, releaseHead: string | null): ReleaseGate {
   if (issues.length) return { reason: 'release-tasks', issues };
   if (playtest.blocked !== null) return { reason: 'playtest-blocked', issues: [] };
   return releaseHead !== null && playtest.passed === releaseHead ? { reason: 'candidate', issues: [] } : { reason: 'playtest', issues: [] };
@@ -307,8 +307,9 @@ async function failJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Prom
   await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), reason, job.log);
 }
 
-// Each queue has its own time limit, since its jobs differ in length by hours.
+// Each queue has its own time limit, since its jobs differ in length by hours. The release playtest plays and fixes several rounds in one job, so it has its own.
 export function timeoutOf(cfg: FactoryConfig, stage: JobStage): number {
+  if (stage === 'playtest') return cfg.playtestTimeoutMinutes;
   const queue = QUEUE_OF[stage];
   const minutes: Record<Queue, number> = {
     triage: cfg.triageTimeoutMinutes,
@@ -426,6 +427,8 @@ function cleanWork(ctx: Ctx, cards: Card[]): void {
   if (logs.length > 0) ctx.log('tick', null, `removed ${logs.length} job logs older than ${ctx.cfg.logDays} days`);
   const transcripts = sweepTranscripts(ctx.cfg.home, ctx.now(), ctx.cfg.transcriptDays);
   if (transcripts.length > 0) ctx.log('tick', null, `removed ${transcripts.length} agent transcripts older than ${ctx.cfg.transcriptDays} days`);
+  const cached = sweepTestCache(join(ctx.cfg.home, 'test-cache'), ctx.now(), ctx.cfg.testCacheDays);
+  if (cached > 0) ctx.log('tick', null, `removed ${cached} test cache files older than ${ctx.cfg.testCacheDays} days`);
 }
 
 // A plain approval reply that Hermes did not route in time becomes an incident, so the incident watch wakes Hermes and the reply is never lost.

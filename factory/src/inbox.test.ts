@@ -230,7 +230,7 @@ describe('drainInbox', () => {
   });
 });
 
-const RELEASE: ReleaseState = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } };
+const RELEASE: ReleaseState = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } };
 const openRelease = (over: Partial<ReleaseState> = {}) => writeState(statePath, withPost({ ...structuredClone(EMPTY_STATE), release: { ...RELEASE, ...over } }));
 
 describe('release commands', () => {
@@ -303,6 +303,7 @@ describe('release commands', () => {
     await drainInbox(fakeCtx([], sent, calls));
     expect(calls[0]).toBe('create The horn is too quiet|The horn is too quiet\nMake it louder\n\nRequested by Ann in the committee chat as a task of release 2026-09-29.|release-task');
     expect(calls[1]).toBe('addCard 9 Design');
+    expect(readState(statePath).release?.tasks).toEqual([9]);
     expect(readState(statePath).release?.postId).toBeNull();
     expect(readState(statePath).pendingShip).toBeNull();
     expect(sent).toEqual([]);

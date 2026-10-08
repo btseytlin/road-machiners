@@ -213,9 +213,10 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
       }
       return must(result, `agent in ${clone}`);
     },
-    async shell(clone, script, log, env = {}) {
+    async shell(clone, script, log, env = {}, mounts = {}) {
       await ensureProxy(run, cfg);
-      const args = [...baseArgs(jobId, cpus, testWorkers, cfg.gpu), ...mountArgs(cfg, clone, GAME_DIR), ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', `${PEAK_TRAP}\n${script}`];
+      const extraMounts = Object.entries(mounts).flatMap(([host, path]) => ['-v', `${host}:${path}`]);
+      const args = [...baseArgs(jobId, cpus, testWorkers, cfg.gpu), ...mountArgs(cfg, clone, GAME_DIR), ...extraMounts, ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', `${PEAK_TRAP}\n${script}`];
       const result = await run('docker', args, { logPath: log });
       recordContainerPeak(cfg, jobId, result);
       must(result, `shell in ${clone}`);

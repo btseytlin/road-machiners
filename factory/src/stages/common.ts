@@ -234,13 +234,17 @@ async function guardedHead(ctx: Ctx, issue: number, base: string, stage: CardSta
   const untracked = await ctx.repo.untrackFactoryFiles(workDir(ctx, issue));
   if (untracked.length > 0) ctx.log(stage, issue, `took factory files out of the branch: ${untracked.join(', ')}`);
   const head = await ctx.repo.fetchFromWork(workDir(ctx, issue), BRANCH(issue));
-  const diff = await ctx.repo.diff(base, head);
+  guardDiff(await ctx.repo.diff(base, head));
+  return head;
+}
+
+// The checks every agent diff passes before it reaches a branch on GitHub.
+export function guardDiff(diff: string): void {
   const leaked = factoryPaths(diff);
   if (leaked.length) throw new Error(`The branch touches paths an agent may not push: ${leaked.join(', ')}`);
   if (changesSaveMajor(diff)) {
     throw new Error('The change bumps SAVE_MAJOR in game/src/three/save-migrations.ts. The committee must decide on a major save bump before this can go on.');
   }
-  return head;
 }
 
 // Merges the commits that reached the issue branch on GitHub since the work clone last saw it. An agent resolves a conflict at once, in the same job.
