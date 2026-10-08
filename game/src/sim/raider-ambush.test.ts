@@ -4,6 +4,7 @@ import { HUNT, NPC_BEHAVIOR, NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { START_KITS } from '../data/start';
+import { ECONOMY } from '../data/goods';
 import { TERRAIN } from '../data/terrain';
 import { TEST_MAP } from '../test/map';
 import { planNpcOrders } from './ai';
@@ -23,6 +24,7 @@ import { route } from './path';
 import { getResources } from './resources';
 import { siteGates, sitePads, siteUnder, type Site } from './sites';
 import { isFree } from './spawn';
+import { fuelCap } from './stats';
 import { stateOf } from './states';
 import { isRoadTile } from './terrain';
 import { hazardZones } from './territory';
@@ -57,6 +59,11 @@ function expectPostRules(w: World, post: Vec, where: string): void {
   for (const gate of gates) expect(dist(post, gate), where).toBeGreaterThan(HUNT.lawReach);
   expect(nearCliff(terrainNav(w.terrain), post.x, post.y, RAIDER_RADIUS + CLEARANCE), where).toBe(false);
   expect(isFree({ ...w, vehicles: [] }, post, RAIDER_RADIUS, null), where).toBe(true);
+}
+
+// The most a raider can pay for a full tank at the camp pump.
+function fuelBill(w: World, id: string): number {
+  return fuelCap(vehicle(w, id)) * ECONOMY.supplyPrice.fuel;
 }
 
 describe('watch posts on the map', () => {
@@ -400,7 +407,7 @@ describe('going home with loot', () => {
     // The sale is the only income. The camp then sells the raider fuel for its tank, so a little of it goes back.
     const after = getResources(end, vehicle(end, raider.id)).money;
     expect(after).toBeLessThanOrEqual(money + value);
-    expect(after).toBeGreaterThan(money + value - 50);
+    expect(after).toBeGreaterThan(money + value - fuelBill(end, raider.id));
     expect(goodsOn(end, raider.id, 'electronics')).toBe(0);
   });
 
@@ -451,7 +458,7 @@ describe('going home with loot', () => {
     // The sale is the only income. The camp then sells the raider fuel for its tank, so a little of it goes back.
     const after = getResources(end, vehicle(end, raider.id)).money;
     expect(after).toBeLessThanOrEqual(money + value);
-    expect(after).toBeGreaterThan(money + value - 50);
+    expect(after).toBeGreaterThan(money + value - fuelBill(end, raider.id));
     expect(goodsOn(end, raider.id, 'electronics')).toBe(0);
   });
 
