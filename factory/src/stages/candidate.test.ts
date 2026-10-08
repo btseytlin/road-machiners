@@ -172,14 +172,14 @@ describe('candidate evidence', () => {
     expect(f.photos).toHaveLength(1);
   });
 
-  it('clears the post id and fails when the album fails, so no dead Ship post stays current', async () => {
+  it('keeps the Ship post and logs the failure when the album fails', async () => {
     const f = setup();
     f.albumFails = true;
-    await expect(candidate(f.ctx, 11)).rejects.toThrow('boom');
-    expect(readState(f.ctx.statePath).release?.postId).toBeNull();
-    expect(readState(f.ctx.statePath).postCaptions).toEqual({});
-    expect(f.calls.some((call) => call.startsWith('editCaption 42 Superseded'))).toBe(true);
-    expect(f.calls.some((call) => call.startsWith('message committee 42'))).toBe(false);
+    await candidate(f.ctx, 11);
+    expect(readState(f.ctx.statePath).release?.postId).toBe(42);
+    expect(f.logs.some((line) => line.includes('the extra images of post 42 did not upload') && line.includes('boom'))).toBe(true);
+    expect(f.calls.some((call) => call.startsWith('editCaption 42 Superseded'))).toBe(false);
+    expect(f.calls.some((call) => call.startsWith('message committee 42'))).toBe(true);
   });
 });
 

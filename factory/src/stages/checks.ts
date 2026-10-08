@@ -183,17 +183,12 @@ export async function post(ctx: Ctx, issue: number, approval: Approval, shown: S
   const caption = approvalCaption(`#${issue} ${item.title}`, url, link, pr, approval, base, evidence === null, unchecked);
   const track = {
     add: (id: number) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: { ...state.approvalPosts, [id]: issue }, postCaptions: { ...state.postCaptions, [id]: caption }, textPosts: evidence === null ? [...state.textPosts, String(id)] : state.textPosts })),
-    drop: (id: number) => updateState(ctx.statePath, (state) => ({ ...state, approvalPosts: omit(state.approvalPosts, id), postCaptions: omit(state.postCaptions, id), textPosts: state.textPosts.filter((name) => name !== String(id)) })),
   };
   if (evidence !== null) {
-    await postWithEvidence(ctx, evidence, caption, approvalButtons(issue, base), track);
+    await postWithEvidence(ctx, evidence, caption, approvalButtons(issue, base), track, { stage: 'checks', issue });
     return;
   }
   track.add(await ctx.telegram.sendButtons(ctx.cfg.committeeChat, caption, approvalButtons(issue, base)));
-}
-
-function omit<T>(record: Record<string, T>, key: number): Record<string, T> {
-  return Object.fromEntries(Object.entries(record).filter(([name]) => name !== String(key)));
 }
 
 async function pullRequestUrl(ctx: Ctx, issue: number, title: string, approval: Approval, base: string): Promise<string> {

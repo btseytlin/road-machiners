@@ -282,15 +282,16 @@ describe('testing in one job', () => {
     expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 100: 7 });
   });
 
-  it('retracts the primary when the album fails', async () => {
+  it('keeps the primary post when the album fails', async () => {
     albumFails = true;
     const ctx = fakeCtx((run) => {
       posts(run);
       writeFileSync(`${out(run)}/view1.png`, pngBytes(1));
       writeFileSync(`${out(run)}/evidence.json`, JSON.stringify({ images: [{ file: 'view1.png', description: 'One' }] }));
     });
-    await expect(runVerify(ctx, 7)).rejects.toThrow('sendMediaGroup failed');
-    expect(readState(`${home}/state.json`).approvalPosts).toEqual({});
+    await runVerify(ctx, 7);
+    expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 100: 7 });
+    expect(calls.at(-1)).toBe('move 7 Approval');
   });
 });
 

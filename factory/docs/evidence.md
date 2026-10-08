@@ -19,7 +19,7 @@ A manifest that is not JSON is ignored, and the one screenshot posts.
 
 The agent can see what the post would lose before it ends. Every agent container mounts `node /opt/factory-check/check.mjs`, the factory's own code, read only, so the agent cannot change it and the two cannot drift. `check.mjs test` reports a missing approval and every image the post would leave out, and names the checks it cannot run.
 
-Telegram gives a media group no buttons. So the approval post stays one photo with its caption and buttons, and the other images follow as a reply photo or album. Commands act on the primary only. When the album fails, the factory marks the primary superseded, drops its buttons and fails the stage with the card in Testing. The release candidate posts the same way, and it needs a usable screenshot.
+Telegram gives a media group no buttons. So the approval post stays one photo with its caption and buttons, and the other images follow as a reply photo or album. Commands act on the primary only. When the album fails, the primary post stays with its buttons, and the factory logs the failure. Images never block finished work. The release candidate posts the same way, and it needs a usable screenshot.
 
 ## Diff guard
 

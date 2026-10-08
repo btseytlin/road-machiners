@@ -70,8 +70,7 @@ export async function candidate(ctx: Ctx, issue: number): Promise<void> {
   const evidence = candidateEvidence(ctx, issue, home);
   const photoId = await postWithEvidence(ctx, evidence, caption, buttons, {
     add: (id) => updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: id, candidateSha: sha }, postCaptions: { ...state.postCaptions, [id]: caption } })),
-    drop: (id) => updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: null, candidateSha: null }, postCaptions: Object.fromEntries(Object.entries(state.postCaptions).filter(([name]) => name !== String(id))) })),
-  });
+  }, { stage: 'candidate', issue });
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, changes, photoId);
 }
 
