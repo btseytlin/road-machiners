@@ -1415,6 +1415,9 @@ body {
   justify-content: flex-start;
   gap: 24px;
 }
+.town-shop {
+  container-type: inline-size;
+}
 .town-shop > .tabs {
   padding: 0 0 8px;
   margin-bottom: 8px;
@@ -2106,6 +2109,111 @@ canvas.view {
   padding: 3px 12px;
   font-size: 13px;
 }
+/* Shop part list: one compact row per part, the open one shows its detail below. */
+.part-rows {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.part-row {
+  background: #22292d;
+  border: 1px solid #4b555b;
+  border-left: 4px solid var(--tone);
+}
+.part-row:hover {
+  border-color: #8e8a73;
+  border-left-color: var(--tone);
+}
+#ui button.part-sum {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) auto auto auto 14px;
+  grid-template-areas: "icon name stat foot price chev";
+  align-items: center;
+  gap: 4px 8px;
+  width: 100%;
+  padding: 3px 8px 3px 6px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: 13px;
+}
+.part-sum > .icon {
+  grid-area: icon;
+  width: 28px;
+  height: 28px;
+}
+.part-name {
+  grid-area: name;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 12px;
+}
+.part-name b {
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+}
+.part-name > span {
+  white-space: nowrap;
+}
+.stat-chip {
+  grid-area: stat;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.stat-chip .icon {
+  width: 16px;
+  height: 16px;
+}
+.stat-chip small {
+  margin-left: 2px;
+  color: var(--muted);
+}
+.part-sum .footprint {
+  grid-area: foot;
+  width: 22px;
+}
+.part-sum .price {
+  grid-area: price;
+  white-space: nowrap;
+  min-width: 44px;
+  text-align: right;
+}
+.part-sum .chevron {
+  grid-area: chev;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+}
+.part-sum[aria-expanded="true"] .chevron {
+  transform: rotate(45deg);
+}
+.part-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 2px 10px 8px;
+}
+@container (max-width: 440px) {
+  #ui button.part-sum {
+    grid-template-columns: 28px minmax(0, 1fr) auto 14px;
+    grid-template-areas:
+      "icon name price chev"
+      ". stat foot foot";
+  }
+}
+
 /* A stock part that will not fit the grid: the Buy button with a note that it goes to garage storage. */
 .buy-stored {
   display: flex;
