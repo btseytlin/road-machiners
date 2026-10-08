@@ -11,6 +11,7 @@ import { buildDrive, freeDrive, initPhysics, type Drive } from './drive';
 import { physicsMove } from './turn';
 import { TEST_MAP } from '../test/map';
 import { budget } from '../test/budget';
+import { defaultSetup } from '../sim/settings';
 
 beforeAll(async () => {
   await initPhysics();
@@ -18,7 +19,7 @@ beforeAll(async () => {
 
 describe('invariants under AI traffic', () => {
   it('no negative HP, fuel, supplies, health or money over 80 turns', async () => {
-    let w = setMoveOrder(newWorld(11, START_KITS.standard, TEST_MAP), { kind: 'stopAt', dest: { x: 45, y: 15 } });
+    let w = setMoveOrder(newWorld(11, START_KITS.standard, TEST_MAP, defaultSetup('roaming')), { kind: 'stopAt', dest: { x: 45, y: 15 } });
     // One Drive carried across all 80 turns: physicsMove's own syncDrive keeps it in step with
     // spawns, despawns and hangups, so nothing here needs a fresh physics world per turn.
     let d = buildDrive(w);

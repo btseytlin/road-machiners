@@ -2,6 +2,7 @@
 
 import { DialoguePanel, type DialogueHost } from "./dialogue";
 import type { Vehicle, World } from "../sim/types";
+import { setupLabel } from "../sim/settings";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
 import type { SpeedRow } from "./hud-readout";
@@ -169,6 +170,8 @@ export class Hud {
     window.addEventListener("keydown", (e) => {
       if (e.code === "KeyV" && !isBrowserChord(e) && !document.activeElement?.matches("input, select, textarea")) this.toggleCameraMode();
     });
+    // The world setup stays for the page, since a new game reloads it.
+    const setup = setupLabel(this.actions.dialogue.world().setup);
     const feedbackMenu = el("details", {});
     const feedbackLink = (href: string, text: string) =>
       el(
@@ -187,7 +190,7 @@ export class Hud {
         { title: "Report a bug or request a feature", "aria-label": "Report a bug or request a feature" },
         "!",
       ),
-      feedbackLink(bugReportUrl(versionLabel()), "Report a bug"),
+      feedbackLink(bugReportUrl(`${versionLabel()}, ${setup}`), "Report a bug"),
       feedbackLink(featureRequestUrl(), "Request a feature"),
     );
     this.feedback.append(feedbackMenu);

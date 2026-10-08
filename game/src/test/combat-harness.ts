@@ -31,6 +31,7 @@ import { bearing, dist, type Vec } from '../sim/vec';
 import { refreshVision } from '../sim/vision';
 import { cloneWorld, endTurn, newWorld, seedStreams, setAutoFire, setMoveOrder } from '../sim/world';
 import { TEST_MAP } from './map';
+import { defaultSetup } from '../sim/settings';
 
 // A scripted driver steers the player truck instead of a brain, to test one way of driving. stand: brakes and never
 // moves. orbit: circles the nearest foe. charge: drives at the nearest foe and brakes once close. kite: closes in to
@@ -160,7 +161,7 @@ function baseWorld(kit: string, arena: number | null): World {
   const key = `${kit}|${arena}`;
   const cached = BASES.get(key);
   if (cached) return cached;
-  const w = newWorld(0, START_KITS[kit] ?? missing('kit', kit), TEST_MAP, false);
+  const w = newWorld(0, START_KITS[kit] ?? missing('kit', kit), TEST_MAP, defaultSetup('roaming'), false);
   const terrain = { size: w.size, heights: new Array((w.size + 1) * (w.size + 1)).fill(0), types: new Array(w.size * w.size).fill('road') };
   Object.freeze(terrain.heights);
   Object.freeze(terrain.types);

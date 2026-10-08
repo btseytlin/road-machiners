@@ -11,6 +11,7 @@ import { newWorld } from '../../sim/world';
 import { TEST_MAP } from '../../test/map';
 import { loadModels } from './models';
 import { RADIO_LIGHT, RadioLights, radioLit, VehicleView, type RadioCue } from './vehicle';
+import { defaultSetup } from '../../sim/settings';
 
 
 const F = RADIO_LIGHT.flashMs;
@@ -234,7 +235,7 @@ function halos(view: VehicleView): THREE.Sprite[] {
 
 describe('antenna radio light', () => {
   it('has one bulb and one halo, and radio() switches both', () => {
-    const view = new VehicleView(playerVehicle(newWorld(1337, startKit('standard'), TEST_MAP)), true);
+    const view = new VehicleView(playerVehicle(newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'))), true);
     expect(bulbs(view)).toHaveLength(1);
     expect(halos(view)).toHaveLength(1);
     const color = () => (bulbs(view)[0].material as THREE.MeshBasicMaterial).color.getHex();

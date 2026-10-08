@@ -1,3 +1,4 @@
+import { defaultSetup } from './settings';
 import { describe, expect, it } from 'vitest';
 import { REGION, type TerritoryDef } from '../data/region';
 import { START_KITS } from '../data/start';
@@ -13,7 +14,7 @@ import { newWorld } from './world';
 // into one.
 const orchard = REGION.locations.find((l) => l.id === 'orchard') as TerritoryDef;
 const RELIEF = 0.1; // height units (0.4 m) a blocking box corner's ground may lie off the prop's seat
-const world = newWorld(1337, START_KITS.standard, TEST_MAP);
+const world = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
 // Dead trees stand on a trunk and rocks sit in the ground, so their boxes may overhang a slope.
 const props = world.obstacles.filter((o) => o.kind === 'landmark' && o.look !== 'deadTree' && o.look !== 'crag' && siteGap(orchard, o.pos) < 0);
 

@@ -23,6 +23,7 @@ import { stowPart } from "../sim/inventory";
 import { beginSearch } from "../sim/search";
 import { dumpOnPile, emptyHidden, isRoadWreck } from "../sim/salvage";
 import { TEST_MAP } from "../test/map";
+import { defaultSetup } from "../sim/settings";
 import { isLootSpot, territoryAt } from "../sim/territory";
 import { propReach } from "../sim/mapgen";
 import type { Obstacle, World } from "../sim/types";
@@ -112,7 +113,7 @@ describe('salvage interaction', () => {
 
 // A real world with the player parked beside the first prop of this look in this territory, or the first road wreck.
 function parkedAt(find: (o: Obstacle) => boolean): { w: World; id: string } {
-  const w = newWorld(1337, startKit('standard'), TEST_MAP);
+  const w = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
   const o = w.obstacles.find(find);
   if (!o) throw new Error('No such prop on the test map');
   const me = playerVehicle(w);
@@ -350,7 +351,7 @@ describe("rescue readout", () => {
     });
   });
   it("tells a stranded player to install a spare engine it carries", () => {
-    const w = newWorld(1337, startKit("combat"), TEST_MAP);
+    const w = newWorld(1337, startKit("combat"), TEST_MAP, defaultSetup('roaming'));
     const me = playerVehicle(w);
     const engine = me.items.find((it) => it.kind === "part" && partDef(it.part.defId).kind === "engine");
     if (!engine || engine.kind !== "part") throw new Error("Expected an engine");

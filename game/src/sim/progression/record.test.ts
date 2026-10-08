@@ -28,6 +28,18 @@ describe('record', () => {
     expect(second).toEqual(first);
   }, RUN_TIMEOUT);
 
+  it('starts in a Roaming world with the given settings, the missing ones at their defaults', () => {
+    const first = recordTurns(1337, 'trader', 1, { settings: { damage: 2, fuelUse: 1.5 } }).next();
+
+    expect(first.done).toBe(false);
+    expect(first.value?.world.setup).toEqual({ mode: 'roaming', settings: { damage: 2, fuelUse: 1.5, supplyUse: 1 } });
+  }, RUN_TIMEOUT);
+
+  it('fails a run with a bad setting before it plays', () => {
+    expect(() => recordTurns(1337, 'trader', 1, { settings: { damage: 9 } }).next()).toThrow(/damage/);
+    expect(() => recordTurns(1337, 'trader', 1, { settings: { speed: 1 } }).next()).toThrow(/speed/);
+  }, RUN_TIMEOUT);
+
   it('replays to the XP the world gave through practice', async () => {
     const lines: TraceLine[] = [];
     let last: World | null = null;

@@ -2,15 +2,14 @@
 // setup screen, and Help shows the controls. While the dropdown is open it owns the keys and the pointer.
 
 import { ERROR_REPORT_URL } from "../config";
-import type { BootRequest } from "../three/save-slots";
 import { el, isBrowserChord, panel, topLeft, topRight } from "./dom";
 import { versionLabel } from "./hud-readout";
-import { chooseNewGame, startNewGame } from "./new-game";
+import { isNewGameOpen, openNewGame, type NewGameActions } from "./new-game";
 import { SavePanel, type SavePanelActions } from "./save-panel";
 
 export type GameMenuActions = SavePanelActions & {
   hasSave: () => boolean;
-  requestBoot: (request: BootRequest) => void;
+  newGame: NewGameActions;
 };
 
 export type MenuEntry = "new" | "save" | "load" | "help";
@@ -31,6 +30,8 @@ export function entryEnabled(entry: MenuEntry, busy: boolean, hasSave: boolean):
 
 // The controls guide. It is not modal, so the player can keep driving while it is open.
 export class HelpPanel {
+  constructor(private setup: () => string) {}
+
   private root: HTMLElement | null = null;
   private readonly onKey = (e: KeyboardEvent) => {
     if (e.code === "Escape") this.close();
@@ -57,6 +58,7 @@ export class HelpPanel {
       el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
       el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
       el("div", { class: "version" }, versionLabel()),
+      el("div", { class: "version world-setup" }, this.setup()),
     );
     if (ERROR_REPORT_URL) root.append(el("div", { class: "version" }, "Game errors are sent to the developers with your save."));
     this.root = root;
@@ -86,8 +88,7 @@ export class GameMenu {
   private list = el("div", { id: "game-menu-list", role: "menu", "aria-label": "Menu", hidden: true });
   private items = {} as Record<MenuEntry, HTMLButtonElement>;
   private savePanel: SavePanel;
-  private help = new HelpPanel();
-  private choosing = false;
+  private help: HelpPanel;
 
   private readonly onKey = (e: KeyboardEvent) => {
     if (e.code === "Escape") {
@@ -115,7 +116,8 @@ export class GameMenu {
     if (e.relatedTarget instanceof Node && !this.root.contains(e.relatedTarget)) this.closeList(false);
   };
 
-  constructor(private actions: GameMenuActions, private isBusy: () => boolean) {
+  constructor(private actions: GameMenuActions, private isBusy: () => boolean, setup: () => string) {
+    this.help = new HelpPanel(setup);
     this.savePanel = new SavePanel(actions);
     for (const { entry, label } of ENTRIES) {
       const item = el("button", { role: "menuitem", onclick: () => this.choose(entry) }, label) as HTMLButtonElement;
@@ -127,7 +129,7 @@ export class GameMenu {
   }
 
   isOpen(): boolean {
-    return !this.list.hidden || this.savePanel.isOpen() || this.choosing;
+    return !this.list.hidden || this.savePanel.isOpen() || isNewGameOpen();
   }
 
   refresh(): void {
@@ -178,15 +180,10 @@ export class GameMenu {
     if (entry === "save") this.savePanel.openSave();
     else if (entry === "load") this.savePanel.openLoad();
     else if (entry === "help") this.help.toggle();
-    else void this.newGame();
+    else this.newGame();
   }
 
-  private async newGame(): Promise<void> {
-    this.choosing = true;
-    try {
-      if (await chooseNewGame()) startNewGame(this.actions.requestBoot);
-    } finally {
-      this.choosing = false;
-    }
+  private newGame(): void {
+    openNewGame(this.actions.newGame, () => this.refresh());
   }
 }

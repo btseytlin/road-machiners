@@ -33,6 +33,7 @@ import { SMOKE } from '../data/utilities';
 import { isShutDown } from './utility';
 import { attachLine } from './harpoon';
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
+import { damageScale } from './settings';
 
 export type FireBlock =
   | "disabled"
@@ -454,7 +455,7 @@ function laneEntries(o: Spread, a: Aiming): number[] {
 // A round that enters a lane walks it, as a crit or not, and its splash lands on the lane's face.
 function laneReach(c: Reach, lane: number): number {
   if (splashReaches(c, lanePoint(c.target, c.a.side, lane), lane)) return 1;
-  const walks = (crit: boolean) => Number(reachesAim(c, planLane(c.target, c.a.side, lane, directRound(c.round, crit))));
+  const walks = (crit: boolean) => Number(reachesAim(c, planLane(c.target, c.a.side, lane, directRound(c.world, c.round, crit))));
   return (1 - RULES.critChance) * walks(false) + RULES.critChance * walks(true);
 }
 
@@ -462,7 +463,7 @@ function laneReach(c: Reach, lane: number): number {
 function splashReaches(c: Reach, point: Vec, skip: number | null): boolean {
   if (c.round.splashRadius <= 0) return false;
   const { side, lanes } = blastLanes(c.target, point, c.round.splashRadius);
-  return lanes.some((lane) => lane !== skip && reachesAim(c, planLane(c.target, side, lane, splashRound(c.round))));
+  return lanes.some((lane) => lane !== skip && reachesAim(c, planLane(c.target, side, lane, splashRound(c.world, c.round))));
 }
 
 // Splash reach changes only where a lane face enters the blast radius. This many steps per side keeps each step a
@@ -764,7 +765,7 @@ function burstPoint(world: World, r: WeaponDef["round"], landing: Landing): Vec 
 function landRound(world: World, s: Shot, roll: Roll, offset: number): Landing {
   const lane = enteredLane(s.aiming, roll, offset);
   if (lane === null) return strayRound(world, s, missPoint(s.shooter.pos, s.target.pos, offset));
-  const hits = walkLane(world, s.target, s.aiming.side, lane, directRound(s.mw.def.round, roll.crit));
+  const hits = walkLane(world, s.target, s.aiming.side, lane, directRound(world, s.mw.def.round, roll.crit));
   return { struck: s.target, lane, hits, point: lanePoint(s.target, s.aiming.side, lane) };
 }
 
@@ -774,14 +775,20 @@ function enteredLane(a: Aiming, roll: Roll, offset: number): number | null {
   return roll.hit && a.lane !== null ? a.lane : laneOfOffset(a.side, a.body, a.lanes, offset);
 }
 
-// The round that walks the lane it landed in. A crit multiplies its damage and pen.
-function directRound(r: WeaponDef["round"], crit: boolean): Round {
+// The round that walks the lane it landed in. A crit multiplies its damage and pen. The world's Damage setting scales
+// every round after its rolls.
+function directRound(world: World, r: WeaponDef["round"], crit: boolean): Round {
   const k = crit ? { damage: RULES.critDamage, pen: RULES.critPen } : { damage: 1, pen: 1 };
-  return { damage: r.damage * k.damage * RULES.weaponDamage, pen: r.pen * k.pen, blast: r.blast, armorShare: r.armorShare };
+  return { damage: r.damage * k.damage * RULES.weaponDamage * damageScale(world), pen: r.pen * k.pen, blast: r.blast, armorShare: r.armorShare };
 }
 
-function splashRound(r: WeaponDef["round"]): Round {
-  return { damage: r.splashDamage * RULES.weaponDamage, pen: r.splashPen, blast: true, armorShare: r.armorShare };
+function splashRound(world: World, r: WeaponDef["round"]): Round {
+  return { damage: r.splashDamage * RULES.weaponDamage * damageScale(world), pen: r.splashPen, blast: true, armorShare: r.armorShare };
+}
+
+// The damage of one round of the weapon that is not a crit, in this world. The UI shows it.
+export function roundDamage(world: World, def: WeaponDef): number {
+  return directRound(world, def.round, false).damage;
 }
 
 // A stray round enters a random lane of the side facing the shooter, with its full damage and pen.
@@ -791,7 +798,7 @@ function strayRound(world: World, s: Shot, miss: Vec): Landing {
   const side = sideToward(victim, s.shooter.pos);
   const lane = randInt(world, 0, laneCount(victim, side) - 1);
   const r = s.mw.def.round;
-  const hits = walkLane(world, victim, side, lane, directRound(r, false));
+  const hits = walkLane(world, victim, side, lane, directRound(world, r, false));
   return { struck: victim, lane, hits, point: lanePoint(victim, side, lane) };
 }
 
@@ -836,7 +843,7 @@ function explode(world: World, r: WeaponDef["round"], landing: Landing): Vehicle
   const out: VehicleHits[] = [];
   for (const v of world.vehicles) {
     const skip = v.id === landing.struck?.id ? landing.lane : null;
-    const hits = blastTruck(world, v, landing.point, r.splashRadius, splashRound(r), skip);
+    const hits = blastTruck(world, v, landing.point, r.splashRadius, splashRound(world, r), skip);
     if (hits.length > 0) out.push({ vehicle: v.id, hits });
   }
   return out;

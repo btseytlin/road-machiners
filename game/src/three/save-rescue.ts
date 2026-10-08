@@ -6,7 +6,7 @@ import type { BakedMap } from '../sim/terrain';
 import { carriedWorld, type Carried, type CarriedItem, type CarriedPart, type CarryReport } from '../sim/world';
 import type { World } from '../sim/types';
 import type { SlotId } from './save-slots';
-import { CENTS_PER_MONEY_28_29, pooledSkills_9_10 } from './save-migrations';
+import { CENTS_PER_MONEY_29_30, pooledSkills_9_10 } from './save-migrations';
 import { storedSave, tryWriteSave } from './save';
 
 type Json = Record<string, unknown>;
@@ -79,7 +79,7 @@ function truckOf(world: Json, player: Json): Carried['truck'] {
 
 const NO_CARRIED: Carried = {
   seed: null, money: null, xp: null, ranks: {}, xpBySource: {}, perks: [], discovered: [], knockouts: null, autoFire: null,
-  autoRepair: null, fuel: null, supplies: null, costBasis: {}, truck: null, storage: [],
+  autoRepair: null, fuel: null, supplies: null, costBasis: {}, truck: null, storage: [], setup: undefined,
 };
 
 // What a save holds of the player's progression. Never throws: anything of the wrong type reads as missing.
@@ -87,7 +87,7 @@ export function readCarried(raw: unknown): Carried {
   const world = objectOf(objectOf(raw)?.world);
   const player = objectOf(world?.player);
   if (!world || !player) return NO_CARRIED;
-  const scale = moneyScale_28_29(raw);
+  const scale = moneyScale_29_30(raw);
   return {
     seed: isGridInt(world.seed) ? world.seed : null,
     money: centsOf(player.money, scale),
@@ -103,15 +103,16 @@ export function readCarried(raw: unknown): Carried {
     costBasis: Object.fromEntries(Object.entries(countsOf(player.costBasis)).map(([good, basis]) => [good, basis * scale])),
     truck: truckOf(world, player),
     storage: listOf(player.storage).flatMap((p) => partOf(p) ?? []),
+    setup: world.setup, // carriedWorld() checks and repairs it
   };
 }
 
-// Money in a save from before format 2.29 is in the old unit, a third of an M per fuel unit, as the 28 to 29 step
+// Money in a save from before format 2.30 is in the old unit, a third of an M per fuel unit, as the 29 to 30 step
 // reads it. A save with no format is older still. A newer major format is not old money.
-function moneyScale_28_29(raw: unknown): number {
+function moneyScale_29_30(raw: unknown): number {
   const format = objectOf(objectOf(raw)?.format);
   const part = (key: 'major' | 'minor'): number => (typeof format?.[key] === 'number' ? format[key] : 0);
-  return part('major') * 1000 + part('minor') < 2029 ? CENTS_PER_MONEY_28_29 : 1;
+  return part('major') * 1000 + part('minor') < 2030 ? CENTS_PER_MONEY_29_30 : 1;
 }
 
 function centsOf(value: unknown, scale: number): number | null {

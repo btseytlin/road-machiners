@@ -9,6 +9,7 @@ import { TERRAIN } from '../data/terrain';
 import { TIME } from '../data/time';
 import { playerVehicle, vehicleById } from '../sim/damage';
 import { gaveUp, isKnockedOut } from '../sim/defeat';
+import { OPENING_WRECK_ID } from '../sim/opening';
 import type { Work, WorkLeft } from '../sim/states';
 import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
@@ -123,10 +124,13 @@ export function conditionStatus(part: PartInstance): { text: string; tone: 'dim'
   return { text: `${hp(part.hp)}/${hp(maxHp(part))} HP`, tone: 'dim' };
 }
 
+// Ids of obstacles a truck can hit: road, kill and opening wrecks, rocks and town buildings.
+const OBSTACLE_ID = new RegExp(`^(wreck|rock|bld|${OPENING_WRECK_ID}$)`);
+
 export function vehicleName(world: World, id: string): string {
   if (id === world.player.vehicleId) return 'You';
   const v = findAny(world, id);
-  return v ? npcName(v) : id.startsWith('wreck') || id.startsWith('rock') || id.startsWith('bld') ? 'an obstacle' : 'something';
+  return v ? npcName(v) : OBSTACLE_ID.test(id) ? 'an obstacle' : 'something';
 }
 
 function findAny(world: World, id: string): Vehicle | undefined {
