@@ -536,13 +536,13 @@ describe("aim line", () => {
     aimLine({ guns: "all guns", body: [], bodyAimed: false, locked: false, hasGuns: true, ...state }, onBody) as unknown as FakeNode;
   const chip = (n: FakeNode) => n.find((c) => c.tag === "button")!;
 
-  it("names the chosen guns and holds the Body chip", () => {
-    expect(line({}).text()).toBe("All guns: click a part, or Body");
-    expect(line({ guns: "gun 2" }).text()).toBe("Gun 2: click a part, or Body");
+  it("holds only the Body chip, with no instruction text", () => {
+    expect(line({}).text()).toBe("Body");
+    expect(chip(line({ guns: "gun 2" })).attrs.get("title")).toContain("gun 2");
   });
 
   it("shows the numbers of the guns with a body shot", () => {
-    expect(line({ body: [1, 2] }).text()).toBe("All guns: click a part, or Body1 2");
+    expect(line({ body: [1, 2] }).text()).toBe("Body1 2");
   });
 
   it("presses the chip while aimed, disables it while locked and calls back on click", () => {

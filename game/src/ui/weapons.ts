@@ -135,10 +135,9 @@ export function aimActions(h: AimHost) {
   };
 }
 
-// The dim line above the card's diagram. It names the chosen guns and holds the Body chip. It is missing for a player without guns.
+// The line above the card's diagram. It holds the Body chip, whose tooltip names the chosen guns. It is missing for a player without guns.
 export function aimLine(state: AimState, onBody: () => void): HTMLElement | null {
   if (!state.hasGuns) return null;
-  const guns = state.guns[0].toUpperCase() + state.guns.slice(1);
   const chip = el(
     "button",
     {
@@ -151,7 +150,7 @@ export function aimLine(state: AimState, onBody: () => void): HTMLElement | null
     "Body",
     ...(state.body.length ? [el("span", { class: "condition-aim" }, state.body.join(" "))] : []),
   );
-  return el("div", { class: "aim-line dim" }, `${guns}: click a part, or `, chip);
+  return el("div", { class: "aim-line dim" }, chip);
 }
 
 // The Body chip aims the chosen guns at a vehicle's body. When all of them already do, it clears them. A gun on a part moves to the body.
