@@ -14,7 +14,9 @@ import { setPhase } from './verify';
 // Each step logs its start time, so the log shows where the time goes.
 // The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
 // Only the build gets SAVE_SCOPE, since the tests expect the default save key.
-const checkScript = (playtest: string) => `set -e
+// The game's cached runner skips test files whose inputs already passed, with its cache mounted at /test-cache.
+// A branch cut before the runner reached dev has no test:cached script and runs the full suite. Remove that path once no open branch lacks the script.
+export const checkScript = (playtest: string) => `set -e
 step() { echo "[checks] $(date -u +%T) $1"; }
 mkdir -p tmp
 step "npm ci"
@@ -22,10 +24,27 @@ npm ci
 step "tests and typecheck"
 npm run typecheck > tmp/typecheck.log 2>&1 &
 typecheck=$!
-npm test
+if grep -q '"test:cached"' package.json; then
+  npm run test:cached -- --cache /test-cache
+else
+  step "branch has no test:cached, full suite"
+  npm test
+fi
 step "tests done"
 if ! wait "$typecheck"; then cat tmp/typecheck.log; exit 1; fi
-step "dev server"
+${playAndBuild(playtest)}`;
+
+// The checks before a committee post. The committee only needs a build that starts and plays, so the game suite waits for the merge checks.
+export const previewScript = (playtest: string) => `set -e
+step() { echo "[checks] $(date -u +%T) $1"; }
+mkdir -p tmp
+step "npm ci"
+npm ci
+step "typecheck"
+npm run typecheck
+${playAndBuild(playtest)}`;
+
+const playAndBuild = (playtest: string) => `step "dev server"
 npm run dev -- --port 5173 --strictPort > tmp/dev-server.log 2>&1 &
 server=$!
 ready=0
@@ -71,7 +90,7 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const approver = approvedAlready(ctx, issue, item.labels);
   const approval = approver === null ? readApproval(home) : null;
   // Timeouts alone rerun here. A real failure goes to verify for one fix round. Three timeouts throw with the phase kept, so a retry runs the checks again.
-  const failure = await checkOrBuild(ctx, issue, phase, base, build);
+  const failure = await checkOrBuild(ctx, issue, phase, base, build, mergesNext(approver, base));
   if (failure !== null) return failed(ctx, issue, home, phase, failure);
   const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
@@ -89,12 +108,12 @@ function checksPhase(ctx: Ctx, issue: number): TestPhase {
 
 // The post phase builds once. A failed build throws with the phase kept, so a retry builds again.
 // A docs change builds only, and a failed build gets the fix round like a failed check.
-async function checkOrBuild(ctx: Ctx, issue: number, phase: TestPhase, base: string, build: string): Promise<string | null> {
+async function checkOrBuild(ctx: Ctx, issue: number, phase: TestPhase, base: string, build: string, merging: boolean): Promise<string | null> {
   if (phase !== 'post' && await docsOnly(ctx, issue, base)) {
     ctx.log('checks', issue, 'the branch changes docs only, so it builds with no tests, typecheck or playtest');
     return runScript(ctx, issue, base, build, buildScript);
   }
-  if (phase !== 'post') return checkPatiently(ctx, issue, base, build);
+  if (phase !== 'post') return checkPatiently(ctx, issue, base, build, merging);
   const failure = await runScript(ctx, issue, base, build, buildScript);
   if (failure !== null) throw new Error(`The build failed, no factory checks ran.\n${failure}`);
   return null;
@@ -134,8 +153,21 @@ function checkDir(ctx: Ctx, issue: number): string {
 
 // The host runs its own checks in a fresh clone of the pushed branch. Agent claims do not count.
 // Passing checks leave the build of scope `build` in the clone. Returns null when they pass, or the tail of the check log when they fail.
-async function runChecks(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
-  return runScript(ctx, issue, base, build, checkScript(playtestCommand(ctx.cfg, false)));
+// The game suite runs only for a commit that merges next: an approved card in Hardening, or a hotfix, which merges straight from its post.
+function mergesNext(approver: string | null, base: string): boolean {
+  return approver !== null || base === HOTFIX_BASE;
+}
+
+async function runChecks(ctx: Ctx, issue: number, base: string, build: string, merging: boolean): Promise<string | null> {
+  const playtest = playtestCommand(ctx.cfg, false);
+  return runScript(ctx, issue, base, build, merging ? checkScript(playtest) : previewScript(playtest));
+}
+
+// Every run of checkScript mounts the shared test cache, so passes recorded by one job skip tests in the next.
+export function testCacheMount(ctx: Ctx): Record<string, string> {
+  const cache = `${ctx.cfg.home}/test-cache`;
+  mkdirSync(cache, { recursive: true });
+  return { [cache]: '/test-cache' };
 }
 
 async function runScript(ctx: Ctx, issue: number, base: string, build: string, script: string): Promise<string | null> {
@@ -146,7 +178,7 @@ async function runScript(ctx: Ctx, issue: number, base: string, build: string, s
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, dir);
   const log = agentLog(ctx, issue, 'checks');
   try {
-    await ctx.container.shell(dir, script, log, { BUILD_SCOPE: build });
+    await ctx.container.shell(dir, script, log, { BUILD_SCOPE: build }, testCacheMount(ctx));
     return null;
   } catch (error) {
     return checkFailure(log, error);
@@ -166,20 +198,24 @@ export function timeoutOnly(failure: string): boolean {
 // Two reruns ride out a burst of load. A third timeout means the load stays, and Hermes has to look.
 const CHECK_RUNS = 3;
 
+async function checkPatiently(ctx: Ctx, issue: number, base: string, build: string, merging: boolean): Promise<string | null> {
+  return checkUntilReal(() => runChecks(ctx, issue, base, build, merging),(run) => ctx.log('checks', issue, `the checks only timed out, run ${run} of ${CHECK_RUNS}, running them again`));
+}
+
 // Runs the checks until they pass or fail for a real reason. Timeouts alone rerun the checks with no agent round,
 // since an agent would only raise the time limits. Returns null on a pass, or the real failure. Throws after CHECK_RUNS timeouts.
-async function checkPatiently(ctx: Ctx, issue: number, base: string, build: string): Promise<string | null> {
+export async function checkUntilReal(check: () => Promise<string | null>, onTimeout: (run: number) => void): Promise<string | null> {
   for (let run = 1; ; run++) {
-    const failure = await runChecks(ctx, issue, base, build);
+    const failure = await check();
     if (failure === null || !timeoutOnly(failure)) return failure;
     if (run === CHECK_RUNS) throw new Error(`The factory checks timed out ${CHECK_RUNS} times, under load. No test failed for another reason.\n${failure}`);
-    ctx.log('checks', issue, `the checks only timed out, run ${run} of ${CHECK_RUNS}, running them again`);
+    onTimeout(run);
   }
 }
 
 const FAILURE_TAIL_LINES = 150;
 
-function checkFailure(log: string, error: unknown): string {
+export function checkFailure(log: string, error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
   const tail = existsSync(log) ? readFileSync(log, 'utf8').split('\n').slice(-FAILURE_TAIL_LINES).join('\n') : message;
   return stripAnsi(tail);

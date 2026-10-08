@@ -6,7 +6,7 @@ digraph testing {
   subgraph cluster_preview {
     label="Preview: new card"; fontname="Helvetica"; fontsize=12; color="#c7d2fe"; style=rounded;
     PM [label="Merge new branch\ncommits and the base"]; PT [label="Test round\nplay, fix, capture"]; PV [label="Visual review"];
-    PC [label="Checks\ntests, playtest, build"]; PP [label="Post to\ncommittee", fillcolor="#fde68a", color="#b45309"];
+    PC [label="Checks\ntypecheck, playtest, build\nhotfix: game suite too"]; PP [label="Post to\ncommittee", fillcolor="#fde68a", color="#b45309"];
     PM -> PT -> PV -> PC -> PP [weight=100];
   }
   subgraph cluster_post {

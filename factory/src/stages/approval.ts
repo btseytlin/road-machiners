@@ -51,13 +51,13 @@ export async function approve(ctx: Ctx, issue: number, by: string): Promise<void
 
 // The committee approved a preview, which had no review yet. The card moves to Hardening under the same approver,
 // and Hardening queues the merge with no new post. A hotfix hardened before its post, so it merges at once instead.
-// The card keeps its build, the commit the checks passed, so Hardening runs the checks again only if the head moves past it.
+// The card keeps its build, so the published build the committee played stays until the merge.
 async function harden(ctx: Ctx, issue: number, by: string, base: string): Promise<void> {
   const build = readState(ctx.statePath).builds[String(issue)];
   if (build === undefined) throw new Error(`Issue #${issue} was approved with no recorded build`);
   forgetPosts(ctx, issue, true);
   updateState(ctx.statePath, (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [String(issue)]: by }, builds: { ...state.builds, [String(issue)]: build } }));
-  await ctx.github.comment(issue, `Approved by ${by} in the committee chat. Hardening and the review run now, and the checks only if they change the code. Then the factory merges it into ${base} by itself, with no new post.`);
+  await ctx.github.comment(issue, `Approved by ${by} in the committee chat. Hardening, the review and the full checks run now. Then the factory merges it into ${base} by itself, with no new post.`);
   await moveCard(ctx, issue, 'Hardening', 'approved');
   ctx.log('approve', issue, `approved by ${by}, to Hardening`);
 }

@@ -24,7 +24,8 @@ type Summary = {
   issues: { issue: number; workerMs: number; cost: number | null }[];
   buckets: Bucket[];
   activity: { stage: JobStage; issue: number | null; outcome: string; at: string }[];
-  waitingMs: number | null; waitingStages: { stage: string; workerMs: number }[]; waitingGaps: number;
+  // waitingMs is card-time, summed over every waiting card. waitingSpanMs is the clock time it was measured over.
+  waitingMs: number | null; waitingSpanMs: number | null; waitingStages: { stage: string; workerMs: number }[]; waitingGaps: number;
   retries: { outcome: string; runs: number; workerMs: number; cost: number | null }[];
   delivery: DeliverySummary | null;
 };
@@ -42,7 +43,7 @@ function getPublicIssue(job: Job): number | null {
   return job.stage === 'change' || job.stage === 'adhoc' ? null : job.issue;
 }
 function createSummary(days: number, since: string | null): Summary {
-  return { days, since, completed: 0, failed: 0, timeouts: 0, workerMs: 0, cost: null, tokens: null, missingUsage: 0, collectionFaults: 0, wasted: { cost: null, tokens: null }, waitingMs: null, waitingStages: [], waitingGaps: 0, retries: [], delivery: null, models: [], stageModels: [], stages: [], issues: [], buckets: [], activity: [] };
+  return { days, since, completed: 0, failed: 0, timeouts: 0, workerMs: 0, cost: null, tokens: null, missingUsage: 0, collectionFaults: 0, wasted: { cost: null, tokens: null }, waitingMs: null, waitingSpanMs: null, waitingStages: [], waitingGaps: 0, retries: [], delivery: null, models: [], stageModels: [], stages: [], issues: [], buckets: [], activity: [] };
 }
 function addCost(summary: Summary, stage: StageRow, issue: IssueRow | null, cost: number): void {
   summary.cost = (summary.cost ?? 0) + cost;
@@ -173,6 +174,7 @@ type SchedulerPoint = Observation & { data: SchedulerData };
 function addWaitInterval(summary: Summary, point: SchedulerPoint, duration: number): void {
   if (point.data.report === null) return;
   summary.waitingMs ??= 0;
+  summary.waitingSpanMs = (summary.waitingSpanMs ?? 0) + duration;
   const waiting = point.data.report.decisions.filter((decision) => decision.reasons.length && !decision.reasons.includes('issue-running'));
   const issues = new Set<string>();
   for (const decision of waiting) {
