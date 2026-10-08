@@ -26,20 +26,20 @@ const has = (root: string, path: string): boolean => existsSync(join(root, path)
 describe('sweepWork', () => {
   it('keeps an open card clone with its task file and drops its packages', () => {
     const root = work('issue-3');
-    const swept = sweepWork(root, state(), [card(3, 'Approval')]);
+    const swept = sweepWork(root, `${root}-locks`,state(), [card(3, 'Approval')]);
     expect(swept).toEqual({ removed: [], stripped: ['issue-3'], unknown: [] });
     expect([has(root, 'issue-3/game/.factory-tasks/task.md'), has(root, 'issue-3/node_modules'), has(root, 'issue-3/game/node_modules')]).toEqual([true, false, false]);
   });
 
   it('removes the clones of Done cards, issues off the board, merged changes and finished builds', () => {
     const root = work('issue-1', 'issue-2', 'adhoc-4', 'check-issue-3', 'change-1790000000000', 'incident-6', 'dev-build', 'release-main', 'release-candidate', 'waste');
-    const swept = sweepWork(root, state(), [card(1, 'Done'), card(3, 'Testing'), card(4, 'Done')]);
+    const swept = sweepWork(root, `${root}-locks`,state(), [card(1, 'Done'), card(3, 'Testing'), card(4, 'Done')]);
     expect(swept.removed.sort()).toEqual(['adhoc-4', 'change-1790000000000', 'check-issue-3', 'dev-build', 'incident-6', 'issue-1', 'issue-2', 'release-candidate', 'release-main', 'waste']);
   });
 
   it('keeps every clone a running or interrupted job works in, packages included', () => {
     const root = work('issue-5', 'check-issue-5', 'issue-7', 'dev-build', 'release-candidate', 'waste');
-    const swept = sweepWork(root, state({ jobs: [running('verify', 5), running('ship', 20), running('waste', null)], interrupted: [7] }), [card(5, 'Done'), card(7, 'Done')]);
+    const swept = sweepWork(root, `${root}-locks`,state({ jobs: [running('verify', 5), running('ship', 20), running('waste', null)], interrupted: [7] }), [card(5, 'Done'), card(7, 'Done')]);
     expect(swept).toEqual({ removed: ['dev-build'], stripped: [], unknown: [] });
     expect([has(root, 'issue-5/node_modules'), has(root, 'check-issue-5/node_modules'), has(root, 'issue-7/node_modules'), has(root, 'release-candidate/node_modules')]).toEqual([true, true, true, true]);
   });
@@ -47,26 +47,35 @@ describe('sweepWork', () => {
   it('keeps queued changes and incidents and the candidate of an open release', () => {
     const root = work('change-12', 'incident-6', 'release-candidate');
     const release = { issue: 20, branch: 'release/2026-01-05', day: '2026-01-05', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } };
-    const swept = sweepWork(root, state({ pendingChanges: [{ id: 12, text: 't', by: 'u' }], pendingIncidents: [6], release }), []);
+    const swept = sweepWork(root, `${root}-locks`,state({ pendingChanges: [{ id: 12, text: 't', by: 'u' }], pendingIncidents: [6], release }), []);
     expect(swept.removed).toEqual([]);
     expect(swept.stripped.sort()).toEqual(['change-12', 'incident-6', 'release-candidate']);
   });
 
   it('keeps every issue clone when the board has no card at all', () => {
     const root = work('issue-1', 'adhoc-2');
-    expect(sweepWork(root, state(), []).removed).toEqual([]);
+    expect(sweepWork(root, `${root}-locks`,state(), []).removed).toEqual([]);
   });
 
   it('leaves unknown folders, the merge worktree and files alone', () => {
     const root = work('scratch', 'land');
     writeFileSync(join(root, 'notes.txt'), 'x');
-    const swept = sweepWork(root, state(), [card(1, 'Design')]);
+    const swept = sweepWork(root, `${root}-locks`,state(), [card(1, 'Design')]);
     expect(swept).toEqual({ removed: [], stripped: [], unknown: ['scratch'] });
     expect([has(root, 'scratch/node_modules'), has(root, 'land/node_modules'), has(root, 'notes.txt')]).toEqual([true, true, true]);
   });
 
   it('does nothing without a work root', () => {
-    expect(sweepWork(join(tmpdir(), 'no-such-work-root'), state(), [])).toEqual({ removed: [], stripped: [], unknown: [] });
+    expect(sweepWork(join(tmpdir(), 'no-such-work-root'), join(tmpdir(), 'no-such-locks'), state(), [])).toEqual({ removed: [], stripped: [], unknown: [] });
+  });
+
+  it('skips a clone whose lock a live process holds', () => {
+    const root = work('issue-3', 'issue-4');
+    mkdirSync(join(`${root}-locks`, 'issue-3'), { recursive: true });
+    writeFileSync(join(`${root}-locks`, 'issue-3', 'owner'), String(process.pid));
+    const swept = sweepWork(root, `${root}-locks`, state(), [card(3, 'Done'), card(4, 'Done')]);
+    expect(swept.removed).toEqual(['issue-4']);
+    expect(has(root, 'issue-3/node_modules')).toBe(true);
   });
 });
 

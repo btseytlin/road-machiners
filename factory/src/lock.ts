@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { isAlive } from './jobs';
 
@@ -24,6 +24,12 @@ function ownerState(dir: string): Attempt {
   if (owner === process.pid) return 'mine';
   if (owner !== null && !isAlive(owner)) dropStale(dir, inode);
   return 'busy';
+}
+
+export function isLocked(dir: string): boolean {
+  if (!existsSync(dir)) return false;
+  const owner = readOwner(dir);
+  return owner === null || isAlive(owner);
 }
 
 function dropStale(dir: string, inode: number | undefined): void {

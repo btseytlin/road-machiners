@@ -86,7 +86,7 @@ These four act at once, not on the next tick.
 - `factory retry N` removes the stuck label and clears the card's failure.
 - `factory pause <reason>` pauses the factory.
 - `factory resume` lifts the pause.
-- `factory repair-clone N --by <who> --reason <why>` replaces a broken work clone of a card under a pause with no running job, and keeps the old one as a backup. `docs/operations.md` has the rules.
+- `factory repair-clone N --by <who> --reason <why>` replaces a broken work clone of a card, and keeps the old one as a backup. `docs/operations.md` has the rules.
 
 Orders and authority:
 
@@ -128,10 +128,10 @@ Common fixes:
 
 - Retry a step: `factory retry N`. The next tick runs the step again. By hand: `gh issue edit N --remove-label factory-stuck`.
 - "The factory checks timed out 3 times, under load": the code passed, but the tests ran out of time three runs in a row. Read the load with `factory-host 'uptime; docker stats --no-stream'`. Find what used the CPUs. Hold new starts with `factory pause <reason>` until the load falls, then run `factory resume` and `factory retry N`. A failed merge labels every card of its batch, so retry each of them. Skip the Testing gate with `factory move N approval` when the load stays. Note in the issue comment what held the CPUs.
-- Move a card: `factory move N <position>`. By hand: `gh project item-edit` on Project 2 of owner `btseytlin`, with ids from `gh project item-list` and `gh project field-list`. A hand move leaves the other stores stale, so do it under a pause and fix them too.
+- Move a card: `factory move N <position>`. By hand: `gh project item-edit` on Project 2 of owner `btseytlin`, with ids from `gh project item-list` and `gh project field-list`. A hand move leaves the other stores stale, so hold the card with `factory pause-card N` and fix them too.
 - Drop a queued action: `factory drop <queue> <id>`. By hand: edit `/factory/home/state/state.json` with `jq`, as Changing factory state says.
 - Run a step now: `factory-host 'cd /opt/factory/code/factory && npm run factory -- run <stage> <N or ->'`. For example, `run merge -` merges the cards waiting in Merging. `run dev -` rebuilds `/dev/` alone, and clears `devFailed` when it passes. Prefer `factory merge N` for a merge.
-- Reset an issue branch: change it on GitHub from a clone of your own under `/factory/home/work/`, named `hermes-<name>`. The tick deletes folders named like its own clones, such as `issue-N`, and leaves other names alone. Then, under a pause with no running job, run `factory repair-clone N --by hermes --reason <why>`, so the next stage starts clean. Never delete the issue work clone by hand. Delete its backup in `/factory/home/clone-backups/` once the card is past the trouble.
+- Reset an issue branch: change it on GitHub from a clone of your own under `/factory/home/work/`, named `hermes-<name>`. The tick deletes folders named like its own clones, such as `issue-N`, and leaves other names alone. Then run `factory repair-clone N --by hermes --reason <why>`, so the next stage starts clean. Never delete the issue work clone by hand. Delete its backup in `/factory/home/clone-backups/` once the card is past the trouble.
 - A failed update: read `/factory/home/logs/update.log`. A local edit in `/opt/factory/code` blocks every update. Drop the edit, or bring it to `main` with `factory_queue_change` when it looks worth keeping. You decide which, and record it in an issue comment or the chat. A failed build leaves the running release in place, and each update run tries again.
 
 ## Server health
@@ -183,7 +183,8 @@ Name the line, what you found and what you did in your issue comment or chat pos
 
 Use the `factory` CLI first. Change a store by hand only for a step the CLI lacks, and then queue a factory change that adds the command. `docs/state.md` describes each store and what a valid state looks like. Under a pause you may change any store by hand.
 
-- Pause the factory before you edit the state file or the work clones, or run a step by hand. Run `factory pause <reason>`, or write the reason into `/factory/home/paused`. Every tick skips while that file exists. Run `factory resume` or delete the file when you are done.
+- Hold the card with `factory pause-card N` before you edit its work clone or run a step on it by hand. Lift it with `factory resume-card N`. Other cards keep running.
+- Pause the factory only before you edit the state file by hand. Run `factory pause <reason>`, or write the reason into `/factory/home/paused`. Every tick skips while that file exists. Run `factory resume` or delete the file when you are done.
 - The pause does not stop running jobs. Wait until `jobs` in the state file is empty, since jobs write the state too and a step you run by hand does not appear there. A paused tick never clears a dead job, so check each pid with `factory-host 'kill -0 <pid>'` and remove a dead entry yourself.
 - Your turn can end before a long step you started finishes, and nothing wakes you when it ends. So when you start a step in the background with `nohup`, add the line `pid: <N>` to the pause file, with `$!` from the same `factory-host` command. The tick lifts the pause once that process ends. One pause names one process, so run two steps from one script.
 - A factory update never pauses the factory or stops jobs. Running jobs finish on the code they started with.

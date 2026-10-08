@@ -1,10 +1,10 @@
 import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { GUARD_HOOK } from './container';
 import { must } from './exec';
 import { withLock } from './lock';
 import { createLockWaitReporter } from './observability';
-import { MEDIA_DIR, MergeConflictError, OUT_DIR, RevertConflictError, TASK_DIR, type FactoryConfig, type HostRepo, type MergeStep, type Resolution, type Run } from './types';
+import { CLONE_LOCK_MS, MEDIA_DIR, MergeConflictError, OUT_DIR, RevertConflictError, TASK_DIR, WORK_LOCK, type FactoryConfig, type HostRepo, type MergeStep, type Resolution, type Run } from './types';
 
 const NO_HOOKS = ['-c', 'core.hooksPath=/dev/null', '-c', 'user.name=ROAM Factory', '-c', 'user.email=factory@roam.invalid'];
 
@@ -333,7 +333,15 @@ function lockEach(cfg: FactoryConfig, jobId: string | null, repo: HostRepo): Hos
   const entries = Object.entries(repo).map(([key, value]) => {
     if (typeof value !== 'function') return [key, value];
     const method = value as (...args: unknown[]) => Promise<unknown>;
-    return [key, (...args: unknown[]) => withLock(dir, REPO_LOCK_MS, () => method(...args), createLockWaitReporter(cfg.home, jobId, cfg.observationHeartbeatMs))];
+    const locked = (...args: unknown[]): Promise<unknown> => withLock(dir, REPO_LOCK_MS, () => method(...args), createLockWaitReporter(cfg.home, jobId, cfg.observationHeartbeatMs));
+    if (key !== 'prepareWorkClone') return [key, locked];
+    return [key, (...args: unknown[]) => withCloneLock(cfg.home, String(args[2]), () => locked(...args))];
   });
   return Object.fromEntries(entries) as HostRepo;
+}
+
+function withCloneLock(home: string, clone: string, work: () => Promise<unknown>): Promise<unknown> {
+  const name = basename(clone);
+  if (dirname(clone) !== join(home, 'work') || !/^issue-\d+$/.test(name)) return work();
+  return withLock(WORK_LOCK(home, name), CLONE_LOCK_MS, work);
 }

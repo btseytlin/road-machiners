@@ -45,11 +45,18 @@ async function mergeBatch(ctx: Ctx, base: string, cards: Card[]): Promise<void> 
 }
 
 async function nextBatch(ctx: Ctx): Promise<{ base: string; cards: Card[] } | null> {
-  const held = readState(ctx.statePath).held;
-  const waiting = (await ctx.github.cards()).filter((card) => card.column === 'Merging' && !card.labels.includes(STUCK_LABEL) && !(String(card.issue) in held));
-  if (waiting.length === 0) return null;
-  const base = baseBranchFor(ctx, waiting[0]!.labels);
-  return { base, cards: waiting.filter((card) => baseBranchFor(ctx, card.labels) === base) };
+  const merging = (await ctx.github.cards()).filter((card) => card.column === 'Merging' && !card.labels.includes(STUCK_LABEL));
+  let taken: { base: string; cards: Card[] } | null = null;
+  updateState(ctx.statePath, (state) => {
+    const waiting = merging.filter((card) => !(String(card.issue) in state.held));
+    if (waiting.length === 0) return state;
+    const base = baseBranchFor(ctx, waiting[0]!.labels);
+    const cards = waiting.filter((card) => baseBranchFor(ctx, card.labels) === base);
+    taken = { base, cards };
+    const batch = cards.map((card) => card.issue);
+    return { ...state, jobs: state.jobs.map((job) => (job.stage === 'merge' ? { ...job, batch } : job)) };
+  });
+  return taken;
 }
 
 function newSession(ctx: Ctx): AgentSession {

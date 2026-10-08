@@ -107,7 +107,7 @@ export type Issue = {
 export type Card = { itemId: string; issue: number; column: Column; labels: string[] };
 
 export type JobStage = CardStage | ReleaseStage | 'checks' | 'approve' | 'merge' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste';
-export type Job = { id: string; stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
+export type Job = { id: string; stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string; batch?: number[] };
 
 export type Queue = 'branch' | 'triage' | 'design' | 'implement' | 'verify' | 'test';
 export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement', 'verify'];
@@ -300,6 +300,8 @@ export const BRANCH = (issue: number): string => `factory/issue-${issue}`;
 export const TASK_DIR = '.factory-tasks';
 export const TASK_FILE = (issue: number): string => `${TASK_DIR}/issue-${issue}.md`;
 export const WORK_DIR = (home: string, issue: number): string => `${home}/work/issue-${issue}`;
+export const WORK_LOCK = (home: string, name: string): string => `${home}/locks/${name}`;
+export const CLONE_LOCK_MS = 15 * 60_000;
 export const OUT_DIR = '.factory';
 export const MEDIA_DIR = '.factory-media';
 export const STUCK_LABEL = 'factory-stuck';

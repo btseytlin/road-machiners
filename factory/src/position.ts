@@ -10,8 +10,10 @@ const POSITION_STAGE: Record<Position, JobStage | null> = {
 };
 export const CARD_JOBS: JobStage[] = ['triage', 'design', 'implement', 'adhoc', 'verify', 'harden', 'checks'];
 
+export const inMergeBatch = (job: Job, card: Card): boolean => job.stage === 'merge' && card.column === 'Merging' && (job.batch?.includes(card.issue) ?? false);
+
 export function isMerging(state: FactoryState, card: Card): boolean {
-  return state.jobs.some((job) => (job.stage === 'merge' && card.column === 'Merging') || (job.stage === 'approve' && job.issue === card.issue));
+  return state.jobs.some((job) => inMergeBatch(job, card) || (job.stage === 'approve' && job.issue === card.issue));
 }
 
 const COLUMN_POSITION: Record<Card['column'], Position> = {

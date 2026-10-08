@@ -161,6 +161,17 @@ describe('merge queue', () => {
     expect(calls.filter((call) => call.startsWith('merge '))).toEqual(['merge factory/issue-6']);
   });
 
+  it('records the batch on its own job entry, without the stuck and held cards', async () => {
+    cards = [card(5, [STUCK_LABEL]), card(6), card(7)];
+    const job = { id: 'merge---x', stage: 'merge' as const, issue: null, pid: 1, startedAt: '', log: '' };
+    updateState(`${home}/state.json`, (state) => ({ ...state, jobs: [job], held: { 7: { by: 'Ann', reason: 'wait', at: '2026-09-30T09:00:00Z', stage: null } } }));
+    let batch: number[] | undefined;
+    const ctx = fakeCtx();
+    ctx.container.shell = async () => { batch = readState(`${home}/state.json`).jobs[0].batch; return { code: 0, stdout: '', stderr: '' } as never; };
+    await merge(ctx);
+    expect(batch).toEqual([6]);
+  });
+
   it('does nothing when no card waits', async () => {
     cards = [];
     await merge(fakeCtx());

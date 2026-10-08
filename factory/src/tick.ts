@@ -378,7 +378,7 @@ function cleanBuilds(ctx: Ctx, cards: Card[]): void {
 
 function cleanWork(ctx: Ctx, cards: Card[]): void {
   const state = readState(ctx.statePath);
-  const swept = sweepWork(join(ctx.cfg.home, 'work'), state, cards);
+  const swept = sweepWork(join(ctx.cfg.home, 'work'), join(ctx.cfg.home, 'locks'), state, cards);
   for (const name of swept.removed) ctx.log('tick', null, `removed work clone ${name}`);
   if (swept.stripped.length > 0) ctx.log('tick', null, `removed packages of idle clones ${swept.stripped.join(', ')}`);
   if (swept.unknown.length > 0) ctx.log('tick', null, `left unknown work folders ${swept.unknown.join(', ')}`);
