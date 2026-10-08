@@ -156,4 +156,4 @@ Queues:
 - implement: implementation, ad hoc and change.
 - verify: testing, hardening and the release playtest.
 - test: the post with no checks.
-- branch: approve, merge, remove, ship, incident, release cut, candidate and dev, side by side. A job never runs twice at once, and Ship and Remove never run together, since both change the release.
+- branch: approve, merge, remove, ship, incident, release cut, candidate and dev, side by side. A job never runs twice at once, and Ship and Remove never run together, since both change the release. While a Ship runs, the merge leaves release task cards for the next batch.

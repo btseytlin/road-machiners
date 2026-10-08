@@ -377,6 +377,16 @@ describe('work clones', () => {
       await git(work, 'add', 'g.txt');
       expect(await repo.catchUpBase(work, 'dev')).toEqual({ commit: await head('dev'), conflicts: ['g.txt'], kept: null });
     });
+
+    it('lets the issue branch catch-up pass an open base merge when the branch did not move, so the stage reaches it', async () => {
+      const { repo, work, head } = await staleClone(260);
+      writeFileSync(join(work, 'g.txt'), 'mine\n');
+      await git(work, 'commit', '-am', 'mine');
+      await git(work, 'push', '--quiet', 'origin', 'HEAD:factory/issue-260');
+      await repo.catchUpBase(work, 'dev');
+      expect(await repo.mergeBranchIntoWork(work, 'factory/issue-260')).toEqual({ commit: null, conflicts: [] });
+      expect(await repo.catchUpBase(work, 'dev')).toEqual({ commit: await head('dev'), conflicts: ['g.txt'], kept: null });
+    });
   });
 
   it('gives a new and an existing work clone the guard as an executable pre-commit hook that passes on the host', async () => {

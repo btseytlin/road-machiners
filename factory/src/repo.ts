@@ -162,12 +162,6 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     if (open.length > 0) throw new Error(`${dir} has an unfinished merge or conflicts (${open.join(', ')}), so the factory left it as it is. Repair it with factory repair-clone.`);
   }
 
-  async function resumeOrRequireClean(dir: string, branch: string): Promise<{ commit: string; conflicts: string[] } | null> {
-    const open = await openMergeOf(dir, branch);
-    if (open === null) await requireNoOpenWork(dir);
-    return open;
-  }
-
   async function mergeBranchCommit(dir: string, branch: string, commit: string, message?: string): Promise<{ commit: string; conflicts: string[] }> {
     const result = await run('git', [...NO_HOOKS, 'merge', ...mergeFlags(message), commit], { cwd: dir });
     if (result.code === 0) return { commit, conflicts: [] };
@@ -297,10 +291,11 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     async mergeBranchIntoWork(dir, branch, message) {
       await gitIn(dir, ['fetch', 'origin']);
       if (!(await hasRef(dir, `refs/remotes/origin/${branch}`))) return { commit: null, conflicts: [] };
-      const open = await resumeOrRequireClean(dir, branch);
+      const open = await openMergeOf(dir, branch);
       if (open !== null) return open;
       const commit = (await gitIn(dir, ['rev-parse', `origin/${branch}`])).trim();
       if ((await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', commit, 'HEAD'], { cwd: dir })).code === 0) return { commit: null, conflicts: [] };
+      await requireNoOpenWork(dir);
       return mergeBranchCommit(dir, branch, commit, message);
     },
     async isMerged(base, branch) {
@@ -314,7 +309,7 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     async forkPoint(a, b) {
       return (await git(['rev-parse', '--short', (await git(['merge-base', await ref(a), await ref(b)])).trim()])).trim();
     },
-    diff: async (base, branch) => git(['diff', `${await ref(base)}...${await ref(branch)}`]),
+    diff: async (base, branch) => git(['diff', '--no-renames', `${await ref(base)}...${await ref(branch)}`]),
     async readFile(branch, path) {
       return git(['show', `${await ref(branch)}:${path}`]);
     },

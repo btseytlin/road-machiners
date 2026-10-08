@@ -12,7 +12,7 @@ import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
 import { openTasks } from './stages/release-common';
-import { readState, updateState } from './state';
+import { clearQueued, readState, updateState } from './state';
 import { sweepTranscripts } from './transcript-archive';
 import { askedAt, isAnswered } from './questions';
 import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
@@ -235,10 +235,10 @@ export const REAL_DEPS: TickDeps = {
   cores: availableParallelism,
 };
 
-function dropJob(ctx: Ctx, id: string): void {
+function dropJob(ctx: Ctx, job: Job): void {
   updateState(ctx.statePath, (state) => ({
-    ...state,
-    jobs: state.jobs.filter((job) => job.id !== id),
+    ...clearQueued(state, job.stage, job.issue),
+    jobs: state.jobs.filter((other) => other.id !== job.id),
   }));
 }
 
@@ -264,7 +264,7 @@ async function checkJob(ctx: Ctx, job: Job, deps: TickDeps): Promise<void> {
 async function failJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Promise<void> {
   if (alive) await deps.kill(ctx.run, job.pid, job.id);
   recordJob(ctx.cfg.home, ctx.cfg.tokenPrices, ctx.now(), job, alive ? 'timeout' : 'died');
-  dropJob(ctx, job.id);
+  dropJob(ctx, job);
   forgetResume(ctx, job);
   const reason = alive ? `timed out after ${timeoutOf(ctx.cfg, job.stage)} minutes` : 'job process died without finishing';
   await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), reason, job.log);

@@ -251,5 +251,5 @@ export async function mergeBase(ctx: Ctx, issue: number, base: string, home: str
 export async function unfinishedBaseMerge(ctx: Ctx, issue: number, base: string, commit: string | null): Promise<string | null> {
   if (commit === null) return null;
   if (await ctx.repo.isMerged(commit, BRANCH(issue))) return null;
-  return `The merge of ${base} at ${commit.slice(0, 7)} into ${BRANCH(issue)} is unfinished. Finish it with \`git commit --no-edit\`, then end again.`;
+  return `The merge of ${base} at ${commit.slice(0, 7)} into ${BRANCH(issue)} is unfinished. If a merge is open, resolve it and run \`git commit --no-edit\`. If none is open, run \`git merge origin/${base}\` and resolve it. Then end again.`;
 }

@@ -304,6 +304,15 @@ describe('timeoutOf', () => {
 });
 
 describe('tick', () => {
+  it('clears the queued ship of a ship job past its timeout, so it does not start again', async () => {
+    const ship = job('2026-01-10T08:00:00Z', 'ship', 20);
+    const h = harness(ship, true);
+    writeState(h.ctx.statePath, state({ jobs: [ship], pendingShip: 'Ann' }));
+    await checkJobs(h.ctx, h.deps);
+    expect(h.killed).toEqual(['42 ship-job']);
+    expect(readState(h.ctx.statePath).pendingShip).toBeNull();
+  });
+
   it('kills a job past the timeout by its id, clears it and reports, when it already resumed once', async () => {
     const h = harness(job('2026-01-10T11:00:00Z'), true);
     writeState(h.ctx.statePath, state({ jobs: [job('2026-01-10T11:00:00Z')], interrupted: [5] }));

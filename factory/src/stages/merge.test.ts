@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EMPTY_STATE, readState, updateState, writeState } from '../state';
-import { STUCK_LABEL, type AgentRun, type Card, type Ctx } from '../types';
+import { RELEASE_TASK_LABEL, STUCK_LABEL, type AgentRun, type Card, type Ctx } from '../types';
 import { BudgetError } from './checkpoint';
 
 const deployed: string[] = [];
@@ -157,6 +157,14 @@ describe('merge queue', () => {
   it('leaves a stuck or held card out of the batch', async () => {
     cards = [card(5, [STUCK_LABEL]), card(6), card(7)];
     updateState(`${home}/state.json`, (state) => ({ ...state, held: { 7: { by: 'Ann', reason: 'wait', at: '2026-09-30T09:00:00Z', stage: null } } }));
+    await merge(fakeCtx());
+    expect(calls.filter((call) => call.startsWith('merge '))).toEqual(['merge factory/issue-6']);
+  });
+
+  it('leaves release task cards out while a ship runs, and merges dev cards', async () => {
+    cards = [card(6), card(7, [RELEASE_TASK_LABEL])];
+    const ship = { id: 'ship-20-x', stage: 'ship' as const, issue: 20, pid: 1, startedAt: '', log: '' };
+    updateState(`${home}/state.json`, (state) => ({ ...state, jobs: [ship], release: { issue: 20, branch: 'release/2026-01-05', day: '2026-01-05', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } } }));
     await merge(fakeCtx());
     expect(calls.filter((call) => call.startsWith('merge '))).toEqual(['merge factory/issue-6']);
   });

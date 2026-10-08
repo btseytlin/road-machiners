@@ -21,9 +21,13 @@ export function changedAgainstAll(diffs: string[]): string {
 }
 
 export function guardDiff(diff: string): void {
-  const leaked = factoryPaths(diff);
+  guardAgainstAll([diff]);
+}
+
+export function guardAgainstAll(diffs: string[]): void {
+  const leaked = factoryPaths(changedAgainstAll(diffs));
   if (leaked.length) throw new Error(`The branch touches paths an agent may not push: ${leaked.join(', ')}`);
-  if (changesSaveMajor(diff)) {
+  if (diffs.every(changesSaveMajor)) {
     throw new CommitteeDecisionError('The change bumps SAVE_MAJOR in game/src/three/save-migrations.ts. The committee must decide on a major save bump before this can go on.');
   }
 }

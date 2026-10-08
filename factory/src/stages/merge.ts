@@ -8,7 +8,7 @@ import { withWorkFolder } from '../work-lock';
 import { closeMerged } from './approval';
 import { runCost, untilPasses } from './checkpoint';
 import { checkFailure, checkScript, checkUntilReal, testCacheMount } from './checks';
-import { changedAgainstAll, guardDiff } from '../diff-guard';
+import { guardAgainstAll } from '../diff-guard';
 import { BASE_BRANCH, baseBranchFor, fillPrompt, playtestCommand, resetOutputs } from './common';
 import { releaseLog } from './release-common';
 
@@ -55,7 +55,8 @@ async function nextBatch(ctx: Ctx): Promise<{ base: string; cards: Card[] } | nu
   const merging = (await ctx.github.cards()).filter((card) => card.column === 'Merging' && !card.labels.includes(STUCK_LABEL));
   let taken: { base: string; cards: Card[] } | null = null;
   updateState(ctx.statePath, (state) => {
-    const waiting = merging.filter((card) => !(String(card.issue) in state.held));
+    const shipping = state.jobs.some((job) => job.stage === 'ship');
+    const waiting = merging.filter((card) => !(String(card.issue) in state.held) && !(shipping && baseBranchFor(ctx, card.labels) === state.release?.branch));
     if (waiting.length === 0) return state;
     const base = baseBranchFor(ctx, waiting[0]!.labels);
     const cards = waiting.filter((card) => baseBranchFor(ctx, card.labels) === base);
@@ -109,7 +110,7 @@ async function mergedChecks(ctx: Ctx, land: Landing): Promise<string | null> {
 
 async function pushed(ctx: Ctx, land: Landing): Promise<boolean> {
   const head = await ctx.repo.fetchFromWork(land.dir, land.into);
-  guardDiff(changedAgainstAll(await Promise.all(land.guardAgainst.map((branch) => ctx.repo.diff(branch, head)))));
+  guardAgainstAll(await Promise.all(land.guardAgainst.map((branch) => ctx.repo.diff(branch, head))));
   try {
     await ctx.repo.push(head, land.into);
     return true;

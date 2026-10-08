@@ -23,8 +23,8 @@ import { runStage as waste } from './stages/waste';
 import { runStage as triage } from './stages/triage';
 import { recordJob, type JobOutcome } from './ledger';
 import { clearSessions, markResumed, resumedStage } from './sessions';
-import { readState, updateState } from './state';
-import { QUEUE_OF, type Ctx, type FactoryState, type Job, type JobStage } from './types';
+import { clearQueued, readState, updateState } from './state';
+import { QUEUE_OF, type Ctx, type Job, type JobStage } from './types';
 
 type Handler = (ctx: Ctx, issue: number) => Promise<void>;
 
@@ -129,22 +129,4 @@ function clearJob(ctx: Ctx, stage: JobStage, issue: number | null, resumes: bool
     const interrupted = QUEUE_OF[stage] === 'branch' || resumes ? state.interrupted : state.interrupted.filter((item) => item !== issue);
     return { ...clearQueued(state, stage, issue), jobs, interrupted };
   });
-}
-
-function clearQueued(state: FactoryState, stage: JobStage, issue: number | null): FactoryState {
-  const pendingApprovals = { ...state.pendingApprovals };
-  if (stage === 'approve') delete pendingApprovals[String(issue)];
-  const pendingChanges = stage === 'change' ? state.pendingChanges.filter((item) => item.id !== issue) : state.pendingChanges;
-  const pendingIncidents = stage === 'incident' ? state.pendingIncidents.filter((n) => n !== issue) : state.pendingIncidents;
-  const pendingShip = stage === 'ship' ? null : state.pendingShip;
-  const first = stage === 'remove' ? state.pendingRemovals.findIndex((item) => item.issue === issue) : -1;
-  const pendingRemovals = state.pendingRemovals.filter((_, index) => index !== first);
-  return {
-    ...state,
-    pendingApprovals,
-    pendingChanges,
-    pendingIncidents,
-    pendingShip,
-    pendingRemovals,
-  };
 }
