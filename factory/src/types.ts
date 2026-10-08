@@ -48,7 +48,8 @@ export type FactoryConfig = {
   replyRouteMinutes: number; // minutes Hermes has to route a plain approval reply before it becomes a failure
   releaseDays: number;
   playtestTurns: number; // turns of the release playtest's progression run
-  playtestRuns: number; // playtest runs a release may spend before it blocks for a member
+  playtestRuns: number; // plays of one release playtest job before it blocks for a member
+  playtestTimeoutMinutes: number; // minutes a release playtest job may run, since its plays and fixes outlast the verify queue's limit
   wasteReviewDays: number; // days between waste reviews of the factory
   itchTarget: string | null; // itch.io page as "user/game". Null until set, and then a release fails loud.
   butlerKey: string | null; // BUTLER_API_KEY, only ever in the env of the butler call

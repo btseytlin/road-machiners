@@ -6,9 +6,9 @@ import { parseStage } from './jobs';
 import { readLedger } from './ledger';
 import { readObservation, type SchedulerData } from './observability';
 import { resumedStage } from './sessions';
-import { chooseJobs, evaluateSchedule, tick, type TickDeps } from './tick';
+import { chooseJobs, evaluateSchedule, tick, timeoutOf, type TickDeps } from './tick';
 import { EMPTY_STATE, readState, writeState } from './state';
-import { FACTORY_MARK, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type ReleaseState, type Ctx, type IssueComment, type FactoryState, type Job } from './types';
+import { FACTORY_MARK, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUESTIONS_HEADING, STUCK_LABEL, type Card, type ReleaseState, type Ctx, type IssueComment, type FactoryConfig, type FactoryState, type Job } from './types';
 
 const NOW = new Date('2026-01-10T12:00:00Z');
 const hoursAgo = (hours: number) => new Date(NOW.getTime() - hours * 3_600_000).toISOString();
@@ -295,6 +295,13 @@ function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: 
 const job = (startedAt: string, stage: Job['stage'] = 'design', issue: number | null = 5): Job => ({ id: `${stage}-job`, stage, issue, pid: 42, startedAt, log: '/l.log' });
 // The spawned args without the job id at the end.
 const args = (h: Harness): string[][] => h.spawned.map((call) => call.slice(0, 2));
+
+describe('timeoutOf', () => {
+  it('gives the release playtest its own limit and every other stage its queue limit', () => {
+    const cfg = { verifyTimeoutMinutes: 240, playtestTimeoutMinutes: 330 } as FactoryConfig;
+    expect([timeoutOf(cfg, 'playtest'), timeoutOf(cfg, 'verify')]).toEqual([330, 240]);
+  });
+});
 
 describe('tick', () => {
   it('kills a job past the timeout by its id, clears it and reports', async () => {

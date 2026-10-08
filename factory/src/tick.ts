@@ -270,8 +270,9 @@ async function failJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Prom
   await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), reason, job.log);
 }
 
-// Each queue has its own time limit, since its jobs differ in length by hours.
+// Each queue has its own time limit, since its jobs differ in length by hours. The release playtest plays and fixes several rounds in one job, so it has its own.
 export function timeoutOf(cfg: FactoryConfig, stage: JobStage): number {
+  if (stage === 'playtest') return cfg.playtestTimeoutMinutes;
   const queue = QUEUE_OF[stage];
   const minutes: Record<Queue, number> = {
     triage: cfg.triageTimeoutMinutes, design: cfg.designTimeoutMinutes, implement: cfg.implementTimeoutMinutes,
