@@ -89,7 +89,7 @@ export function closeRunFromTranscript(home: string, jobId: string, prices: Reco
   const path = openRunPath(home, jobId);
   if (!existsSync(path)) return;
   const run = JSON.parse(readFileSync(path, 'utf8')) as OpenRun;
-  const modelUsage = transcriptUsage(run.projects, run.sessionId, prices);
+  const modelUsage = transcriptUsage(run.projects, run.sessionId, prices, new Date(run.startedAt));
   if (modelUsage !== null) {
     const costUsd = modelUsage.reduce((sum, row) => sum + row.cost, 0);
     const minutes = (endedAt.getTime() - Date.parse(run.startedAt)) / 60_000;

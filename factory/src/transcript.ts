@@ -15,7 +15,7 @@ function transcriptFiles(projects: string, id: string): string[] {
 }
 
 type Counts = { input: number; output: number; cacheRead: number; cacheWrite5m: number; cacheWrite1h: number };
-type Message = { id: string; model: string; usage: Record<string, unknown> };
+type Message = { id: string; model: string; usage: Record<string, unknown>; timestamp: unknown };
 
 const count = (value: unknown, at: string): number => {
   if (value === undefined) return 0;
@@ -25,10 +25,10 @@ const count = (value: unknown, at: string): number => {
 
 function readMessages(file: string): Message[] {
   return readFileSync(file, 'utf8').split('\n').filter((line) => line.trim() !== '').flatMap((line) => {
-    const event = JSON.parse(line) as { type?: string; message?: { id?: string; model?: string; usage?: Record<string, unknown> } };
+    const event = JSON.parse(line) as { type?: string; timestamp?: unknown; message?: { id?: string; model?: string; usage?: Record<string, unknown> } };
     const message = event.message;
     if (event.type !== 'assistant' || !message?.id || !message.model || !message.usage) return [];
-    return [{ id: message.id, model: message.model, usage: message.usage }];
+    return [{ id: message.id, model: message.model, usage: message.usage, timestamp: event.timestamp }];
   });
 }
 
@@ -45,16 +45,23 @@ function countsOf(message: Message, at: string): Counts {
 const priceOf = (counts: Counts, price: TokenPrice): number =>
   (counts.input * price.input + counts.output * price.output + counts.cacheRead * price.cacheRead + counts.cacheWrite5m * price.cacheWrite5m + counts.cacheWrite1h * price.cacheWrite1h) / 1_000_000;
 
-export function transcriptUsage(projects: string, id: string, prices: Record<string, TokenPrice>): ModelUsage[] | null {
+function readTime(message: Message, at: string): number {
+  const time = typeof message.timestamp === 'string' ? Date.parse(message.timestamp) : Number.NaN;
+  if (Number.isNaN(time)) throw new Error(`${at} has no valid timestamp`);
+  return time;
+}
+
+export function transcriptUsage(projects: string, id: string, prices: Record<string, TokenPrice>, since: Date): ModelUsage[] | null {
   const files = transcriptFiles(projects, id);
   if (files.length === 0) return null;
   const seen = new Set<string>();
   const models = new Map<string, ModelUsage>();
   const messages = files.flatMap((file) => readMessages(file).map((message) => ({ message, file })));
   for (const { message, file } of messages.filter(({ message }) => message.model !== '<synthetic>')) {
-    if (seen.has(message.id)) continue;
+    const at = `Message ${message.id} in ${file}`;
+    if (readTime(message, at) < since.getTime() || seen.has(message.id)) continue;
     seen.add(message.id);
-    addMessage(models, message, `Message ${message.id} in ${file}`, prices);
+    addMessage(models, message, at, prices);
   }
   return [...models.values()];
 }
