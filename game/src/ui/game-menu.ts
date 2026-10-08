@@ -53,7 +53,7 @@ export class HelpPanel {
       el("div", {}, "Click a town or site: stop at its pad. E on a pad: trade, repair or loot."),
       el("div", {}, "T: radio the inspected truck. 1-9: reply. H: honk."),
       el("div", {}, "Click a truck: inspect it, or aim a picked weapon at its body. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
-      el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
+      el("div", {}, "P: auto patch. C: character. J: journal. I: inventory. Esc: close."),
       el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
       el("div", { class: "version" }, versionLabel()),
       el("div", { class: "version world-setup" }, this.setup()),

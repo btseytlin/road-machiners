@@ -295,6 +295,12 @@ describe("caltrops log", () => {
 });
 
 describe("collision log", () => {
+  it("tells the log the title of a note written into the journal", () => {
+    const w = emptyWorld();
+
+    expect(eventText(w, { t: "note", id: "greenPit" })).toEqual({ text: "Noted in your journal: Clean water at Green Pit.", cls: "good" });
+  });
+
   it("logs no crash, whether into a standing obstacle or through a fence", () => {
     const w = emptyWorld();
     const me = w.player.vehicleId;

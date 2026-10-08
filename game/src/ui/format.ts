@@ -3,6 +3,7 @@
 import { GOODS } from '../data/goods';
 import { CONTRACTS } from '../data/market';
 import { partDef } from '../data/parts';
+import { NOTES } from '../data/locals';
 import type { Contract } from '../sim/market';
 import { PERK_LEVELS, SKILL_INFO } from '../data/skills';
 import { TERRAIN } from '../data/terrain';
@@ -15,7 +16,7 @@ import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
 import { goodsCount } from '../sim/grid';
 import { spareParts } from '../sim/inventory';
-import { carriedPart } from '../sim/salvage';
+import { carriedPart, isStoryWreck } from '../sim/salvage';
 import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
@@ -118,7 +119,7 @@ const OBSTACLE_ID = new RegExp(`^(wreck|rock|bld|${OPENING_WRECK_ID}$)`);
 export function vehicleName(world: World, id: string): string {
   if (id === world.player.vehicleId) return 'You';
   const v = findAny(world, id);
-  return v ? npcName(v) : OBSTACLE_ID.test(id) ? 'an obstacle' : 'something';
+  return v ? npcName(v) : OBSTACLE_ID.test(id) || isStoryWreck({ id }) ? 'an obstacle' : 'something';
 }
 
 function findAny(world: World, id: string): Vehicle | undefined {
@@ -640,6 +641,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   escortPaid: escortPaidText,
   escortHired: escortHiredText,
   escortRefused: escortRefusedText,
+  note: (_, e) => ({ text: `Noted in your journal: ${NOTES[e.id].title}.`, cls: 'good' }),
 };
 
 export function eventText(world: World, e: GameEvent): LogLine | null {

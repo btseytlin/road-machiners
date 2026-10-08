@@ -40,11 +40,13 @@ import FORMAT_2_30 from './save-fixtures/format-2-30.json';
 import SAVE_SHAPE from './save-shape.json';
 import FORMAT_2_31 from './save-fixtures/format-2-31.json';
 import FORMAT_2_32 from './save-fixtures/format-2-32.json';
+import FORMAT_2_33 from './save-fixtures/format-2-33.json';
+import { STORY_WRECKS } from '../data/salvage';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
 import { dropQuest, dropQuestVar, endQuestSession, MIGRATIONS, moveQuestCheckpoint, pooledSkills_9_10, renameQuestVar, type SavedJson } from './save-migrations';
-import FORMAT_2_33 from './save-fixtures/format-2-33.json';
+import FORMAT_2_34 from './save-fixtures/format-2-34.json';
 
 describe('save migrations', () => {
   it('0 to 1 gives the player townPatched false and keeps every other field', () => {
@@ -762,10 +764,33 @@ describe('save migration 32 to 33', () => {
 });
 
 describe('save migration 33 to 34', () => {
-  it('gives the player empty quest state with no open quest', () => {
-    const next = MIGRATIONS[33](FORMAT_2_33);
+  const wagon = STORY_WRECKS[0];
+  const fresh = emptyWorld();
 
-    expect(next).toEqual({ ...FORMAT_2_33, player: { ...FORMAT_2_33.player, quests: { world: {}, local: {}, session: null } } });
+  it('gives the player an empty journal and puts wagon Seven in place as a new game has it', () => {
+    const next = MIGRATIONS[33](FORMAT_2_33) as typeof FORMAT_2_33 & { player: { notes: unknown[] } };
+
+    expect(next.player).toEqual({ ...FORMAT_2_33.player, notes: [] });
+    expect(next.obstacles).toEqual([...FORMAT_2_33.obstacles, { id: wagon.id, pos: wagon.pos, r: wagon.r, kind: 'wreck', hulk: { chassisId: wagon.chassisId, yaw: wagon.yaw } }]);
+    expect(next.salvage).toEqual([...FORMAT_2_33.salvage, fresh.salvage.find((s) => s.id === wagon.id)]);
+    expect(next.turn).toBe(FORMAT_2_33.turn);
+  });
+
+  it('adds no second wagon to a save that holds one', () => {
+    const once = MIGRATIONS[33](FORMAT_2_33);
+
+    const twice = MIGRATIONS[33](once) as typeof FORMAT_2_33;
+
+    expect(twice.obstacles.filter((o) => o.id === wagon.id)).toHaveLength(1);
+    expect(twice.salvage.filter((s) => s.id === wagon.id)).toHaveLength(1);
+  });
+});
+
+describe('save migration 34 to 35', () => {
+  it('gives the player empty quest state with no open quest', () => {
+    const next = MIGRATIONS[34](FORMAT_2_34);
+
+    expect(next).toEqual({ ...FORMAT_2_34, player: { ...FORMAT_2_34.player, quests: { world: {}, local: {}, session: null } } });
   });
 });
 

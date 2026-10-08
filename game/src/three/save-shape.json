@@ -1,5 +1,5 @@
 {
- "format": "2.34",
+ "format": "2.35",
  "shape": {
   "broken": [],
   "craters": [],
@@ -16,6 +16,19 @@
   },
   "nextId": "number",
   "obstacles": [
+   {
+    "hulk": {
+     "chassisId": "string",
+     "yaw": "number"
+    },
+    "id": "string",
+    "kind": "string",
+    "pos": {
+     "x": "number",
+     "y": "number"
+    },
+    "r": "number"
+   },
    {
     "id": "string",
     "kind": "string",
@@ -49,6 +62,7 @@
    "knockouts": "number",
    "marked": [],
    "money": "number",
+   "notes": [],
    "overdrive": "boolean",
    "perks": [],
    "quests": {

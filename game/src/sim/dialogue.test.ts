@@ -5,6 +5,7 @@ import { buyPrice, sellPrice } from './economy';
 import { goodBasePrice, goodValue, vehicleValue } from './market';
 import { BUSY_LINE, TRAIT_TALK, END, HONK_RANGE, HUB, REFUSED, TOPICS, type Topic } from '../data/dialogue';
 import { REGION } from '../data/region';
+import { STORY_WRECKS } from '../data/salvage';
 import { playerVehicle } from './damage';
 import { callVehicle, callTrucks, chooseOption, currentOptions, endCallIfOut, hangUp, honk, placeholders, radioSpeakers, raiseCalls } from './dialogue';
 import { fireBlock, isHostile } from './combat';
@@ -819,11 +820,58 @@ describe('rumor mill', () => {
     expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).not.toContain(askText);
   });
 
+  it('names a story wreck like any wreck', () => {
+    const { w, npc } = rumorWorld();
+    w.salvage = [wreck('story-wagon-seven', { x: 50, y: 30 })];
+    let next = callVehicle(w, npc.id);
+    next = chooseOption(next, optionIndex(next, askText));
+    next = chooseOption(next, optionIndex(next, 'Where?'));
+    next = chooseOption(next, optionIndex(next, 'Thanks. Over and out.'));
+    expect(next.player.rumored).toEqual(['story-wagon-seven']);
+  });
+
   it('is not offered without the perk', () => {
     const { w, npc } = rumorWorld();
     w.player.perks = [];
     w.salvage = [wreck('wreck7', { x: 50, y: 30 })];
     expect(currentOptions(callVehicle(w, npc.id)).map((o) => o.text)).not.toContain(askText);
+  });
+});
+
+describe('army wagon topic', () => {
+  const askText = TOPICS.armyWagon.ask!.text;
+
+  // A trader within the Rumor mill radius of wagon Seven, or `away` tiles past it, talking to the player beside it.
+  function wagonWorld(away = 0): { w: World; npc: Vehicle } {
+    const wagon = STORY_WRECKS[0].pos;
+    const at = { x: wagon.x + PERK_NUMBERS.rumorMill.radius - 5 + away, y: wagon.y };
+    const w = emptyWorld({ x: at.x - 6, y: at.y });
+    const npc = addVehicle(w, 'traders', 'scout', ['stockEngine'], at);
+    npc.brain = npcBrain('trader', npc.pos, TRAITS_OF.trader);
+    refreshVision(w);
+    return { w, npc };
+  }
+
+  it('tells where the wagon lies once the player has heard of it, with no perk and no mark', () => {
+    const { w, npc } = wagonWorld();
+    w.player.notes = [{ id: 'wagonBowl', turn: 0 }];
+
+    let next = callVehicle(w, npc.id);
+    next = chooseOption(next, optionIndex(next, askText));
+    next = chooseOption(next, optionIndex(next, 'Thanks. Over and out.'));
+
+    expect(next.player.notes.map((n) => n.id)).toEqual(['wagonBowl', 'wagonRoad']);
+    expect(next.player.rumored).toEqual([]);
+    expect(next.player.talked[npc.id]?.armyWagon).toBe('done');
+  });
+
+  it('is not offered before the Bowl rumor, or by a driver far from the wagon', () => {
+    const fresh = wagonWorld();
+    const far = wagonWorld(10);
+    far.w.player.notes = [{ id: 'wagonBowl', turn: 0 }];
+
+    expect(currentOptions(callVehicle(fresh.w, fresh.npc.id)).map((o) => o.text)).not.toContain(askText);
+    expect(currentOptions(callVehicle(far.w, far.npc.id)).map((o) => o.text)).not.toContain(askText);
   });
 });
 

@@ -519,6 +519,32 @@ function withCents_29_30(world: SavedJson): SavedJson {
   };
 }
 
+const WAGON_SEVEN_33_34 = {
+  obstacle: { id: 'story-wagon-seven', pos: { x: 171, y: 381 }, r: 0.8, kind: 'wreck', hulk: { chassisId: 'wagon', yaw: 2.2 } },
+  stock: {
+    id: 'story-wagon-seven',
+    pos: { x: 171, y: 381 },
+    radius: 0.8,
+    goods: { scrap: 3, meds: 1, parts: 1 },
+    parts: [{ id: 'story-wagon-seven-cannon', defId: 'cannon', hp: 48, wear: 2, gun: { cooldown: 0, ammo: 2, reloadWork: 0 } }],
+    fuel: 10,
+    supplies: 4,
+    hidden: { goods: {}, parts: [], fuel: 0, supplies: 0 },
+  },
+};
+
+function withNotesAndWagon_33_34(world: SavedJson): SavedJson {
+  const has = (list: SavedJson[]) => list.some((x) => x.id === WAGON_SEVEN_33_34.obstacle.id);
+  const obstacles = world.obstacles as SavedJson[];
+  const salvage = world.salvage as SavedJson[];
+  return {
+    ...world,
+    player: { ...(world.player as SavedJson), notes: [] },
+    obstacles: has(obstacles) ? obstacles : [...obstacles, structuredClone(WAGON_SEVEN_33_34.obstacle)],
+    salvage: has(salvage) ? salvage : [...salvage, structuredClone(WAGON_SEVEN_33_34.stock)],
+  };
+}
+
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, player: { ...(world.player as SavedJson), townPatched: false } }),
   (world) => {
@@ -597,6 +623,7 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     const { contacts: _contacts, clouds: _clouds, ...player } = world.player as SavedJson;
     return { ...world, player };
   },
+  withNotesAndWagon_33_34,
   (world) => ({ ...world, player: { ...(world.player as SavedJson), quests: { world: {}, local: {}, session: null } } }),
 ];
 
