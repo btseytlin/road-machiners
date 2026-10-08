@@ -28,11 +28,12 @@ function fillLog(page) {
     const g = window.__ROAM__;
     const { t } = await import('/src/text/msg.ts');
     const n = await import('/src/text/names.ts');
+    const { moneyMsg } = await import('/src/ui/units.ts');
     const lines = [
       t('log.jobCancelled', { what: t('job.remove', { part: n.partName('tankHeavy'), truck: t('vehicle.npc', { profession: n.professionName('convoyGuard'), driver: 'Bartholomew Cartwright' }) }) }),
       t('log.jobStarted', { what: t('job.repair', { part: n.partName('enclosedFrame') }), n: 12 }),
-      t('log.escortHired', { client: t('vehicle.npc', { profession: n.professionName('convoy'), driver: 'Mira Dawes' }), who: t('vehicle.npc', { profession: n.professionName('merc'), driver: 'Cass Dust' }), site: n.siteName('canyon-bridge'), fee: 12345 }),
-      t('log.contract.accepted', { what: t('contract.fetch', { part: n.partName('reinforcedCage'), site: n.siteName('salvage-yard'), n: 2 }), reward: 4200 }),
+      t('log.escortHired', { client: t('vehicle.npc', { profession: n.professionName('convoy'), driver: 'Mira Dawes' }), who: t('vehicle.npc', { profession: n.professionName('merc'), driver: 'Cass Dust' }), site: n.siteName('canyon-bridge'), fee: moneyMsg(12345) }),
+      t('log.contract.accepted', { what: t('contract.fetch', { part: n.partName('reinforcedCage'), site: n.siteName('salvage-yard'), n: 2 }), reward: moneyMsg(4200) }),
       t('note.hazard'),
       t('log.towDroppedYou.blocked', { who: t('vehicle.npc', { profession: n.professionName('bowlFarmer'), driver: 'Earl Mason' }) }),
       t('log.scrapPatchFuel', { liters: 40 }),
@@ -89,10 +90,15 @@ const hangUp = (page) => page.evaluate(() => {
   g.apply(next);
 });
 
-const openHelp = (page) => page.evaluate(() => document.querySelector('#ui .help details').setAttribute('open', ''));
-const closeHelp = (page) => page.evaluate(() => document.querySelector('#ui .help details').removeAttribute('open'));
+const chooseMenuItem = (page, index) => page.evaluate((i) => {
+  document.querySelector('#ui .game-menu .menu-button').click();
+  document.querySelectorAll('#ui .game-menu [role=menuitem]')[i].click();
+}, index);
 
-const openSaves = (page) => page.evaluate(() => document.querySelector('#ui .game-menu button').click());
+const openHelp = (page) => chooseMenuItem(page, 3);
+const closeHelp = (page) => page.evaluate(() => document.querySelector('#ui .help .close').click());
+
+const openSaves = (page) => chooseMenuItem(page, 1);
 
 // The checker in the page, with the driver names on the map and the brands allowed in Russian.
 function faultsIn(page, locale) {

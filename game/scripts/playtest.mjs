@@ -58,7 +58,7 @@ const findDeadCorners = () => {
 };
 const hit = await page.evaluate(findDeadCorners);
 hitProblems.push(...hit.failures);
-if (hit.found < 4) hitProblems.push(`found ${hit.found} one-control panels, expected at least 4`);
+if (hit.found < 3) hitProblems.push(`found ${hit.found} one-control panels, expected at least 3`);
 const menuBox = await page.locator('#ui .game-menu').boundingBox();
 await page.mouse.click(menuBox.x + 2, menuBox.y + 2);
 if (!(await page.locator('.game-menu [role=menu]').isVisible())) hitProblems.push('menu did not open from a click in its corner');
