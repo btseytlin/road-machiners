@@ -226,7 +226,7 @@ async function pullRequestUrl(ctx: Ctx, issue: number, title: string, approval: 
   const open = await ctx.github.pullRequestFor(BRANCH(issue));
   if (open !== null) return open;
   const closes = [issue, ...bundleOf(readState(ctx.statePath), issue)].map((n) => `#${n}`).join(', ');
-  const body = `Closes ${closes}.\n\n${approval.description}\n\nHow to try: ${approval.howToTry}\n\nThe factory merges it when the committee approves.`;
+  const body = `Closes ${closes}.\n\n${approval.description}\n\nHow to try: ${approval.howToTry}\n\nThe factory merges it after the committee approves it and it passes hardening and the merge checks.`;
   return ctx.github.openPullRequest(BRANCH(issue), base, `#${issue} ${title}`, body);
 }
 

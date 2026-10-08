@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { EMPTY_STATE, readState, writeState } from '../state';
-import type { AgentRun, Card, Ctx } from '../types';
+import { EMPTY_STATE, readState, updateState, writeState } from '../state';
+import { STUCK_LABEL, type AgentRun, type Card, type Ctx } from '../types';
 import { BudgetError } from './checkpoint';
 
 const deployed: string[] = [];
@@ -154,6 +154,13 @@ describe('merge queue', () => {
     diff = 'diff --git a/.github/workflows/x.yml b/.github/workflows/x.yml\n';
     await expect(merge(fakeCtx())).rejects.toThrow('paths an agent may not push');
     expect(calls.some((call) => call.startsWith('push'))).toBe(false);
+  });
+
+  it('leaves a stuck or held card out of the batch', async () => {
+    cards = [card(5, [STUCK_LABEL]), card(6), card(7)];
+    updateState(`${home}/state.json`, (state) => ({ ...state, held: { 7: { by: 'Ann', reason: 'wait', at: '2026-09-30T09:00:00Z', stage: null } } }));
+    await merge(fakeCtx());
+    expect(calls.filter((call) => call.startsWith('merge '))).toEqual(['merge factory/issue-6']);
   });
 
   it('does nothing when no card waits', async () => {

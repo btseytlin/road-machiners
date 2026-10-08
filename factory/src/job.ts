@@ -114,7 +114,7 @@ function resuming(ctx: Ctx, stage: JobStage, issue: number | null): boolean {
   return issue !== null && readState(ctx.statePath).interrupted.includes(issue) && resumedStage(ctx.cfg.home, issue) === stage;
 }
 
-// Only agent and test jobs run agents with sessions.
+// Only card jobs keep sessions under the issue. Branch jobs keep none there.
 function clearSessionsOf(ctx: Ctx, stage: JobStage, issue: number | null): void {
   if (issue !== null && QUEUE_OF[stage] !== 'branch') clearSessions(ctx.cfg.home, issue);
 }

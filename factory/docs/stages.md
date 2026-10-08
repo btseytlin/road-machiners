@@ -27,7 +27,7 @@ Design runs Opus, or Sonnet with `design-sonnet`, at `FACTORY_DESIGN_EFFORT`. It
 
 - `.factory/questions.md` sends the card back to Triage with the questions, as unclear triage does.
 - `.factory/wont-do.md` closes the issue as wont-do.
-- A revision reads the issue comments under "## Committee feedback", "## Review findings" and "## Visual review findings". Comments under "## Committee question" are context only.
+- A revision reads the issue comments under "## Committee feedback". Comments under "## Committee question" are context only.
 
 ## Implementation
 
@@ -108,7 +108,7 @@ The playtest checks that the merged features hold up together over a long run be
 - The agent fixes each important `release` finding in its clone with the smallest change and commits it. It never removes or disables a feature or changes unrelated behavior to silence a finding. The factory replays the seed on the new head and resumes the same agent session. A replay checks that each fix holds and broke nothing, and does not hunt again.
 - An important `old` finding that no open bug issue names opens a `bug` issue for `dev`, which waits for votes like any other. It never blocks the release.
 - A clean verdict passes only with no important `release` finding, no commit since the play, a run that did not end in an error, and a reason for every death and every kind of missing activity. A clean verdict that misses one blocks.
-- A clean end with fixes runs the diff checks and the factory checks of the checks stage in the clone first. A failed check goes to the same agent, and its fix plays again. Then the factory pushes the reviewed commit to the release, so the release head is the commit the last play passed. A release that moved meanwhile gets the fixes as a merge, and its new head plays next.
+- A clean end with fixes runs the diff checks and the full checks of the merge checkpoint in the clone first. A failed check goes to the same agent, and its fix plays again. Then the factory pushes the reviewed commit to the release, so the release head is the commit the last play passed. A release that moved meanwhile gets the fixes as a merge, and its new head plays next.
 - A job plays at most `FACTORY_PLAYTEST_RUNS` times, the first play included. A blocked verdict, fixes left on the last play, or a failed check on the last play blocks the release. The job fails, so the tracking card takes `factory-stuck` and Hermes sees the failure. `factory retry <tracking> [decision]` lifts the block and hands the decision to the next job's review.
 - Each play keeps its logs, facts, review, report and outcome in `$FACTORY_HOME/playtest/<day>/run-<n>/`. The job comments one report on the tracking issue at its end.
 
@@ -143,7 +143,7 @@ A member can ask Hermes for one-off work, like "simulate 10 battles and tell me 
 The baseline is triage Sonnet, design Opus, implementation Sonnet and testing Sonnet. `FACTORY_DESIGN_MODEL` is the Opus id and `FACTORY_BUILD_MODEL` the Sonnet id. The issue's labels at the moment an agent starts decide its model.
 
 - `design-sonnet` runs design on Sonnet.
-- `implementation-opus` runs implementation on Opus. Every testing round and the review stay on Sonnet.
+- `implementation-opus` runs implementation on Opus. Testing and hardening stay on Sonnet.
 - The release playtest, candidate, incident and factory change agents always run Opus. Triage, merge, ad hoc and waste review agents always run Sonnet.
 - The triage prompt aims for about 20% Opus and 80% Sonnet in measured agent tokens. It is a rule of thumb, never a cap.
 

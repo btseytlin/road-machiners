@@ -99,8 +99,8 @@ export async function useOpenNetwork(ctx: Ctx, stage: Stage, issue: number | nul
 }
 
 // The model of a stage comes from the issue's labels at the moment the agent starts, so a label changed by hand takes effect on the next agent run.
-// design-sonnet moves design to the build model. implementation-opus moves implementation to the design model; verify stays on the build model.
-// Triage and patch always run on the build model. A patch is a small change on top of a reviewed build, so the label that judged the whole issue does not apply.
+// design-sonnet moves design to the build model. implementation-opus moves implementation to the design model.
+// Triage, testing and hardening always run on the build model.
 // The model ids come from settings.env: FACTORY_DESIGN_MODEL is the Opus id, FACTORY_BUILD_MODEL the Sonnet id.
 export function modelFor(cfg: Pick<FactoryConfig, 'designModel' | 'buildModel'>, stage: CardStage, labels: string[]): string {
   if (stage === 'design') return labels.includes(DESIGN_SONNET_LABEL) ? cfg.buildModel : cfg.designModel;

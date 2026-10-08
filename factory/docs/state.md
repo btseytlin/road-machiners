@@ -10,12 +10,12 @@ One card position spans several stores. A position is consistent when every stor
 
 - Project board: the column of each card. Written by every job that moves a card, and by `move`.
 - Issue labels and comments: flags, model routing, design and feedback. Written by triage, design, the tick and `retry`.
-- GitHub branches: `factory/issue-N`, `dev`, `main` and the release branch. Written by implement, approve, ship and `merge`.
+- GitHub branches: `factory/issue-N`, `dev`, `main` and the release branch. Written by implement, testing, hardening, the merge job, a hotfix approve and ship.
 - `state.json`: jobs, queues, card sub-positions, posts, builds, the release and the health records. Written by the tick, every job, and the write commands.
 - Work clone: the task file and stage outputs, like `.factory/approval.json` and the screenshot. Written by the agent stages. Its pre-commit hook runs the diff guard.
 - Clone backups: `$FACTORY_HOME/clone-backups/issue-N-<time>/` holds a work clone that `repair-clone` replaced, with `repair.json` and `status.txt`. Written only by `repair-clone`. No code reads or deletes it. Hermes deletes it by hand once the card is past the trouble.
-- Web root: the published builds. Written by checks, approve, ship and the dev build.
-- Telegram: the posts with buttons. Written by checks, candidate, approve and ship.
+- Web root: the published builds. Written by testing, the post-only checks, candidate, a hotfix approve, ship and the dev build.
+- Telegram: the posts with buttons. Written by testing, the post-only checks, candidate, approve and ship.
 - Source maps: `$FACTORY_HOME/sourcemaps/<commit>/` holds the maps of each release, dev and candidate build, and `published.jsonl` lists those builds. Written by ship, hotfix, the dev build and candidate. Read by the error service.
 - Test cache: `$FACTORY_HOME/test-cache/` holds the pass entries of the game test tool. The tool writes and reads them in the check containers of the post and merge checkpoints, the only ones that mount the folder. The tick deletes files older than `FACTORY_TEST_CACHE_DAYS`.
 - Error reports: `$FACTORY_HOME/error-reports/` holds `store.json`, which ties each error fingerprint to its issue and counts reports and rejects, and `reports/<fingerprint>/<commit>.json.gz`. Written only by the error service. Agent stages of an `error-report` issue read its reports.
@@ -80,7 +80,7 @@ The release tracking card has the label `release`. It waits in Approval for the 
 
 `factory queues` prints the queues. The tick applies each queue before it picks jobs.
 
-- `pendingApprovals`: approvals the approve job merges. Fed by an Approve press and by `merge`. Drop with `drop approval <issue>`.
+- `pendingApprovals`: approvals the approve job runs. It moves the card to Hardening, or ships a hotfix. Fed by an Approve press. Drop with `drop approval <issue>`.
 - `pendingRemovals`: features to take out of the release. Fed by `remove N`. Drop with `drop removal <issue>`.
 - `pendingShip`: a Ship press the ship job runs. Fed by `ship`. Drop with `drop ship`.
 - `pendingChanges`: factory change requests the change job runs. Drop with `drop change <id>`. `merge-change <id>` merges a finished change PR into `main`, which deploys it.

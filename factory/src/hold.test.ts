@@ -137,6 +137,13 @@ describe('pause-card refusals', () => {
     expect(readState(statePath).jobs).toHaveLength(1);
   });
 
+  it('refuses a Merging card while the merge job, which has no issue, runs', async () => {
+    cards = [card(4, 'Merging')];
+    seed({ jobs: [{ ...JOB, stage: 'merge', issue: null }] });
+    await expect(order('hold')).rejects.toThrow('runs a merge job');
+    expect(killed).toEqual([]);
+  });
+
   it('refuses a second hold and a resume of a card that is not held', async () => {
     cards = [card(4, 'Design')];
     await expect(order('unhold')).rejects.toThrow('not held');

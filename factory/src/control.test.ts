@@ -292,6 +292,16 @@ describe('move', () => {
     expect(calls).toEqual([]);
   });
 
+  it('changes nothing for a Merging card while the merge job runs, though that job has no issue (IV4)', async () => {
+    cards = [card(4, 'Merging')];
+    const state = readState(statePath);
+    writeState(statePath, { ...state, jobs: [{ ...JOB, id: 'merge---x', stage: 'merge', issue: null }] });
+    const before = readState(statePath);
+    await expect(applyControl(fakeCtx(), command({ action: 'move', issue: 4, to: 'design' }))).rejects.toThrow('merging now');
+    expect(readState(statePath)).toEqual(before);
+    expect(killed).toEqual([]);
+  });
+
   it('changes nothing when a post of the card has no caption (IV4)', async () => {
     busyCard();
     const state = readState(statePath);

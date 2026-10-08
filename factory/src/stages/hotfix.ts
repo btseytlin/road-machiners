@@ -28,7 +28,7 @@ export async function shipHotfix(ctx: Ctx, issue: number, title: string, by: str
 }
 
 // One atomic push moves main, dev and the release together, so a failed push fails the job before anything is public.
-// A conflict of main with dev or the release goes to an agent. A conflict of the hotfix with main goes back to the approval.
+// A conflict of main with dev or the release goes to an agent. A conflict of the hotfix with main sends the card back to Testing.
 async function mergeEverywhere(ctx: Ctx, issue: number, title: string, release: ReleaseState | null): Promise<void> {
   const others = release ? ['dev', release.branch] : ['dev'];
   await ctx.repo.fetch();

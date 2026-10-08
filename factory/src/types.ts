@@ -49,6 +49,7 @@ export type FactoryConfig = {
   playtestTurns: number; // turns of the release playtest's progression run
   playtestRuns: number; // plays of one release playtest job before it blocks for a member
   playtestTimeoutMinutes: number; // minutes a release playtest job may run, since its plays and fixes outlast the verify queue's limit
+  mergeTimeoutMinutes: number; // minutes a merge job may run, since its full checks and fixes outlast the branch queue's limit
   testingBudgetUsd: number; // dollars a Testing job's agents may spend while its checkpoint fails
   mergingBudgetUsd: number; // dollars a Merging job's agent may spend while the merged checks fail
   wasteReviewDays: number; // days between waste reviews of the factory
@@ -114,7 +115,7 @@ export type Job = { id: string; stage: JobStage; issue: number | null; pid: numb
 // Jobs run in parallel up to a limit per queue.
 // The branch queue moves dev, main and the release, or rebuilds a shared build, so it runs one job at a time.
 // Triage, design, implement and verify each get their own queue, so a short triage never waits behind a long build.
-// The test queue runs only the factory's checks: it builds the game and plays it in a browser, which loads the CPU. It runs no agent.
+// The test queue only builds and posts post-only cards. It runs no agent.
 export type Queue = 'branch' | 'triage' | 'design' | 'implement' | 'verify' | 'test';
 // Queues whose jobs only run agents in work clones, with no deploy or branch move.
 export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement', 'verify'];
@@ -395,9 +396,6 @@ export const QUESTIONS_HEADING = '## Questions from the factory';
 export const FEEDBACK_HEADING = '## Committee feedback';
 // An approval reply routed as an answer. Design reads it as context, never as a change request.
 export const QUESTION_HEADING = '## Committee question';
-export const REVIEW_HEADING = '## Review findings';
-// The testing agent's reading of the captured gameplay images found the look wrong. The agent that gets the card back reads it as a mismatch report.
-export const VISUAL_HEADING = '## Visual review findings';
 // Agent containers sit on an internal Docker network. The proxy container is their only way out.
 export const AGENT_NETWORK = 'roam-factory-agents';
 export const PROXY_NAME = 'roam-factory-proxy';

@@ -48,9 +48,10 @@ async function mergeBatch(ctx: Ctx, base: string, cards: Card[]): Promise<void> 
   await settle(ctx, base, cards);
 }
 
-// The Merging cards of the base of the first one, in board order. Release tasks and dev cards never share a batch.
+// The free Merging cards of the base of the first one, in board order. A stuck or held card waits. Release tasks and dev cards never share a batch.
 async function nextBatch(ctx: Ctx): Promise<{ base: string; cards: Card[] } | null> {
-  const waiting = (await ctx.github.cards()).filter((card) => card.column === 'Merging');
+  const held = readState(ctx.statePath).held;
+  const waiting = (await ctx.github.cards()).filter((card) => card.column === 'Merging' && !card.labels.includes(STUCK_LABEL) && !(String(card.issue) in held));
   if (waiting.length === 0) return null;
   const base = baseBranchFor(ctx, waiting[0]!.labels);
   return { base, cards: waiting.filter((card) => baseBranchFor(ctx, card.labels) === base) };

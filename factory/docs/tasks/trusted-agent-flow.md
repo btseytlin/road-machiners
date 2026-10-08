@@ -1,6 +1,6 @@
 # Trusted agent flow
 
-**Status:** executing
+**Status:** validating
 **Branch:** trusted-agent-flow
 **Worktree:** .worktrees/trusted-agent-flow
 **Goal:** Each card stage runs as one agent session that fixes its own failures. Hard checks run only at four checkpoints. Approved cards reach `dev` through a merge queue that keeps `dev` working. Each fact about a card lives in one store.
@@ -137,4 +137,12 @@ Approach: rebuild the four card stages after Design on one helper that runs a se
 
 ## Verify
 
+- `npm run typecheck` passes. `npm test` passes 1001 tests with 1 skipped. The Hermes plugin tests pass 174.
+- No real card has run the new flow yet. The first Testing, Hardening and Merging runs on the host confirm the Goal.
+
 ## Conclusion
+
+- A sweep for leftovers after the build found five wrong behaviors and fixed them. The merge batch took stuck and held cards. Moves and holds did not see the issueless merge job. Build cleanup could delete a fresh Testing preview. The merge job ran the full suite on the 1-CPU light pool, under the 60-minute branch limit. It now takes the test pool and `FACTORY_MERGE_TIMEOUT_MINUTES`. The waste review counted the committee's wait after a Testing post as a queue wait.
+- Stale prompts, settings comments, dashboard labels and docs from the old testing, review and patch flow were removed or corrected. [check-gates.md](check-gates.md) is superseded.
+- RK1 holds: add the Merging option to the Project's Status field by hand before deploy.
+- Older ledger steps `patched`, `patch-replan`, `rebuild` and `review-failed` stay readable for the dashboard. No stage writes them.

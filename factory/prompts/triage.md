@@ -101,7 +101,7 @@ For `ready`, also rate the task complexity.
 It picks the models for the later stages.
 Aim for 20% Opus and 80% Sonnet in measured factory-agent tokens.
 This is a rule of thumb, not a per-issue cap or a quota you can measure here.
-`trivial` moves design to Sonnet; `hard` moves implementation to Opus. Design otherwise uses Opus. Verify and review use Sonnet. An existing committee label takes precedence.
+`trivial` moves design to Sonnet; `hard` moves implementation to Opus. Design otherwise uses Opus. Testing, hardening and merging use Sonnet. An existing committee label takes precedence.
 Do not change a complexity rating to chase the target. Apply the checks below and name the evidence in `complexityReason`.
 Judge by these checks, never by keywords in the text.
 Read the code the issue touches to answer them.

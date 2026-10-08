@@ -13,6 +13,12 @@ const POSITION_STAGE: Record<Position, JobStage | null> = {
 // Lists the jobs that belong to a card position. Release, change and incident jobs carry an issue too, but no position owns them.
 export const CARD_JOBS: JobStage[] = ['triage', 'design', 'implement', 'adhoc', 'verify', 'harden', 'checks'];
 
+// The merge job has no issue, and it merges every free card in Merging. An approve job ships a hotfix.
+// Neither is ever killed, since it may stop between its push and its deploy.
+export function isMerging(state: FactoryState, card: Card): boolean {
+  return state.jobs.some((job) => (job.stage === 'merge' && card.column === 'Merging') || (job.stage === 'approve' && job.issue === card.issue));
+}
+
 const COLUMN_POSITION: Record<Card['column'], Position> = {
   Triage: 'triage', Design: 'design', Implementation: 'implement', Testing: 'verify', Approval: 'approval', Hardening: 'harden', Merging: 'merging', Done: 'done',
 };

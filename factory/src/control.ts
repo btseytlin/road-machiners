@@ -4,7 +4,7 @@ import { readCommittee } from './committee';
 import { holdCard, releaseHold } from './hold';
 import { killJob } from './jobs';
 import { appendLedger, recordJob } from './ledger';
-import { CARD_JOBS, MOVE_TARGETS, type MoveTarget } from './position';
+import { CARD_JOBS, MOVE_TARGETS, isMerging, type MoveTarget } from './position';
 import { withStatus } from './post-status';
 import { dropReplyMedia } from './reply-media';
 import { clearSessions } from './sessions';
@@ -164,11 +164,11 @@ function cardPosts(state: FactoryState, issue: number): string[] {
   return Object.entries(state.approvalPosts).filter(([, number]) => number === issue).map(([id]) => id);
 }
 
-// Checked before a card leaves its position, so a refused order changes nothing.
-// A running merge is never killed, since it may stop between its push and its deploy. Hermes repeats the order after the merge.
-function requireLeavable(ctx: Ctx, issue: number): void {
+// Checked before a card leaves its position, so a refused order changes nothing. Hermes repeats an order refused by a merge after it.
+function requireLeavable(ctx: Ctx, card: Card): void {
+  const { issue } = card;
   const state = readState(ctx.statePath);
-  if (state.jobs.some((job) => job.issue === issue && job.stage === 'approve')) throw new Error(`Issue #${issue} is merging now. Repeat the order after the merge.`);
+  if (isMerging(state, card)) throw new Error(`Issue #${issue} is merging now. Repeat the order after the merge.`);
   const missing = cardPosts(state, issue).find((id) => state.postCaptions[id] === undefined);
   if (missing !== undefined) throw new Error(`No caption is recorded for post ${missing}`);
 }
@@ -250,7 +250,7 @@ type Relocation = { column: Column; step: CardStep; status: string; dropsApprova
 // jobs, board, state, posts, labels. Each step skips what an earlier run did.
 async function relocate(ctx: Ctx, card: Card, needs: Need[], plan: Relocation): Promise<void> {
   const { issue } = card;
-  requireLeavable(ctx, issue);
+  requireLeavable(ctx, card);
   for (const need of needs) await need(ctx, issue);
   await stopJobs(ctx, issue);
   await moveCard(ctx, issue, plan.column, plan.step);

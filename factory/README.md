@@ -30,8 +30,8 @@ Run every command in this file from `factory/`. The factory reads two files.
 ## GitHub setup
 
 - The host needs `gh` logged in with the `repo`, `project` and `read:org` scopes. Run `gh auth setup-git` so git pushes with it.
-- The host needs a git identity, since approvals make merge commits.
-- Make a GitHub Project for the repo. Its Status field needs the options Triage, Design, Implementation, Testing, Approval, Hardening and Done. Put its owner and number in `settings.env`.
+- The host needs a git identity, since the merge queue makes merge commits.
+- Make a GitHub Project for the repo. Its Status field needs the options Triage, Design, Implementation, Testing, Approval, Hardening, Merging and Done. Put its owner and number in `settings.env`.
 - The repo needs a `dev` branch.
 
 ## Parts

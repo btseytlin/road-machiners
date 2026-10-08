@@ -264,15 +264,11 @@ describe('stage prompts for reference images', () => {
     expect(text).toContain('Do not commit them');
     expect(text).toContain('Never use a drawn or invented render');
     expect(text).toContain('needs no screenshots');
-    expect(text).toContain('## Visual review findings');
     // The reference-image rules stay.
     expect(text).toContain('Read every available image with the Read tool before you build.');
     expect(text).toContain('When the task file asks for a visual acceptance check');
   });
 
-  it('tell design how to read visual review findings', () => {
-    expect(fillPrompt('design', vars)).toContain('## Visual review findings');
-  });
 });
 
 describe('fillPrompt', () => {
