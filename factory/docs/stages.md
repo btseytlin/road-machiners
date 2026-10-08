@@ -90,16 +90,20 @@ The release cut opens two cleanup issues, for optimization and code janitor work
 
 ## Release playtest
 
-The playtest checks that the merged features hold up together over a long run before the committee sees a candidate. It runs when no release task is open and the release head is not the commit it last passed. It runs on the tracking issue in the verify queue and counts against the daily cap.
+The playtest checks that the merged features hold up together over a long run before the committee sees a candidate. It finds what the release broke, fixes it and confirms the fix in one job. It runs when no release task is open and the release head is not the commit it last passed. It runs on the tracking issue in the verify queue, counts against the daily cap and has its own time limit, `FACTORY_PLAYTEST_TIMEOUT_MINUTES`.
 
+- The job merges `main` into the release when the release lacks it, with an agent for a conflict. So the release holds all of `main` before it plays, and a later Ship has no unplayed game change to bring in.
 - The factory clones the release head and runs the game's `progression:playthrough` with one seed per release, the cut day as `YYYYMMDD`, for `FACTORY_PLAYTEST_TURNS` turns. 2250 turns are 5 in-game days, so the mixed bot plays its trader, scavenger and fighter days among the NPC traffic. The log holds every game event, snapshots of the player and every NPC, how the run ended and a summary.
+- The first play also runs the seed on the baseline, side by side: the last commit this release passed, or `main` before any pass. So a replay after a pass judges only what changed since that pass.
 - Every truck travels in far mode and a scripted bot drives, so physics, close driving and choices the bot never makes do not happen. The log header, the prompt and the report say so.
-- The factory reads the facts from the log: its seed, turns and commit, how it ended, and which kinds of activity never happened. A log of another run fails the job.
-- An Opus agent reads the whole log and writes `.factory/playtest.json` and the report `.factory/playtest.md`: observations, suspected issues, limitations, findings with severity and evidence, and a fix plan with priorities.
-- A clean verdict passes only with no important finding, a run that did not end in an error, and a reason for every death and every kind of missing activity. A clean verdict that misses one blocks.
-- A fix verdict opens one `release-task` and `maintenance` issue with the findings and the plan. It asks for the smallest fixes, and it forbids removing or disabling a feature or changing unrelated behavior. The task runs the card stages and merges into the release like a cleanup task. The playtest then replays the same seed on the new head.
-- A blocked verdict, or findings on the last of `FACTORY_PLAYTEST_RUNS` runs since the last pass, blocks the release. A pass gives the budget back, so a committee change later plays with a full one. The job fails, so the tracking card takes `factory-stuck` and Hermes sees the failure. `factory retry <tracking> [decision]` lifts the block, gives the runs back and hands the decision to the next review.
-- Each run keeps its log, facts, review, report and outcome in `$FACTORY_HOME/playtest/<day>/run-<n>/`, and comments the report on the tracking issue.
+- The factory reads the facts from each log: its seed, turns and commit, how it ended, and which kinds of activity never happened. A log of another run fails the job.
+- An Opus agent reads the whole release log and writes `.factory/playtest.json` and the report `.factory/playtest.md`: observations, suspected issues, limitations, findings with severity and evidence, and the fixes it committed. Each finding is `release`, caused by a change since the baseline, or `old`, when the baseline has it too, with the evidence for the sort.
+- The agent fixes each important `release` finding in its clone with the smallest change and commits it. It never removes or disables a feature or changes unrelated behavior to silence a finding. The factory replays the seed on the new head and resumes the same agent session. A replay checks that each fix holds and broke nothing, and does not hunt again.
+- An important `old` finding that no open bug issue names opens a `bug` issue for `dev`, which waits for votes like any other. It never blocks the release.
+- A clean verdict passes only with no important `release` finding, no commit since the play, a run that did not end in an error, and a reason for every death and every kind of missing activity. A clean verdict that misses one blocks.
+- A clean end with fixes runs the diff checks and the factory checks of the checks stage in the clone first. A failed check goes to the same agent, and its fix plays again. Then the factory pushes the reviewed commit to the release, so the release head is the commit the last play passed. A release that moved meanwhile gets the fixes as a merge, and its new head plays next.
+- A job plays at most `FACTORY_PLAYTEST_RUNS` times, the first play included. A blocked verdict, fixes left on the last play, or a failed check on the last play blocks the release. The job fails, so the tracking card takes `factory-stuck` and Hermes sees the failure. `factory retry <tracking> [decision]` lifts the block and hands the decision to the next job's review.
+- Each play keeps its logs, facts, review, report and outcome in `$FACTORY_HOME/playtest/<day>/run-<n>/`. The job comments one report on the tracking issue at its end.
 
 ## Candidate
 

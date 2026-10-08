@@ -124,7 +124,8 @@ export const QUEUE_OF: Record<JobStage, Queue> = {
   checks: 'test',
   // An incident job pushes dev, and two of them at once would pick the same log id.
   approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', incident: 'branch',
-  // The release playtest runs a long agent review and moves no branch, so it never holds the branch queue.
+  // The release playtest runs for hours, so it never holds the branch queue. Its two release moves, main in and its fixes out,
+  // go through the locked merge and push, which merge again when another job moved the release.
   playtest: 'verify',
 };
 // Where a committee reply to an approval post sends the card. Answer moves nothing, patch fixes the build in place, redesign goes back to Design.
