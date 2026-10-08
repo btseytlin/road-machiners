@@ -8,6 +8,8 @@ import { newId } from './factory';
 import { cabShield, gunLayoutScore } from './armor';
 import { findSpot, freeCells, gridOf, isMounted, itemCells, MOUNT_CELLS, mountSpots, placementError, type Cell, type Spot } from './grid';
 import { requireShop, shopAt } from './market';
+import { disarm } from './claymore';
+import { workTimeMult } from './utility';
 import { startJob } from './jobs';
 import { RULES } from '../data/rules';
 import { PERK_NUMBERS } from '../data/skills';
@@ -135,6 +137,8 @@ export function moveItem(world: World, itemId: string, to: Spot): World {
     const me = playerVehicle(w);
     const result = planItemMove(me, itemId, to);
     if (result.error !== null) throw new Error(result.error);
+    const moving = findItem(me, itemId);
+    if (moving.kind === 'part') disarm(moving.part);
     const { moves, items, turns } = result.plan;
     if (turns > 0 && !shopAt(w)) {
       const work = refitTurns(w, me, turns);
@@ -143,9 +147,10 @@ export function moveItem(world: World, itemId: string, to: Spot): World {
   });
 }
 
-// Turns a field refit takes: the planned turns cut by the player's machining, at least 1.
+// Turns a field refit takes: the planned turns times the truck's work time (src/sim/utility.ts), cut by the player's
+// machining, at least 1.
 export function refitTurns(world: World, v: Vehicle, planned: number): number {
-  return Math.max(1, Math.ceil(planned * (1 - skillEffect(world, v, 'machining', 'refit'))));
+  return Math.max(1, Math.ceil(planned * workTimeMult(v) * (1 - skillEffect(world, v, 'machining', 'refit'))));
 }
 
 // Turns a field refit takes to move a part off a wreck stock or a knocked-out truck. The Cannibal perk sets the
@@ -164,6 +169,7 @@ export function storePart(world: World, itemId: string): World {
     if (item.kind !== 'part') throw new Error('Only parts go into garage storage');
     requireRemovable(item);
     me.items = me.items.filter((it) => it.id !== itemId);
+    disarm(item.part);
     w.player.storage.push(item.part);
     afterRefit(w);
   });

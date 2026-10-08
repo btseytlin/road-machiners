@@ -34,6 +34,13 @@ function ramToRear(v: Vehicle): void {
   expect(mountedItems(v).some((it) => it.part.defId === 'ram')).toBe(true);
 }
 
+// Moves the hauler's plow ram to the middle of its nose. The first free mount puts it on a flank.
+function plowToNose(v: Vehicle): void {
+  const item = mountedItems(v).find((it) => it.part.defId === 'plowRam')!;
+  Object.assign(v.items.find((it) => it.id === item.id)!, { x: 3, y: 0, rot: 0 });
+  expect(mountedItems(v).some((it) => it.part.defId === 'plowRam')).toBe(true);
+}
+
 describe('rams', () => {
   it('a light truck takes more damage than a heavy one in a head-on crash', () => {
     const w = emptyWorld();
@@ -206,11 +213,13 @@ describe('ram value', () => {
   it('rises with a ram bar on the rammer nose against an equal truck', () => {
     const bare = duel(['cannon', 'stockEngine'], ['cannon', 'stockEngine']);
     const barred = duel(['cannon', 'stockEngine', 'plowRam'], ['cannon', 'stockEngine']);
+    plowToNose(barred.rammer);
     expect(ramValue(barred.w, barred.rammer, barred.target)).toBeGreaterThan(ramValue(bare.w, bare.rammer, bare.target));
   });
 
   it('is not vetoed by a broken ram bar on a ram that hurts the target far more', () => {
     const { w, rammer, target } = duel(['cannon', 'stockEngine', 'plowRam'], ['cannon', 'stockEngine']);
+    plowToNose(rammer);
     const bar = mountedParts(rammer, 'armor')[0];
     bar.hp = 1;
     expect(ramValue(w, rammer, target)).toBeGreaterThan(0);

@@ -1,4 +1,4 @@
-import { START_KITS } from '../data/start';
+import { START_KITS, type StartKit } from '../data/start';
 // Helpers for sim tests.
 
 import { RULES } from '../data/rules';
@@ -15,8 +15,11 @@ import { addState } from './states';
 import type { Faction, GameEvent, NpcBrain, Vehicle, World, XpSource } from './types';
 import { dist, type Vec } from './vec';
 import { refreshVision } from './vision';
+import { openingStockOf } from './opening';
+import { playerVehicle } from './damage';
 import { stormDepth } from './weather';
 import { cloneWorld, newWorld } from './world';
+import { defaultSetup } from './settings';
 
 // Flat road-speed terrain, for tests that need predictable driving.
 export function flatTerrain(size: number): Terrain {
@@ -29,12 +32,21 @@ export function editableTerrain(w: World): Terrain {
   return w.terrain;
 }
 
+// The standard truck without the new-game opening: the cage mounted, every part at full HP and auto patch on. Tests
+// that are not about the opening start from it.
+export const PLAIN_KIT: StartKit = {
+  ...START_KITS.standard,
+  parts: [...START_KITS.standard.parts, 'cage'],
+  autoRepair: true,
+  opening: null,
+};
+
 let emptyTemplate: World | undefined;
 
 // A world on flat ground with no obstacles and no NPCs, the player truck at `pos` facing +x.
 export function emptyWorld(pos: Vec = { x: 30, y: 30 }): World {
   if (!emptyTemplate) {
-    emptyTemplate = newWorld(1, START_KITS.standard, TEST_MAP);
+    emptyTemplate = newWorld(1, PLAIN_KIT, TEST_MAP, defaultSetup('roaming'));
     emptyTemplate.obstacles = [];
     emptyTemplate.terrain = flatTerrain(emptyTemplate.size);
     Object.freeze(emptyTemplate.terrain.heights);
@@ -171,4 +183,14 @@ function driveOne(world: World, v: Vehicle): void {
 // Puts `aggressor` in combat with `target`, as a shot would.
 export function startCombat(w: World, aggressor: Vehicle, target: Vehicle): void {
   addState(w, 'combat', aggressor.id, target.id, { kind: 'none' });
+}
+
+// The stop point a new player Shift-clicks by the opening wreck: on the line from the truck to the wreck, 2.2 tiles
+// short of its center, inside search reach.
+export function openingStopPoint(w: World): Vec {
+  const stock = openingStockOf(w);
+  if (!stock) throw new Error('No opening wreck');
+  const from = playerVehicle(w).pos;
+  const d = dist(from, stock.pos);
+  return { x: stock.pos.x + ((from.x - stock.pos.x) / d) * 2.2, y: stock.pos.y + ((from.y - stock.pos.y) / d) * 2.2 };
 }

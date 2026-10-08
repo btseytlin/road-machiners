@@ -7,7 +7,6 @@ import type { VehicleStats } from "./stats";
 import type { Blocker } from "./path";
 import { nearestPad, siteUnder } from "./sites";
 import { straightClear } from "./path";
-import { ropeClientOf } from "./tow";
 import type { MoveOrder, Vehicle, World } from "./types";
 import { clamp, DEG, dist, type Vec } from "./vec";
 
@@ -95,12 +94,10 @@ function groundOrder(dest: Vec, shift: boolean, current: MoveOrder | null): Move
   return { kind: "through", dest };
 }
 
-// The parked vehicles a truck routes around: never the truck it rams, nor the truck on its own rope, which trails it.
-export function parkedVehicles(world: World, selfId: string): Blocker[] {
+export function parkedVehicles(world: World, selfId: string, onRope: ReadonlySet<string>): Blocker[] {
   const target = world.vehicles.find((v) => v.id === selfId)?.brain?.ramTarget;
-  const client = ropeClientOf(world, selfId);
   return world.vehicles
-    .filter((x) => x.id !== selfId && x.id !== target && x.id !== client && x.speed < RULES.parkedSpeed)
+    .filter((x) => x.id !== selfId && x.id !== target && !onRope.has(x.id) && x.speed < RULES.parkedSpeed)
     .map((x) => ({ pos: x.pos, r: chassisDef(x.chassisId).radius }));
 }
 

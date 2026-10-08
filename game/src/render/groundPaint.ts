@@ -40,6 +40,7 @@ const DESERT_WEIGHT: Record<LookType, number> = {
   track: 0,
   canal: 0,
   concrete: 0,
+  glass: 0,
 };
 
 // The ground paint under a road at mean noise, before hillshade and patches, on ground with no desert look. Road
@@ -122,29 +123,14 @@ export type PaintOptions = {
 
 const DEFAULT_OPTIONS: PaintOptions = { hillshade: 1 };
 
-// Discs of worn ground painted under locations, in paint order. A location with an outline gets none: its edge is
-// not a circle, and its own marks show its ground.
-export function groundDiscs(): { id: string; pos: Vec; radius: number; style: string }[] {
-  return REGION.locations
-    .filter((l) => !("outline" in l && l.outline))
-    .flatMap((l) => {
-      const farm = l.id === "granary";
-      const wear = css(l.kind === "oasis" || farm ? shade(PAL.scrub[0], 1.1) : shade(PAL.rust.dark, 1.6), 0.45);
-      return [
-        ...(farm ? [{ id: l.id, pos: l.pos, radius: l.radius + 3, style: css(PAL.scrub[0], 0.2) }] : []),
-        { id: l.id, pos: l.pos, radius: l.radius + 0.5, style: wear },
-      ];
-    });
-}
-
-// Paints ground, oasis/convoy discs and terrain features onto the canvas. The caller uploads the texture.
+// Paints the ground, the canyon and dry river, and the Fallen Sun scree onto the canvas. The caller uploads the texture.
+// No town, site or crater gets a painted disc: its models and relief mark it.
 export function paintGroundCanvas(
   c: PaintCanvas,
   t: Terrain,
   opts: PaintOptions = DEFAULT_OPTIONS,
 ): void {
   paintGround(c, t, opts.hillshade);
-  for (const d of groundDiscs()) disc(c, d.pos, d.radius, d.style);
   const { canyon, dryRiver } = TERRAIN.features;
   stroke(
     c,
@@ -162,17 +148,7 @@ export function paintGroundCanvas(
     0,
   );
   stroke(c, dryRiver.path, dryRiver.width * 2, css(PAL.road, 0.65), 0);
-  paintCraters(c);
   paintScree(c);
-}
-
-// Each crater's bank is rust-tinted and its floor scorched. A basin gets no paint: its floor takes the wasteland's own
-// ground, so nothing marks where it starts, and its swells show through hillshade.
-function paintCraters(c: PaintCanvas): void {
-  for (const crater of TERRAIN.features.craters) {
-    disc(c, crater.center, crater.radius + crater.bank, css(PAL.rust.side, 0.18));
-    disc(c, crater.center, crater.radius, css(PAL.rust.dark, 0.25));
-  }
 }
 
 // Bands a scree slope is painted in, each reaching a step further up the bank, so the colour is densest at the foot
@@ -247,7 +223,7 @@ function tileLook(t: Terrain, hillshadeStrength: number): TileLook {
   const look = lookTypes(t);
   for (let i = 0; i < count; i++) {
     color[i] = paintColor(t.types[i]);
-    desert[i] = desertWeight(look[i]);
+    desert[i] = desertWeight(look[i] === "glass" ? "hardpan" : look[i]);
     shadeBy[i] = hillshade(t, i, hillshadeStrength);
   }
   return { t, color, desert, shade: shadeBy, broad: new CellNoise(), fine: new CellNoise(), patch: new CellNoise(), cell: { a: 0, b: 0, c: 0, d: 0, fx: 0, fy: 0 } };
@@ -377,9 +353,10 @@ function sandChannel(color: number, sand: number, patch: number, warm: number, k
   return (warmed + ((patch & 0xff) - warmed) * k + 0.5) | 0;
 }
 
-// Road tiles paint as hardpan, since the ground shader draws the road over it with its own edge.
+// Road tiles paint as hardpan, since the ground shader draws the road over it with its own edge. Fused glass tiles paint
+// as hardpan too, and the shader draws the glass over them with a smooth edge that ignores the tile grid.
 function paintColor(type: TerrainTypeId): number {
-  return TERRAIN_TYPES[type === "road" ? "hardpan" : type].color;
+  return TERRAIN_TYPES[type === "road" || type === "glass" ? "hardpan" : type].color;
 }
 
 function groundColor(look: TileLook, x: number, y: number): number {
@@ -453,13 +430,6 @@ function stroke(
   ctx.stroke();
 }
 
-function disc(c: PaintCanvas, p: Vec, r: number, style: string): void {
-  c.ctx.fillStyle = style;
-  c.ctx.beginPath();
-  c.ctx.arc(c.toPx(p.x), c.toPx(p.y), r * c.res, 0, Math.PI * 2);
-  c.ctx.fill();
-}
-
 // A filled closed polygon in map units.
 function polygon(c: PaintCanvas, points: readonly Vec[], style: string): void {
   c.ctx.fillStyle = style;
@@ -467,4 +437,42 @@ function polygon(c: PaintCanvas, points: readonly Vec[], style: string): void {
   points.forEach((p, i) => (i === 0 ? c.ctx.moveTo(c.toPx(p.x), c.toPx(p.y)) : c.ctx.lineTo(c.toPx(p.x), c.toPx(p.y))));
   c.ctx.closePath();
   c.ctx.fill();
+}
+
+// Fused glass field for the ground shader: how much glass lies around each tile center, 0 to 255. Tiles of glass count
+// as 1 and every other tile as 0, then a Gaussian blur rounds the outline. The shader reads it with linear filtering,
+// adds noise and draws glass where the value is above half, so a glass field has a smooth, wandering edge and not the
+// tile grid's staircase. See three/render/roads.ts.
+const GLASS_BLUR = 0.75; // tiles of blur. A one tile wide strip still peaks above half, a lone tile does not.
+const GLASS_REACH = Math.ceil(GLASS_BLUR * 3); // tiles each side of a tile that the blur reads
+
+export function glassField(t: Terrain): Uint8Array {
+  const size = t.size;
+  const kernel = gaussian();
+  const member = new Float32Array(size * size);
+  for (let i = 0; i < member.length; i++) member[i] = t.types[i] === "glass" ? 1 : 0;
+  const rows = new Float32Array(member.length);
+  blur(member, rows, size, 1, size, kernel);
+  const blurred = new Float32Array(member.length);
+  blur(rows, blurred, size, size, 1, kernel);
+  return Uint8Array.from(blurred, (v) => Math.round(v * 255));
+}
+
+// Normalized weights of the taps from -GLASS_REACH to GLASS_REACH.
+function gaussian(): Float32Array {
+  const kernel = new Float32Array(2 * GLASS_REACH + 1);
+  let sum = 0;
+  for (let k = -GLASS_REACH; k <= GLASS_REACH; k++) sum += kernel[k + GLASS_REACH] = Math.exp(-(k * k) / (2 * GLASS_BLUR * GLASS_BLUR));
+  return kernel.map((w) => w / sum);
+}
+
+// One blur pass over every line of the square. `along` is the index step inside a line and `across` the step between
+// lines. Reads past a line's end repeat its last tile, as the clamped texture does.
+function blur(from: Float32Array, to: Float32Array, size: number, along: number, across: number, kernel: Float32Array): void {
+  for (let line = 0; line < size; line++)
+    for (let i = 0; i < size; i++) {
+      let v = 0;
+      for (let k = -GLASS_REACH; k <= GLASS_REACH; k++) v += from[line * across + Math.min(Math.max(i + k, 0), size - 1) * along] * kernel[k + GLASS_REACH];
+      to[line * across + i * along] = v;
+    }
 }

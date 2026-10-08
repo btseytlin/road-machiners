@@ -1,13 +1,13 @@
-// Territory layer: a wreck's hull pieces, caches, rim rocks, field spots and debris, the reactor, and a farm's layout
-// (./farm) and debris inside each territory, placed by the rules in TERRITORIES. It runs after the new-world layer, so
-// ground rules read these props, the seated heights and the farm's marks. Pieces, the reactor, caches and farms are
-// authored; rim rocks, field spots and debris are drawn from the map seed and the territory's own seed offset, on open
-// ground off the pieces, the dirt roads and their spurs, the decks and their landing strips, the region roads and the
-// farm's marks.
+// Territory layer: a wreck's hull pieces, caches, buildings, rim rocks, field spots and debris, the reactor, a farm's
+// layout (./farm) and debris, and fused glass (./glass) inside each territory, placed by the rules in TERRITORIES. It
+// runs after the new-world layer, so ground rules read these props, the seated heights and the marks. Pieces, the
+// reactor, caches, buildings and farms are authored; rim rocks, field spots, debris, glass and its spires are drawn
+// from the map seed and the territory's own seed offset, on open ground off the pieces, the dirt roads and their
+// spurs, the decks and their landing strips, the region roads and the farm's marks.
 
 import { PHYSICS } from '../data/physics';
 import { REGION, type TerritoryDef } from '../data/region';
-import { TERRITORIES, type FarmRules, type Patch, type TerritoryRules, type WreckRules } from '../data/territory';
+import { TERRITORIES, type FarmRules, type Patch, type RimRocks, type TerritoryRules, type WreckRules } from '../data/territory';
 import { TERRAIN } from '../data/terrain';
 import { boxDistance, onDeck, propBoxes, type PosedBox } from '../sim/mapgen';
 import { ROAD_INDEX } from '../sim/road-index';
@@ -17,7 +17,8 @@ import { basinUnder, isTerritory, landingStrips, reactorPos, territoryCaches, te
 import { groundAt, type BakedProp } from '../sim/terrain';
 import { dist, segmentDist, type Vec } from '../sim/vec';
 import { footprintRelief, tileSteepness, type MapDraft } from './bake';
-import { fillFarm, touchesMarks } from './farm';
+import { fillFarm, placeBuildingGroups, touchesMarks } from './farm';
+import { fillGlass } from './glass';
 import { at, markRoads, type Touch } from './marks';
 import { prop, ruleRng, tileOf } from './oldworld';
 
@@ -41,7 +42,6 @@ type Draws = { d: MapDraft; t: TerritoryDef; rules: TerritoryRules; rng: Rng };
 // pieces are the authored piece props: drawn props keep clear of their boxes, not of their placement circles, which
 // are half a long piece's length. onRoad touches the dirt roads and spurs, and strips are the decks' landing strips.
 type Ground = Draws & {
-  rules: TerritoryRules;
   wreck: WreckRules;
   pieces: ReadonlySet<BakedProp>;
   pieceBoxes: readonly PosedBox[];
@@ -49,11 +49,13 @@ type Ground = Draws & {
   strips: readonly LandingStrip[];
 };
 
+// Glass goes last, so it keeps off the dirt roads and the yards round every piece, building and cache.
 function fill(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, rng: Rng): void {
   const pieces = rules.wreck ? placePieces(d, t, rules.wreck) : [];
   if (rules.reactor) d.props.push(prop(rules.reactor.look, reactorPos(t), rules.reactor.radius, 0));
   if (rules.wreck) fillWreck({ d, t, rules, rng }, rules, rules.wreck, pieces);
   if (rules.farm) fillFarmBand({ d, t, rules, rng }, rules, rules.farm);
+  if (rules.glass) fillGlass(d, t, rules, rules.glass, rng);
 }
 
 // The wreck's pieces on their seated ground. Returns the piece props.
@@ -65,20 +67,23 @@ function placePieces(d: MapDraft, t: TerritoryDef, wreck: WreckRules): BakedProp
   return props;
 }
 
-// The dirt roads and spurs first, so no prop stands on them, then the caches, rim rocks and the patches round the
-// placed pieces. An authored cache on a dirt road is a data error.
+// The dirt roads and spurs first, so no prop stands on them, then the caches, the buildings, rim rocks and the patches
+// round the placed pieces. An authored cache on a dirt road is a data error, as is a building off its ground or on a
+// piece. Field spots keep the spot gap from the caches and the buildings.
 function fillWreck(draws: Draws, rules: TerritoryRules, wreck: WreckRules, pieceProps: readonly BakedProp[]): void {
-  const { d, t } = draws;
+  const { d, t, rng } = draws;
   const { roads, spurs } = territoryRoads(t);
   const [onWeb, onSpur] = [markRoads(d, t, roads, 'inside'), markRoads(d, t, spurs, 'spur')];
   const onRoad: Touch = (pos, r) => onWeb(pos, r) || onSpur(pos, r);
+  const pieceBoxes = territoryPieces(t).flatMap((p) => propBoxes(pieceObstacle(p, 'piece')));
   const caches = territoryCaches(t).map((pos) => prop(wreck.cacheLook, pos, wreck.cacheRadius, 0));
   for (const c of caches) if (onRoad(c.pos, c.r) || touchesMarks(d, c.pos, c.r)) throw new Error(`${t.id} cache at ${at(c.pos)} stands on a dirt road`);
   d.props.push(...caches);
-  const pieceBoxes = territoryPieces(t).flatMap((p) => propBoxes(pieceObstacle(p, 'piece')));
+  const buildings = placeBuildingGroups(d, t, 0, wreck.buildings, onRoad, pieceBoxes, rng);
+  d.props.push(...buildings);
   const g: Ground = { ...draws, rules, wreck, pieces: new Set(pieceProps), pieceBoxes, onRoad, strips: landingStrips(t) };
-  placeRimRocks(g);
-  let spots: BakedProp[] = [...caches];
+  if (wreck.rimRocks) placeRimRocks(g, wreck.rimRocks);
+  let spots: BakedProp[] = [...caches, ...buildings];
   for (const patch of wreck.patches) spots = placePatch(g, patch, spots);
 }
 
@@ -162,8 +167,8 @@ function smooth(s: number): number {
 // Rim rocks drawn on the bank of the basin's arc of floor vertices from..to, from out[0] to out[1] tiles out from the
 // floor edge, off roads and other props. They overlap each other by up to two thirds and run along the rim, so they
 // read as one broken rock wall.
-function placeRimRocks(g: Ground): void {
-  const { from, to, out, count, size } = g.wreck.rimRocks;
+function placeRimRocks(g: Ground, rim: RimRocks): void {
+  const { from, to, out, count, size } = rim;
   const b = basinUnder(g.t);
   const n = b.floor.length;
   if (![from, to].every((k) => Number.isInteger(k) && k >= 0 && k < n)) throw new Error(`${g.t.id} rim rock arc ${from}..${to} is not on a basin of ${n} floor points`);
@@ -249,7 +254,7 @@ function onStrip(s: LandingStrip, pos: Vec, r: number): boolean {
 
 // The first drawn prop at a picked point that stands on open ground and passes ok. Fails loudly: a territory that
 // cannot hold its props is a data problem, not something to place fewer of.
-function draw(g: Draws, look: BakedProp['kind'], where: string, pick: () => Vec, radius: [number, number], ok: (pos: Vec, r: number) => boolean): BakedProp {
+export function draw(g: Draws, look: BakedProp['kind'], where: string, pick: () => Vec, radius: [number, number], ok: (pos: Vec, r: number) => boolean): BakedProp {
   for (let k = 0; k < TRIES; k++) {
     const pos = pick();
     const r = randRange(g.rng, radius[0], radius[1]);
@@ -279,6 +284,6 @@ function standable(d: MapDraft, p: BakedProp, relief: number | null): boolean {
 }
 
 // Whether no prop of the list stands within gap tiles of a circle at pos with radius r.
-function clearOf(props: readonly BakedProp[], pos: Vec, r: number, gap: number): boolean {
+export function clearOf(props: readonly BakedProp[], pos: Vec, r: number, gap: number): boolean {
   return props.every((o) => dist(o.pos, pos) >= o.r + r + REGION.obstacles.gap + gap);
 }

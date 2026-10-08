@@ -6,7 +6,7 @@ import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
 import { isKnockedOut } from './defeat';
 import { inTowReach } from './tow';
-import { canLootTruck, canReachSalvage, collectSalvage, hasSalvage, lootBlocker, pourStores, requireLootFree, salvageInRange, takeBasis } from './salvage';
+import { canLootTruck, canReachSalvage, collectSalvage, hasRevealed, hasSalvage, hiddenUnits, lootBlocker, pourStores, requireLootFree, salvageInRange, takeBasis } from './salvage';
 import { takeClaimed } from './parley';
 import { newId } from './factory';
 import { goodsCount, isMounted, type Spot } from './grid';
@@ -115,22 +115,34 @@ function reachableStock(world: World, stockId: string): SalvageStock | null {
   return stock && hasSalvage(stock) && canReachSalvage(me, stock) ? stock : null;
 }
 
-// The stock is unsearched, in reach and nobody else loots it: the player can start a search.
+// The player has a reason to search the stock: it still hides units, or they never searched it.
+export function needsSearch(world: World, stock: SalvageStock): boolean {
+  return hiddenUnits(stock) > 0 || !world.player.scavenged.includes(stock.id);
+}
+
+// The stock needs a search, is in reach and nobody else loots it: the player can start a search.
 export function canScavenge(world: World, stockId: string): boolean {
   const me = playerVehicle(world);
-  return reachableStock(world, stockId) !== null && !world.player.scavenged.includes(stockId) && !inCombat(world, me) && !lootBlocker(world, me, stockId);
+  const stock = reachableStock(world, stockId);
+  return stock !== null && needsSearch(world, stock) && !inCombat(world, me) && !lootBlocker(world, me, stockId);
 }
 
-// The stock is searched and in reach: the player can take its loot.
+// The player searched the stock once and it holds revealed loot, theirs to take.
+export function hasLootFor(world: World, stock: SalvageStock): boolean {
+  return world.player.scavenged.includes(stock.id) && hasRevealed(stock);
+}
+
+// The stock has loot for the player and is in reach: the player can take its loot.
 export function canLoot(world: World, stockId: string): boolean {
-  return reachableStock(world, stockId) !== null && world.player.scavenged.includes(stockId);
+  const stock = reachableStock(world, stockId);
+  return stock !== null && hasLootFor(world, stock);
 }
 
-// Starts a timed search of the given stock. When it ends, the stock opens for looting.
+// Starts a timed search of the given stock. When it ends, the stock's revealed loot opens for looting.
 export function scavenge(world: World, stockId: string): World {
   return playerCommand(world, (w) => {
     if (w.salvage.some((s) => s.id === stockId)) requireLootFree(w, playerVehicle(w), stockId);
-    if (!canScavenge(w, stockId)) throw new Error('Nothing unsearched in reach');
+    if (!canScavenge(w, stockId)) throw new Error('Nothing to search in reach');
     beginSearch(w, playerVehicle(w), stockId);
   });
 }

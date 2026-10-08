@@ -16,6 +16,7 @@ import { buildDrive, freeDrive, initPhysics, type Drive } from './drive';
 import { physicsMove } from './turn';
 import { TEST_MAP } from '../test/map';
 import { budget } from '../test/budget';
+import { defaultSetup } from '../sim/settings';
 
 beforeAll(async () => {
   await initPhysics();
@@ -32,7 +33,7 @@ function turn(w: World, d: Drive): { w: World; d: Drive } {
 }
 
 describe('NPC driving', () => {
-  it('backs out after repeated failed drive attempts', () => {
+  it('backs off a rock in its path and drives around it', () => {
     let w = emptyWorld({ x: 40, y: 30 });
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30, y: 30 });
     npc.brain = npcBrain('buggy', npc.pos, ['raider']);
@@ -40,12 +41,14 @@ describe('NPC driving', () => {
     npc.brain.goals = [{ kind: 'raid', targetId: null, destination: { x: 300, y: 30 }, reason: 'look for prey at known hunting grounds', phase: 'travel' }];
     w.obstacles = [{ id: 'rock', pos: { x: 31.4, y: 30 }, r: 0.8, kind: 'rock' }];
     const startX = npc.pos.x;
+    const xs: number[] = [];
     let d = buildDrive(w);
-    // The rock is round and the truck nose narrow, so the first turn slides along it before the truck stalls.
-    for (let i = 0; i < RULES.npcStuckTurns + 2; i++) ({ w, d } = turn(w, d));
-    expect(w.vehicles.find((v) => v.id === npc.id)!.brain!.recovery).toBeGreaterThan(0);
-    ({ w, d } = turn(w, d));
-    expect(w.vehicles.find((v) => v.id === npc.id)!.pos.x).toBeLessThan(startX);
+    for (let i = 0; i < RULES.npcStuckTurns + 4; i++) {
+      ({ w, d } = turn(w, d));
+      xs.push(w.vehicles.find((v) => v.id === npc.id)!.pos.x);
+    }
+    expect(Math.min(...xs)).toBeLessThan(startX);
+    expect(xs.at(-1)).toBeGreaterThan(31.4);
     freeDrive(d);
   });
 
@@ -66,7 +69,7 @@ describe('NPC driving', () => {
   });
 
   it('travels between towns without entering either site', () => {
-    let w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    let w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     // No spawns, so no raider can end the trip before it reaches Nose.
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -90,7 +93,7 @@ describe('NPC driving', () => {
   }, budget(120_000));
 
   it('passes the oncoming player without stopping or touching it', () => {
-    let w = newWorld(1337, START_KITS.standard, TEST_MAP);
+    let w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     const bowl = REGION.towns[0];
@@ -131,7 +134,7 @@ describe('NPC driving', () => {
   it.each([-3, -1.5].flatMap((dx) => [-3, -1.5, 0, 1.5, 3].map((dy) => [dx, dy])))(
     'two NPCs closing head-on never touch: second goal offset %s,%s',
     (dx, dy) => {
-      let w = newWorld(1337, START_KITS.standard, TEST_MAP);
+      let w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
       w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
       for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
       w.vehicles[0].pos = { x: 300, y: 200 };
@@ -146,6 +149,10 @@ describe('NPC driving', () => {
       b.brain = npcBrain('roamer', b.pos, ['roamer']);
       a.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 317, y: 102.75 }, phase: 'travel', reason: 'test trip' }];
       b.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 276.07 + dx, y: 157.15 + dy }, phase: 'travel', reason: 'test trip' }];
+      // Each has already weighed robbing the other and let it pass. This is traffic: on some world random states the
+      // scavenger rolls a robbery, and the fight that follows closes to contact by design, not by a driving fault.
+      a.brain.noticed[`preySeen:${b.id}`] = w.turn;
+      b.brain.noticed[`preySeen:${a.id}`] = w.turn;
       let d = buildDrive(w);
       let touches = 0;
       for (let i = 0; i < 10; i++) {

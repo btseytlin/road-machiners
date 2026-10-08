@@ -43,8 +43,16 @@ export const PAL = {
   dest: 0xe05030,
   throttle: { brake: 0xe05a3a, hold: 0xf0d060, accelerate: 0x7cc85a },
   select: 0xf0d060,
+  utility: 0xb39a3a, // mustard hints on utility models, the border of a utility card in the inventory
   arcSpent: 0x9a9a94, // firing arc of a gun that is reloading or cooling down
   contact: 0xf4f1ea, // faint white sound waves around a contact
+  smoke: 0x100e0d, // dense black smoke clouds from smoke utilities
+  caltrops: { spike: 0x9a9a94 }, // steel spikes
+  oil: { slick: 0x0c0b0a }, // a glossy black oil slick; its rainbow sheen is drawn in its texture
+  rope: 0x16130f, // a harpoon line, black tarred rope
+  pulse: { flash: 0xc8ecff, arc: 0x9fd8ff, spark: 0xd8f0ff }, // an emitter pulse's flash and arcs and the sparks on a shut-down truck, electric blue-white
+  flare: { core: 0xffffff, halo: 0xff3a2a, light: 0xff4a3a, marker: 0xff6a50, casing: 0x9a3426, trail: 0xb8b0a8 }, // a burning flare's white core, its red glow and red light, the contact blip it gives, and its red casing and pale smoke trail in flight
+  shell: { casing: 0x2a2622, trail: 0x8a8580 }, // a smoke mortar's round in flight and its gray trail
   dustTrail: 0xe0c49a, // dust streak behind a contact seen by its dust, pale so it shows over fog
   radio: 0x8fe0c8, // crisp scanner blip
   beacon: 0xff4030, // red rings spreading from the player's truck while its emergency beacon calls
@@ -56,6 +64,7 @@ export const PAL = {
   reactorLight: 0x38d6e8, // the reactor's light, bluer than its core so on warm sand and hull it still reads green-teal
   reactorGlow: 0x5cf0b4, // the Fallen Sun reactor core, green-teal as in the level concept
   hull: { light: 0xc4baa6, grey: 0x8e887c, dark: 0x6e6a62, rust: 0x7e5634 }, // the Fallen Sun's off-white and grey hull metal and its rust streaks
+  glass: { top: 0x9cb8ac, side: 0x6f8f88, dark: 0x4c6460 }, // Glass Flats fused teal-grey glass: lit, side and shaded faces of the spires, paler than PAL.water
   scree: 0x8e5e44, // the red-brown scree slope on a crater bank, warm like the level concept's upper-left slope
   dirtRoad: 0x8e7d69, // the Fallen Sun's grey-brown dirt roads: about 0.7 of PAL.sand[0]'s value, as reference 3's #6e5e50 roads over its #a08a70 islands, and greyer than the sand
   shipGlow: 0x6fe4ff, // cold glow of dead ship tech on debris power cells and pod beacons, unlike the reactor's green

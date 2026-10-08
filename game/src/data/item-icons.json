@@ -194,8 +194,98 @@
         0.5390625
       ]
     },
-    "stockEngine": {
+    "harpoon": {
       "index": 18,
+      "hash": "bd12fef8",
+      "box": [
+        0.046875,
+        0.1875,
+        0.8515625,
+        0.640625
+      ]
+    },
+    "sprout": {
+      "index": 19,
+      "hash": "3ad11613",
+      "box": [
+        0.0390625,
+        0.046875,
+        0.921875,
+        0.90625
+      ]
+    },
+    "caltrops": {
+      "index": 20,
+      "hash": "06bd3c38",
+      "box": [
+        0.0390625,
+        0.0703125,
+        0.921875,
+        0.859375
+      ]
+    },
+    "oilSpiller": {
+      "index": 21,
+      "hash": "191f20ce",
+      "box": [
+        0.0390625,
+        0.046875,
+        0.921875,
+        0.90625
+      ]
+    },
+    "patcherCrane": {
+      "index": 22,
+      "hash": "dd8bd99e",
+      "box": [
+        0.046875,
+        0.1171875,
+        0.90625,
+        0.765625
+      ]
+    },
+    "smokeMortar": {
+      "index": 23,
+      "hash": "f1babfd3",
+      "box": [
+        0.046875,
+        0.140625,
+        0.90625,
+        0.71875
+      ]
+    },
+    "flareCannon": {
+      "index": 24,
+      "hash": "125cc1d5",
+      "box": [
+        0.1015625,
+        0.0390625,
+        0.796875,
+        0.921875
+      ]
+    },
+    "scrapersKnife": {
+      "index": 25,
+      "hash": "aca6740f",
+      "box": [
+        0.046875,
+        0.15625,
+        0.90625,
+        0.6875
+      ]
+    },
+    "emitter": {
+      "index": 26,
+      "hash": "31cf63a5",
+      "box": [
+        0.046875,
+        0.15625,
+        0.90625,
+        0.71875
+      ]
+    },
+    "stockEngine": {
+      "index": 27,
       "hash": "09d0364e",
       "box": [
         0.046875,
@@ -205,7 +295,7 @@
       ]
     },
     "tunedEngine": {
-      "index": 19,
+      "index": 28,
       "hash": "39e13f08",
       "box": [
         0.046875,
@@ -215,7 +305,7 @@
       ]
     },
     "flatFour": {
-      "index": 20,
+      "index": 29,
       "hash": "e63aa188",
       "box": [
         0.046875,
@@ -225,7 +315,7 @@
       ]
     },
     "workhorseDiesel": {
-      "index": 21,
+      "index": 30,
       "hash": "b3806fcc",
       "box": [
         0.046875,
@@ -235,7 +325,7 @@
       ]
     },
     "racingV6": {
-      "index": 22,
+      "index": 31,
       "hash": "223d9855",
       "box": [
         0.046875,
@@ -245,7 +335,7 @@
       ]
     },
     "heavyDiesel": {
-      "index": 23,
+      "index": 32,
       "hash": "fc7e348f",
       "box": [
         0.109375,
@@ -255,7 +345,7 @@
       ]
     },
     "turbine": {
-      "index": 24,
+      "index": 33,
       "hash": "b271ea90",
       "box": [
         0.046875,
@@ -265,7 +355,7 @@
       ]
     },
     "plates": {
-      "index": 25,
+      "index": 34,
       "hash": "3c699121",
       "box": [
         0.046875,
@@ -275,7 +365,7 @@
       ]
     },
     "cage": {
-      "index": 26,
+      "index": 35,
       "hash": "b151e7c6",
       "box": [
         0.1015625,
@@ -285,7 +375,7 @@
       ]
     },
     "ram": {
-      "index": 27,
+      "index": 36,
       "hash": "ec0efc4b",
       "box": [
         0.046875,
@@ -295,7 +385,7 @@
       ]
     },
     "scrapPanels": {
-      "index": 28,
+      "index": 37,
       "hash": "6426ecb5",
       "box": [
         0.109375,
@@ -305,7 +395,7 @@
       ]
     },
     "ceramicPlates": {
-      "index": 29,
+      "index": 38,
       "hash": "278cd965",
       "box": [
         0.125,
@@ -315,7 +405,7 @@
       ]
     },
     "spacedArmor": {
-      "index": 30,
+      "index": 39,
       "hash": "b2471f03",
       "box": [
         0.046875,
@@ -325,7 +415,7 @@
       ]
     },
     "reinforcedCage": {
-      "index": 31,
+      "index": 40,
       "hash": "bafc8353",
       "box": [
         0.046875,
@@ -335,7 +425,7 @@
       ]
     },
     "plowRam": {
-      "index": 32,
+      "index": 41,
       "hash": "8c4be6d7",
       "box": [
         0.046875,
@@ -344,8 +434,18 @@
         0.65625
       ]
     },
+    "claymoreRam": {
+      "index": 42,
+      "hash": "dcc65a89",
+      "box": [
+        0.046875,
+        0.2109375,
+        0.90625,
+        0.578125
+      ]
+    },
     "steelPlate": {
-      "index": 33,
+      "index": 43,
       "hash": "bfbd6e0a",
       "box": [
         0.25,
@@ -355,7 +455,7 @@
       ]
     },
     "scrapSheet": {
-      "index": 34,
+      "index": 44,
       "hash": "8f4803b2",
       "box": [
         0.2421875,
@@ -365,7 +465,7 @@
       ]
     },
     "ceramicTile": {
-      "index": 35,
+      "index": 45,
       "hash": "154d999f",
       "box": [
         0.2421875,
@@ -375,7 +475,7 @@
       ]
     },
     "rack": {
-      "index": 36,
+      "index": 46,
       "hash": "c789afe3",
       "box": [
         0.0859375,
@@ -385,7 +485,7 @@
       ]
     },
     "trailerBox": {
-      "index": 37,
+      "index": 47,
       "hash": "6e170d41",
       "box": [
         0.0625,
@@ -395,7 +495,7 @@
       ]
     },
     "panniers": {
-      "index": 38,
+      "index": 48,
       "hash": "d7818e84",
       "box": [
         0.0546875,
@@ -405,7 +505,7 @@
       ]
     },
     "flatbed": {
-      "index": 39,
+      "index": 49,
       "hash": "134e719a",
       "box": [
         0.046875,
@@ -415,7 +515,7 @@
       ]
     },
     "lightFrame": {
-      "index": 40,
+      "index": 50,
       "hash": "936f6cb3",
       "box": [
         0.046875,
@@ -425,7 +525,7 @@
       ]
     },
     "enclosedFrame": {
-      "index": 41,
+      "index": 51,
       "hash": "57472257",
       "box": [
         0.046875,
@@ -435,7 +535,7 @@
       ]
     },
     "heavyFrame": {
-      "index": 42,
+      "index": 52,
       "hash": "e2554fcf",
       "box": [
         0.0625,
@@ -445,7 +545,7 @@
       ]
     },
     "jerrycans": {
-      "index": 43,
+      "index": 53,
       "hash": "64838b8d",
       "box": [
         0.0390625,
@@ -455,7 +555,7 @@
       ]
     },
     "supplyLocker": {
-      "index": 44,
+      "index": 54,
       "hash": "70a33a91",
       "box": [
         0.0390625,
@@ -465,7 +565,7 @@
       ]
     },
     "cab": {
-      "index": 45,
+      "index": 55,
       "hash": "cce27e71",
       "box": [
         0.109375,
@@ -475,7 +575,7 @@
       ]
     },
     "cabPickup": {
-      "index": 46,
+      "index": 56,
       "hash": "231d9b33",
       "box": [
         0.0546875,
@@ -485,7 +585,7 @@
       ]
     },
     "cabHardtop": {
-      "index": 47,
+      "index": 57,
       "hash": "949ad804",
       "box": [
         0.046875,
@@ -495,7 +595,7 @@
       ]
     },
     "transmission": {
-      "index": 48,
+      "index": 58,
       "hash": "b9cc1f21",
       "box": [
         0.046875,
@@ -505,7 +605,7 @@
       ]
     },
     "transmissionMid": {
-      "index": 49,
+      "index": 59,
       "hash": "71490e7a",
       "box": [
         0.046875,
@@ -515,7 +615,7 @@
       ]
     },
     "transmissionHeavy": {
-      "index": 50,
+      "index": 60,
       "hash": "cb5e4a57",
       "box": [
         0.046875,
@@ -525,7 +625,7 @@
       ]
     },
     "wheel": {
-      "index": 51,
+      "index": 61,
       "hash": "730a0948",
       "box": [
         0.0546875,
@@ -535,7 +635,7 @@
       ]
     },
     "wheelMid": {
-      "index": 52,
+      "index": 62,
       "hash": "25904e4f",
       "box": [
         0.0546875,
@@ -545,7 +645,7 @@
       ]
     },
     "wheelHeavy": {
-      "index": 53,
+      "index": 63,
       "hash": "1585f512",
       "box": [
         0.0546875,
@@ -555,7 +655,7 @@
       ]
     },
     "tank": {
-      "index": 54,
+      "index": 64,
       "hash": "1cb02302",
       "box": [
         0.046875,
@@ -565,7 +665,7 @@
       ]
     },
     "tankLong": {
-      "index": 55,
+      "index": 65,
       "hash": "f8941ad1",
       "box": [
         0.046875,
@@ -575,7 +675,7 @@
       ]
     },
     "tankMid": {
-      "index": 56,
+      "index": 66,
       "hash": "5c1d1eac",
       "box": [
         0.046875,
@@ -585,7 +685,7 @@
       ]
     },
     "tankHeavy": {
-      "index": 57,
+      "index": 67,
       "hash": "78bd241b",
       "box": [
         0.046875,
@@ -595,7 +695,7 @@
       ]
     },
     "scanner": {
-      "index": 58,
+      "index": 68,
       "hash": "e54eeffa",
       "box": [
         0.203125,
@@ -605,7 +705,7 @@
       ]
     },
     "scrap": {
-      "index": 59,
+      "index": 69,
       "hash": "a832433f",
       "box": [
         0.03125,
@@ -615,7 +715,7 @@
       ]
     },
     "salt": {
-      "index": 60,
+      "index": 70,
       "hash": "ead1781a",
       "box": [
         0.0390625,
@@ -625,7 +725,7 @@
       ]
     },
     "meds": {
-      "index": 61,
+      "index": 71,
       "hash": "6ee48ec5",
       "box": [
         0.0390625,
@@ -635,7 +735,7 @@
       ]
     },
     "grain": {
-      "index": 62,
+      "index": 72,
       "hash": "2d99b241",
       "box": [
         0.0703125,
@@ -645,7 +745,7 @@
       ]
     },
     "textiles": {
-      "index": 63,
+      "index": 73,
       "hash": "b50df729",
       "box": [
         0.0390625,
@@ -655,7 +755,7 @@
       ]
     },
     "tools": {
-      "index": 64,
+      "index": 74,
       "hash": "bca5d6b7",
       "box": [
         0.0390625,
@@ -665,7 +765,7 @@
       ]
     },
     "batteries": {
-      "index": 65,
+      "index": 75,
       "hash": "20bcee09",
       "box": [
         0.0390625,
@@ -675,7 +775,7 @@
       ]
     },
     "electronics": {
-      "index": 66,
+      "index": 76,
       "hash": "cd8a81af",
       "box": [
         0.0390625,
@@ -685,7 +785,7 @@
       ]
     },
     "parts": {
-      "index": 67,
+      "index": 77,
       "hash": "8612234e",
       "box": [
         0.0390625,
@@ -695,7 +795,7 @@
       ]
     },
     "fuelDrums": {
-      "index": 68,
+      "index": 78,
       "hash": "2afa53b6",
       "box": [
         0.0390625,
@@ -705,7 +805,7 @@
       ]
     },
     "water": {
-      "index": 69,
+      "index": 79,
       "hash": "93191ee9",
       "box": [
         0.0390625,

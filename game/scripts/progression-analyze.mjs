@@ -4,6 +4,9 @@
 // Usage: npm run progression:analyze -- <dir> [--run trader-1]
 import { createReadStream, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
+import { JobTally } from '../src/sim/progression/job-checks.ts';
+import { HUNT } from '../src/data/npc-behavior.ts';
+import { moneyText } from '../src/ui/units.ts';
 
 // A loss of more than this share of net worth within LOSS_TURNS counts as a big loss: about one stolen gun.
 const LOSS_SHARE = 0.1;
@@ -18,6 +21,11 @@ const STALL_TURNS = 60;
 const FLAP_COUNT = 6;
 const FLAP_TURNS = 40;
 const FLAP_KINDS = new Set(['towDropped', 'towOffer', 'towHitched', 'stateEnded', 'hostile']);
+
+// Raiders on a hunting goal travel off the road, so road traffic does not see them coming. At most this share of
+// their moving snapshots may be on road.
+const HUNT_ROAD_TARGET = 0.25;
+const HUNT_GOALS = new Set(HUNT.offRoadGoals);
 
 const argv = process.argv.slice(2).filter((a) => a !== '--');
 const dir = argv[0];
@@ -40,8 +48,9 @@ async function readLines(path) {
 
 function analyze(name, turns) {
   const last = turns[turns.length - 1];
-  console.log(`\n=== ${name}: turns ${turns[0].t}-${last.t}, net worth ${turns[0].nw} -> ${last.nw}, money ${last.money}, ${last.chassis}`);
+  console.log(`\n=== ${name}: turns ${turns[0].t}-${last.t}, net worth ${moneyText(turns[0].nw)} -> ${moneyText(last.nw)}, money ${moneyText(last.money)}, ${last.chassis}`);
   printTime(turns);
+  printJob(name.slice(0, name.lastIndexOf('-')), turns);
   printFights(turns);
   printLosses(turns);
   printTows(turns);
@@ -55,6 +64,17 @@ function printTime(turns) {
   const share = (test) => `${Math.round((100 * turns.filter(test).length) / turns.length)}%`;
   const flags = ['combat', 'stranded', 'towed', 'beacon'].map((f) => `${f} ${share((l) => l.flags.includes(f))}`);
   console.log(`time: ${flags.join(', ')}, job ${share((l) => l.job !== null)}, no order ${share((l) => l.order === null)}`);
+}
+
+// Whether the bot did its job: the first day end where it fell below its floor in src/sim/progression/job-checks.ts.
+function printJob(archetype, turns) {
+  const tally = new JobTally();
+  for (const line of turns) {
+    tally.note(line);
+    const failure = tally.failure(archetype);
+    if (failure) return console.log(`job: FAIL turn ${line.t}: ${failure}`);
+  }
+  console.log('job: ok');
 }
 
 // Stretches of turns where a test holds, with start, end and length.
@@ -97,7 +117,7 @@ function printFights(turns) {
     const foes = firstSeen(fight);
     const still = fight.filter((l, i) => i > 0 && l.pos[0] === fight[i - 1].pos[0] && l.pos[1] === fight[i - 1].pos[1]).length;
     console.log(`fight ${turns[e.from].t}-${turns[e.to].t}: me speed ${before.speed}, foes ${[...foes.values()].map((f) => `${f.who} win ${f.odds}% s${f.speed}`).join(', ') || 'unseen'}`);
-    console.log(`  first shot ${firstShot}; still ${still} turns; nw ${before.nw} -> ${after.nw}; ${outcome(fight, before, after)}`);
+    console.log(`  first shot ${firstShot}; still ${still} turns; nw ${moneyText(before.nw)} -> ${moneyText(after.nw)}; ${outcome(fight, before, after)}`);
   }
 }
 
@@ -134,7 +154,7 @@ function printLosses(turns) {
       i++;
       continue;
     }
-    console.log(`loss ${turns[i].t}-${turns[j].t}: nw ${turns[i].nw} -> ${turns[j].nw}, money ${turns[i].money} -> ${turns[j].money}, at ${turns[j].pos.join(',')}`);
+    console.log(`loss ${turns[i].t}-${turns[j].t}: nw ${moneyText(turns[i].nw)} -> ${moneyText(turns[j].nw)}, money ${moneyText(turns[i].money)} -> ${moneyText(turns[j].money)}, at ${turns[j].pos.join(',')}`);
     for (const l of turns.slice(Math.max(0, j - CONTEXT_TURNS), j + 1)) for (const x of l.ev) console.log(`  ${l.t} ${x.slice(0, 160)}`);
     i = j + 1;
   }
@@ -153,7 +173,7 @@ function printTows(turns) {
   for (const e of tows) {
     const end = turns[Math.min(turns.length - 1, e.to + 1)];
     const fee = end.ev.find((x) => x.startsWith('towDone')) ?? 'no towDone';
-    console.log(`  ${turns[e.from].t}-${end.t}: ${turns[e.from].pos.join(',')} -> ${end.pos.join(',')}, ${fee.slice(0, 60)}, money ${end.money}, fuel ${end.fuel}, parts ${end.parts.filter((p) => p.endsWith(':0')).join(' ') || 'sound'}`);
+    console.log(`  ${turns[e.from].t}-${end.t}: ${turns[e.from].pos.join(',')} -> ${end.pos.join(',')}, ${fee.slice(0, 60)}, money ${moneyText(end.money)}, fuel ${end.fuel}, parts ${end.parts.filter((p) => p.endsWith(':0')).join(' ') || 'sound'}`);
   }
 }
 
@@ -219,7 +239,7 @@ function printPopulation(lines) {
   for (const snap of [snaps[0], snaps[Math.floor(snaps.length / 2)], snaps[snaps.length - 1]]) {
     const by = new Map();
     for (const v of snap.trucks) by.set(v.faction, [...(by.get(v.faction) ?? []), v]);
-    const text = [...by.entries()].map(([f, vs]) => `${f} ${vs.length} ($${Math.round(vs.reduce((s, v) => s + v.money, 0) / vs.length)}, hp ${Math.round(vs.reduce((s, v) => s + v.hp, 0) / vs.length)})`).join(', ');
+    const text = [...by.entries()].map(([f, vs]) => `${f} ${vs.length} (${moneyText(vs.reduce((s, v) => s + v.money, 0) / vs.length)}, hp ${Math.round(vs.reduce((s, v) => s + v.hp, 0) / vs.length)})`).join(', ');
     console.log(`turn ${snap.t}: ${text}`);
   }
 }
@@ -233,11 +253,15 @@ function printOffRoad(lines) {
   const by = Map.groupBy(moving.filter((v) => v.offRoad), offRoadReason);
   const off = [...by.entries()].map(([why, vs]) => `${why} ${share(vs)}`).join(', ') || 'none';
   console.log(`raiders keeping off roads: ${off}; healthy raiders ${share(moving.filter((v) => !v.offRoad))}`);
+  const hunting = by.get('hunting') ?? [];
+  const onRoad = hunting.filter((v) => v.onRoad).length;
+  if (hunting.length > 0 && onRoad / hunting.length > HUNT_ROAD_TARGET) console.log(`MISS: hunting raiders on road above ${100 * HUNT_ROAD_TARGET}%`);
 }
 
 function offRoadReason(v) {
   const top = v.goals.at(-1)?.split(':')[0];
-  return top === 'retreat' || top === 'flee' ? top : 'stranded';
+  if (top === 'retreat' || top === 'flee') return top;
+  return HUNT_GOALS.has(top) ? 'hunting' : 'stranded';
 }
 
 // Every truck lost or knocked out, with the turn and who did it.

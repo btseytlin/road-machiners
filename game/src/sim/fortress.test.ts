@@ -17,10 +17,11 @@ import { playerVehicle } from './damage';
 import { newWorld } from './world';
 import { START_KITS } from '../data/start';
 import { dist, segmentDist, type Vec } from './vec';
+import { defaultSetup } from './settings';
 
 const SITES = [...REGION.towns, ...REGION.locations];
 const FORT_SITES = SITES.filter(isFortress);
-const world = newWorld(1337, START_KITS.standard, TEST_MAP);
+const world = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
 
 // The corners of a posed box's ground outline.
 function corners(b: { center: { x: number; y: number }; axis: { x: number; y: number }; half: { x: number; y: number } }) {

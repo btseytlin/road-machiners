@@ -13,6 +13,7 @@ import { dist, segmentDist } from './vec';
 import { deckHeight, deckSegments, groundAt, heightAt, isCliff, markHeightAt, tileAt, type Terrain } from './terrain';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
+import { defaultSetup } from './settings';
 
 const B = deckById('canyon-bridge');
 const at = (along: number, across: number) => ({
@@ -92,7 +93,7 @@ describe('the Broken Wing deck', () => {
 });
 
 describe('Canyon Bridge', () => {
-  const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+  const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
   const t = w.terrain;
 
   it('finds points near a rail as the distance to each rail does, on and around the deck', () => {

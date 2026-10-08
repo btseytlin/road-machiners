@@ -18,6 +18,7 @@ import type { Vehicle, World } from '../../sim/types';
 import { maxHp } from '../../sim/wear';
 import type { CameraRig } from './camera';
 import { tirePoints, Ruts } from './ruts';
+import type { GroundAt } from './lines';
 import { Casings, Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan, type ShotCues } from './projectiles';
 
 // Pool sizes; effects beyond them are dropped rather than growing the pools. Wheel dust dominates: at the
@@ -256,6 +257,7 @@ class MuzzleFlashes {
 // perMeter: puffs per meter driven from one rear wheel on ground with dust 1; front wheels throw half.
 // Puffs close together per meter read as one stream at any speed.
 const AMMO_BLAST_RADIUS = 0.8; // meters, a small pop of a broken weapon's ammo
+const CLAYMORE_FX_RADIUS = 10; // meters, the look of a claymore blast; its damage radius is in CLAYMORE
 const DUST = { perMeter: 2.5, life: 1.1, color: 0xd8c098 };
 
 export class Fx3D {
@@ -303,8 +305,8 @@ export class Fx3D {
   // One round leaves the muzzle after its delay and flies to its landing point. muzzle is read when the round
   // fires, so it starts at the barrel tip as the turret points then. A round with a blast radius in meters explodes
   // where it lands, unless it ends unseen. Any other lands with sparks on a truck, dust on the ground and nothing unseen.
-  // A gun with a casing throws one as the round fires, stamped with the turn for its life.
-  shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan, blastRadius: number, cues: ShotCues, turn: number): void {
+  // A gun with a casing throws one as the round fires, stamped with the turn for its life. ground gives the height a rope rests at.
+  shot(spec: ProjectileSpec, muzzle: () => Muzzle, plan: RoundPlan, blastRadius: number, cues: ShotCues, ground: GroundAt, turn: number): void {
     const onFire = (m: Muzzle) => {
       this.flashes.show(m, spec.flash);
       this.casings.eject(m, spec.casing, turn);
@@ -315,7 +317,12 @@ export class Fx3D {
       if (plan.impact !== 'none') this.landing(plan, blastRadius, spec.look === 'shell');
       cues.landed();
     };
-    this.projectiles.launch({ spec, muzzle, plan, onFire, onLand });
+    this.projectiles.launch({ spec, muzzle, plan, onFire, onLand, ground });
+  }
+
+  // Drops the ropes of harpoon rounds that struck, when the turn's playback ends and the lines show.
+  releaseRopes(): void {
+    this.projectiles.releaseRopes();
   }
 
   private landing(plan: RoundPlan, blastRadius: number, big: boolean): void {
@@ -381,6 +388,11 @@ export class Fx3D {
     this.puff(p, 0xffa040, 30, { speed: 6, life: 0.4, scale: 0.4, grow: 0.3, additive: true });
     this.puff(p, 0x3a3028, 16, { speed: 3, life: 1.6, scale: 1.0, grow: 2.4 });
     this.puff(p, 0xffc060, 1, { speed: 0, life: 0.4, scale: 3.2, grow: 1.6, additive: true });
+  }
+
+  // A claymore ram's charge: a shell's blast at CLAYMORE_FX_RADIUS, well wider than a truck.
+  claymoreBlast(p: V3): void {
+    this.blast(p, CLAYMORE_FX_RADIUS);
   }
 
   crash(p: V3): void {

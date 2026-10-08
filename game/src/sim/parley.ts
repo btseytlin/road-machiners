@@ -53,7 +53,7 @@ function holdFire(v: Vehicle, target: Vehicle): void {
   if (v.brain) delete v.brain.attackers[target.id];
 }
 
-// The loser drops its cargo beside its truck, and both sides make peace. An NPC winner goes to take the cargo, and its grudge against the loser is settled.
+// The loser drops its cargo beside its truck, and both sides make peace and stop fighting. An NPC winner goes to take the cargo, and its grudge against the loser is settled.
 // `dumped` is the pile the loser already threw parts onto.
 export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, dumped: SalvageStock | null = null): void {
   const stock = hasCargo(loser) ? createCargoSalvage(world, loser, 1) : dumped;
@@ -69,6 +69,7 @@ export function abandonSpill(world: World, loser: Vehicle, winner: Vehicle, stoc
 // Both sides make peace and the winner's grudge is settled. An NPC winner goes to take the pile and claims it.
 function cede(world: World, loser: Vehicle, winner: Vehicle, stock: SalvageStock | null, reason: string): void {
   makePeace(world, loser, winner);
+  endFight(world, loser, winner);
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');
   if (stock && winner.brain) goTake(world, winner, stock, [loser.id], reason);
@@ -97,13 +98,18 @@ export function giveUpTo(world: World, loser: Vehicle, winner: Vehicle): void {
 export function standDownTo(world: World, loser: Vehicle, winner: Vehicle): void {
   standDown(world, loser, winner.id);
   makePeace(world, loser, winner);
-  for (const [a, b] of [[loser, winner], [winner, loser]]) {
-    const fight = stateOf(world, 'combat', a.id, b.id);
-    if (fight) endState(world, fight, 'broken');
-  }
+  endFight(world, loser, winner);
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
   if (grudge) endState(world, grudge, 'fulfilled');
   creditYield(world, loser, winner);
+}
+
+// The combat states between two trucks that made peace end at once, so a loot or strip job can start this turn.
+function endFight(world: World, a: Vehicle, b: Vehicle): void {
+  for (const [p, q] of [[a, b], [b, a]]) {
+    const fight = stateOf(world, 'combat', p.id, q.id);
+    if (fight) endState(world, fight, 'broken');
+  }
 }
 
 // With Bounty talk, an NPC that gives up to the player counts for a bounty on its template.
