@@ -999,13 +999,11 @@ body {
   padding: 3px 5px;
   outline: none;
 }
-#ui .help,
 #ui .feedback {
   padding: 0;
   background: #272b2ef5;
   font-size: 12px;
 }
-.help summary,
 .feedback summary {
   display: block;
   padding: 5px 9px;
@@ -1030,18 +1028,26 @@ body {
 .feedback details a:focus-visible {
   text-decoration: underline;
 }
-.help details[open] {
+#ui .help {
   box-sizing: border-box;
   width: calc(var(--inspection-width) - 2px);
   height: calc(var(--inspection-height) - 2px);
   max-width: calc(100vw - 30px);
-  padding-bottom: 5px;
+  padding: 8px 0 5px;
   overflow: auto;
+  background: #272b2ef5;
+  font-size: 12px;
 }
-.help details[open] summary {
-  margin-bottom: 8px;
+.help h3 {
+  margin: 0 9px 6px;
+  font-size: 14px;
 }
-.help details > div {
+.help .close {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+}
+.help > div {
   margin: 4px 9px;
   color: var(--muted);
 }
@@ -1830,6 +1836,7 @@ canvas.view {
 
 .top-left {
   position: absolute;
+  z-index: 3;
   left: 14px;
   top: 14px;
   display: flex;
@@ -1838,6 +1845,9 @@ canvas.view {
 }
 #ui .top-left > .panel {
   position: static;
+}
+#ui .top-left > .help {
+  position: relative;
 }
 /* The weapons keep the bottom line, and the instruments go above them only when the two do not fit side by side. */
 .bottom-left {
@@ -1882,14 +1892,38 @@ canvas.view {
   position: static;
   padding: 6px 8px;
 }
+#ui .top-right > .game-menu,
 #ui .top-right > .camera-mode {
   padding: 0;
   border: 0;
 }
 .game-menu {
+  position: relative;
   display: flex;
   gap: 6px;
   font-size: 12px;
+}
+.game-menu [role=menu] {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
+  min-width: 160px;
+  max-width: calc(100vw - 28px);
+  padding: 4px;
+  background: #272b2ef5;
+  border: 1px solid var(--edge);
+}
+.game-menu [role=menu][hidden] {
+  display: none;
+}
+.game-menu [role=menu] button {
+  width: 100%;
+  text-align: left;
 }
 
 #ui .dialogue {
@@ -2532,6 +2566,24 @@ canvas.view {
   box-shadow:
     inset 0 0 0 4px #3d4549,
     0 0 0 100vmax #101316b8;
+}
+#ui .new-game-block {
+  position: fixed;
+  inset: 0;
+  z-index: 59;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+.new-game .mode {
+  font-size: 15px;
+}
+.new-game .new-game-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
 }
 .save-panel .save-row {
   display: flex;

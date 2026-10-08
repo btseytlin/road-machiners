@@ -5,12 +5,11 @@ import type { CarryReport } from '../sim/world';
 import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { el, panel } from './dom';
+import { chooseNewGame } from './new-game';
 
 export type SaveFate = 'migrate' | 'new';
 
-export const CONFIRM_NEW_GAME = 'Start a new game? The autosaves are deleted. Your save slots stay.';
-
-// Shows the choice and resolves with the player's pick. New game asks first, and a no leaves the screen up.
+// Shows the choice and resolves with the player's pick. New game opens the setup screen, and Back returns here.
 export function chooseSaveFate(reason: string, canMigrate: boolean): Promise<SaveFate> {
   return new Promise((resolve) => {
     const root = savePanel('Your save needs migrating');
@@ -18,8 +17,8 @@ export function chooseSaveFate(reason: string, canMigrate: boolean): Promise<Sav
       root.remove();
       resolve(fate);
     };
-    const confirmNew = () => {
-      if (window.confirm(CONFIRM_NEW_GAME)) done('new');
+    const confirmNew = async () => {
+      if (await chooseNewGame()) done('new');
     };
     root.append(
       el('div', {}, 'This update changed the world. Migrate keeps your skills, perks, money, truck, parts and cargo, and moves you to a town. The rest of the world starts fresh.'),

@@ -398,7 +398,7 @@ export class Game {
 
   private modalOpen(): boolean {
     const screens = [this.town, this.fullShop, this.trade, this.character, this.inventory];
-    return screens.some((s) => s.isOpen()) || this.world.player.call !== null || this.menu.isPanelOpen();
+    return screens.some((s) => s.isOpen()) || this.world.player.call !== null || this.menu.isOpen();
   }
 
   // Until a turn's shots land, the panels show the world as it was when the turn began.
