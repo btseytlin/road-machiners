@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { LINE_IDS } from '../data/dialogue';
 import { GOODS } from '../data/goods';
-import { NPCS, TRAITS } from '../data/npcs';
+import { FEMALE_NAMES, FIRST_NAMES, NPCS, SURNAMES, TRAITS } from '../data/npcs';
 import { PARTS } from '../data/parts';
 import { DIRECTIONS, RADIO_VARIANTS } from '../data/radio';
 import { REGION } from '../data/region';
@@ -23,6 +23,7 @@ const REQUIRED: [string, string[]][] = [
   ['NPC template', ids(NPCS).flatMap((id) => [`npc.${id}`, `npc.${id}.profession`])],
   ['site', [...REGION.towns, ...REGION.locations].map((s) => `site.${s.id}`)],
   ['terrain', ids(TERRAIN_TYPES).map((id) => `terrain.${id}`)],
+  ['driver name', [...FIRST_NAMES.map((n) => `driver.first.${n}`), ...SURNAMES.flatMap((n) => [`driver.last.${n}`, `driver.last.${n}.f`])]],
   ['trait', ids(TRAITS).map((id) => `trait.${id}`)],
   ['skill', SKILL_IDS.flatMap((id) => [`skill.${id}`, `skill.${id}.grows`])],
   ['perk', PERK_IDS.flatMap((id) => [`perk.${id}`, `perk.${id}.rule`])],
@@ -36,6 +37,10 @@ describe('every runtime id', () => {
     expect(keys.length).toBeGreaterThan(0);
     expect(keys.filter((key) => !(key in EN))).toEqual([]);
     expect(keys.filter((key) => !(key in RU))).toEqual([]);
+  });
+
+  it('marks only listed first names as female', () => {
+    expect([...FEMALE_NAMES].filter((n) => !FIRST_NAMES.includes(n))).toEqual([]);
   });
 
   it('has no broadcast variant beyond the counts in the data', () => {

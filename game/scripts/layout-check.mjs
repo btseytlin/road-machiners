@@ -12,8 +12,6 @@ const LOCALES = process.env.LAYOUT_LOCALES?.split(',') ?? ['en', 'ru', 'pseudo']
 const VIEWPORTS = [[1280, 720], [700, 800]];
 // Keyboard caps keep their Latin labels in Russian, like the WASD keys.
 const KEY_CAPS = ['WASD', 'Shift', 'Esc'];
-// The drivers of the long log lines, proper names that stay in Latin script.
-const LOG_DRIVERS = ['Bartholomew Cartwright', 'Mira Dawes', 'Cass Dust', 'Earl Mason'];
 const OUT = 'tmp/layout';
 // Barlow has no Cyrillic, so Russian needs this face loaded.
 const GLYPHS = { font: 'Fira Sans Condensed', letter: 'Ж' };
@@ -30,12 +28,12 @@ function fillLog(page) {
     const n = await import('/src/text/names.ts');
     const { moneyMsg } = await import('/src/ui/units.ts');
     const lines = [
-      t('log.jobCancelled', { what: t('job.remove', { part: n.partName('tankHeavy'), truck: t('vehicle.npc', { profession: n.professionName('convoyGuard'), driver: 'Bartholomew Cartwright' }) }) }),
+      t('log.jobCancelled', { what: t('job.remove', { part: n.partName('tankHeavy'), truck: t('vehicle.npc', { profession: n.professionName('convoyGuard'), driver: n.fullName('Dmitri Tulloch') }) }) }),
       t('log.jobStarted', { what: t('job.repair', { part: n.partName('enclosedFrame') }), n: 12 }),
-      t('log.escortHired', { client: t('vehicle.npc', { profession: n.professionName('convoy'), driver: 'Mira Dawes' }), who: t('vehicle.npc', { profession: n.professionName('merc'), driver: 'Cass Dust' }), site: n.siteName('canyon-bridge'), fee: moneyMsg(12345) }),
+      t('log.escortHired', { client: t('vehicle.npc', { profession: n.professionName('convoy'), driver: n.fullName('Lorna Morozov') }), who: t('vehicle.npc', { profession: n.professionName('merc'), driver: n.fullName('Elias Drummond') }), site: n.siteName('canyon-bridge'), fee: moneyMsg(12345) }),
       t('log.contract.accepted', { what: t('contract.fetch', { part: n.partName('reinforcedCage'), site: n.siteName('salvage-yard'), n: 2 }), reward: moneyMsg(4200) }),
       t('note.hazard'),
-      t('log.towDroppedYou.blocked', { who: t('vehicle.npc', { profession: n.professionName('bowlFarmer'), driver: 'Earl Mason' }) }),
+      t('log.towDroppedYou.blocked', { who: t('vehicle.npc', { profession: n.professionName('bowlFarmer'), driver: n.fullName('Hester Kessler') }) }),
       t('log.scrapPatchFuel', { liters: 40 }),
       t('log.rankBoughtPerk', { skill: n.skillName('perception'), rank: 2 }),
     ];
@@ -100,15 +98,12 @@ const closeHelp = (page) => page.evaluate(() => document.querySelector('#ui .hel
 
 const openSaves = (page) => chooseMenuItem(page, 1);
 
-// The checker in the page, with the driver names on the map and the brands allowed in Russian.
 function faultsIn(page, locale) {
   return page.evaluate(async ({ locale, names, glyphs }) => {
     const { findLayoutFaults } = await import('/src/ui/dom.ts');
-    const g = window.__ROAM__;
-    const drivers = [...g.state.vehicles, ...g.state.removed].flatMap((v) => (v.brain ? [v.brain.driver] : []));
-    const allow = [...drivers, ...names, 'WOT RADIO', 'FM', 'English'];
+    const allow = [...names, 'WOT RADIO', 'FM', 'English'];
     return findLayoutFaults(document.getElementById('ui'), { locale, allow, glyphs });
-  }, { locale, names: [...KEY_CAPS, ...LOG_DRIVERS], glyphs: GLYPHS });
+  }, { locale, names: KEY_CAPS, glyphs: GLYPHS });
 }
 
 // A button too narrow for its label must be reported, or the checker has gone blind.

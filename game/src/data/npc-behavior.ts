@@ -113,6 +113,11 @@ export const FIRST_NAMES: readonly string[] = [
   'Zoya',
 ];
 
+export const FEMALE_NAMES: ReadonlySet<string> = new Set([
+  'Ada', 'Anya', 'Bea', 'Cass', 'Dora', 'Edda', 'Faye', 'Hester', 'Ida', 'Ivy', 'Juno', 'Kat', 'Lorna', 'Lupe',
+  'Mae', 'Mira', 'Nell', 'Opal', 'Pru', 'Raya', 'Ruth', 'Tess', 'Vera', 'Wren', 'Zoya',
+]);
+
 export const SURNAMES: readonly string[] = [
   'Ash', 'Baines', 'Barrow', 'Boyle', 'Brandt', 'Cobb', 'Crane', 'Culver', 'Dawes', 'Drummond', 'Dust', 'Fisk',
   'Flint', 'Gage', 'Garza', 'Grell', 'Harrow', 'Hatch', 'Holt', 'Irons', 'Jarvis', 'Kane', 'Kessler', 'Kovac',

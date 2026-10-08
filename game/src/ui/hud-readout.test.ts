@@ -10,7 +10,7 @@ import { addState, towData } from "../sim/states";
 import { playerAid } from "../sim/aid";
 import { aidGoods, clock } from "./format";
 import { t, verbatim, type Msg } from "../text/msg";
-import { chassisName, professionName, siteName } from "../text/names";
+import { chassisName, driverName, professionName, siteName } from "../text/names";
 import { resolve } from "../text/resolve";
 import type { Vehicle } from "../sim/types";
 import { bugReportUrl, ContextPicker, featureRequestUrl, getContextActions, getHudReadout, getRescueReadout, overdriveSwitch, versionLabel } from "./hud-readout";
@@ -34,7 +34,7 @@ import type { Obstacle, World } from "../sim/types";
 const en = (msg: Msg): string => resolve(msg, "en");
 const siteEn = (id: string): string => en(siteName(id));
 const npcName = (v: Vehicle): string =>
-  en(v.brain ? t("vehicle.npc", { profession: professionName(v.brain.templateId), driver: v.brain.driver }) : chassisName(v.chassisId));
+  en(v.brain ? t("vehicle.npc", { profession: professionName(v.brain.templateId), driver: driverName(v) }) : chassisName(v.chassisId));
 
 // The actions in reach with their words in English.
 function actions(w: World) {

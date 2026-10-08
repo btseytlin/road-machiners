@@ -2,15 +2,15 @@
   "turn": 900,
   "vehicles": [
     { "id": "player", "name": "Your truck", "brain": null },
-    { "id": "npc1", "name": "Trader caravan", "brain": { "templateId": "trader", "driver": "Ada Stone", "goals": [
+    { "id": "npc1", "name": "Trader caravan", "brain": { "templateId": "trader", "driver": "Ada Holt", "goals": [
       { "kind": "trade", "targetId": "bowl", "destination": { "x": 80, "y": 470 }, "phase": "travel", "reason": "buy profitable cargo" },
       { "kind": "resupply", "targetId": "nose", "destination": { "x": 510, "y": 175 }, "phase": "travel", "reason": "low fuel" }
     ] } },
-    { "id": "npc2", "name": "Roamer", "brain": { "templateId": "roamer", "driver": "Cal Reed", "goals": [
+    { "id": "npc2", "name": "Roamer", "brain": { "templateId": "roamer", "driver": "Cal Rusk", "goals": [
       { "kind": "explore", "targetId": null, "destination": { "x": 300, "y": 300 }, "phase": "travel", "reason": "explore the open map" },
       { "kind": "wait", "targetId": null, "destination": null, "phase": "act", "reason": "ponder the horizon" }
     ] } },
-    { "id": "npc3", "name": "Raider outrider", "brain": { "templateId": "buggy", "driver": "Dora Vane", "goals": [
+    { "id": "npc3", "name": "Raider outrider", "brain": { "templateId": "buggy", "driver": "Dora Vance", "goals": [
       { "kind": "raid", "targetId": null, "destination": { "x": 40, "y": 60 }, "phase": "travel", "reason": "look for prey at known hunting grounds" }
     ] } }
   ],

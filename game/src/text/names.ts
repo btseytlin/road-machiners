@@ -2,10 +2,10 @@
 // coverage test checks that every id has its words in every language.
 import { WORLD_SETTINGS } from '../data/modes';
 import type { LineId } from '../data/dialogue';
-import type { TraitId } from '../data/npcs';
+import { FEMALE_NAMES, FIRST_NAMES, SURNAMES, type TraitId } from '../data/npcs';
 import type { PerkId } from '../data/skills';
 import type { Faction, GameModeId, GoalReason, MoneyReason, Refusal, SimNote, SkillId, UnitId, Vehicle, World, WorldSetup, WorldSettings } from '../sim/types';
-import { byId, list, t, verbatim, type Msg } from './msg';
+import { byId, list, t, type Msg } from './msg';
 
 export const partName = (defId: string): Msg => byId(`part.${defId}`);
 export const chassisName = (id: string): Msg => byId(`chassis.${id}`);
@@ -41,7 +41,7 @@ export function setupText(setup: WorldSetup): Msg {
 export function vehicleTitle(world: World, v: Vehicle): Msg {
   if (v.id === world.player.vehicleId) return t('vehicle.yours');
   if (!v.brain) return chassisName(v.chassisId);
-  return t('vehicle.npc', { profession: professionName(v.brain.templateId), driver: v.brain.driver });
+  return t('vehicle.npc', { profession: professionName(v.brain.templateId), driver: driverName(v) });
 }
 
 // The truck with this id, alive or removed this turn.
@@ -51,10 +51,18 @@ export function vehicleTitleOf(world: World, id: string): Msg {
   return vehicleTitle(world, v);
 }
 
-// A driver's own name, shown as it is in every language.
 export function driverName(v: Vehicle): Msg {
   if (!v.brain) throw new Error(`${v.id} has no driver`);
-  return verbatim(v.brain.driver);
+  return fullName(v.brain.driver);
+}
+
+export function fullName(driver: string): Msg {
+  const [first, last, ...rest] = driver.split(' ');
+  if (rest.length > 0 || !FIRST_NAMES.includes(first) || !SURNAMES.includes(last)) {
+    throw new Error(`Driver "${driver}" is not a first name and a surname from the name lists`);
+  }
+  const surname = FEMALE_NAMES.has(first) ? `driver.last.${last}.f` : `driver.last.${last}`;
+  return t('driver.full', { first: byId(`driver.first.${first}`), last: byId(surname) });
 }
 
 type NoteWords = { [K in SimNote['id']]: (note: Extract<SimNote, { id: K }>) => Msg };

@@ -47,13 +47,13 @@ describe('old saves in every language', () => {
     expect(words.length).toBeGreaterThan(10);
     expect(words).toContain('Busy');
     expect(words).toContain('Занят');
-    expect(words).toContain('Trader Ada Stone');
+    expect(words).toContain('Trader Ada Holt');
   });
 
   it('a whole save from before the text ids loads and renders in both languages', () => {
     const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     const npc = addVehicle(world, 'traders', 'hauler', ['stockEngine'], { x: 300, y: 300 });
-    npc.brain = { ...npcBrain('trader', npc.pos, ['trader']), driver: 'Cal Reed' };
+    npc.brain = { ...npcBrain('trader', npc.pos, ['trader']), driver: 'Cal Rusk' };
     npc.brain.goals = [{ kind: 'trade', targetId: 'bowl', destination: { x: 80, y: 470 }, phase: 'travel', reason: 'buyCargo' }];
     const deal: CallVars = { deal: { kind: 'deal', deal: 'free', patcher: 'npc', price: 0, parts: 1, turns: 2 } };
     world.player.call = { with: npc.id, topic: 'patch', node: 'terms', vars: deal, line: { line: 'dealTerms', vars: deal } };

@@ -206,10 +206,10 @@ it('logs how a feud with the player ends', () => {
   const w = emptyWorld();
   const me = playerVehicle(w);
   const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
-  npc.brain = { ...npcBrain('scavenger', npc.pos, ['scavenger']), driver: 'Ada Stone' };
+  npc.brain = { ...npcBrain('scavenger', npc.pos, ['scavenger']), driver: 'Ada Holt' };
   const feud = addState(w, 'feud', npc.id, me.id, { kind: 'feud', robbery: true });
-  expect(lineEn(w, { t: 'stateEnded', state: feud, ending: 'expired' })).toEqual({ text: 'Scavenger Ada Stone gives up the feud with you.', cls: 'good' });
-  expect(lineEn(w, { t: 'stateEnded', state: feud, ending: 'fulfilled' })).toEqual({ text: 'Scavenger Ada Stone ends the feud: you are beaten.', cls: 'bad' });
+  expect(lineEn(w, { t: 'stateEnded', state: feud, ending: 'expired' })).toEqual({ text: 'Scavenger Ada Holt gives up the feud with you.', cls: 'good' });
+  expect(lineEn(w, { t: 'stateEnded', state: feud, ending: 'fulfilled' })).toEqual({ text: 'Scavenger Ada Holt ends the feud: you are beaten.', cls: 'bad' });
 });
 
 it('logs no state ending for tow states or states between NPCs', () => {
@@ -275,11 +275,11 @@ it('names both trucks, the destination and the fee in a tow between NPCs', () =>
   const w = emptyWorld();
   const tower = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
   const client = addVehicle(w, 'traders', 'hauler', [], { x: 34, y: 30 });
-  tower.brain = { ...npcBrain('scavenger', tower.pos, ['scavenger']), driver: 'Tom Ward' };
-  client.brain = { ...npcBrain('trader', client.pos, ['trader']), driver: 'Cal Reed' };
+  tower.brain = { ...npcBrain('scavenger', tower.pos, ['scavenger']), driver: 'Gus Wick' };
+  client.brain = { ...npcBrain('trader', client.pos, ['trader']), driver: 'Cal Rusk' };
   refreshVision(w);
-  expect(lineEn(w, { t: 'towHitched', by: tower.id, client: client.id, site: 'kiln' })).toEqual({ text: 'Scavenger Tom Ward takes Trader Cal Reed in tow to Kiln Camp.', cls: 'dim' });
-  expect(lineEn(w, { t: 'towDone', by: tower.id, client: client.id, fee: 1250 })).toEqual({ text: 'Scavenger Tom Ward tows Trader Cal Reed in and takes 13 M.', cls: 'dim' });
-  expect(lineEn(w, { t: 'towDropped', by: tower.id, client: client.id, reason: 'danger' })).toEqual({ text: 'Scavenger Tom Ward drops the tow of Trader Cal Reed.', cls: 'dim' });
-  expect(lineEn(w, { t: 'towDone', by: tower.id, client: w.player.vehicleId, fee: 1200 })).toEqual({ text: 'Scavenger Tom Ward tows you into town and takes 12 M.', cls: 'bad' });
+  expect(lineEn(w, { t: 'towHitched', by: tower.id, client: client.id, site: 'kiln' })).toEqual({ text: 'Scavenger Gus Wick takes Trader Cal Rusk in tow to Kiln Camp.', cls: 'dim' });
+  expect(lineEn(w, { t: 'towDone', by: tower.id, client: client.id, fee: 1250 })).toEqual({ text: 'Scavenger Gus Wick tows Trader Cal Rusk in and takes 13 M.', cls: 'dim' });
+  expect(lineEn(w, { t: 'towDropped', by: tower.id, client: client.id, reason: 'danger' })).toEqual({ text: 'Scavenger Gus Wick drops the tow of Trader Cal Rusk.', cls: 'dim' });
+  expect(lineEn(w, { t: 'towDone', by: tower.id, client: w.player.vehicleId, fee: 1200 })).toEqual({ text: 'Scavenger Gus Wick tows you into town and takes 12 M.', cls: 'bad' });
 });

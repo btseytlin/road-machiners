@@ -10,13 +10,13 @@ Every word a player reads comes from one catalog in `src/text/`, in English and 
   - `dec1`: always one decimal, like 20.0.
   - `count`: an integer that picks plural forms.
   - `text`: a nested message.
-  - `name`: a proper name shown as it is, like a driver's name.
+  - `name`: a string shown as it is, like a key cap.
 - Russian in `src/text/ru/` gives words for every English key, so a missing key fails tsc. An entry is a string, or for a name a `noun(gender, nom, gen, dat, acc, ins, prep)` with its form in every case and its gender `m`, `f`, `n` or `pl`. Forms are written as inside a sentence: a common noun in lower case, a proper name capitalized.
 - Keys group by area: `screens` for panels and menus, `log` for the log and the sim's ids, `talk` for radio talk and J.J.'s broadcasts, `names` for data names. A key names its part of the game and its id, like `goal.lowFuel`, `part.mg`, `line.dealTerms` or `radio.dawn.2`.
 - The message syntax is a strict ICU subset: `{name}` and `{n, plural, one {...} few {...} many {...} other {...}}`, where `#` is the formatted count. A literal brace is not allowed. `src/text/resolve.ts` alone parses and resolves it.
 - Russian adds two forms for text params. `{part, case, gen}` puts a name in a case: `nom`, `gen`, `dat`, `acc`, `ins` or `prep`. `{who, gender, m {починил} f {починила} n {починило} pl {починили}}` agrees with a name's gender and needs all four forms.
-- A name shown on its own, or put in a sentence with plain `{x}`, is nominative and capitalized. A name in a case keeps its form as written. A phrase like `{profession} {driver}` passes its case to its names and takes the gender of its first name. A list passes its case to every item and is plural when it holds several.
-- Asking a case of text with no case forms, or the gender of text with none, throws. A driver's name alone has no gender.
+- A name shown on its own, or put in a sentence with plain `{x}`, is nominative and capitalized. A name in a case keeps its form as written. A phrase like `{profession} {driver}` passes its case to its names and takes the gender of its last name. A list passes its case to every item and is plural when it holds several.
+- Asking a case of text with no case forms, or the gender of text with none, throws. A driver's name is a phrase of a first name and a surname from `src/text/<locale>/drivers.ts`. A surname has a form for a man and one for a woman, picked by `FEMALE_NAMES` in `src/data/npc-behavior.ts`. A saved name outside the name lists throws.
 - `t(key, params)` builds a `Msg`, a key with its params, typed by the English schema. `verbatim(name)` wraps a proper name, `num(n, kind)` a number shown on its own, `list(items)` a comma list, `concat(items)` pieces shown one after another, like the colored spans of a log line, and `date(ms)` a real time. A `Msg` turns into words only where it is shown.
 - `src/text/names.ts` gives the words of an id: `partName`, `goodName`, `siteName`, `vehicleTitle`, `goalText`, `noteText`, `refusalText` and the rest. A key is built from an id there and nowhere else. Never build a key from text, and never join translated fragments into a sentence. A sentence with values is one entry with params.
 - Numbers and plurals use `Intl.NumberFormat` and `Intl.PluralRules` for `en-US` and `ru-RU`. Russian groups with a no-break space and uses a decimal comma. Real times use `Intl.DateTimeFormat`. Units are part of an entry's words, like `{n} km` and `{n} км`.
@@ -75,7 +75,7 @@ All of them run in `npm test` and `npm run typecheck`. Together the text tests t
 - `control-overlap`: two visible controls overlap.
 - `unreachable-control`: a click at a control's center, once scrolled into view, lands on something else.
 - `missing-glyphs`: the Cyrillic face is not loaded.
-- `leak`: Latin words in Russian, apart from bound names, driver names, key caps and brands.
+- `leak`: Latin words in Russian, apart from bound names, key caps and brands.
 
 Each fault prints the screen, language, window size, a CSS path, the text, the sizes and the kind, and `tmp/layout/faults.json` keeps them. Every screen is captured to `tmp/layout/<screen>-<language>-<w>x<h>.png`. Before the screens, the check plants a 40 px button with a long label and fails unless the checker reports it. A text check skips text a box scrolls, decoration hidden from screen readers and screen-reader-only labels. While a modal is open, only its controls count. The run takes about 8 minutes on a slow machine with software drawing.
 
@@ -86,7 +86,6 @@ Each of these stays as it is, with a follow-up where one makes sense.
 - The debug console, the cheats it runs, the full shop it opens, the perf panel, `icons.html`, `sound.html` and the progression and income reports are dev tools. They stay English. The full-log debug lines go through the catalog but name goal kinds as the code does.
 - The crash screen shows the raw error and its stack, for a bug report. Its title and hint are translated.
 - Internal `Error` messages are for the console and bug reports. No `Error` message is shown to a player.
-- Driver names stay in Latin script in every language, as proper names. They are rolled from `nameRng` and stored in saves. Follow-up: a Cyrillic name list, which needs a save step and a decision on the name roll.
 - The game title "Road Machiners", the station "WOT RADIO" and "FM 66.6", and each language's own name on the language control stay as they are.
 - Keyboard keys keep their caps, like WASD, Shift and Esc in the help guide.
 - `docs/wiki/` stays English. It reads the English catalog.

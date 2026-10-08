@@ -898,5 +898,5 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
 };
 
 
-export { FIRST_NAMES, HUNT, MEMORY, NPC_BEHAVIOR, NPC_UPKEEP, SURNAMES, TRADE_TIP } from './npc-behavior';
+export { FEMALE_NAMES, FIRST_NAMES, HUNT, MEMORY, NPC_BEHAVIOR, NPC_UPKEEP, SURNAMES, TRADE_TIP } from './npc-behavior';
 export { TRAITS, type Trait } from './npc-traits';

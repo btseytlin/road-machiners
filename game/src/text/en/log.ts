@@ -370,5 +370,5 @@ export const LOG = {
   'unit.part': m('{n, plural, one {# part} other {# parts}}', { n: 'count' }),
   // Truck titles.
   'vehicle.yours': 'Your truck',
-  'vehicle.npc': m('{profession} {driver}', { profession: 'text', driver: 'name' }),
+  'vehicle.npc': m('{profession} {driver}', { profession: 'text', driver: 'text' }),
 };

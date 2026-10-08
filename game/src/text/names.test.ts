@@ -10,14 +10,14 @@ const both = (msg: Msg): Record<Locale, string> => ({ en: resolve(msg, 'en'), ru
 function scene() {
   const w = emptyWorld();
   const npc = addVehicle(w, 'roamers', 'buggy', ['mg', 'stockEngine'], { x: 5, y: 5 });
-  npc.brain = { ...npcBrain('roamer', npc.pos, ['roamer']), driver: 'Ada Voss' };
+  npc.brain = { ...npcBrain('roamer', npc.pos, ['roamer']), driver: 'Ada Volkov' };
   return { w, npc };
 }
 
 describe('truck titles', () => {
-  it('reads an NPC as its profession and driver, with the driver name as it is', () => {
+  it('reads an NPC as its profession and driver, with the driver name in every case', () => {
     const { w, npc } = scene();
-    expect(both(vehicleTitle(w, npc))).toEqual({ en: 'Roamer Ada Voss', ru: 'Бродяга Ada Voss' });
+    expect(both(vehicleTitle(w, npc))).toEqual({ en: 'Roamer Ada Volkov', ru: "Бродяга Ада Волкова" });
   });
 
   it('reads the player truck as the player\'s own', () => {
@@ -52,13 +52,13 @@ describe('sim ids in words', () => {
 
   it('words a tow fee with the towed truck', () => {
     const { w, npc } = scene();
-    expect(both(moneyReasonText(w, { kind: 'towing', vehicle: npc.id }))).toEqual({ en: 'towing Roamer Ada Voss', ru: 'буксировка бродяги Ada Voss' });
+    expect(both(moneyReasonText(w, { kind: 'towing', vehicle: npc.id }))).toEqual({ en: 'towing Roamer Ada Volkov', ru: 'буксировка бродяги Ады Волковой' });
   });
 
   it('words refusals, naming who loots and why a part does not fit', () => {
     const { w, npc } = scene();
     const looting: Refusal = { id: 'looting', by: npc.id, place: 'wreck' };
-    expect(both(refusalText(w, looting))).toEqual({ en: 'Roamer Ada Voss is looting this wreck', ru: 'Эти обломки уже грабит бродяга Ada Voss' });
+    expect(both(refusalText(w, looting))).toEqual({ en: 'Roamer Ada Volkov is looting this wreck', ru: 'Эти обломки уже грабит бродяга Ада Волкова' });
     expect(both(refusalText(w, { id: 'badLayout', cause: { id: 'noFit' } })).en).toBe('Does not fit there. Items would fall off the grid or overlap.');
     expect(both(refusalText(w, { id: 'needsXp', cost: 1200, have: 30 }))).toEqual({ en: 'Needs 1,200 XP, you have 30 XP', ru: 'Нужно 1 200 опыта, у вас 30' });
   });

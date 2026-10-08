@@ -47,7 +47,7 @@ describe("latinLeft", () => {
   });
 
   it("lets allowed names and single letters stay", () => {
-    expect(latinLeft("Бродяга Ada Voss", ["Ada Voss"])).toBe(false);
+    expect(latinLeft("Бродяга Ada Volkov", ["Ada Volkov"])).toBe(false);
     expect(latinLeft("Ремонт [R], форсированный V8", [])).toBe(false);
   });
 });

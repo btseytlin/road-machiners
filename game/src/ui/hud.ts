@@ -33,8 +33,8 @@ import { ENGINE_HEAT } from "../data/wear";
 import type { RadioPanel } from "./radio";
 import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
 import { bindAttr, say, setText } from "../text/language";
-import { num, t, verbatim, type Msg } from "../text/msg";
-import { factionName, setupText, templateName, vehicleTitle } from "../text/names";
+import { num, t, type Msg } from "../text/msg";
+import { driverName, factionName, setupText, templateName, vehicleTitle } from "../text/names";
 
 export type ContextTarget =
   | { kind: 'aid'; id: string }
@@ -567,7 +567,7 @@ function infoHeading(w: World, v: Vehicle): HTMLElement[] {
   if (!v.brain) return [el("h3", {}, vehicleTitle(w, v))];
   const activity = formatNpcActivity(w, v);
   return [
-    el("h3", {}, verbatim(v.brain.driver)),
+    el("h3", {}, driverName(v)),
     ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
     el("div", { class: "dim" }, templateName(v.brain.templateId)),
   ];

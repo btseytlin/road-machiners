@@ -9,7 +9,7 @@ const CATALOGS: Record<Locale, Readonly<Record<string, EnEntry | Noun>>> = { en:
 const KEYS = Object.keys(EN);
 
 const SAME_AS_ENGLISH = new Set(['radio.band', 'radio.frequency', 'language.en', 'language.ru']);
-const RU_NOUN = /^(part|chassis|site|terrain|faction)\.[^.]+$|^npc\.[^.]+\.profession$|^good\.[^.]+(\.lower|\.subject)?$/;
+const RU_NOUN = /^(part|chassis|site|terrain|faction)\.[^.]+$|^driver\.(first|last)\.|^npc\.[^.]+\.profession$|^good\.[^.]+(\.lower|\.subject)?$/;
 const RU_NOUN_KEYS = new Set(['vehicle.yours', 'job.theTruck', 'job.somePart', 'log.anObstacle', 'log.something', 'log.you']);
 const hasWords =(text: string): boolean => /\p{L}{2,}/u.test(text.replace(/\{[^}]*\}/g, ''));
 

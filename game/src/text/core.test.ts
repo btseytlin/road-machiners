@@ -81,10 +81,14 @@ describe('resolve', () => {
     expect(resolve(t('log.partDamage', { part: byId('part.mg'), n: 3 }), 'ru')).toBe('Пулемётная турель: 3');
   });
 
-  it('carries the case into a phrase and takes its gender from its first name', () => {
-    const trader = t('vehicle.npc', { profession: byId('npc.trader.profession'), driver: 'Ray Nolan' });
-    expect(resolve(trader, 'ru')).toBe('Торговец Ray Nolan');
-    expect(resolve(t('log.patchDoneThem', { who: trader }), 'ru')).toBe('Торговец Ray Nolan починил ваш грузовик.');
+  it('carries the case into a phrase and takes its gender from its last name', () => {
+    const driver = (first: string, last: string) => t('driver.full', { first: byId(`driver.first.${first}`), last: byId(`driver.last.${last}`) });
+    const trader = (who: Msg) => t('vehicle.npc', { profession: byId('npc.trader.profession'), driver: who });
+    expect(resolve(trader(driver('Boris', 'Morozov')), 'ru')).toBe('Торговец Борис Морозов');
+    expect(resolve(t('log.patchDoneThem', { who: trader(driver('Boris', 'Morozov')) }), 'ru')).toBe('Торговец Борис Морозов починил ваш грузовик.');
+    expect(resolve(t('log.patchDoneYou', { who: trader(driver('Boris', 'Morozov')) }), 'ru')).toBe('Вы починили торговца Бориса Морозова.');
+    expect(resolve(t('log.patchDoneThem', { who: trader(driver('Vera', 'Morozov.f')) }), 'ru')).toBe('Торговец Вера Морозова починила ваш грузовик.');
+    expect(resolve(t('log.patchDoneYou', { who: trader(driver('Ada', 'Kane.f')) }), 'ru')).toBe('Вы починили торговца Аду Кейн.');
     expect(resolve(t('job.repair', { part: list([byId('part.mg'), byId('part.plates')]) }), 'ru')).toBe('Ремонт пулемётной турели, стальных плит');
   });
 

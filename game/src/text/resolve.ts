@@ -240,7 +240,7 @@ function render(msg: Msg, locale: Locale, mode: Mode): string {
   if (internal) return internal(msg, locale, mode);
   const entry = entryOf(locale, msg.key);
   if (isNoun(entry)) return renderNoun(msg, entry, locale, mode);
-  if (mode.case !== 'nom' && !firstName(msg, locale)) throw new Error(`Text "${msg.key}" has no ${mode.case} form in ${locale}`);
+  if (mode.case !== 'nom' && names(msg, locale).length === 0) throw new Error(`Text "${msg.key}" has no ${mode.case} form in ${locale}`);
   const values = checkParams(msg, schemaOf(msg.key), locale);
   return renderParts({ msg, values, locale, mode, count: null }, partsOf(locale, msg.key));
 }
@@ -251,10 +251,10 @@ function renderNoun(msg: Msg, entry: Noun, locale: Locale, mode: Mode): string {
   return mode.cap ? form.charAt(0).toUpperCase() + form.slice(1) : form;
 }
 
-function firstName(msg: Msg, locale: Locale): Msg | undefined {
+function names(msg: Msg, locale: Locale): Msg[] {
   return partsOf(locale, msg.key)
     .map((part) => (part.kind === 'arg' && part.case === null ? msg.params[part.name] : undefined))
-    .find((value): value is Msg => Msg.is(value));
+    .filter((value): value is Msg => Msg.is(value));
 }
 
 export function genderOf(msg: Msg, locale: Locale): Gender | null {
@@ -262,7 +262,7 @@ export function genderOf(msg: Msg, locale: Locale): Gender | null {
   if (msg.key.startsWith('#')) return null;
   const entry = entryOf(locale, msg.key);
   if (isNoun(entry)) return entry.gender;
-  const name = firstName(msg, locale);
+  const name = names(msg, locale).at(-1);
   return name ? genderOf(name, locale) : null;
 }
 

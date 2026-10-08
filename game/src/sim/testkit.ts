@@ -69,7 +69,7 @@ export function practiceOf(w: World, source: XpSource): Extract<GameEvent, { t: 
 }
 
 export function npcBrain(templateId: string, home: Vec, traits: TraitId[]): NpcBrain {
-  return { templateId, driver: 'Test Driver', traits, goals: [], noticed: {}, tracks: {}, hurt: 0, attackers: {}, goal: null, home: { ...home }, stepIndex: 0, memories: [] };
+  return { templateId, driver: 'Jed Cobb', traits, goals: [], noticed: {}, tracks: {}, hurt: 0, attackers: {}, goal: null, home: { ...home }, stepIndex: 0, memories: [] };
 }
 
 export function forceOption<D extends DecisionId>(decision: D, option: DecisionOptions[D]): void {
