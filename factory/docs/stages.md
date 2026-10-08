@@ -57,12 +57,15 @@ A branch whose every changed file since its base is a Markdown file outside `gam
 
 [process.md](process.md#hardening-column) shows the order of the rounds. These are the rules behind them.
 
-- Harden merges the new commits of the issue branch on GitHub, but not the base. Approve merges the base, and a conflict there comes back here.
+- Harden merges the new commits of the issue branch on GitHub first. It merges the base only on the way to Checks, as below.
 - The harden round uses `prompts/harden.md`. A cleanup task and a docs change skip it and get the review alone.
 - The review runs `/code-review` on Sonnet over the whole branch diff, with `prompts/review.md`, `docs/incident-log.md` and `game/docs/architecture/principles.md` pasted in. The factory reads the findings from the last `ReportFindings` call in the run's output. Any finding of category `correctness`, or with no category, fails the review. Other findings are listed and do not block. A run with no `ReportFindings` call fails the stage.
 - A review FAIL hands the review to the review-fix round in `.factory/review-findings.md`. A second FAIL comments it on the issue under "## Review findings", drops the approval and sends the card to Design.
-- After the review, the branch head is compared with the card's build, the commit Testing checked and the committee played. The same commit moves the card to Approval with its merge queued. Any other commit runs Checks, whose fix round runs in Hardening and leaves no evidence.
-- A conflict at approve merges the base, and a merge agent resolves the conflict with `prompts/branch-merge.md`. Checks runs next, with no harden round or review.
+- After the review, the branch head is compared with the card's build, the commit Testing checked and the committee played. The same commit moves the card to Approval with its merge queued, with no base merge, since that would make a commit no check ran. Any other commit runs Checks.
+- Before Checks, Hardening merges the current base, and a merge agent resolves any conflict with `prompts/branch-merge.md`. It pushes the result, and Checks tests that head. So approve meets a conflict only when the base moved again during the checks. A cleanup task always takes this path, on the release branch.
+- Checks clones the exact commit it read as the branch head, and publishes and records that commit as the build. Its fix round runs in Hardening and leaves no evidence, with no second base merge.
+- The factory never merges the base after the checks pass and calls the result checked. Approve's own merge into the base is the one untested merge commit, as before.
+- A conflict at approve takes the same base merge, and Checks runs next, with no harden round or review.
 
 ## Approval
 

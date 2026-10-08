@@ -34,7 +34,7 @@ The loops:
 - patch: a small committee change. The patch goes straight to the checks, with no testing agent. A patch that finds the plan must change goes to Design.
 - redesign: the committee reply changes the plan.
 - review fails twice: the code review blocked the change after one fix round. The approval is dropped, so the new build gets a new post.
-- conflict: `dev` moved on since testing. The card goes back to Hardening with its approval kept. A merge agent resolves the conflict, and the checks run again with no new harden round or review.
+- conflict: `dev` moved on since the last checks. The card goes back to Hardening with its approval kept. A merge agent resolves the conflict, and the checks run again with no new harden round or review.
 - removed from release: `remove #N` on the release candidate post.
 
 The early ends:
@@ -66,12 +66,13 @@ Testing is two jobs. Verify runs the testing agent. Checks runs the machine chec
 
 ## Hardening column
 
-Approve moves a card to Hardening. It runs the harden round and the review, and no test that Testing already ran. The card keeps the build the committee played. If hardening left the branch head on that build, the card goes straight to Approval with its merge queued. If hardening changed the code, Checks runs first.
+Approve moves a card to Hardening. It runs the harden round and the review, and no test that Testing already ran. The card keeps the build the committee played. If hardening left the branch head on that build, the card goes straight to Approval with its merge queued. If hardening changed the code, Hardening merges the current base, a merge agent resolves any conflict, and Checks runs on that exact head. Approve then merges it with no conflict unless the base moved again during the checks.
 
 ![Hardening column](diagrams/hardening.svg)
 
 - A release cleanup task goes from Implementation straight to Hardening, since it merges with no post. It gets the review with no harden round, since its design and build were the cleanup. It has no played build, so Checks always runs. Then it merges with no second Hardening.
 - A conflict at approve sends the card back to Hardening. A merge agent resolves it, and Checks runs, with no harden round or review.
+- The base can still move during the checks. A clean move merges at approve without new checks, as before. Only the merge commit that approve makes is untested, and nothing calls it checked.
 - A card that the review already sent to Design once fails the stage on its next second FAIL.
 
 ## Committee inputs
