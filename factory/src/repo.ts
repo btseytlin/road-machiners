@@ -149,6 +149,14 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
     return [...marks.flat(), ...rebases, ...(await conflictedFiles(dir))];
   }
 
+  async function openBaseMerge(dir: string, base: string): Promise<{ commit: string; conflicts: string[] } | null> {
+    if (!(await hasRef(dir, 'MERGE_HEAD'))) return null;
+    const commit = (await gitIn(dir, ['rev-parse', 'MERGE_HEAD'])).trim();
+    if ((await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', commit, `origin/${base}`], { cwd: dir })).code !== 0) return null;
+    const conflicts = await conflictedFiles(dir);
+    return { commit, conflicts: conflicts.length > 0 ? conflicts : lines(await gitIn(dir, ['diff', '--name-only', 'HEAD', 'MERGE_HEAD'])) };
+  }
+
   async function untouchable(dir: string): Promise<string | null> {
     const open = await openWork(dir);
     if (open.length > 0) throw new Error(`${dir} has an unfinished merge or conflicts (${open.join(', ')}), so the factory left it as it is. Repair it with factory repair-clone.`);
@@ -268,9 +276,11 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       return { commit, conflicts };
     },
     async catchUpBase(dir, base) {
+      await gitIn(dir, ['fetch', '--quiet', 'origin']);
+      const open = await openBaseMerge(dir, base);
+      if (open !== null) return { ...open, kept: null };
       const kept = await untouchable(dir);
       if (kept !== null) return { commit: null, conflicts: [], kept };
-      await gitIn(dir, ['fetch', '--quiet', 'origin']);
       const commit = (await gitIn(dir, ['rev-parse', `origin/${base}^{commit}`])).trim();
       if ((await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', commit, 'HEAD'], { cwd: dir })).code === 0) return { commit: null, conflicts: [], kept: null };
       return mergeBaseCommit(dir, base, commit);

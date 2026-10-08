@@ -232,7 +232,7 @@ describe('design stage', () => {
     let prompt = '';
     await runStage(fakeCtx((run) => { prompt = run.prompt; planned(run); }), 7);
     expect(calls.slice(0, 5)).toEqual(['fetch ', 'fetch ', 'mergeBranchIntoWork', 'catchUpBase dev', 'agent design']);
-    expect(prompt).toContain('merged the latest dev into this clone');
+    expect(prompt).toContain('The factory merged the latest dev into this clone before you started');
     expect(prompt).toContain('You cannot fetch');
     expect(prompt).toContain('Never ask the author about branches, clones, fetching or the network.');
   });
@@ -256,7 +256,10 @@ describe('design stage', () => {
 
   it('designs on a clone it kept as it is, and asks the author nothing about it', async () => {
     caughtUp = { commit: null, conflicts: [], kept: 'uncommitted changes in f.txt' };
-    await runStage(fakeCtx(planned), 7);
+    let prompt = '';
+    await runStage(fakeCtx((run) => { prompt = run.prompt; planned(run); }), 7);
+    expect(prompt).toContain('could not merge the latest dev into this clone, because of uncommitted changes in f.txt');
+    expect(prompt).not.toContain('before you started');
     expect(calls.filter((call) => call.startsWith('agent'))).toEqual(['agent design']);
     expect(calls.some((call) => call.startsWith('comment 7 ## Questions'))).toBe(false);
     expect(calls.at(-1)).toBe('move 7 Implementation');

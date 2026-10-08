@@ -330,12 +330,14 @@ describe('work clones', () => {
       expect(readFileSync(join(work, 'new.txt'), 'utf8')).toBe('local scratch\n');
     });
 
-    it('refuses a clone with an open conflicted merge and touches nothing', async () => {
-      const { repo, work } = await staleClone(257);
+    it('refuses a clone with an open conflicted merge of other work and touches nothing', async () => {
+      const { repo, work, commit } = await staleClone(257);
+      await commit('factory/issue-999', 'g.txt', 'other\n');
+      await repo.fetch();
       writeFileSync(join(work, 'g.txt'), 'mine\n');
       await git(work, 'commit', '-am', 'mine');
       await git(work, 'fetch', '--quiet', 'origin');
-      expect((await realRun('git', [...ID, 'merge', 'origin/dev'], { cwd: work })).code).not.toBe(0);
+      expect((await realRun('git', [...ID, 'merge', 'origin/factory/issue-999'], { cwd: work })).code).not.toBe(0);
       const before = readFileSync(join(work, 'g.txt'), 'utf8');
       await expect(repo.catchUpBase(work, 'dev')).rejects.toThrow(/unfinished merge or conflicts \(MERGE_HEAD, g\.txt\)/);
       expect(readFileSync(join(work, 'g.txt'), 'utf8')).toBe(before);
@@ -347,6 +349,19 @@ describe('work clones', () => {
       await git(work, 'commit', '-am', 'mine');
       expect(await repo.catchUpBase(work, 'dev')).toEqual({ commit: await head('dev'), conflicts: ['g.txt'], kept: null });
       expect((await realRun('git', ['rev-parse', '--verify', '--quiet', 'MERGE_HEAD'], { cwd: work })).code).toBe(0);
+    });
+
+    it('hands its own unfinished base merge back for another round instead of refusing it', async () => {
+      const { repo, work, head } = await staleClone(259);
+      writeFileSync(join(work, 'g.txt'), 'mine\n');
+      await git(work, 'commit', '-am', 'mine');
+      await repo.catchUpBase(work, 'dev');
+      const before = readFileSync(join(work, 'g.txt'), 'utf8');
+      expect(await repo.catchUpBase(work, 'dev')).toEqual({ commit: await head('dev'), conflicts: ['g.txt'], kept: null });
+      expect(readFileSync(join(work, 'g.txt'), 'utf8')).toBe(before);
+      writeFileSync(join(work, 'g.txt'), 'both\n');
+      await git(work, 'add', 'g.txt');
+      expect(await repo.catchUpBase(work, 'dev')).toEqual({ commit: await head('dev'), conflicts: ['g.txt'], kept: null });
     });
   });
 

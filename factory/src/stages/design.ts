@@ -9,11 +9,11 @@ export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   const base = await baseBranchOf(ctx, issue);
   await ctx.repo.fetch();
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, clone);
-  await catchUpBase(ctx, issue, base, 'design');
+  const baseNote = await catchUpBase(ctx, issue, base, 'design');
   const home = agentHome(clone, GAME_DIR);
   prepareOutputs(ctx, issue, home);
   await writeIssueInput(ctx, issue, home);
-  const prompt = fillPrompt('design', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), base });
+  const prompt = fillPrompt('design', { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), baseNote });
   await runAgent(ctx, issue, 'design', 'design', prompt, { effort: ctx.cfg.designEffort });
   throwIfNeedsCommittee(home);
   const questions = readOutput(home, 'questions.md');
