@@ -21,7 +21,7 @@ import { getResources } from './resources';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { inCombat } from './combat';
 import { cancelJob, startJob } from './jobs';
-import type { GridItem, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
+import type { GridItem, HiddenLoot, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { estimateCrashGeometry } from './crash-contact';
 import { walkLane } from './armor';
 import { canUseSite } from './sites';
@@ -89,13 +89,15 @@ function fieldSpare(world: World, table: LootTable): PartInstance {
   return makePart(world, defId, sampleWeighted(world.marketRng, rare ? rare.wear : FIELD_SPARE_WEAR));
 }
 
+// A rolled stock lies hidden until searches reveal it.
 export function rollStock(world: World, table: LootTable, id: string, pos: Vec, radius: number): SalvageStock {
   const goods: Record<string, number> = {};
   for (const [good, [lo, hi]] of Object.entries(table.goods)) goods[good] = randInt(world, lo, hi);
   goods.parts = randInt(world, table.parts[0], table.parts[1]);
   const parts: PartInstance[] = [];
   if (chance(world, table.sparePartChance)) parts.push(fieldSpare(world, table));
-  return { id, pos: { ...pos }, radius, goods, parts, fuel: randInt(world, ...table.fuel), supplies: randInt(world, ...table.supplies) };
+  const hidden = { goods, parts, fuel: randInt(world, ...table.fuel), supplies: randInt(world, ...table.supplies) };
+  return { id, pos: { ...pos }, radius, goods: {}, parts: [], fuel: 0, supplies: 0, hidden };
 }
 
 // Gives every old-world loot spot of the map its stock, rolled from its place's table. A new game has none of them,
@@ -111,13 +113,70 @@ export function stockOldSpots(world: World, map: BakedMap): void {
   for (const p of picks) world.salvage.push(rollStock(world, OLD_TABLES[p.type], oldStockId(p), p.pos, p.reach));
 }
 
+// No hidden loot: a stock whose loot lies in the open.
+export function emptyHidden(): HiddenLoot {
+  return { goods: {}, parts: [], fuel: 0, supplies: 0 };
+}
+
+// Loot left in the stock, hidden or revealed.
 export function hasSalvage(stock: SalvageStock): boolean {
+  return hasRevealed(stock) || hiddenUnits(stock) > 0;
+}
+
+// Loot a search has revealed and nobody took yet.
+export function hasRevealed(stock: SalvageStock): boolean {
   return stock.parts.length > 0 || Object.values(stock.goods).some((count) => count > 0) || hasStores(stock);
+}
+
+// Units not found yet. Fuel and supplies are one unit each, since a search finds each whole.
+export function hiddenUnits(stock: SalvageStock): number {
+  const { goods, parts, fuel, supplies } = stock.hidden;
+  return parts.length + Object.values(goods).reduce((sum, count) => sum + count, 0) + Number(fuel > 0) + Number(supplies > 0);
+}
+
+// What one search turn moved from hidden to revealed.
+export type Found = { goods: Record<string, number>; parts: string[]; fuel: number; supplies: number };
+
+// Mutates a draft world: one search turn rolls every hidden unit at `p` on the search stream and moves the hits to
+// the revealed loot. The stock's total never changes. Found parts are named by their def id.
+export function revealTurn(world: World, stock: SalvageStock, p: number): Found {
+  const found: Found = { goods: revealGoods(world, stock, p), parts: [], fuel: 0, supplies: 0 };
+  stock.hidden.parts = stock.hidden.parts.filter((part) => {
+    if (!chance(world.searchRng, p)) return true;
+    stock.parts.push(part);
+    found.parts.push(part.defId);
+    return false;
+  });
+  for (const kind of ['fuel', 'supplies'] as const) {
+    if (stock.hidden[kind] <= 0 || !chance(world.searchRng, p)) continue;
+    found[kind] = stock.hidden[kind];
+    stock[kind] = (stock[kind] ?? 0) + stock.hidden[kind];
+    stock.hidden[kind] = 0;
+  }
+  return found;
+}
+
+function revealGoods(world: World, stock: SalvageStock, p: number): Record<string, number> {
+  const found: Record<string, number> = {};
+  for (const [good, count] of Object.entries(stock.hidden.goods)) {
+    let hits = 0;
+    for (let unit = 0; unit < count; unit++) if (chance(world.searchRng, p)) hits++;
+    if (hits === 0) continue;
+    stock.hidden.goods[good] = count - hits;
+    stock.goods[good] = (stock.goods[good] ?? 0) + hits;
+    found[good] = hits;
+  }
+  return found;
+}
+
+// Whether a search there is worth starting: units still hidden, or a collect would move revealed loot into the vehicle.
+export function canTakeAny(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
+  return hiddenUnits(stock) > 0 || canTakeRevealed(world, vehicle, stock);
 }
 
 // Whether a collect would move anything from the stock into the vehicle. Stores pour in whole units, so they count
 // only when a unit fits.
-export function canTakeAny(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
+function canTakeRevealed(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
   const room = storesRoom(world, vehicle);
   if ((['fuel', 'supplies'] as const).some((kind) => (stock[kind] ?? 0) > 0 && room[kind] >= 1)) return true;
   const grid = gridOf(vehicle);
@@ -135,7 +194,7 @@ export function hasStores(stock: SalvageStock): boolean {
   return (stock.fuel ?? 0) > 0 || (stock.supplies ?? 0) > 0;
 }
 
-// Total loot units left in a stock, goods and parts alike, for estimating a search's length.
+// Revealed loot units left in a stock, goods and parts alike, for estimating a search's length.
 // Fuel and supplies pour out at once, so they add no search time.
 export function salvageUnits(stock: SalvageStock): number {
   return stock.parts.length + Object.values(stock.goods).reduce((sum, count) => sum + count, 0);
@@ -308,7 +367,7 @@ export function hasCargo(vehicle: Vehicle): boolean {
 
 function addVehicleStock(world: World, vehicle: Vehicle, id: string, goods: Record<string, number>, parts: PartInstance[]): SalvageStock {
   if (world.salvage.some((stock) => stock.id === id)) throw new Error(`Duplicate wreck salvage ${id}`);
-  const stock: SalvageStock = { id, pos: { ...vehicle.pos }, radius: vehicleStats(world, vehicle).radius * RULES.wreckRadiusScale, goods, parts };
+  const stock: SalvageStock = { id, pos: { ...vehicle.pos }, radius: vehicleStats(world, vehicle).radius * RULES.wreckRadiusScale, goods, parts, hidden: emptyHidden() };
   world.salvage.push(stock);
   return stock;
 }
@@ -427,25 +486,29 @@ function siteStock(world: World, id: string): SalvageStock {
 }
 
 // Each good, fuel and supplies regain a share of a fresh roll, up to the table's high. A site holds at most one
-// spare part, and an empty slot refills at the same share of the table's spare part chance.
+// spare part, and an empty slot refills at the same share of the table's spare part chance. What comes back lies
+// hidden, and the high caps hidden plus revealed.
 function restockSite(world: World, stock: SalvageStock, table: LootTable): void {
-  for (const [good, range] of Object.entries({ ...table.goods, parts: table.parts })) stock.goods[good] = refill(world, stock.goods[good], range);
-  stock.fuel = refill(world, stock.fuel, table.fuel);
-  stock.supplies = refill(world, stock.supplies, table.supplies);
-  if (stock.parts.length > 0 || !chance(world, table.sparePartChance * SALVAGE.restockShare)) return;
-  stock.parts.push(fieldSpare(world, table));
+  for (const [good, range] of Object.entries({ ...table.goods, parts: table.parts })) refillGood(world, stock, good, range);
+  for (const kind of ['fuel', 'supplies'] as const) stock.hidden[kind] += refill(world, (stock[kind] ?? 0) + stock.hidden[kind], table[kind]);
+  if (stock.parts.length + stock.hidden.parts.length > 0 || !chance(world, table.sparePartChance * SALVAGE.restockShare)) return;
+  stock.hidden.parts.push(fieldSpare(world, table));
 }
 
-// Each unit of a fresh roll comes back with chance restockShare. The high caps the gain, but a count already
-// above it stays.
-function refill(world: World, count: number | undefined, [lo, hi]: LootRange): number {
-  const current = count ?? 0;
+function refillGood(world: World, stock: SalvageStock, good: string, range: LootRange): void {
+  const hidden = stock.hidden.goods[good] ?? 0;
+  stock.hidden.goods[good] = hidden + refill(world, (stock.goods[good] ?? 0) + hidden, range);
+}
+
+// The gain of a count: each unit of a fresh roll comes back with chance restockShare. The high caps the count, but a
+// count already above it stays.
+function refill(world: World, current: number, [lo, hi]: LootRange): number {
   let gain = 0;
   for (let unit = randInt(world, lo, hi); unit > 0; unit--) if (chance(world, SALVAGE.restockShare)) gain++;
-  return Math.max(current, Math.min(hi, current + gain));
+  return Math.max(current, Math.min(hi, current + gain)) - current;
 }
 
-// A road wreck found looted starts its clock. Once it ran out, and the wreck lies beyond the player's gray vision,
+// A road wreck found looted, with nothing hidden or revealed left, starts its clock. Once it ran out, and the wreck lies beyond the player's gray vision,
 // a new road wreck replaces it.
 function turnOverRoadWrecks(world: World): void {
   for (const stock of world.salvage.filter(isRoadWreck)) {

@@ -134,13 +134,19 @@ describe('old-world loot spot picks on the committed map', () => {
 // What old spots add to the economy over 30 new games, against the rest of the map's salvage.
 describe('old-world loot spot economy', () => {
   const SEEDS = 30;
+  // Rolled loot lies in `hidden` until searched.
   const stockValue = (stock: SalvageStock): number =>
-    Object.entries(stock.goods).reduce((sum, [id, n]) => sum + n * GOODS[id].value, 0) +
-    stock.parts.reduce((sum, p) => sum + partValue(p), 0) +
-    (stock.fuel ?? 0) * ECONOMY.supplyPrice.fuel +
-    (stock.supplies ?? 0) * ECONOMY.supplyPrice.supplies;
+    [stock, stock.hidden].reduce(
+      (total, l) =>
+        total +
+        Object.entries(l.goods).reduce((sum, [id, n]) => sum + n * GOODS[id].value, 0) +
+        l.parts.reduce((sum, p) => sum + partValue(p), 0) +
+        (l.fuel ?? 0) * ECONOMY.supplyPrice.fuel +
+        (l.supplies ?? 0) * ECONOMY.supplyPrice.supplies,
+      0,
+    );
   const worlds = Array.from({ length: SEEDS }, (_, k) => newWorld(k + 1, START_KITS.standard, TEST_MAP, false));
-  const isRare = (stock: SalvageStock) => stock.parts.some((p) => OLD_TABLES[oldSpotOf(stock)!.type].rare!.parts.includes(p.defId));
+  const isRare = (stock: SalvageStock) => stock.hidden.parts.some((p) => OLD_TABLES[oldSpotOf(stock)!.type].rare!.parts.includes(p.defId));
   const olds = worlds.flatMap((w) => w.salvage.filter((s) => oldSpotOf(s)));
   const others = worlds.flatMap((w) => w.salvage.filter((s) => !oldSpotOf(s)));
 

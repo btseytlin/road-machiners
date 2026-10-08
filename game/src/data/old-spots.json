@@ -1,8 +1,8 @@
 {
- "mapHash": "d5a902b5",
+ "mapHash": "88fcae14",
  "picks": [
   {
-   "propId": "house-22",
+   "propId": "house-21",
    "type": "hamlet",
    "pos": {
     "x": 378.0845031738281,
@@ -11,7 +11,7 @@
    "reach": 1.4853706035265684
   },
   {
-   "propId": "house-34",
+   "propId": "house-33",
    "type": "homestead",
    "pos": {
     "x": 162.78785705566406,
@@ -20,16 +20,7 @@
    "reach": 1.3011653825008982
   },
   {
-   "propId": "ruin-44",
-   "type": "homestead",
-   "pos": {
-    "x": 18.00567054748535,
-    "y": 446.49029541015625
-   },
-   "reach": 1.4786305971887732
-  },
-  {
-   "propId": "ruin-48",
+   "propId": "ruin-47",
    "type": "hamlet",
    "pos": {
     "x": 129.0364990234375,
@@ -38,16 +29,16 @@
    "reach": 1.1388013766136378
   },
   {
-   "propId": "house-58",
+   "propId": "ruin-58",
    "type": "hamlet",
    "pos": {
-    "x": 343.1154479980469,
-    "y": 408.121826171875
+    "x": 339.9869384765625,
+    "y": 407.9102783203125
    },
-   "reach": 1.0581494105036684
+   "reach": 1.5545012952946193
   },
   {
-   "propId": "ruin-66",
+   "propId": "ruin-65",
    "type": "homestead",
    "pos": {
     "x": 235.8750457763672,
@@ -56,7 +47,7 @@
    "reach": 1.1247825385718093
   },
   {
-   "propId": "ruin-77",
+   "propId": "ruin-76",
    "type": "lookout",
    "pos": {
     "x": 561,
@@ -65,7 +56,7 @@
    "reach": 1.6130980412529714
   },
   {
-   "propId": "ruin-78",
+   "propId": "ruin-77",
    "type": "lookout",
    "pos": {
     "x": 324,
@@ -74,7 +65,7 @@
    "reach": 1.6257517841450815
   },
   {
-   "propId": "ruin-82",
+   "propId": "ruin-81",
    "type": "lookout",
    "pos": {
     "x": 576,
@@ -83,7 +74,7 @@
    "reach": 1.3304457797044242
   },
   {
-   "propId": "tank-187",
+   "propId": "tank-184",
    "type": "hulks",
    "pos": {
     "x": 364.4322814941406,
@@ -92,7 +83,7 @@
    "reach": 1.214549813717
   },
   {
-   "propId": "tank-195",
+   "propId": "tank-192",
    "type": "hulks",
    "pos": {
     "x": 485.91070556640625,
@@ -101,20 +92,11 @@
    "reach": 1.214549813717
   },
   {
-   "propId": "tank-199",
+   "propId": "tank-196",
    "type": "hulks",
    "pos": {
     "x": 159.6417694091797,
     "y": 145.83303833007812
-   },
-   "reach": 1.214549813717
-  },
-  {
-   "propId": "tank-205",
-   "type": "hulks",
-   "pos": {
-    "x": 13.426525115966797,
-    "y": 436.7169494628906
    },
    "reach": 1.214549813717
   }

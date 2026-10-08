@@ -7,6 +7,7 @@ import { isKnockedOut } from './defeat';
 import { awaitsTower, exploreGoal, idleGoal, logChange, pushGoal, saleGoal, topGoal } from './npc-activities';
 import { hasSaleCargo, npcProfile } from './npc-decisions';
 import { liesUp } from './npc-service';
+import { isShutDown } from './utility';
 import { route } from './path';
 import { randRange } from './rng';
 import { nearestPad } from './sites';
@@ -27,7 +28,7 @@ export function watchStalls(world: World): void {
   }
 }
 
-// A driver waiting on a timed state, knocked out, towed, with a tower on its way, lying up at its site or parked at its
+// A driver waiting on a timed state, knocked out, shut down by an emitter pulse, towed, with a tower on its way, lying up at its site or parked at its
 // spot beside its leader, counts as making progress: the state or the leader ends the wait, and the watchdog judges
 // the leader on its own.
 function madeProgress(world: World, v: Vehicle): boolean {
@@ -36,7 +37,7 @@ function madeProgress(world: World, v: Vehicle): boolean {
 }
 
 function waits(world: World, v: Vehicle): boolean {
-  return isOnRope(world, v.id) || awaitsTower(world, v) || liesUp(v) || waitsOnLeader(v);
+  return isShutDown(world, v) || isOnRope(world, v.id) || awaitsTower(world, v) || liesUp(v) || waitsOnLeader(v);
 }
 
 function waitsOnLeader(v: Vehicle): boolean {

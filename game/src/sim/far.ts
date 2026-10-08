@@ -14,6 +14,7 @@ import { breakProp } from './salvage';
 import { burnFuel, getResources } from './resources';
 import { fuelCap, vehicleStats, type VehicleStats } from './stats';
 import { parkedVehicles, throughSpeed } from './steering';
+import { fieldBlockers } from './hazards';
 import { isOnRope, ropeClientOf } from './tow';
 import type { Blocker } from './nav/buckets';
 import type { MoveOrder, Obstacle, Pose, Vehicle, World } from './types';
@@ -99,7 +100,8 @@ export function advanceFar(w: World, v: Vehicle): void {
 function farPoints(w: World, v: Vehicle, dest: Vec, offRoad: boolean, full: VehicleStats, s: VehicleStats): Vec[] {
   const stored = keptFarRoute(v);
   if (stored && stored.dest.x === dest.x && stored.dest.y === dest.y && keptOffRoad(stored) === offRoad) return stored.points;
-  return route(w, v.pos, dest, full.radius, farBlockers(w, v, s), v);
+  // A new route steers around parked vehicles and seen ground fields, like the physics driver's, and around slower ones it could reach.
+  return route(w, v.pos, dest, full.radius, [...farBlockers(w, v, s), ...fieldBlockers(w, v)], v);
 }
 
 // The trucks a new far route steers around: parked ones, and moving ones slower than this truck's top speed within
