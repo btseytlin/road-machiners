@@ -1,13 +1,6 @@
 // Turns a model's triangles into collision boxes. The prop and truck shape scripts share it.
 // Each model's triangles are rasterized on a grid of cfg.cell meters in model space. Every cell keeps the height
 // slabs its geometry fills. Cells merge into boxes by height band, and then the boxes merge down to cfg.maxBoxes.
-//
-// cfg: cell (m, the grid), ground (m, geometry wholly below it never blocks), gap (m, a vertical gap narrower than
-// it is filled), band (m, cells merge into one box when their slabs start and end in the same bands), costHeight (m,
-// the least height a box counts for when boxes merge), maxBoxes, rays (per cell side) and rayShift (of the ray
-// spacing, keeps rays off round coordinates where model edges lie).
-//
-// Boxes are in model meters: x forward (Blender X), y sideways (Blender Y), z up (Blender Z).
 
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Vector3 } from 'three';
@@ -18,9 +11,6 @@ export function shapeOf(triangles, cfg) {
   return capBoxes(mergeCells(rasterize(triangles, cfg), cfg), cfg).map(roundBox);
 }
 
-// The top surface of a model: per cell of cell meters, the highest point of any triangle over it, rounded up to whole
-// centimeters. A cell no triangle touches is null. Returns cell indices i0, j0 of the first row and column (x and y in
-// model space) and top[i][j] in centimeters, so cell (i, j) spans x from (i0 + i) * cell to (i0 + i + 1) * cell.
 export function heightMap(triangles, cell) {
   const cfg = { cell };
   const best = new Map();
@@ -38,14 +28,12 @@ export function heightMap(triangles, cell) {
   return { cell, i0, j0, top };
 }
 
-// FNV-1a over the file bytes, as 8 hex digits. src/data/prop-shapes.test.ts repeats it.
 export function fnv1a(bytes) {
   let h = 0x811c9dc5;
   for (const b of bytes) h = Math.imul(h ^ b, 0x01000193) >>> 0;
   return h.toString(16).padStart(8, '0');
 }
 
-// Every triangle of every mesh in model space. glTF is Y up, so glTF (x, y, z) is model (x, -z, y).
 export async function loadTriangles(bytes) {
   const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
   const gltf = await new GLTFLoader().parseAsync(buffer, '');
@@ -71,8 +59,6 @@ function meshTriangles(mesh) {
   return tris;
 }
 
-// Per cell "i,j", the height slabs of geometry over it, each with the ground extent of that geometry.
-// Surfaces mark the cell where they cross it, and vertical rays fill the solid between a floor and its roof.
 export function rasterize(tris, cfg) {
   const raw = new Map();
   for (const tri of tris) {
@@ -103,7 +89,6 @@ function triangleCells(tri, cfg) {
   return out;
 }
 
-// The solid spans that vertical rays through the cell cross, each marked at its ray's ground point.
 function cellSolids(cell, cfg) {
   const spans = [];
   for (let a = 0; a < cfg.rays; a++) {
@@ -116,8 +101,6 @@ function cellSolids(cell, cfg) {
   return spans;
 }
 
-// A ray going up enters the solid through a face that looks down and leaves through one that looks up.
-// A count that does not return to zero means an open mesh, which has no inside.
 function raySolids(tris, x, y) {
   const hits = tris.map((t) => rayHit(t, x, y)).filter((h) => h !== null).sort((p, q) => p.z - q.z);
   const spans = [];
@@ -147,7 +130,6 @@ function cellRange(values, cfg) {
   return [Math.floor(Math.min(...values) / cfg.cell), Math.floor(Math.max(...values) / cfg.cell)];
 }
 
-// Clips a triangle to the cell, shrunk by a hair so faces lying on a cell edge mark only the cell they close.
 function clipToCell(tri, i, j, cfg) {
   const e = 1e-4;
   let poly = tri;
@@ -157,7 +139,6 @@ function clipToCell(tri, i, j, cfg) {
   return clip(poly, (p) => (j + 1) * cfg.cell - e - p.y);
 }
 
-// Sutherland-Hodgman: keeps the part of the polygon where inside(p) >= 0.
 function clip(poly, inside) {
   const out = [];
   for (let k = 0; k < poly.length; k++) {
@@ -187,7 +168,6 @@ function extentOf(points) {
   };
 }
 
-// Joins overlapping height spans, and spans closer than cfg.gap, into slabs.
 function joinSlabs(parts, cfg) {
   const sorted = [...parts].sort((a, b) => a.z0 - b.z0);
   const slabs = [{ ...sorted[0] }];
@@ -207,7 +187,6 @@ function union(a, b) {
   };
 }
 
-// Groups slabs by height band, then covers each band's cells with rectangles, greedy along x then y.
 export function mergeCells(cells, cfg) {
   const bands = new Map();
   for (const [key, slabs] of cells) {
@@ -251,9 +230,6 @@ function takeRectangle(left, start) {
   return box;
 }
 
-// Merges the pair of boxes whose union adds the least empty volume, until cfg.maxBoxes remain. A post joins the
-// roof above it before two posts join across the gap between them. Volume counts every box as at least
-// cfg.costHeight tall, since a low box across a lane blocks a wheel as much as a wall does.
 export function capBoxes(input, cfg) {
   const boxes = [...input];
   while (boxes.length > cfg.maxBoxes) {
@@ -279,14 +255,12 @@ function costVolume(b, cfg) {
   return (b.x1 - b.x0) * (b.y1 - b.y0) * Math.max(b.z1 - b.z0, cfg.costHeight);
 }
 
-// Rounds outward to whole centimeters, so a stored box never shrinks.
 export function roundBox(b) {
   const down = (v) => Math.floor(v * CM + 1e-6) / CM + 0;
   const up = (v) => Math.ceil(v * CM - 1e-6) / CM + 0;
   return { x0: down(b.x0), x1: up(b.x1), y0: down(b.y0), y1: up(b.y1), z0: down(b.z0), z1: up(b.z1) };
 }
 
-// One model per block and one box per line, sorted by name, so a rerun writes the same bytes.
 export function formatShapes(all) {
   const blocks = Object.keys(all).sort().map((name) => {
     const { hash, boxes, heights } = all[name];

@@ -247,9 +247,7 @@ describe('finite salvage', () => {
 
 const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
     const w = emptyWorld({ ...sitePads(convoy)[0] });
-    // Keep the built-ins so the truck still runs, but clear cargo so the search has room to fill.
     w.vehicles[0].items = w.vehicles[0].items.filter((item) => item.kind === 'part' && partDef(item.part.defId).kind === 'core');
-    // Empty the tank and stores so the convoy's fuel and supplies fit.
     w.player.fuel = 0;
     w.player.supplies = 0;
     const totalScrap = w.salvage.find((s) => s.id === convoy.id)!.hidden.goods.scrap;
@@ -269,7 +267,6 @@ const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
   });
 
   it('fills a landmark site with loot at world creation', () => {
-    // A landmark with a shop trades instead, so the site is the first that rolls from the landmark table.
     const landmark = REGION.locations.find((site) => siteLootTable(site) === SALVAGE.landmark)!;
     expect(landmark.kind).toBe('landmark');
     const w = emptyWorld();
@@ -411,7 +408,6 @@ function emptyStock(stock: SalvageStock): void {
   stock.hidden = emptyHidden();
 }
 
-// A world whose only road wreck is a looted one at `pos`, with the player at `playerPos`.
 function worldWithLootedWreck(playerPos: Vec, pos: Vec): World {
   const w = emptyWorld(playerPos);
   w.salvage = w.salvage.filter((stock) => !isRoadWreck(stock));
@@ -420,7 +416,6 @@ function worldWithLootedWreck(playerPos: Vec, pos: Vec): World {
   return w;
 }
 
-// Jumps to the last turn of each of the next `days` days and renews there.
 function runDays(w: World, days: number): void {
   for (let day = 0; day < days; day++) {
     w.turn = (Math.floor(w.turn / TIME.turnsPerDay) + 1) * TIME.turnsPerDay;
@@ -435,8 +430,6 @@ describe('site restock', () => {
     emptyStock(stock);
     runDays(w, 1);
     const firstDay = stock.hidden.goods.scrap;
-    // A unit comes back at SALVAGE.restockShare a day, so a year of days fills every range but for
-    // odds far below one in a million.
     runDays(w, 365);
     expect(firstDay).toBeLessThan(SALVAGE.convoy.goods.scrap[1]);
     expect(stock.hidden.goods.scrap).toBe(SALVAGE.convoy.goods.scrap[1]);
@@ -448,8 +441,6 @@ describe('site restock', () => {
     const w = emptyWorld();
     const stock = stockOf(w, convoy.id);
     emptyStock(stock);
-    // The daily chance is sparePartChance * restockShare, a few percent, so 1000 days refill it
-    // except with odds far below one in a million.
     let days = 0;
     while (stock.hidden.parts.length === 0 && days < 1000) {
       runDays(w, 1);
@@ -627,7 +618,6 @@ describe('who loots a target', () => {
   const at = { x: 30, y: 30 };
   const beside = { x: 30.5, y: 30 };
 
-  // The player parked at 30,30 on top of a wreck stock that nobody works yet.
   function wreckWorld(): { w: World; me: Vehicle; stock: SalvageStock } {
     const w = emptyWorld(at);
     const stock: SalvageStock = { id: 'wreck-test', pos: { ...at }, radius: 0.6, goods: { scrap: 3 }, parts: [], hidden: emptyHidden() };
@@ -635,14 +625,12 @@ describe('who loots a target', () => {
     return { w, me: w.vehicles[0], stock };
   }
 
-  // A scavenger parked beside the player, with a brain and no goals.
   function scavenger(w: World, pos: Vec = beside): Vehicle {
     const npc = addVehicle(w, 'scavengers', 'scout', [], pos);
     npc.brain = npcBrain('scavenger', pos, []);
     return npc;
   }
 
-  // The player parked beside a knocked-out raider buggy.
   function downedWorld(): { w: World; me: Vehicle; buggy: Vehicle } {
     const w = emptyWorld(at);
     const gap = chassisDef('scout').radius + chassisDef('buggy').radius + 0.2;
@@ -833,8 +821,6 @@ describe('territory loot spots', () => {
 
   it('refills an emptied spot over days and never past its table', async () => {
     const w = await realWorld();
-    // Every Fallen Sun cache at once, since one cache may draw a lucky full day: a day refills a share, not the table
-    // highs.
     const caches = spotsOf(w).filter((spot) => spot.kind === 'landmark' && spot.look === 'hullCache' && territoryAt(spot.pos)?.id === 'fallen-sun');
     const stocks = caches.map((o) => stockOf(w, o.id));
     for (const stock of stocks) emptyStock(stock);

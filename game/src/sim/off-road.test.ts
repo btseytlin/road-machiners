@@ -75,8 +75,6 @@ describe('the recorder world log', () => {
 });
 
 describe('raiders keeping off roads in the turn pipeline', () => {
-  // Hardpan with one road running north to Kiln Camp's gate, far from the player at 30,30, so trucks on it travel
-  // by the far rules.
   function campRoad(): World {
     const w = emptyWorld();
     const t = editableTerrain(w);
@@ -94,8 +92,6 @@ describe('raiders keeping off roads in the turn pipeline', () => {
     return v;
   }
 
-  // Plays turns with every truck moving by the far rules, as the recorder does, and calls `each` on the world after
-  // every turn until it returns true.
   function play(w: World, turns: number, each: (w: World) => boolean | void): World {
     for (let i = 0; i < turns; i++) {
       w = endTurn(w, (x) => {
@@ -124,7 +120,6 @@ describe('raiders keeping off roads in the turn pipeline', () => {
       if (v.order) expect(v.brain!.farRoute?.offRoad).toBe(true);
       if (onRoad(w, v)) road.push(turn);
     });
-    // It leaves the road it starts on within a few turns and never drives on it again.
     expect(Math.max(0, ...road)).toBeLessThanOrEqual(4);
     const v = byId(w, id);
     expect(v.brain!.goals.at(-1)?.kind).toBe('rearm');
@@ -148,7 +143,6 @@ describe('raiders keeping off roads in the turn pipeline', () => {
     });
     expect(topGoal(byId(w, dry.id))?.kind).toBe('resupply');
     expect(onRoad(w, byId(w, dry.id))).toBe(false);
-    // The raider selling runs dry on the road, and its next route turns off it.
     byId(w, patrol.id).resources!.fuel = 0;
     w = play(w, 6, () => {});
     expect(byId(w, patrol.id).brain!.farRoute?.offRoad).toBe(true);

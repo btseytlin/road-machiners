@@ -8,17 +8,15 @@ import type { Terrain } from '../../sim/terrain';
 import { CASING, Casings, PROJECTILES, Projectiles, type Muzzle } from './projectiles';
 
 const S = PHYSICS.metersPerTile;
-const GROUND_TILES = 2; // the test ground sits this many tiles up, so resting on y 0 would show
+const GROUND_TILES = 2;
 
 function raisedTerrain(): Terrain {
   const t = flatTerrain(32);
   return { ...t, heights: t.heights.map(() => GROUND_TILES) };
 }
 
-// A gun 1.5 m above the raised ground in the middle of the map, firing along +x.
 const MUZZLE: Muzzle = { pos: { x: 16 * S, y: GROUND_TILES * S + 1.5, z: 16 * S }, dir: { x: 1, y: 0, z: 0 } };
 
-// Ticks long enough for any casing to land, bounce and settle.
 function settle(c: Casings, terrain: Terrain, turn: number): void {
   for (let i = 0; i < 300; i++) c.tick(1 / 60, terrain, turn);
 }
@@ -51,7 +49,6 @@ describe('Casings', () => {
 
     const p = positionOf(c.meshes.large, 0);
     expect(p.y).toBeCloseTo(GROUND_TILES * S + CASING.large.radius, 5);
-    // Firing along +x, the right side is +z.
     expect(p.z).toBeGreaterThan(MUZZLE.pos.z);
   });
 
@@ -124,7 +121,7 @@ describe('a burst throwing casings', () => {
     const thrown = () => casings.meshes.small.count;
     const dt = 1 / 60;
 
-    projectiles.tick(dt); // the first round leaves at once
+    projectiles.tick(dt);
     casings.tick(dt, raisedTerrain(), 0);
     expect(thrown()).toBe(1);
 

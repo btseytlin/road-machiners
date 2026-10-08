@@ -22,7 +22,6 @@ describe('goal stack', () => {
     const { w, npc } = scavengerWorld();
     pushGoal(w, npc, goal('scavenge', 'podfield'));
     npc.job = { kind: 'search', stockId: 'podfield', turnsLeft: 3, total: 3 };
-    // A goal on the same stock keeps the search.
     pushGoal(w, npc, goal('loot', 'podfield'));
     expect(npc.job).not.toBeNull();
     pushGoal(w, npc, goal('resupply', 'bowl'));
@@ -60,7 +59,7 @@ describe('goal stack', () => {
 
   it('an interrupted scavenge goal is active again after flee and service pop', () => {
     const { w, npc } = scavengerWorld();
-    w.vehicles[0].pos = { x: 50, y: 50 }; // inside the live range, so the cover rock hides the raider
+    w.vehicles[0].pos = { x: 50, y: 50 };
     forceOption('hostileSeen', 'flee');
     forceOption('resume', 'resume');
     const site = REGION.locations.find((l) => l.id === 'podfield')!;

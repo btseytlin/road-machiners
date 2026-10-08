@@ -23,7 +23,6 @@ function withEvents(base: World, events: World['events']): World {
   return w;
 }
 
-// On and off runs of the light, as [lit, length in ms].
 function runs(l: RadioLights, id: string, from: number, to: number): [boolean, number][] {
   const out: [boolean, number][] = [];
   for (let t = from; t < to; t += STEP) {

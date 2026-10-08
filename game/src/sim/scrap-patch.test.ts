@@ -20,8 +20,6 @@ const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
 const engineOf = (v: Vehicle) => mountedParts(v, 'engine')[0];
 const share = (p: PartInstance) => p.hp / maxHp(p);
 
-// The player at the Bowl pad with a broken transmission, a worn engine, no money and nothing to sell. The truck
-// keeps only its built-in parts and its engine.
 function strandedBroke(pos = sitePads(bowl)[0]): World {
   const w = emptyWorld(pos);
   const me = w.vehicles[0];
@@ -222,7 +220,6 @@ describe('scrap fuel for a low tank', () => {
 
     expect(isStranded(next, next.vehicles[0])).toBe(false);
     expect(next.player.fuel).toBeGreaterThan(0);
-    // The board's own roll depends on the world newWorld() spawns, so the test offers a small haul of its own.
     const haul: Contract = { id: 'haul-test', shop: 'bowl', kind: 'haul', good: 'scrap', units: 1, to: 'nose', reward: 3333, deadline: next.turn + 50, window: 50, rush: false, tier: 1 };
     shopState(next, 'bowl').contracts.push(haul);
     expect(acceptContract(next, haul.id).player.contracts.map((c) => c.id)).toContain(haul.id);

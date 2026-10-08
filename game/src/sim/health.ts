@@ -7,12 +7,10 @@ import { skillEffect, vehicleHasPerk } from './progress';
 import { townNear } from './sites';
 import type { Vehicle, World } from './types';
 
-// Healing needs a parked truck. The Long haul perk heals while driving too.
 function restsNow(world: World, me: Vehicle): boolean {
   return me.speed <= RULES.parkedSpeed || vehicleHasPerk(world, me, 'longHaul');
 }
 
-// The player's max health. Every reader of the player's health cap goes through here.
 export function maxHealthOf(world: World): number {
   return Math.round(RULES.maxHealth * (1 + skillEffect(world, playerVehicle(world), 'toughness', 'maxHealth')));
 }
@@ -20,7 +18,6 @@ export function maxHealthOf(world: World): number {
 export function healPlayer(world: World): void {
   const p = world.player;
   const max = maxHealthOf(world);
-  // A driver at 0 health is dying this turn, so rest cannot save them.
   if (p.state === 'dead' || p.health <= 0 || p.supplies <= 0 || p.health >= max) return;
   const me = playerVehicle(world);
   if (!restsNow(world, me)) return;

@@ -1,5 +1,4 @@
 import { START_KITS, type StartKit } from '../data/start';
-// Helpers for sim tests.
 
 import { RULES } from '../data/rules';
 import { makeVehicle } from './factory';
@@ -23,19 +22,15 @@ import { stormDepth } from './weather';
 import { cloneWorld, newWorld } from './world';
 import { defaultSetup } from './settings';
 
-// Flat road-speed terrain, for tests that need predictable driving.
 export function flatTerrain(size: number): Terrain {
   return { size, heights: new Array((size + 1) * (size + 1)).fill(0), types: new Array(size * size).fill('road') };
 }
 
-// Swaps in a mutable copy of the world's terrain, for tests that shape the ground. Built terrain is frozen.
 export function editableTerrain(w: World): Terrain {
   w.terrain = { ...w.terrain, heights: [...w.terrain.heights], types: [...w.terrain.types] };
   return w.terrain;
 }
 
-// The standard truck without the new-game opening: the cage mounted, every part at full HP and auto patch on. Tests
-// that are not about the opening start from it.
 export const PLAIN_KIT: StartKit = {
   ...START_KITS.standard,
   parts: [...START_KITS.standard.parts, 'cage'],
@@ -45,7 +40,6 @@ export const PLAIN_KIT: StartKit = {
 
 let emptyTemplate: World | undefined;
 
-// A world on flat ground with no obstacles and no NPCs, the player truck at `pos` facing +x.
 export function emptyWorld(pos: Vec = { x: 30, y: 30 }): World {
   if (!emptyTemplate) {
     emptyTemplate = newWorld(1, PLAIN_KIT, TEST_MAP, defaultSetup('roaming'));
@@ -56,7 +50,6 @@ export function emptyWorld(pos: Vec = { x: 30, y: 30 }): World {
     Object.freeze(emptyTemplate.terrain);
     emptyTemplate.vehicles = emptyTemplate.vehicles.filter((v) => v.faction === 'player');
     emptyTemplate.states = [];
-    // A fixed state, so the rolls in a test do not move when the spawn loadouts drawn by newWorld() change.
     emptyTemplate.rngState = -1655809527;
   }
   const w = cloneWorld(emptyTemplate);
@@ -73,19 +66,14 @@ export function addVehicle(w: World, faction: Faction, chassisId: string, parts:
   return v;
 }
 
-// The practice events a source logged in the world's current events.
 export function practiceOf(w: World, source: XpSource): Extract<GameEvent, { t: 'practice' }>[] {
   return w.events.filter((e): e is Extract<GameEvent, { t: 'practice' }> => e.t === 'practice' && e.source === source);
 }
 
-// A fresh NPC brain with no goals.
 export function npcBrain(templateId: string, home: Vec, traits: TraitId[]): NpcBrain {
   return { templateId, driver: 'Test Driver', traits, goals: [], noticed: {}, tracks: {}, hurt: 0, attackers: {}, goal: null, home: { ...home }, stepIndex: 0, memories: [] };
 }
 
-// Makes `option` the only option of `decision` that can carry weight until the test ends. Other options lose their
-// base weight and every trait and state change. The forced option keeps its own weight, so it can still be zero.
-// Other available options keep MIN_CHANCE each, so a forced roll is likely, not certain.
 export function forceOption<D extends DecisionId>(decision: D, option: DecisionOptions[D]): void {
   const base = DECISIONS[decision] as Record<string, number>;
   const savedBase = { ...base };
@@ -106,15 +94,11 @@ export function forceOption<D extends DecisionId>(decision: D, option: DecisionO
   });
 }
 
-// The first RNG state from 1 whose next roll passes `test`, so a test can make one world roll land a given way.
-// Rolls spread evenly, so any test that passes 1 in 100 rolls finds a state within a few hundred tries.
 export function rngStateWhere(test: (roll: number) => boolean): number {
   for (let state = 1; state <= 100_000; state++) if (test(nextRandom({ rngState: state }))) return state;
   throw new Error('No RNG state passes the test');
 }
 
-// The first RNG state from 1 whose next `count` rolls all land mid-range. A forced option holds all but
-// MIN_CHANCE per other option, so a mid-range roll picks it wherever it sits in the option order.
 export function rngStateForForcedRolls(count: number): number {
   for (let state = 1; state <= 1_000_000; state++) {
     const rng = { rngState: state };
@@ -128,7 +112,6 @@ export function rngStateForForcedRolls(count: number): number {
   throw new Error(`No RNG state gives ${count} mid-range rolls`);
 }
 
-// Gives every truck the storm shares it would have after standing still long enough: each storm's depth where it is.
 export function settleStorms(w: World): void {
   for (const v of w.vehicles) {
     v.stormExposure = {};
@@ -140,16 +123,10 @@ export function settleStorms(w: World): void {
   }
 }
 
-// Total hit points of the mounted parts, for checking that damage landed.
 export function partHp(v: Vehicle): number {
   return mountedParts(v).reduce((a, p) => a + p.hp, 0);
 }
 
-// A driving stand-in for tests that only need vehicles to make progress toward their orders, not to
-// drive realistically: it ignores terrain, obstacles and other vehicles, so it never fires a collision
-// event and its speeds do not match the physics engine. Pass to endTurn in tests of combat, defeat,
-// the economy, NPC activities, salvage, search and tow, none of which assert on driving itself. Tests
-// of driving belong in src/phys/, played through the real physics turn, as in src/phys/traffic.test.ts.
 export function testDrive(world: World): void {
   for (const v of world.vehicles) if (v.order) driveOne(world, v);
 }
@@ -169,9 +146,6 @@ function driveOne(world: World, v: Vehicle): void {
     world.events.push({ t: 'arrived', vehicle: v.id });
     return;
   }
-  // Ramp by at most accel or brake, like real steering, so tests that race a decision against an
-  // approach (a threat check, a reach check) see the same timing the game gives them.
-  // Stops inside the arrival radius, not on the point, where the vehicle it drives to often stands.
   const target = Math.min(s.maxSpeed, remaining - RULES.arriveRadius / 2);
   const speed = target > v.speed ? Math.min(target, v.speed + s.accel) : Math.max(target, v.speed - s.brake);
   v.heading = Math.atan2(dest.y - v.pos.y, dest.x - v.pos.x);
@@ -182,7 +156,6 @@ function driveOne(world: World, v: Vehicle): void {
   burnFuel(world, v, speed);
 }
 
-// Puts `aggressor` in combat with `target`, as a shot would.
 export function startCombat(w: World, aggressor: Vehicle, target: Vehicle): void {
   addState(w, 'combat', aggressor.id, target.id, { kind: 'none' });
 }
@@ -200,8 +173,6 @@ export function finishBusiness(w: World, npc: Vehicle): void {
   }
 }
 
-// The stop point a new player Shift-clicks by the opening wreck: on the line from the truck to the wreck, 2.2 tiles
-// short of its center, inside search reach.
 export function openingStopPoint(w: World): Vec {
   const stock = openingStockOf(w);
   if (!stock) throw new Error('No opening wreck');

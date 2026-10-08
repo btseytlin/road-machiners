@@ -4,7 +4,6 @@ import { DEG } from './vec';
 import { addVehicle, emptyWorld } from './testkit';
 import { cappedHeatAt, clockOf, heatAt, inShade, sunAt, type Sun } from './sun';
 
-// Turn number that lands the clock on a given hour of day 1.
 function turnFor(hour: number): number {
   return 1 + ((hour - TIME.startHour) * TIME.turnsPerDay) / 24;
 }
@@ -75,7 +74,6 @@ describe('heatAt', () => {
     const size = w.terrain.size;
     const sun = sunAt(w.turn)!;
     const pos = w.vehicles[0].pos;
-    // Put a tall blocker a few tiles toward the sun from pos, clear of pos's own corner.
     const bx = Math.round(pos.x + sun.dir.x * 3);
     const by = Math.round(pos.y + sun.dir.y * 3);
     for (let j = by - 1; j <= by + 1; j++) for (let i = bx - 1; i <= bx + 1; i++) heights[j * (size + 1) + i] = 50;

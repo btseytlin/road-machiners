@@ -10,16 +10,14 @@ import { conditionStatus, conditionTier } from "./format";
 export type PartRow = {
   world: World;
   part: PartInstance;
-  base: PartInstance | null; // the part it is weighed against, or null for plain stats
+  base: PartInstance | null;
   price: number;
-  payable: boolean; // false when the action would be disabled for lack of money
+  payable: boolean;
   unpaidTitle: string;
-  action: HTMLElement; // the Buy or Sell button, built with its disabled state
+  action: HTMLElement;
   onHover: (on: boolean) => void;
 };
 
-// The row that should hold focus after a redraw: the same one, else the next one that survived, else the
-// nearest one before it.
 export function focusAfter(before: string[], focused: string, after: string[]): string | null {
   const at = before.indexOf(focused);
   if (at < 0) throw new Error(`Focused part row ${focused} was not in the list`);
@@ -106,14 +104,12 @@ export class PartRows {
     this.onChange();
   }
 
-  // Runs a redraw and puts scroll and focus back where the reader had them.
   keepPlace(root: HTMLElement, draw: () => void): void {
     const place = this.record(root);
     draw();
     this.restore(root, place);
   }
 
-  // A tab or filter change shows its new list from the top.
   toTop(root: HTMLElement): void {
     for (const box of scrollBoxes(root)) box.scrollTop = 0;
   }
@@ -152,7 +148,6 @@ export class PartRows {
   }
 }
 
-// The shop column scrolls on wide screens and the whole split below 720px.
 function scrollBoxes(root: HTMLElement): HTMLElement[] {
   return [...root.querySelectorAll<HTMLElement>(".town-shop, .town-split")];
 }

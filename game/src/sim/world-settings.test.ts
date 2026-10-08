@@ -18,14 +18,11 @@ function withSettings(w: World, settings: Partial<WorldSettings>): World {
   return w;
 }
 
-// Parts that never break, so every hit walks the same lane in both worlds.
 function sturdy(v: Vehicle): Vehicle {
   for (const p of mountedParts(v)) p.hp = 1e9;
   return v;
 }
 
-// Each lane's hit rounds to whole HP, so a part's damage can differ from the exact multiple by up to the rounding of
-// both sides in each lane that reached it.
 function expectScaled(scaled: number[], base: number[], k: number, lanes = 1): void {
   expect(base.length).toBeGreaterThan(0);
   expect(base.some((d) => d >= 4)).toBe(true);
@@ -36,7 +33,6 @@ function expectScaled(scaled: number[], base: number[], k: number, lanes = 1): v
 const hitsOf = (hits: PartHit[]) => hits.map((h) => h.damage);
 
 describe('Damage setting', () => {
-  // The player and an NPC with cannons shoot each other at 4 tiles from the given RNG state.
   function duel(damage: number, rngState: number): { byPlayer: number[]; byNpc: number[] } {
     const w = withSettings(emptyWorld({ x: 60, y: 60 }), { damage });
     w.rngState = rngState;

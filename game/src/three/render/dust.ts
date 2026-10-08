@@ -1,9 +1,6 @@
 // Dust clouds from world.dustClouds. Each cloud keeps its own sprites for its whole life, so the sky fills
 // with clouds as trucks drive, and they rise, drift and fade instead of being redrawn each turn.
 // Shown: clouds the player sees (world.player.clouds) and the player's own clouds in sight. Between turns a
-// cloud glides toward where it will be next turn, so the drift looks continuous.
-// Drawn after the fog, so a risen cloud shows over ground the player cannot see. Depth-tested, so trucks
-// and hills in front hide it.
 
 import * as THREE from 'three';
 import { DETECT } from '../../data/detect';
@@ -14,21 +11,18 @@ import { heightAt, type Terrain } from '../../sim/terrain';
 import type { DustCloud, World } from '../../sim/types';
 
 const S = PHYSICS.metersPerTile;
-const RENDER_ORDER = 904; // above the fog (900) and shade (901), below contact markers
-// A cloud is a loose swarm of faint puffs. The swarm spreads wide as it ages and each puff wanders on
-// slow noise, so the cloud keeps changing shape. Puffs are faint on their own, so overlapping clouds
-// blend into one haze instead of stacking as blobs.
+const RENDER_ORDER = 904;
 const LOOK = {
-  puffs: 7, // sprites per cloud
-  spread: 0.5, // tiles a fresh swarm spans around its center
-  spreadGrowth: 3, // extra tiles of span by the end of its life
-  size: 1.8, // tiles across a fresh puff
-  sizeGrowth: 2.5, // times larger by the end of its life
-  opacity: 0.22, // per puff at its thickest; it fades in, then out toward the end of its life
-  fadeIn: 0.5, // turns to fade in
-  wobble: 0.8, // tiles each puff wanders from its place in the swarm
-  wobbleSeconds: 3.5, // time scale of that wandering
-  glideSeconds: 1.2, // time a cloud takes to glide to its next-turn position after a turn
+  puffs: 7,
+  spread: 0.5,
+  spreadGrowth: 3,
+  size: 1.8,
+  sizeGrowth: 2.5,
+  opacity: 0.22,
+  fadeIn: 0.5,
+  wobble: 0.8,
+  wobbleSeconds: 3.5,
+  glideSeconds: 1.2,
 };
 
 type View = { group: THREE.Group; puffs: THREE.Sprite[] };
@@ -79,7 +73,6 @@ export class DustCloudsView {
   }
 }
 
-// age runs on smoothly between turns: whole turns from the sim, plus the glide share of the next one.
 function place(terrain: Terrain, view: View, c: DustCloud, glide: number, seconds: number): void {
   const age = c.age + glide;
   const x = c.pos.x + c.vel.x * glide;
@@ -95,7 +88,6 @@ function place(terrain: Terrain, view: View, c: DustCloud, glide: number, second
     const wx = (valueNoise(k * 0.13 + t, 1.7) - 0.5) * 2 * LOOK.wobble;
     const wz = (valueNoise(4.3, k * 0.13 + t) - 0.5) * 2 * LOOK.wobble;
     p.position.set(((hash2(k, 3) - 0.5) * span + wx) * S, hash2(k, 7) * span * 0.4 * S, ((hash2(k, 11) - 0.5) * span + wz) * S);
-    // Each puff swells and thins on its own, so the outline keeps changing.
     const breathe = 0.75 + 0.5 * valueNoise(k * 0.29 + t * 1.3, 8.1);
     p.scale.setScalar(LOOK.size * (1 + (LOOK.sizeGrowth - 1) * life) * breathe * S);
     p.material.opacity = LOOK.opacity * fade * (0.6 + 0.8 * hash2(k, 13));
@@ -107,7 +99,6 @@ function createPuffTexture(): THREE.CanvasTexture {
   canvas.width = canvas.height = 64;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Could not create dust texture');
-  // A soft falloff with no bright core, so puffs read as haze rather than balls.
   const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
   g.addColorStop(0, 'rgba(255,255,255,0.55)');
   g.addColorStop(0.5, 'rgba(255,255,255,0.3)');

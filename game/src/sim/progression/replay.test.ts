@@ -7,7 +7,6 @@ import type { SkillId } from '../types';
 import type { TraceLine } from './record';
 import { parseRunEnd, replay, targetMisses, type Curve, type SkillCurve } from './replay';
 
-// Sets search XP to one per amount and the daily cap to 100, with half pay past it, until the test ends.
 function simpleSearchXp(): void {
   const rules = { ...XP_RULES };
   const search = { ...XP_SOURCES.search };
@@ -28,10 +27,10 @@ describe('replay', () => {
     expect(clockOf(40).day).toBe(1);
     expect(clockOf(dayTwo).day).toBe(2);
     const trace = [
-      search(10, 100), // 100: the cap is used up
-      search(40, 400), // half pay past the cap: 300
-      search(dayTwo, 50), // a new day pays in full: 350
-      search(dayTwo + 10, 150), // 50 in full and 100 at half pay: 450
+      search(10, 100),
+      search(40, 400),
+      search(dayTwo, 50),
+      search(dayTwo + 10, 150),
     ];
     const totals = [100, 300, 350, 450];
     const turns = [10, 40, dayTwo, dayTwo + 10];
@@ -116,6 +115,6 @@ describe('targetMisses', () => {
   it('does not flag an unreached level whose window starts after the run', () => {
     const misses = targetMisses(curveWith('social', [day(1), day(TARGET_DAYS.main[2]), day(5), day(TARGET_DAYS.main[4]), null]), 'trader', pastWindow(TARGET_DAYS.off[2]));
     expect(misses.some((m) => m.startsWith('social rank 5'))).toBe(false);
-    expect(offOnly(misses).length).toBeGreaterThan(0); // off skills that never level still miss
+    expect(offOnly(misses).length).toBeGreaterThan(0);
   });
 });

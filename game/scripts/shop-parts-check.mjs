@@ -9,7 +9,6 @@ if (!url) throw new Error('Usage: node scripts/shop-parts-check.mjs <dev-server-
 const browser = await chromium.launch();
 await mkdir('.playtest', { recursive: true });
 
-// Parts whose head lies fully inside the shop column.
 const visibleRows = (page) => page.evaluate(() => {
   const box = document.querySelector('.town-shop').getBoundingClientRect();
   return [...document.querySelectorAll('.town-shop .part-sum')].filter((n) => {
@@ -50,7 +49,6 @@ try {
   await page.waitForFunction(() => window.__ROAM__?.state, null, { timeout: 120000 });
   await setup(page);
 
-  // Collapsed by default.
   assert.equal(await page.locator('.part-detail').count(), 0, 'rows start collapsed');
   assert.equal(await rows(page).count(), 16);
   const seen = await visibleRows(page);
@@ -60,7 +58,6 @@ try {
   await page.screenshot({ path: '.playtest/shop-parts-after-1280.png' });
   assert(seen >= 6, `the compact list must show many parts, shows ${seen}`);
 
-  // Mouse: one open at a time, the clicked head stays put.
   await rows(page).nth(4).locator('.part-sum').click();
   assert.equal(await page.locator('.part-detail').count(), 1);
   assert(await rows(page).nth(4).locator('.part-detail .stat-grid').count());
@@ -78,7 +75,6 @@ try {
   await rows(page).nth(8).locator('.part-sum').click();
   assert.equal(await page.locator('.part-detail').count(), 0, 'a second click closes');
 
-  // Keyboard.
   await rows(page).nth(1).locator('.part-sum').focus();
   await page.keyboard.press('Enter');
   assert.equal(await rows(page).nth(1).locator('.part-sum').getAttribute('aria-expanded'), 'true');
@@ -88,7 +84,6 @@ try {
   await page.keyboard.press('Space');
   assert.equal(await page.locator('.part-detail').count(), 0, 'Space closes');
 
-  // Purchase: money drops, the part leaves, focus stays in the list, no row open.
   const afford = await page.evaluate(() => {
     const m = window.__ROAM__.state.player.money;
     return [...document.querySelectorAll('.town-shop .part-row')].findIndex((r) => Number(r.querySelector('.price').textContent) <= m && !r.querySelector('.price.bad'));
@@ -105,7 +100,6 @@ try {
   assert(await page.evaluate(() => !!document.activeElement?.closest('[data-part-row]')), 'focus stays on a row');
   await page.screenshot({ path: '.playtest/shop-parts-bought-1280.png' });
 
-  // Unaffordable row: disabled buy with a title.
   await page.evaluate(async () => {
     const c = await import('/src/sim/cheats.ts');
     window.__ROAM__.apply(c.setMoney(window.__ROAM__.state, 0));
@@ -116,17 +110,14 @@ try {
   assert.equal(await buy.getAttribute('title'), 'Not enough money');
   assert(await rows(page).nth(0).locator('.price.bad').count());
 
-  // Filter: collapses and scrolls to the top.
   await page.locator('.tabs.sub button').nth(1).click();
   assert.equal(await page.locator('.part-detail').count(), 0);
   assert.equal(await page.evaluate(() => document.querySelector('.town-shop').scrollTop), 0);
   await page.locator('.tabs.sub button').nth(0).click();
 
-  // Sell tab.
   await page.locator('.town-screen .tabs button', { hasText: 'Sell Parts' }).click();
   await page.screenshot({ path: '.playtest/shop-sell-1280.png' });
 
-  // Narrow layouts.
   await page.locator('.town-screen .tabs button', { hasText: 'Buy Parts' }).click();
   for (const [width, height] of [[800, 730], [600, 900]]) {
     await page.setViewportSize({ width, height });

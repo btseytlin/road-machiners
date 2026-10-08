@@ -111,7 +111,6 @@ describe('salvage interaction', () => {
   });
 });
 
-// A real world with the player parked beside the first prop of this look in this territory, or the first road wreck.
 function parkedAt(find: (o: Obstacle) => boolean): { w: World; id: string } {
   const w = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
   const o = w.obstacles.find(find);
@@ -130,7 +129,6 @@ function stockLabel(w: World, id: string, kind: 'stock' | 'loot' = 'stock'): str
   return getContextActions(w, false).find((a) => a.target.kind === kind && a.target.id === id)?.label;
 }
 
-// Every hidden unit of the stock revealed, so only its loot is left to take.
 function reveal(w: World, id: string): void {
   const stock = w.salvage.find((s) => s.id === id)!;
   for (const [good, n] of Object.entries(stock.hidden.goods)) stock.goods[good] = (stock.goods[good] ?? 0) + (n ?? 0);
@@ -355,7 +353,6 @@ describe("rescue readout", () => {
     const me = playerVehicle(w);
     const engine = me.items.find((it) => it.kind === "part" && partDef(it.part.defId).kind === "engine");
     if (!engine || engine.kind !== "part") throw new Error("Expected an engine");
-    // The hauler keeps only its built-in parts, so its deck has room to stow the engine.
     me.items = me.items.filter((it) => it.kind === "part" && partDef(it.part.defId).kind === "core");
     expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine." });
     expect(stowPart(w, me, engine.part)).toBe(true);
@@ -381,7 +378,6 @@ describe("rescue readout", () => {
 });
 
 describe('trade interaction', () => {
-  // The player parked on a town pad, with a trader beside it that agreed to trade.
   function atTownWithTrader(npcSpeed: number) {
     const town = REGION.towns[0];
     const w = emptyWorld({ ...sitePads(town)[0] });
@@ -537,7 +533,6 @@ describe('context picker', () => {
 });
 
 describe('overdrive switch', () => {
-  // Wear 2 takes the stock engine from 50 to 40 max HP, so 15% is exactly 6 HP.
   function wornTo(hp: number) {
     const w = emptyWorld();
     const engine = mountedParts(playerVehicle(w), 'engine')[0];

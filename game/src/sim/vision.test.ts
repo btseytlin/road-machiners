@@ -8,7 +8,7 @@ import { addVehicle, emptyWorld, practiceOf, settleStorms } from './testkit';
 import { contactsOf, soundRange } from './detect';
 import { TIME } from '../data/time';
 import { sunAt } from './sun';
-import { canVehicleSee, exploreFrom, grayRadius, hasLineOfFire, playerVisible, refreshVision, sightRadius, visibleTiles } from './vision';
+import { canVehicleSee, exploreFrom, grayRadius, hasLineOfFire, playerVisible, practiceContacts, refreshVision, sightRadius, visibleTiles } from './vision';
 import { TEST_MAP } from '../test/map';
 import { START_KITS } from '../data/start';
 import { DECKS, deckAt } from './bridge';
@@ -21,7 +21,7 @@ describe('vision', () => {
   it('sees an unblocked tile within radius', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const vis = visibleTiles(w, { x: 30, y: 30 });
-    expect(vis.has(31 * w.size + 34)).toBe(true); // tile (34, 31), close and clear
+    expect(vis.has(31 * w.size + 34)).toBe(true);
   });
 
   it('is blocked by an obstacle between the viewer and the tile', () => {
@@ -29,16 +29,16 @@ describe('vision', () => {
     w.obstacles = [{ id: 'r', pos: { x: 33, y: 30 }, r: 1.2, kind: 'rock' }];
     const from = { x: 30, y: 30 };
     const near = visibleTiles(w, from);
-    expect(near.has(30 * w.size + 31)).toBe(true); // in front of the rock, still visible
-    expect(near.has(30 * w.size + 36)).toBe(false); // behind the rock, blocked
+    expect(near.has(30 * w.size + 31)).toBe(true);
+    expect(near.has(30 * w.size + 36)).toBe(false);
   });
 
   it('sees behind a rock within the close radius', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.obstacles = [{ id: 'r', pos: { x: 31.2, y: 30.5 }, r: 0.6, kind: 'rock' }];
     const vis = visibleTiles(w, { x: 30, y: 30.5 });
-    expect(vis.has(30 * w.size + 32)).toBe(true); // 2.5 tiles away, behind the rock
-    expect(vis.has(30 * w.size + 35)).toBe(false); // 5.5 tiles away, behind the rock
+    expect(vis.has(30 * w.size + 32)).toBe(true);
+    expect(vis.has(30 * w.size + 35)).toBe(false);
   });
 
   it('lets an NPC see a vehicle behind a rock within the close radius', () => {
@@ -56,7 +56,6 @@ describe('vision', () => {
     expect(vis.has(30 * w.size + 36)).toBe(true);
   });
 
-  // A fence segment is one tile long, so its radius is half a tile.
   it('sees over a fence but not past a shack', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const from = { x: 30, y: 30 };
@@ -78,7 +77,6 @@ describe('vision', () => {
     expect(hasLineOfFire(w, { x: 30, y: 30 }, { x: 36.5, y: 30 })).toBe(true);
   });
 
-  // A hulk hides what lies past it only where its chassis boxes reach eye height, so a tall tractor cab hides and a low buggy hulk is seen over.
   it('is blocked by a kill wreck hulk only where its chassis reaches eye height', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const eye = TERRAIN.vision.eyeHeight * PHYSICS.metersPerTile;
@@ -101,14 +99,12 @@ describe('vision', () => {
     expect(hasLineOfFire(w, { x: 30, y: 30 }, { x: 36.5, y: 30 })).toBe(true);
   });
 
-  // The ruin model at scale 1 (radius 1.2 tiles). Its south corner, model y -3.9 to -2.5 m at model x 3.35 to
-  // 4.45 m, is rubble below eye height, and its standing south wall ends at model y -3.52 m. Model y runs to map -y.
   it('sees over the rubble of a ruin but not through its standing wall', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.obstacles = [{ id: 'ruin-0', pos: { x: 33, y: 30 }, r: 1.2, kind: 'landmark', look: 'ruin', yaw: 0 }];
     const line = (modelY: number) => hasLineOfFire(w, { x: 28, y: 30 - modelY / 4 }, { x: 38, y: 30 - modelY / 4 });
 
-    expect(line(-3.7)).toBe(true); // 0.9 tiles from the center, inside its 1.2-tile radius
+    expect(line(-3.7)).toBe(true);
     expect(line(-3)).toBe(false);
     expect(line(0)).toBe(false);
   });
@@ -116,7 +112,7 @@ describe('vision', () => {
   it('sees a ruin wall that holds the target', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.obstacles = [{ id: 'ruin-0', pos: { x: 33, y: 30 }, r: 1.2, kind: 'landmark', look: 'ruin', yaw: 0 }];
-    const eastWall = { x: 33 + 4 / 4, y: 30 }; // model x 3.5 to 4.5 m
+    const eastWall = { x: 33 + 4 / 4, y: 30 };
 
     expect(hasLineOfFire(w, { x: 40, y: 30 }, eastWall)).toBe(true);
     expect(hasLineOfFire(w, { x: 26, y: 30 }, eastWall)).toBe(false);
@@ -126,7 +122,7 @@ describe('vision', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.obstacles = [{ id: 'r', pos: { x: 33, y: 30 }, r: 1.2, kind: 'rock' }];
     const from = { x: 30, y: 30 };
-    const before = 5 * w.size + 5; // far outside sight
+    const before = 5 * w.size + 5;
     w.player.explored.fill(0);
     w.player.explored[before] = 1;
     exploreFrom(w, from);
@@ -150,7 +146,7 @@ describe('vision', () => {
     w.vehicles.find((v) => v.id === w.player.vehicleId)!.pos = { x: 55, y: 55 };
     refreshVision(w);
     expect(playerVisible(w).has(idx)).toBe(false);
-    expect(w.player.explored[idx]).toBe(1); // stays explored even though no longer visible
+    expect(w.player.explored[idx]).toBe(1);
   });
 });
 
@@ -161,7 +157,6 @@ describe('terrain line of sight', () => {
     w.terrain = TEST_MAP.terrain;
     const elevationAt = (_seed: number, x: number, y: number) => heightAt(w.terrain, x, y);
     let found: { a: { x: number; y: number }; b: { x: number; y: number } } | null = null;
-    // A peak above both eye heights blocks the line between the two sides.
     for (let x = 6; x < w.size - 6 && !found; x++) {
       for (let y = 2; y < w.size - 2 && !found; y++) {
         const peak = elevationAt(w.seed, x, y);
@@ -190,7 +185,6 @@ describe('terrain line of sight', () => {
 });
 
 describe('contact practice', () => {
-  // Night hides dust, so a moving buggy past sight is heard and nothing else.
   function heardBuggy() {
     const w = emptyWorld({ x: 30, y: 30 });
     w.turn = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
@@ -201,19 +195,26 @@ describe('contact practice', () => {
 
   it('pays the player once for a newly heard truck, harder near the edge of hearing', () => {
     const { w, buggy } = heardBuggy();
-    refreshVision(w);
+    practiceContacts(w, refreshVision(w));
     const [event] = practiceOf(w, 'contact');
     expect(event.amount).toBe(1);
     expect(event.difficulty).toBeCloseTo(15 / soundRange(w, buggy));
-    refreshVision(w);
+    practiceContacts(w, refreshVision(w));
     expect(practiceOf(w, 'contact')).toHaveLength(1);
   });
 
   it('pays nothing for a truck in sight', () => {
     const { w, buggy } = heardBuggy();
     buggy.pos = { x: 34, y: 30 };
-    refreshVision(w);
+    practiceContacts(w, refreshVision(w));
     expect(practiceOf(w, 'contact')).toEqual([]);
+  });
+
+  it('rebuilds the view without paying, so a load awards nothing', () => {
+    const { w, buggy } = heardBuggy();
+    const xp = w.player.xp;
+    expect(refreshVision(w).map((c) => c.vehicleId)).toEqual([buggy.id]);
+    expect([practiceOf(w, 'contact'), w.player.xp]).toEqual([[], xp]);
   });
 
   it('pays nothing when an NPC hears a truck', () => {
@@ -274,7 +275,6 @@ describe('the night eyes perk', () => {
 describe('the storm rider perk', () => {
   const day = () => Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => sunAt(t))!;
 
-  // A daylight world with a storm over the player truck and an NPC beside it.
   function stormWorld() {
     const w = emptyWorld({ x: 60, y: 60 });
     w.turn = day();
@@ -299,7 +299,6 @@ describe('the storm rider perk', () => {
 });
 
 describe('a dust screen', () => {
-  // An NPC at x=20 looking at the player truck at x=30, with a cloud raised at `pos`.
   function screenWorld(pos: { x: number; y: number }, screen: boolean) {
     const w = emptyWorld({ x: 30, y: 30 });
     const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 20, y: 30 });
@@ -340,10 +339,8 @@ describe('a dust screen', () => {
   });
 });
 
-// UK3: sight from the Fallen Sun's wing, on the real map. The span stands 1.5 height units (6 m) over the furrow.
 describe('sight from the wing', () => {
   const span = DECKS.find((d) => d.id === 'fallen-sun-wing')!;
-  // The middle of the level span, between the wing's second and third stations.
   const [top, end] = [span.stations[1].at, span.stations[2].at];
   const mid = { x: (top.x + end.x) / 2, y: (top.y + end.y) / 2 };
   const across = { x: -span.axis.y, y: span.axis.x };
@@ -352,13 +349,11 @@ describe('sight from the wing', () => {
   function wingWorld(): World {
     const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
-    // The player watches from near the wing, so the meetings play by the full rules.
     w.vehicles[0].pos = at(mid, 0, -5);
     return w;
   }
   const viewer = (w: World, pos: Vec) => addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], pos);
 
-  // The truck on the ground stands on the furrow's west bank, out of the trough, where only the plate hides the target.
   it('sees a truck 15 tiles out on the furrow bank over a hull plate that hides it from the ground', () => {
     const w = wingWorld();
     const target = at(mid, 0, 15);
@@ -374,7 +369,6 @@ describe('sight from the wing', () => {
     expect(canVehicleSee(w, onSpan, target)).toBe(true);
   });
 
-  // The two hull drums under the span hold it up. Their boxes inside the deck outline lie under the deck line.
   it('sees and fires along the span over the piers under it', () => {
     const w = wingWorld();
     const piers = w.obstacles.filter((o) => o.kind === 'landmark' && o.look === 'hullDrum' && deckAt(o.pos.x, o.pos.y)?.deck.id === span.id);

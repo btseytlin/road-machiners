@@ -23,7 +23,7 @@ it('publishes only explicit operational fields, never private state or raw error
 });
 
 it('only publishes a candidate link while the current candidate is valid', () => {
-  const state: FactoryState = { ...structuredClone(EMPTY_STATE), release: { issue: 3, branch: 'release/day', day: '2026-01-01', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } }, builds: { '3': 'rc' } };
+  const state: FactoryState = { ...structuredClone(EMPTY_STATE), release: { issue: 3, branch: 'release/day', day: '2026-01-01', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } }, builds: { '3': 'rc' } };
   const config = { triageWorkers: 1, designWorkers: 2, implementWorkers: 2, verifyWorkers: 2, testWorkers: 2, publicUrl: 'https://example.org' };
   expect(buildOperations(state, false, config).candidateUrl).toBeNull();
   state.release!.postId = 10;
@@ -37,7 +37,7 @@ class FixtureGithub extends PublicGitHub {
   failed = false;
   override async read(state: FactoryState) {
     if (this.failed) throw new Error('PRIVATE credential failure');
-    return { cards: [], features: [], releaseKey: JSON.stringify({ branch: state.release?.branch ?? 'dev', removed: [] }), provisional: state.release === null };
+    return { cards: [], features: [], merges: [], releaseKey: JSON.stringify({ branch: state.release?.branch ?? 'dev', removed: [] }), provisional: state.release === null };
   }
 }
 class FixtureHost extends HostSampler {
@@ -59,6 +59,7 @@ it('retains the last good snapshot with stale markers when its sources fail', as
     await collector.refreshLocal();
     await collector.refreshGithub();
     const good = collector.getSnapshot();
+    expect(good.labels.columns.Merging).toBe('Merging');
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 120_000);
     expect(collector.getSnapshot().operations.status).toBe('stale');

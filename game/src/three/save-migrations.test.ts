@@ -37,8 +37,10 @@ import FORMAT_2_27 from './save-fixtures/format-2-27.json';
 import FORMAT_2_28 from './save-fixtures/format-2-28.json';
 import FORMAT_2_29 from './save-fixtures/format-2-29.json';
 import FORMAT_2_30 from './save-fixtures/format-2-30.json';
-import FORMAT_2_31 from './save-fixtures/format-2-31.json';
 import SAVE_SHAPE from './save-shape.json';
+import FORMAT_2_31 from './save-fixtures/format-2-31.json';
+import FORMAT_2_32 from './save-fixtures/format-2-32.json';
+import FORMAT_2_33 from './save-fixtures/format-2-33.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -109,7 +111,6 @@ describe('save migration 1 to 2', () => {
     expect(next.removed.length).toBe(FORMAT_2_1.removed.length);
   });
 
-  // Delete this test at the next format step: it is the only guard that the step's copies match live data while 2.2 is current.
   it('holds copies of the layouts and cores that equal the live chassis data', () => {
     for (const c of Object.values(CHASSIS).filter((it) => LAYOUTS_2_2[it.id])) {
       expect(LAYOUTS_2_2[c.id], c.id).toEqual(c.layout);
@@ -117,7 +118,6 @@ describe('save migration 1 to 2', () => {
     }
   });
 
-  // Guns, racks and cannons may stand on any free cell, so only the other parts must stay mounted.
   it('puts every item of every truck on a free cell, and every non-core part still mounted', () => {
     for (const v of all) {
       const grid = baseGrid(v.chassisId);
@@ -231,7 +231,6 @@ describe('save migration 8 to 9', () => {
 });
 
 describe('save migration 9 to 10', () => {
-  // Total XP each 2.9 level needed, a copy for the test.
   const reach = [0, 200, 600, 1200, 2000, 3000];
   const migrated = () => MIGRATIONS[9](FORMAT_2_9) as { player: Pick<Player, 'xp' | 'ranks' | 'perks'> & Record<string, unknown> };
 
@@ -694,8 +693,6 @@ describe('save migration 29 to 30', () => {
     expect(() => MIGRATIONS[29](bad)).toThrow(/player money/);
   });
 
-  // A money-named key in the saved shape that the step neither converts nor lists here as not money stays in the old
-  // unit after a load.
   it('converts every money-named field of the saved shape', () => {
     const MONEY_KEYS = new Set(['money', 'reward', 'fee', 'waived', 'price', 'paid', 'amount', 'buy', 'sell', 'basis', 'costBasis']);
     const CONVERTED = new Set([
@@ -735,7 +732,37 @@ describe('save migration 30 to 31', () => {
 });
 
 describe('save migration 31 to 32', () => {
+  const next = MIGRATIONS[31](FORMAT_2_31) as Record<string, unknown> & { vehicles: object[]; player: object; broken: object[] };
+
+  it('drops trails, the visible tiles, the last turn events and removed vehicles', () => {
+    expect(next.vehicles).toEqual(FORMAT_2_31.vehicles.map(({ trail: _t, ...rest }) => rest));
+    expect('events' in next).toBe(false);
+    expect('removed' in next).toBe(false);
+    const { visible: _v, ...player } = FORMAT_2_31.player;
+    expect(next.player).toEqual(player);
+  });
+
+  it('keeps only the id and turn of a broken prop', () => {
+    expect(next.broken).toEqual([{ id: 'deadTree-1354', turn: 2559 }]);
+  });
+
+  it('keeps dust clouds, contacts and clouds', () => {
+    expect(next.dustClouds).toEqual(FORMAT_2_31.dustClouds);
+    expect(next.turn).toBe(FORMAT_2_31.turn);
+  });
+});
+
+describe('save migration 32 to 33', () => {
+  it('drops the contacts and seen clouds and keeps the dust clouds', () => {
+    const next = MIGRATIONS[32](FORMAT_2_32);
+    const { contacts: _c, clouds: _s, ...player } = FORMAT_2_32.player;
+
+    expect(next).toEqual({ ...FORMAT_2_32, player });
+  });
+});
+
+describe('save migration 33 to 34', () => {
   it('returns the world unchanged, since no old save holds a business job', () => {
-    expect(MIGRATIONS[31](FORMAT_2_31)).toEqual(FORMAT_2_31);
+    expect(MIGRATIONS[33](FORMAT_2_33)).toEqual(FORMAT_2_33);
   });
 });

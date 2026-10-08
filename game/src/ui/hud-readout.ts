@@ -34,7 +34,6 @@ import { combatTurnsLeft } from '../sim/combat';
 import { isBusy } from '../sim/jobs';
 import { npcName } from '../sim/spawn';
 
-// The overdrive switch: on only while the engine really overdrives, and blocked with the reason while it is too worn.
 export function overdriveSwitch(w: World): { checked: boolean; blocked: boolean; title: string } {
   const me = playerVehicle(w);
   const blocked = !canOverdrive(me);
@@ -47,7 +46,6 @@ export function overdriveSwitch(w: World): { checked: boolean; blocked: boolean;
   };
 }
 
-// The shop in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
 function shopNear(world: World): { id: string; name: string } | null {
   const pos = playerVehicle(world).pos;
   const sites = [...REGION.towns, ...REGION.locations].filter((s) => s.id in SHOPS);
@@ -55,18 +53,15 @@ function shopNear(world: World): { id: string; name: string } | null {
   return site ? { id: site.id, name: site.name } : null;
 }
 
-// Holds which of the actions in reach the E key runs. The selection is UI state only and is never saved.
 export class ContextPicker {
   private selected: string | null = null;
 
-  // The selected action while it is still listed, else the first one, which becomes the selection.
   pick(actions: ContextAction[]): ContextAction | null {
     const found = actions.find((a) => contextKey(a.target) === this.selected) ?? actions[0] ?? null;
     this.selected = found && contextKey(found.target);
     return found;
   }
 
-  // Moves the selection by one entry and wraps at both ends.
   cycle(actions: ContextAction[], step: 1 | -1): void {
     const current = this.pick(actions);
     if (!current) return;
@@ -75,10 +70,8 @@ export class ContextPicker {
   }
 }
 
-// Every action in reach, the default first. The player picks between them with the arrow keys.
 export function getContextActions(world: World, playing: boolean): ContextAction[] {
   if (playing || !playerCanAct(world)) return [];
-  // An aid handover or a trade the player arranged shows only while its own driver is in reach. It wins over the place once both trucks are parked side by side.
   const deals = [getAidAction(world), ...getTradeActions(world)].filter((d) => d !== null);
   return [...deals.filter((d) => d.ready), ...getPlaceActions(world), ...deals.filter((d) => !d.ready)];
 }
@@ -87,7 +80,6 @@ function awaitsStart(s: NpcState): boolean {
   return aidData(s).agreed && !aidData(s).started;
 }
 
-// An agreed aid deal the player has not started yet.
 function getAidAction(world: World): ContextAction | null {
   const s = playerAid(world);
   if (!s || !awaitsStart(s) || !inMeetingReach(world, s)) return null;
@@ -106,7 +98,6 @@ function getPlaceActions(world: World): ContextAction[] {
   const actions: ContextAction[] = [];
   const shop = shopNear(world);
   if (shop) actions.push({ label: `Enter ${shop.name}`, ready: shopAt(world) === shop.id, target: { kind: 'shop' } });
-  // A knocked-out truck stays open to looting while a removal from it runs.
   for (const downed of downedListNear(world)) {
     actions.push({ label: `Loot ${npcName(downed)}`, ready: canLootTruck(playerVehicle(world), downed), target: { kind: 'downed', id: downed.id } });
   }
@@ -127,8 +118,6 @@ function getSiteActions(world: World): ContextAction[] {
   return actions;
 }
 
-// A stock offers a search while it hides units or the player never searched it, and its revealed loot once the player
-// searched it. Both can show, the search first.
 function getStockActions(world: World, stock: SalvageStock): ContextAction[] {
   const actions: ContextAction[] = [];
   if (needsSearch(world, stock)) actions.push(getSearchAction(world, stock));
@@ -136,20 +125,17 @@ function getStockActions(world: World, stock: SalvageStock): ContextAction[] {
   return actions;
 }
 
-// A search needs no combat. Looting a searched stock does not.
 function getSearchAction(world: World, stock: SalvageStock): ContextAction {
   const combat = combatTurnsLeft(world, playerVehicle(world)) ?? undefined;
   const ready = combat === undefined && canReachSalvage(playerVehicle(world), stock);
   return withBlocker(world, stock, { label: stockLabel('Search', stock), ready, combat, target: { kind: 'stock', id: stock.id } });
 }
 
-// Neither starts while another truck loots the stock.
 function withBlocker(world: World, stock: SalvageStock, action: ContextAction): ContextAction {
   const blocker = lootBlockerHere(world, stock.id);
   return blocker ? { label: action.label, ready: false, hint: `${blocker.name} is looting it`, target: action.target } : action;
 }
 
-// The verb alone at a loot spot that has no name, else the verb and the stock's name.
 function stockLabel(verb: 'Search' | 'Loot', stock: SalvageStock): string {
   const name = getSalvageName(stock);
   return name === null ? verb : `${verb} ${name}`;
@@ -160,7 +146,6 @@ function emptyLabel(stock: SalvageStock): string {
   return name === null ? 'Picked clean' : `${name} is picked clean`;
 }
 
-// What the prompt calls the stock, or null for a loot spot that is no wreck: a farmhouse or a hangar needs no name.
 function getSalvageName(stock: SalvageStock): string | null {
   const place = salvagePlace(stock);
   if (place === 'pile') return 'the pile';
@@ -188,7 +173,6 @@ function getConditionState(ratio: number): string {
 }
 
 
-// The tooltip of a part tile: the part's name and condition.
 export function conditionLabel(part: { name: string; percent: number }): string {
   return part.percent === 0 ? `${part.name}: broken` : `${part.name}: ${part.percent}%`;
 }
@@ -233,9 +217,8 @@ const REGION_WEATHER: Record<"heatwave" | "overcast", string> = {
   heatwave: "Heat wave",
   overcast: "Overcast",
 };
-const HOT = 2; // heat at or above this shows as a warning
+const HOT = 2;
 
-// Storms are local: one shows only when the truck is inside it, or when its edge is within sight.
 function weatherLabel(w: World, pos: Vec): string {
   const names: string[] = [];
   for (const e of w.weather) {
@@ -247,15 +230,12 @@ function weatherLabel(w: World, pos: Vec): string {
   return names.length ? [...new Set(names)].join(", ") : "Clear";
 }
 
-// Negative money is debt. It shows as a positive amount owed.
 export function moneyLabel(money: number): string {
   return money < 0
     ? `Debt ${moneyAmount(-money)}`
     : moneyAmount(money);
 }
 
-// What the rescue panel shows: the knockout, the tow in progress, or a stranded truck with its beacon switch. Null
-// when none applies, and for a dead player, whom the death screen covers. A tow offer comes as a radio call.
 export type RescueReadout =
   | { kind: "knockedOut" }
   | { kind: "towed"; tower: string; town: string; fee: number }
@@ -275,7 +255,6 @@ export function getRescueReadout(w: World): RescueReadout | null {
   return null;
 }
 
-// What stops the truck, and what the player can do about it.
 function strandedReason(w: World): string {
   const me = playerVehicle(w);
   if (!hasWorkingEngine(me)) {
@@ -293,8 +272,6 @@ function townName(id: string): string {
   return town.name;
 }
 
-// Max-speed rows and the power chip: the sim's steps and power facts, worded tersely for the HUD tooltip and the truck headers.
-// Each row shows its cause, its effect and the running km/h. The last row is the total the HUD shows.
 export type SpeedRow = { label: string; effect: string; kph: number; total: boolean };
 
 export type PowerChip = { text: string; detail: string; over: boolean };
@@ -310,14 +287,12 @@ function percent(factor: number): string {
   return pct === 0 ? '0%' : signed(pct, '%');
 }
 
-// Power figures in the same one-decimal style as the item cards.
 export function powerNumber(n: number): string {
   return String(Number(n.toFixed(1)));
 }
 
 type Kind<K extends SpeedStep['kind']> = Extract<SpeedStep, { kind: K }>;
 type Words = { label: string; effect: (deltaKph: number) => string };
-// What each step is called and how its effect reads. A new step kind fails typecheck until it has an entry here.
 type Wording = { [K in SpeedStep['kind']]: (step: Kind<K>, weather: string) => Words };
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
@@ -338,8 +313,6 @@ const WORDING: Wording = {
   towing: (s) => ({ label: 'Towing', effect: byFactor(s.factor) }),
 };
 
-// One row per step, each with its effect and the running km/h of the rounded speed, so the rows chain to the total.
-// weather is the HUD's label for the weather at the truck.
 export function speedRows(weather: string, steps: SpeedStep[]): SpeedRow[] {
   return steps.map((step, i) => {
     const words = (WORDING[step.kind] as (step: SpeedStep, weather: string) => Words)(step, weather);
@@ -348,7 +321,6 @@ export function speedRows(weather: string, steps: SpeedStep[]): SpeedRow[] {
   });
 }
 
-// Short notes for what the number leaves out: a low or empty tank, and how gun power works.
 export function speedNotes(w: World, v: Vehicle, steps: SpeedStep[]): string[] {
   const notes: string[] = [];
   const driving = steps.some((s) => s.kind === 'guns');
@@ -363,14 +335,12 @@ export function speedNotes(w: World, v: Vehicle, steps: SpeedStep[]): string[] {
   return notes;
 }
 
-// The guns step, and the speed before it. Null while a stalled or missing engine skips the engine path.
 function gunStep(steps: SpeedStep[]): { step: Kind<'guns'>; before: number } | null {
   const i = steps.findIndex((s) => s.kind === 'guns');
   const step = steps[i];
   return step?.kind === 'guns' ? { step, before: steps[i - 1].speed } : null;
 }
 
-// What the draw costs: the short chip text and the full-sentence form.
 function gunCost(steps: SpeedStep[]): { short: string; long: string } {
   const guns = gunStep(steps);
   if (!guns) return { short: 'no speed cost while stalled', long: 'none while stalled' };
@@ -380,7 +350,6 @@ function gunCost(steps: SpeedStep[]): { short: string; long: string } {
   return { short: pct, long: `${pct}, ${MINUS}${lost} km/h` };
 }
 
-// The header chip: working-gun draw against engine capacity, and what the draw costs in top speed.
 export function powerChip(steps: SpeedStep[], v: Vehicle): PowerChip {
   const capacity = workingEngineCapacity(v);
   if (capacity === null) {
@@ -455,7 +424,6 @@ export function getHudReadout(w: World) {
   };
 }
 
-// The issue forms in .github/ISSUE_TEMPLATE/.
 const NEW_ISSUE_URL = "https://github.com/btseytlin/road-machiners/issues/new";
 
 function issueFormUrl(template: string, fields: Record<string, string>): string {
@@ -465,17 +433,14 @@ function issueFormUrl(template: string, fields: Record<string, string>): string 
   return url.href;
 }
 
-// The text the ? menu shows.
 export function versionLabel(): string {
   return `v${GAME_VERSION}`;
 }
 
-// The form field id is `version`, so GitHub prefills that field.
 export function bugReportUrl(version: string): string {
   return issueFormUrl("bug.yml", { version });
 }
 
-// The feature form has no version field.
 export function featureRequestUrl(): string {
   return issueFormUrl("feature-request.yml", {});
 }

@@ -29,8 +29,9 @@ Run these from `game/`. The repo-wide quality gate and pre-commit hook run from 
 
 - `npm run dev` starts the game at <http://localhost:5173>.
 - `npm test` runs every Vitest test in `src/`. `npm run typecheck` runs tsc.
+- `npm run test:cached -- --cache <dir> [test files]` skips every test file whose imports, disk reads and global inputs already passed there, and prints `[test-cache] ran N, skipped M, uncacheable K`. The factory checks use it. The factory's release playtest runs `npm test`.
 - `npm run playtest` plays turns in headless Chromium and fails on errors or low FPS. It needs the dev server. Use `--cpu` on machines without a GPU. `--no-fps-gate` keeps the GPU run but only prints the FPS. The factory uses it everywhere but the release candidate, since its host runs many jobs at once.
-- `npm run stuck` records a trader bot for 3 seeds of 1000 turns and fails on any stall from any truck. Run it after changes to NPC goals, services or tows.
+- `npm run stuck` records a trader bot for 2 seeds of 500 turns and fails on any stall from any truck. Run it after changes to NPC goals, services or tows.
 - `npm run progression:record`, `progression:report`, `progression:analyze` and `progression:watch` are the playtest harness. Bots play the real turn pipeline headless with every NPC alive, and each run writes logs of every turn. It covers economy, progression, NPC behavior and fights at the macro level. `progression:playthrough` writes the full activity log of one markov bot run, which the factory's release playtest reads.
 - `npm run combat` plays single fights with physics, for hit rates and ram detail the recorder does not model. `npm run loadouts` rolls NPC gear.
 - `npm run perf` fails on a miss against `scripts/perf-budgets.json`.
@@ -79,6 +80,8 @@ Players keep their saves across updates. Migrate old saves whenever possible. [S
 - Never edit a committed step. Fix a bad step with a new step.
 - Every step gets a Vitest test on a fixture from `src/three/save-fixtures/`.
 - Run `npm run save:shape` after the new step or major bump.
+- A change to world state gets a test that saves the world, loads it and checks the loaded world. Load must give back the same world and award nothing: no XP, money or events.
+- A save holds only what load cannot rebuild. Load rebuilds derived state with the same function the turn uses, so that function must not change anything else. Rewards for what a refresh finds go in a separate call in the turn pipeline, as `practiceContacts()` does for `refreshVision()`.
 
 ## Agent practices
 
