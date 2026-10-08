@@ -59,6 +59,10 @@ describe('operationsQuestions', () => {
     'Should I merge this into the dev branch or open a pull request?',
     'npm run typecheck fails in the work clone, what should I do?',
     'Should the checkout use `main`?',
+    'My clone is stale, can you refresh it?',
+    'Is #242 already in dev?',
+    'Can I assume #242 is done?',
+    'Should I base this on the branch for #243?',
   ])('flags a factory operations question: %s', (question) => {
     expect(operationsQuestions([question])).toEqual([question]);
   });
@@ -72,6 +76,9 @@ describe('operationsQuestions', () => {
     'Should the map look like the one in #242?',
     'How many shells should the MG hold?',
     'Should the parts shop sell a clone of the player truck?',
+    'Should the dev console be hidden from players?',
+    'Should the trader wait until night before opening?',
+    'Should raiders branch off the main road to chase you?',
   ])('passes a product question: %s', (question) => {
     expect(operationsQuestions([question])).toEqual([]);
   });
