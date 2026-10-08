@@ -16,6 +16,7 @@ import type { Vehicle, World } from '../sim/types';
 import { partValue } from '../sim/wear';
 import { newWorld } from '../sim/world';
 import { TEST_MAP } from './map';
+import { defaultSetup } from '../sim/settings';
 import { moneyAmount } from '../ui/units';
 
 type CabSide = 'front' | 'rear' | 'left' | 'right';
@@ -42,7 +43,7 @@ let base: World | undefined;
 
 // One world to draw ids from, with its randomness reset per roll.
 function worldFor(seed: number): World {
-  base ??= newWorld(1, START_KITS.standard, TEST_MAP);
+  base ??= newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
   return { ...base, vehicles: [], rngState: seed * 7919 + 1, marketRng: { rngState: seed * 104729 + 1 } };
 }
 

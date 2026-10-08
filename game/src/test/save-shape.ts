@@ -9,6 +9,7 @@ import { newWorld } from '../sim/world';
 import { saveOf } from '../three/save';
 import { shapeOf, type Shape } from '../three/save-shape';
 import { TEST_MAP } from './map';
+import { defaultSetup } from '../sim/settings';
 
 // One contract of each kind, so the shape does not depend on which kinds the shops rolled.
 const CONTRACT_KINDS: Contract[] = [
@@ -22,7 +23,7 @@ const WEAPON_ID = Object.keys(PARTS).find((id) => PARTS[id].kind === 'weapon');
 const PLAIN_ID = Object.keys(PARTS).find((id) => PARTS[id].kind !== 'weapon');
 
 export function newGameShape(): Shape {
-  const world = newWorld(1337, startKit('standard'), TEST_MAP);
+  const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
   if (!WEAPON_ID || !PLAIN_ID) throw new Error('The part data has no weapon or no other part');
   for (const shop of Object.values(world.shops)) {
     shop.contracts = CONTRACT_KINDS;

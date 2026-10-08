@@ -22,6 +22,7 @@ import {
 } from "../phys/frames";
 import { type PreparedTurn } from "../phys/turn";
 import { playerVehicle, vehicleById } from "../sim/damage";
+import { setupLabel } from "../sim/settings";
 
 import { inOverdrive, isStranded, maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder } from "../sim/steering";
@@ -313,7 +314,7 @@ export class Game {
     this.hoverHold.watch(this.hud.getInspectionRoot());
     const saves = saveStore(window.localStorage, window.sessionStorage, () => this.world, CONFIG.saveSlots, () => this.hud.note(this.world, SAVE_FULL_NOTE, "bad"));
     const guarded = { ...saves, save: (slot: SlotId) => this.saveNow(() => saves.save(slot)) };
-    this.menu = new GameMenu(guarded, () => this.anim !== null);
+    this.menu = new GameMenu(guarded, () => this.anim !== null, () => setupLabel(this.world.setup));
     this.death = new DeathScreen(saves);
 
     this.bindInput();

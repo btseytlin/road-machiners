@@ -1,3 +1,4 @@
+import { defaultSetup } from './settings';
 import { describe, expect, it } from 'vitest';
 import { REGION } from '../data/region';
 import { REPAIR } from '../data/wear';
@@ -23,7 +24,7 @@ import { carriedWorld, endTurn, newWorld, startPose } from './world';
 const KIT = startKit('standard');
 
 let opened: World | undefined;
-const openingWorld = (): World => (opened ??= newWorld(1, KIT, TEST_MAP));
+const openingWorld = (): World => (opened ??= newWorld(1, KIT, TEST_MAP, defaultSetup('roaming')));
 
 const part = (w: World, defId: string): PartInstance => {
   const found = mountedParts(playerVehicle(w)).find((p) => p.defId === defId);
@@ -60,7 +61,7 @@ function searched(w: World): World {
 describe('new-game opening', () => {
   it('places one fixed opening wreck with 3 parts and an unworn Rebar cage on every seed', () => {
     for (const seed of [1, 2, 3, 1337]) {
-      const w = newWorld(seed, KIT, TEST_MAP);
+      const w = newWorld(seed, KIT, TEST_MAP, defaultSetup('roaming'));
       expect(w.obstacles.filter((o) => o.id === OPENING_WRECK_ID)).toHaveLength(1);
       const stocks = w.salvage.filter((s) => s.id === OPENING_WRECK_ID);
       expect(stocks).toHaveLength(1);
@@ -78,10 +79,10 @@ describe('new-game opening', () => {
   }, budget(60_000));
 
   it('leaves a kit without an opening and a carried save with no opening wreck', () => {
-    expect(openingStockOf(newWorld(1, startKit('combat'), TEST_MAP, false))).toBeNull();
+    expect(openingStockOf(newWorld(1, startKit('combat'), TEST_MAP, defaultSetup('roaming'), false))).toBeNull();
     const { world } = carriedWorld({
       seed: 5, money: null, xp: null, ranks: {}, xpBySource: {}, perks: [], discovered: [], knockouts: null,
-      autoFire: null, autoRepair: null, fuel: null, supplies: null, costBasis: {}, truck: null, storage: [],
+      autoFire: null, autoRepair: null, fuel: null, supplies: null, costBasis: {}, truck: null, storage: [], setup: defaultSetup('roaming'),
     }, KIT, TEST_MAP, () => 7);
     expect(openingStockOf(world)).toBeNull();
     expect(world.obstacles.some((o) => o.id === OPENING_WRECK_ID)).toBe(false);
@@ -95,7 +96,7 @@ describe('new-game opening', () => {
     const { ahead, side } = REGION.playerStart.wreck;
     // A start pose whose wreck spot is the rock's own spot.
     const start = { pos: { x: rock.pos.x - ahead, y: rock.pos.y - side }, heading };
-    expect(() => newWorld(1, KIT, TEST_MAP, false, start)).toThrow(/opening-wreck .* overlaps/);
+    expect(() => newWorld(1, KIT, TEST_MAP, defaultSetup('roaming'), false, start)).toThrow(/opening-wreck .* overlaps/);
   });
 
   it('starts the wreck in clear sight of the truck', () => {

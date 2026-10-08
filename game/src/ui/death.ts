@@ -1,14 +1,13 @@
 // The fullscreen death screen. A dead run takes no more turns or commands, so it covers the whole game.
-// Load save opens the Load panel, and New game opens the setup screen, and a confirmed Start reloads the page with a boot request that deletes the autosaves.
+// Load save opens the Load panel, and New game opens the New game screen over it.
 
 import { el, panel } from "./dom";
-import { chooseNewGame, startNewGame } from "./new-game";
+import { openNewGame, type NewGameActions } from "./new-game";
 import { SavePanel, type SavePanelActions } from "./save-panel";
-import type { BootRequest } from "../three/save-slots";
 
 export type DeathActions = SavePanelActions & {
   hasSave: () => boolean;
-  requestBoot: (request: BootRequest) => void;
+  newGame: NewGameActions;
 };
 
 export class DeathScreen {
@@ -37,7 +36,7 @@ export class DeathScreen {
         "div",
         { class: "death-buttons" },
         el("button", { onclick: () => this.savePanel.openLoad(), disabled: !saved }, "Load save"),
-        el("button", { onclick: async () => { if (await chooseNewGame()) startNewGame(this.actions.requestBoot); } }, "New game"),
+        el("button", { onclick: () => openNewGame(this.actions.newGame, () => {}) }, "New game"),
       ),
     );
   }

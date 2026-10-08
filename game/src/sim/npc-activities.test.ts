@@ -40,6 +40,7 @@ import { inCombat } from './combat';
 import { refreshVision } from './vision';
 import { emptyHidden } from './salvage';
 import { recall } from './memory';
+import { defaultSetup } from './settings';
 
 // Marks every stock as already judged, so no forced roll's leftover chance sends the driver off its own goal.
 function overlookSalvage(w: World, npc: Vehicle): void {
@@ -518,7 +519,7 @@ describe('NPC activities', () => {
 
     it('drives into the cage by its open end to a cache inside, searches it and takes its loot', () => {
       // The real map, and the scavenger on the floor 3 tiles past the cage's south end, on its axis.
-      const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+      const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
       w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
       const cage = territoryPieces(sun as never).find((p) => p.look === 'shipCage')!;
       const along = { x: Math.cos(cage.yaw), y: Math.sin(cage.yaw) };
@@ -563,7 +564,7 @@ describe('NPC activities', () => {
 
     it('drives from the west road down into the crash furrow to a spot there, searches it and takes its loot', () => {
       // The real map, and the scavenger at the west road's end, the entry nearest the furrow.
-      const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+      const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
       w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
       const furrow = TERRAIN.features.furrow;
       const start = territoryEntries(sun as never)[0];

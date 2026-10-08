@@ -27,6 +27,7 @@ import { stormStrength } from './weather';
 import { canUseSite, siteGap } from './sites';
 import { endTurn, hostileToPlayer, newWorld } from './world';
 import { TEST_MAP } from '../test/map';
+import { defaultSetup } from './settings';
 
 function withSpawned(w: World, templateId: string, hostile: boolean): { w: World; id: string } {
   const next = spawnNear(w, templateId, hostile);
@@ -335,7 +336,7 @@ describe('teleport', () => {
 
 describe('places and time', () => {
   it('teleports to a spot where every town and location can be used', () => {
-    const w = newWorld(1, START_KITS.standard, TEST_MAP);
+    const w = newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     for (const place of [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')]) {
       const next = teleport(w, placeSpot(w, place.id));
       expect(canUseSite(playerVehicle(next).pos, place), place.id).toBe(true);
@@ -344,7 +345,7 @@ describe('places and time', () => {
   });
 
   it('sends a teleport to a territory to where its road ends', () => {
-    const w = newWorld(1, START_KITS.standard, TEST_MAP);
+    const w = newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
     expect(Math.abs(siteGap(sun, placeSpot(w, sun.id)))).toBeLessThan(1e-6);
   });

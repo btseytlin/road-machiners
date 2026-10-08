@@ -1,3 +1,4 @@
+import { defaultSetup } from '../sim/settings';
 import { describe, expect, it } from "vitest";
 import { playerVehicle } from "../sim/damage";
 import { addVehicle, emptyWorld, npcBrain, openingStopPoint, testDrive } from "../sim/testkit";
@@ -162,7 +163,7 @@ describe("farewell tip", () => {
 
 describe("opening tips", () => {
   let template: World | undefined;
-  const opening = (): World => structuredClone((template ??= newWorld(1, startKit("standard"), TEST_MAP)));
+  const opening = (): World => structuredClone((template ??= newWorld(1, startKit("standard"), TEST_MAP, defaultSetup("roaming"))));
 
   const turns = (w: World, n: number): World => {
     let next = w;

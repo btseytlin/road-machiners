@@ -3,6 +3,7 @@
 // track to the ridge shelf's crate stack. src/sim/territory-reach.test.ts proves the routes exist; this proves trucks
 // drive them.
 
+import { defaultSetup } from '../sim/settings';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { NPCS } from '../data/npcs';
 import { REGION, type TerritoryDef } from '../data/region';
@@ -42,7 +43,7 @@ const SHELF_LEG_TURNS = 15;
 
 // The real map with no NPCs and no spawns, so only the drive under test plays.
 function orchardWorld(): World {
-  const w = newWorld(1337, PLAIN_KIT, TEST_MAP);
+  const w = newWorld(1337, PLAIN_KIT, TEST_MAP, defaultSetup('roaming'));
   w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
   return w;

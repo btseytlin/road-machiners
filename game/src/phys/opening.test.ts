@@ -1,3 +1,4 @@
+import { defaultSetup } from '../sim/settings';
 import { expect, it } from 'vitest';
 import { startKit } from '../data/start';
 import { playerVehicle } from '../sim/damage';
@@ -13,7 +14,7 @@ import { physicsMove } from './turn';
 
 it('drives the new-game truck on its nearly broken engine to a stop point by the opening wreck, in reach to search', async () => {
   await initPhysics();
-  let w = newWorld(1, startKit('standard'), TEST_MAP);
+  let w = newWorld(1, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
   w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
   w = setMoveOrder(w, { kind: 'stopAt', dest: openingStopPoint(w) });
   let drive: Drive = buildDrive(w);
