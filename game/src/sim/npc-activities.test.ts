@@ -1752,6 +1752,16 @@ describe('NPC site business', () => {
     expect(goodsCount(npc).scrap).toBe(1);
   });
 
+  it('waits for a rolling truck to stop before it starts the job', () => {
+    const { w, npc } = atTown('sell');
+    npc.speed = RULES.parkedSpeed + 1;
+    expect(() => resolveNpcActivities(w)).not.toThrow();
+    expect(npc.job).toBeNull();
+    npc.speed = 0;
+    resolveNpcActivities(w);
+    expect(npc.job).toMatchObject({ kind: 'business' });
+  });
+
   it('starts no job in combat and keeps the goal', () => {
     const { w, npc } = atTown('sell');
     const foe = addVehicle(w, 'raiders', 'scout', ['mg', 'stockEngine'], { x: 40, y: 40 });

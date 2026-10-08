@@ -3,7 +3,7 @@
 
 import { NPC_UPKEEP } from '../data/npcs';
 import { inCombat } from './combat';
-import { startJob } from './jobs';
+import { isParkedForWork, startJob } from './jobs';
 import type { BusinessDeal, Job, NpcActivity, Vehicle, World } from './types';
 
 type BusinessJob = Extract<Job, { kind: 'business' }>;
@@ -32,11 +32,11 @@ function businessDone(world: World, vehicle: Vehicle, activity: NpcActivity): bo
   return true;
 }
 
-// Starts the wait before a deal. In combat the driver waits parked and keeps its goal.
+// Starts the wait before a deal. A rolling truck or a driver in combat waits and keeps its goal.
 function startBusiness(world: World, vehicle: Vehicle, activity: NpcActivity, siteId: string): void {
   if (!vehicle.brain) throw new Error(`${vehicle.id} has no brain for business`);
   if (!DEALS.includes(activity.kind)) throw new Error(`No business for a ${activity.kind} goal`);
-  if (inCombat(world, vehicle)) return;
+  if (inCombat(world, vehicle) || !isParkedForWork(world, vehicle)) return;
   const turns = NPC_UPKEEP.businessTurns;
   startJob(world, vehicle, { kind: 'business', siteId, deal: activity.kind as BusinessDeal, turnsLeft: turns, total: turns });
 }
