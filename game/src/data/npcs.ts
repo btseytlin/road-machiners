@@ -75,7 +75,7 @@ export const GEAR_LEVELS: Record<GearLevel, { budget: number; wearShift: number;
   loaded: { budget: 2.4, wearShift: 0, cargo: 1.5 },
 };
 
-// Light guns a driver may add past its main gun. The mgs and the gatling turn all round, so they cover the rear.
+// Light guns a driver may add past its main gun. The mgs and the gatling turn 270 degrees, so they cover both flanks.
 const LIGHT_GUNS: Weighted<string>[] = [
   { value: "mg", weight: 3 },
   { value: "heavyMg", weight: 2 },
