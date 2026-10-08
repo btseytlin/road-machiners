@@ -52,11 +52,12 @@ export const MIN_NPC_SPEED = RULES.limpSpeed * 2;
 export const GEAR_DRAWS = 3;
 export const GEAR_WHIM = 0.1;
 
-// The gear score in src/sim/npc-gear-score.ts adds up armor, guns and speed, each weighted by the template priority.
-// armorQualityScale and armorCurvePower turn a side's armor quality into toughness, with the power above 1 so the
-// first plates on a bare side add the most. gunSaturation and gunCurvePower stop one side from gaining more from guns
-// past a point. speedWeight sets how much of the score a lost share of speed costs.
-export const GEAR_SCORE = { armorQualityScale: 28, armorCurvePower: 2, gunSaturation: 2, gunCurvePower: 0.5, speedWeight: 0.75 };
+// The gear score in src/sim/npc-gear-score.ts adds up armor, guns, speed and cargo room, each weighted by the template
+// priority. armorQualityScale and armorCurvePower turn a side's armor quality into toughness, with the power above 1
+// so the first plates on a bare side add the most. gunSaturation and gunCurvePower stop one side from gaining more
+// from guns past a point. speedWeight sets how much of the score a lost share of speed costs. cargoCurvePower above 1
+// makes the first cells given up cheap and the last ones dear, so a hauler still mounts a gun but keeps its hold.
+export const GEAR_SCORE = { armorQualityScale: 28, armorCurvePower: 2, gunSaturation: 2, gunCurvePower: 0.5, speedWeight: 0.75, cargoCurvePower: 2 };
 
 const GOOD_WEAR: Weighted<number>[] = [{ value: 2, weight: 1 }, { value: 3, weight: 3 }, { value: 4, weight: 12 }];
 

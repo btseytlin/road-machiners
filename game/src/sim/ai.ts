@@ -4,7 +4,7 @@ import { sustainedDamage } from "../data/parts";
 import { RULES } from "../data/rules";
 import { isKnockedOut } from "./defeat";
 import { isNear } from "./far";
-import { fightCornered, getActivityDestination, thinkNpc, topGoal } from "./npc-activities";
+import { getActivityDestination, thinkNpc, topGoal, turnCornered } from "./npc-activities";
 import { clearLines, route, routeLength, type Blocker } from "./path";
 import { randRange } from "./rng";
 import { isFree } from "./spawn";
@@ -13,11 +13,11 @@ import { fieldBlockers } from "./hazards";
 import { vehicleStats, type MountedWeapon } from "./stats";
 import { escortsOf, followPace, getHitchedTowIds, isOnRope, ropeClientOf } from "./tow";
 import { ramImpact, ramValue } from "./crash-contact";
-import { canStartFight, ramsReadily, visibleHostiles } from "./npc-decisions";
+import { ramsReadily } from "./npc-decisions";
 import type { MoveOrder, NpcActivity, Vehicle, World } from "./types";
 import { angleDiff, bearing, dist, type Vec } from "./vec";
 import { canVehicleSee } from "./vision";
-import { bodyHitChance, inArc, inCombatWith } from "./combat";
+import { bodyHitChance, inArc } from "./combat";
 import { passShare, sideToward } from "./armor";
 import { chance } from "./rng";
 
@@ -70,16 +70,6 @@ function noteStuck(world: World, v: Vehicle, goal: Vec | null): void {
   b.recovery = RULES.unstick.driveTurns;
   b.recoveryGoal = spot;
   b.stuck = 0;
-}
-
-// A trapped driver that can fight turns back on a visible foe it is in combat with, or holds a fight goal on, even if
-// combat state expired while it fled. Any other driver returns false, so the caller's recovery runs.
-export function turnCornered(world: World, vehicle: Vehicle): boolean {
-  if (topGoal(vehicle)?.kind === "fight") return false;
-  const foe = visibleHostiles(world, vehicle).find((other) => (inCombatWith(world, vehicle, other) || vehicle.brain!.goals.some((goal) => goal.kind === "fight" && goal.targetId === other.id)) && canStartFight(world, vehicle, other));
-  if (!foe) return false;
-  fightCornered(world, vehicle, foe);
-  return true;
 }
 
 // Standing where it stood last turn, not recovering, with its goal point out of reach.
