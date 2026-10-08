@@ -1,50 +1,30 @@
 // Draws an item icon as a blueprint, all in vectors so it stays sharp at any size. The item's shape is the union of its
 // model's triangles as drawn, filled deep, with the faces turned from the light filled deeper. The outer contour draws
 // in one thick line with sharp corners. Inside it, thin lines mark only where one part's outline passes in front of
-// another, so each part reads and its own folds are left to the shading.
-// An edge draws where its faces turn away from the viewer. A ray toward the camera hides the parts of it behind other
-// faces. Model pieces too small to read at icon size drop out entirely.
 
 import ClipperLib from 'clipper-lib';
 import * as THREE from 'three';
 import { thicken, type Mask, type Pixels } from './lines';
 
-// A piece narrower than this share of the drawing's longer side drops out, so small fittings do not become squiggles.
 const MIN_PIECE = 0.12;
-// Inner lines shorter than this share of the drawing's longer side drop out.
 const MIN_INNER = 0.1;
-// How far apart visibility samples lie along an edge, in drawing pixels.
 const SAMPLE_PX = 2;
-// A face this close to the sample, in meters, is the edge's own face, not one in front of it.
 const HIDE_EPS = 0.004;
-// An edge within this angle of a model axis draws along that axis, so dented boxes still draw with parallel sides.
 const SNAP_DEG = 8;
-// Inner lines keep only the points that bend them more than this many drawing pixels, since each edge is straight.
 const LINE_TOLERANCE = 0.5;
-// The shadow follows the shaded pixels within this many drawing pixels, so its staircases draw straight.
 const SHADOW_TOLERANCE = 1.5;
-// The shape's corners snap to 1/SNAP_GRID of a drawing pixel.
 const SNAP_GRID = 4;
-// Shadow patches smaller across than this share of the drawing's longer side drop out.
 const MIN_SHADOW = 0.04;
-// The light in view space, from over the viewer's left shoulder. A face lit less than SHADE_AT of full is in shadow,
-// and one lit more than LIT_AT is in highlight.
 const LIGHT = new THREE.Vector3(-0.6, 0.45, 0.65).normalize();
 const SHADE_AT = 0.35;
 const LIT_AT = 0.65;
 
-// Line widths in drawing pixels.
 export type BlueprintPen = { outer: number; inner: number };
-// light: the highlight color. Without it the lit faces keep the fill. Over a blueprint's paints, shadow and light
-// should be see-through, so the paints show under them.
 export type BlueprintColors = { line: string; fill: string; shadow: string; glass: string; light?: string };
-// The material name of window glass, which draws in its own color so cabs show their windows.
 export const GLASS_MATERIAL = 'glass';
 
 type Vec2 = { x: number; y: number };
 
-// One icon in drawing pixels of a size x size square: the filled shape, its paints, its shadow, highlight and glass
-// loops and its inner lines. A paint is the loops where the model shows one of its own colors, empty unless asked for.
 export type Paint = { color: string; loops: Vec2[][] };
 export type Blueprint = {
   size: number;
@@ -57,8 +37,6 @@ export type Blueprint = {
   lines: Vec2[][];
 };
 
-// draw renders the scene at size x size with the material, or with its own unlit materials for null. With own, the
-// blueprint keeps the model's colors as paints.
 export function blueprintOf(
   scene: THREE.Scene,
   camera: THREE.OrthographicCamera,
@@ -75,7 +53,6 @@ export function blueprintOf(
   const longest = dropSmallPieces(meshes, tris, toPx);
   const shape = shapeOf(tris, toPx);
   const solid = maskOf(shape, size);
-  // Inner lines keep clear of the contour by their own width, so the two never merge into one heavy line.
   const outside = { w: solid.w, h: solid.h, bits: solid.bits.map((b) => b ^ 1) };
   const near = thicken(outside, pen.outer / 2 + pen.inner);
   const lines = visibleRuns(meshes, tris, camera, toPx, near)
@@ -89,8 +66,6 @@ export function blueprintOf(
   return { size, pen, shape, paints, shadow, light, glass, lines };
 }
 
-// The shape's pixels grouped by their color in the unlit pass, most pixels first, so the largest paint lies at the
-// bottom and smaller ones over it. A color whose every patch is under MIN_SHADOW across drops out.
 function paintsOf(pass: Pixels, solid: Mask, longest: number): Paint[] {
   const groups = new Map<number, Uint8Array>();
   for (let i = 0; i < solid.bits.length; i++) {
@@ -107,14 +82,12 @@ function paintsOf(pass: Pixels, solid: Mask, longest: number): Paint[] {
     .filter((p) => p.loops.length > 0);
 }
 
-// A mask's patches as straightened loops, without those under MIN_SHADOW of the drawing across.
 function patchesOf(mask: Mask, longest: number): Vec2[][] {
   return contours(mask)
     .map((loop) => simplifyPath(loop, SHADOW_TOLERANCE))
     .filter((loop) => Math.sqrt(Math.abs(areaOf(loop))) >= MIN_SHADOW * longest);
 }
 
-// Pixels inside the shape where glass shows, from a pass that draws glass white and everything else black.
 function glassMask(meshes: readonly THREE.Mesh[], draw: (override: THREE.Material | null) => Pixels, solid: Mask): Mask {
   const white = new THREE.MeshBasicMaterial({ color: 0xffffff });
   const black = new THREE.MeshBasicMaterial({ color: 0x000000 });
@@ -126,7 +99,6 @@ function glassMask(meshes: readonly THREE.Mesh[], draw: (override: THREE.Materia
   return { w: solid.w, h: solid.h, bits: solid.bits.map((b, i) => (b && pass.data[i * 4] > 127 ? 1 : 0)) };
 }
 
-// Paints the blueprint scaled to the canvas, on a transparent background.
 export function paintBlueprint(ctx: CanvasRenderingContext2D, bp: Blueprint, colors: BlueprintColors): void {
   const k = ctx.canvas.width / bp.size;
   ctx.save();
@@ -161,8 +133,6 @@ export function paintBlueprint(ctx: CanvasRenderingContext2D, bp: Blueprint, col
   ctx.restore();
 }
 
-// The blueprint as one SVG group in drawing pixels, for a sheet or a file. id names its clip path. Colors go in style,
-// so they may be CSS variables. With screenPen, line widths are CSS values in screen pixels whatever the scale.
 export function blueprintSvg(bp: Blueprint, colors: BlueprintColors, id: string, screenPen?: { outer: string; inner: string }): string {
   const shape = shapePath(bp.shape);
   const width = (drawn: number, screen: string | undefined): string =>
@@ -179,9 +149,6 @@ export function blueprintSvg(bp: Blueprint, colors: BlueprintColors, id: string,
   ].join('');
 }
 
-// The blueprint calmer for small screens. Its shape keeps outer loops only, without holes, and drops loops under
-// minArea of the largest. Shading and glass patches narrower than minPatch of the drawing drop out. Every loop
-// straightens steps under tolerance of the drawing, so diagonal edges draw as one line.
 export type Calm = { tolerance: number; minArea: number; minPatch: number };
 export function calmed(bp: Blueprint, calm: Calm): Blueprint {
   const areas = bp.shape.map(areaOf);
@@ -196,14 +163,11 @@ export function calmed(bp: Blueprint, calm: Calm): Blueprint {
   return { ...bp, shape, paints, shadow: patches(bp.shadow), light: patches(bp.light), glass: patches(bp.glass) };
 }
 
-// The blueprint's outline alone as SVG for a plan, which the game stretches over grid cells. Its colors come from the
-// CSS variables --plan-line and --plan-fill, and the line keeps its width in screen pixels whatever the stretch.
 export function blueprintPlanSvg(bp: Blueprint, stroke: number): string {
   const shape = shapePath(bp.shape);
   return `<path d="${shape}" style="fill:var(--plan-fill);stroke:var(--plan-line);stroke-width:${stroke}px;vector-effect:non-scaling-stroke" fill-rule="evenodd" stroke-linejoin="miter" stroke-miterlimit="3"/>`;
 }
 
-// Drawing pixels are a quarter of a sheet pixel, so one decimal is finer than any screen shows.
 function num(v: number): string {
   return String(Math.round(v * 10) / 10);
 }
@@ -220,8 +184,6 @@ function linesPath(lines: readonly Vec2[][]): string {
   return lines.map((l) => `M${(l.length === 1 ? [l[0], l[0]] : l).map((p) => `${num(p.x)} ${num(p.y)}`).join('L')}`).join('');
 }
 
-// The union of every triangle as drawn: the item's exact outline as closed loops, holes included. Clipper works in
-// whole numbers, so corners land on a 1/SNAP_GRID pixel grid.
 function shapeOf(tris: readonly Tri[], toPx: (p: THREE.Vector3) => Vec2): Vec2[][] {
   const paths = tris.flatMap((t) => {
     const [a, b, c] = [t.a, t.b, t.c].map((p) => {
@@ -230,7 +192,6 @@ function shapeOf(tris: readonly Tri[], toPx: (p: THREE.Vector3) => Vec2): Vec2[]
     });
     const area = (b.X - a.X) * (c.Y - a.Y) - (c.X - a.X) * (b.Y - a.Y);
     if (area === 0) return [];
-    // One winding for every triangle, so front and back faces add up and never cancel.
     return [area > 0 ? [a, b, c] : [a, c, b]];
   });
   if (!paths.length) throw new Error('A blueprint has no triangles to draw');
@@ -256,8 +217,6 @@ function maskOf(shape: readonly Vec2[][], size: number): Mask {
   return { w: size, h: size, bits };
 }
 
-// Pixels inside the shape whose face, by the normal pass, is lit less than SHADE_AT.
-// The solid pixels whose face's light share passes the test.
 function lightMask(normal: Pixels, solid: Mask, test: (lit: number) => boolean): Mask {
   const bits = new Uint8Array(solid.bits.length);
   for (let i = 0; i < bits.length; i++) {
@@ -284,7 +243,6 @@ function projector(camera: THREE.OrthographicCamera, size: number): (p: THREE.Ve
   };
 }
 
-// A triangle in world space, with the mesh and the vertex index of its first corner.
 type Tri = { a: THREE.Vector3; b: THREE.Vector3; c: THREE.Vector3; mesh: number; first: number; normal: THREE.Vector3 };
 
 function trianglesOf(meshes: readonly THREE.Mesh[]): Tri[] {
@@ -307,8 +265,6 @@ function keyOf(p: THREE.Vector3): string {
   return `${Math.round(p.x * 1e4)},${Math.round(p.y * 1e4)},${Math.round(p.z * 1e4)}`;
 }
 
-// Joins triangles that share a corner into pieces, collapses every piece whose drawn extent is under MIN_PIECE of the
-// drawing's longer side, and returns that longer side in pixels. Collapsed triangles leave tris and the geometry.
 function dropSmallPieces(meshes: readonly THREE.Mesh[], tris: Tri[], toPx: (p: THREE.Vector3) => Vec2): number {
   const roots = pieceRoots(tris);
   const { boxes, all } = pieceBoxes(tris, roots, toPx);
@@ -324,7 +280,6 @@ function dropSmallPieces(meshes: readonly THREE.Mesh[], tris: Tri[], toPx: (p: T
   return longest;
 }
 
-// Each triangle's piece, named by one corner key, joining triangles that share a corner (union-find).
 function pieceRoots(tris: readonly Tri[]): string[] {
   const parent = new Map<string, string>();
   const find = (k: string): string => {
@@ -352,7 +307,6 @@ function grow(b: Box, p: Vec2): void {
   [b.x0, b.y0, b.x1, b.y1] = [Math.min(b.x0, p.x), Math.min(b.y0, p.y), Math.max(b.x1, p.x), Math.max(b.y1, p.y)];
 }
 
-// Each piece's drawn bounds, and the whole drawing's.
 function pieceBoxes(tris: readonly Tri[], roots: readonly string[], toPx: (p: THREE.Vector3) => Vec2): { boxes: Map<string, Box>; all: Box } {
   const boxes = new Map<string, Box>();
   const all = emptyBox();
@@ -367,7 +321,6 @@ function pieceBoxes(tris: readonly Tri[], roots: readonly string[], toPx: (p: TH
   return { boxes, all };
 }
 
-// Folds each triangle onto its first corner, so it draws and hits nothing.
 function collapse(meshes: readonly THREE.Mesh[], dropped: readonly Tri[]): void {
   for (const t of dropped) {
     const pos = meshes[t.mesh].geometry.getAttribute('position');
@@ -377,12 +330,10 @@ function collapse(meshes: readonly THREE.Mesh[], dropped: readonly Tri[]): void 
   for (const m of meshes) m.geometry.computeBoundingSphere();
 }
 
-// The edges that draw, by the faces on each side.
 function featureEdges(tris: readonly Tri[], toward: THREE.Vector3): [THREE.Vector3, THREE.Vector3][] {
   return [...edgeFaces(tris).values()].filter((e) => drawsEdge(e.normals, toward)).map((e) => [e.a, e.b]);
 }
 
-// Every edge with the normals of the faces that share it.
 function edgeFaces(tris: readonly Tri[]): Map<string, { a: THREE.Vector3; b: THREE.Vector3; normals: THREE.Vector3[] }> {
   const faces = new Map<string, { a: THREE.Vector3; b: THREE.Vector3; normals: THREE.Vector3[] }>();
   for (const t of tris) {
@@ -397,14 +348,12 @@ function edgeFaces(tris: readonly Tri[]): Map<string, { a: THREE.Vector3; b: THR
   return faces;
 }
 
-// An open edge draws, and so does one between a face toward the viewer and one away: a part's outline as seen.
 function drawsEdge(normals: readonly THREE.Vector3[], toward: THREE.Vector3): boolean {
   if (normals.length === 1) return true;
   const facing = normals.map((n) => n.dot(toward) > 1e-3);
   return facing.some((f) => f) && facing.some((f) => !f);
 }
 
-// The visible stretches of every feature edge in pixels, outside the near mask.
 function visibleRuns(meshes: THREE.Mesh[], tris: readonly Tri[], camera: THREE.OrthographicCamera, toPx: (p: THREE.Vector3) => Vec2, near: Mask): Vec2[][] {
   const toward = camera.getWorldDirection(new THREE.Vector3()).negate();
   const ray = new THREE.Raycaster();
@@ -421,7 +370,6 @@ function visibleRuns(meshes: THREE.Mesh[], tris: readonly Tri[], camera: THREE.O
   return featureEdges(tris, toward).flatMap(([a, b]) => edgeRuns(a, b, toPx, (px, at) => !blocked(px) && shown(at)));
 }
 
-// The stretches of one edge where seen(pixel, model point) holds, sampled every SAMPLE_PX along its snapped line.
 function edgeRuns(a: THREE.Vector3, b: THREE.Vector3, toPx: (p: THREE.Vector3) => Vec2, seen: (px: Vec2, at: THREE.Vector3) => boolean): Vec2[][] {
   const [sa, sb] = snapped(a, b);
   const [pa, pb] = [toPx(sa), toPx(sb)];
@@ -440,7 +388,6 @@ function edgeRuns(a: THREE.Vector3, b: THREE.Vector3, toPx: (p: THREE.Vector3) =
   return runs;
 }
 
-// The edge turned onto the model axis it runs within SNAP_DEG of, about its middle, or unchanged.
 function snapped(a: THREE.Vector3, b: THREE.Vector3): [THREE.Vector3, THREE.Vector3] {
   const d = new THREE.Vector3().subVectors(b, a);
   const len = d.length();
@@ -459,7 +406,6 @@ function lengthOf(points: readonly Vec2[]): number {
   return Math.hypot(points[points.length - 1].x - points[0].x, points[points.length - 1].y - points[0].y);
 }
 
-// A pixel's four sides: the neighbor that must be off for the side to be an edge, and the side's corners in order.
 const SIDES = [
   { dx: 0, dy: -1, from: [1, 0], to: [0, 0] },
   { dx: -1, dy: 0, from: [0, 0], to: [0, 1] },
@@ -467,7 +413,6 @@ const SIDES = [
   { dx: 1, dy: 0, from: [1, 1], to: [1, 0] },
 ] as const;
 
-// Every closed loop of the mask's pixel edges, outer rims and holes alike, as pixel corners with the mask on one side.
 export function contours(mask: Mask): Vec2[][] {
   const next = edgeLinks(mask);
   const loops: Vec2[][] = [];
@@ -475,7 +420,6 @@ export function contours(mask: Mask): Vec2[][] {
   return loops;
 }
 
-// From each pixel corner, keyed y * (w + 1) + x, the corners its edges lead to.
 function edgeLinks(mask: Mask): Map<number, number[]> {
   const { w, h } = mask;
   const on = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < w && y < h && mask.bits[y * w + x] === 1;
@@ -492,7 +436,6 @@ function edgeLinks(mask: Mask): Map<number, number[]> {
   return next;
 }
 
-// Follows edges from start back to it, using each up.
 function traceLoop(next: Map<number, number[]>, start: number, stride: number): Vec2[] {
   const loop: Vec2[] = [];
   let at = start;
@@ -505,10 +448,8 @@ function traceLoop(next: Map<number, number[]>, start: number, stride: number): 
   return loop;
 }
 
-// The loop with every point dropped that lies within tolerance of the line its neighbors keep (Douglas-Peucker).
 export function simplifyPath(loop: readonly Vec2[], tolerance: number): Vec2[] {
   if (loop.length < 4) return [...loop];
-  // Split the loop at its point farthest from the first, so each half is an open path.
   let far = 0;
   loop.forEach((p, i) => {
     if (Math.hypot(p.x - loop[0].x, p.y - loop[0].y) > Math.hypot(loop[far].x - loop[0].x, loop[far].y - loop[0].y)) far = i;

@@ -2,19 +2,16 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, wri
 import { join } from 'node:path';
 import { DROP_QUEUES, isGated, resolveActor, writeControl, type ControlAction, type DropQueue } from './control';
 import { pauseFile, pausedReason } from './pause';
+import { repairClone } from './repair-clone';
 import { MOVE_TARGETS, cardDrift, cardPosition, holdDrift, releaseDrift, runningJobs, type MoveTarget } from './position';
 import { readState, updateState } from './state';
 import { STUCK_LABEL, type Card, type Ctx, type FactoryState, type Hold, type PlaytestState, type ReleasePost, type ReleaseState } from './types';
 
-// The dashboard refuses a browser agent, so the CLI uses the same agent Hermes' status tool uses.
 const SNAPSHOT_AGENT = 'curl/8.0';
-// A job log runs to thousands of lines. Fifty lines hold the failing step, and Hermes asks the log path for more.
 const LOG_TAIL_LINES = 50;
-// Every pause made by `factory pause` starts with this text, so `resume` lifts only its own.
 const PAUSE_PREFIX = 'Paused with factory pause:';
 
 type Handler = (ctx: Ctx, args: string[]) => Promise<void> | void;
-// Builds the action from the positional arguments, and throws on a bad one.
 type Builder = (args: string[]) => ControlAction;
 
 const READ: Record<string, { usage: string; help: string; run: Handler }> = {
@@ -31,14 +28,15 @@ const READ: Record<string, { usage: string; help: string; run: Handler }> = {
 };
 
 const IMMEDIATE: Record<string, { usage: string; help: string; run: Handler }> = {
-  retry: { usage: 'retry N [decision]', help: 'remove the stuck label and the failures of a card. On the release tracking card it also lifts a playtest block, gives the playtest its runs back and keeps the decision for its next review', run: retry },
+  retry: { usage: 'retry N [decision]', help: 'remove the stuck label and the failures of a card. On the release tracking card it also lifts a playtest block, so a new playtest job runs, and keeps the decision for its next review', run: retry },
   pause: { usage: 'pause <reason>', help: 'pause the factory', run: pause },
   resume: { usage: 'resume', help: 'remove the pause', run: resume },
+  'repair-clone': { usage: 'repair-clone N --by <who> --reason <why> [--backup-merge]', help: "replace a card's broken work clone with a fresh clone of its GitHub branch. Needs a pause and no running job. The old clone moves whole to $FACTORY_HOME/clone-backups, and only its .factory, .factory-tasks and .factory-media folders are copied over. --backup-merge also takes a clone with an open merge or conflicts. The stuck label stays for retry", run: repairCloneCommand },
 };
 
 const WRITE: Record<string, { usage: string; help: string; build: Builder }> = {
   move: { usage: 'move N <to>', help: `put a card in one of ${MOVE_TARGETS.join(', ')}`, build: ([n, to]) => ({ action: 'move', issue: number(n), to: target(to) }) },
-  merge: { usage: 'merge N', help: 'merge a card into its base now', build: ([n]) => ({ action: 'merge', issue: number(n) }) },
+  merge: { usage: 'merge N', help: 'put a card in the merge queue, past its post and hardening', build: ([n]) => ({ action: 'merge', issue: number(n) }) },
   ship: { usage: 'ship', help: 'ship the open release now', build: () => ({ action: 'ship' }) },
   cut: { usage: 'cut', help: 'cut a release now', build: () => ({ action: 'cut' }) },
   remove: { usage: 'remove N', help: 'take a feature out of the release', build: ([n]) => ({ action: 'remove', issue: number(n) }) },
@@ -81,7 +79,6 @@ function dropAction(queue: string | undefined, id: string | undefined): ControlA
   return { action: 'drop', queue: queue as DropQueue, id: queue === 'ship' && id === undefined ? null : number(id) };
 }
 
-// Takes `--name value` out of the arguments. Returns the value and the rest.
 function takeFlag(args: string[], name: string): { value: string; rest: string[] } {
   const at = args.indexOf(name);
   const value = args[at + 1];
@@ -93,7 +90,6 @@ function writeCommand(ctx: Ctx, name: string, args: string[]): void {
   const by = takeFlag(args, '--by');
   const reason = takeFlag(by.rest, '--reason');
   const command = { ...WRITE[name].build(reason.rest), by: by.value, reason: reason.value };
-  // Checked here to fail at once, and again by the tick, which resolves the same --by text.
   resolveActor(ctx, command.by, isGated(ctx, command));
   const path = writeControl(ctx.cfg.home, command, ctx.now());
   console.log(`Wrote ${path}. It applies on the next tick.`);
@@ -101,11 +97,20 @@ function writeCommand(ctx: Ctx, name: string, args: string[]): void {
   if (paused !== null) console.log(`The factory is paused: ${paused}. The order applies when the pause is lifted.`);
 }
 
+async function repairCloneCommand(ctx: Ctx, args: string[]): Promise<void> {
+  const by = takeFlag(args, '--by');
+  const reason = takeFlag(by.rest, '--reason');
+  const backupMerge = reason.rest.includes('--backup-merge');
+  const [n, ...extra] = reason.rest.filter((arg) => arg !== '--backup-merge');
+  if (extra.length > 0) throw new Error(`Unexpected "${extra.join(' ')}". Usage: ${IMMEDIATE['repair-clone'].usage}`);
+  const actor = resolveActor(ctx, by.value, false);
+  for (const line of await repairClone(ctx, { issue: number(n), by: actor, reason: reason.value, backupMerge })) console.log(line);
+}
+
 async function status(ctx: Ctx): Promise<void> {
   const url = `${ctx.cfg.publicUrl}/factory/api/snapshot`;
   const response = await (ctx.fetch ?? fetch)(url, { headers: { Accept: 'application/json', 'User-Agent': SNAPSHOT_AGENT } });
   if (!response.ok) throw new Error(`${url} answered ${response.status}.`);
-  // The public snapshot shows a held card's wait reason only. The holds with who and why come from the state.
   const held = Object.entries(readState(ctx.statePath).held).map(([issue, hold]) => ({ issue: Number(issue), ...hold }));
   console.log(JSON.stringify({ ...((await response.json()) as object), held }, null, 2));
 }
@@ -131,13 +136,11 @@ async function card(ctx: Ctx, args: string[]): Promise<void> {
   for (const line of [...cardFacts(found, state), ...cardDrift(found, state).map((row) => `drift: ${row}`), ...jobNote(found, state)]) console.log(line);
 }
 
-// A running job owns its card mid-step, so drift on it may pass in seconds.
 function jobNote(found: Card, state: FactoryState): string[] {
   const stages = runningJobs(found, state).map((job) => job.stage);
   return stages.length === 0 ? [] : [`note: a ${stages.join(', ')} job is running, so the drift above may pass in seconds`];
 }
 
-// Prints a value, or "none" when a store holds nothing for the card.
 const shown = (value: string | undefined): string => (value === undefined || value === '' ? 'none' : value);
 
 function cardFacts(found: Card, state: FactoryState): string[] {
@@ -149,8 +152,7 @@ function cardFacts(found: Card, state: FactoryState): string[] {
     `position: ${cardPosition(found, state)}`,
     `column: ${found.column}`,
     `labels: ${shown(found.labels.join(', '))}`,
-    `testPhase: ${shown(state.testPhase[key])}`,
-    `patching: ${shown(state.patching[key])}`,
+    `post only: ${state.postOnly.includes(found.issue) ? 'yes' : 'no'}`,
     `approvedResolving: ${shown(state.approvedResolving[key])}`,
     `queued approval: ${shown(state.pendingApprovals[key])}`,
     `open posts: ${shown(posts.join(', '))}`,
@@ -166,7 +168,6 @@ function holdText(hold: Hold | undefined): string {
   return `by ${hold.by} since ${hold.at}, ${hold.stage === null ? 'no job stopped' : `stopped ${hold.stage}`}: ${hold.reason}`;
 }
 
-// An empty list prints "none", so the reader can tell it from a command that printed nothing by mistake.
 function printRows(rows: string[]): void {
   console.log(rows.length === 0 ? 'none' : rows.join('\n'));
 }
@@ -195,6 +196,7 @@ function release(ctx: Ctx): void {
   console.log(`open release: #${state.release.issue} branch ${state.release.branch} cut ${state.release.day}`);
   console.log(`candidate post: ${candidatePost(state.release)}`);
   console.log(`removed: ${state.release.removed.map((issue) => `#${issue}`).join(', ') || 'none'}`);
+  console.log(`recorded tasks: ${state.release.tasks.map((issue) => `#${issue}`).join(', ') || 'none'}`);
   for (const line of playtestLines(state.release.playtest, ctx.cfg.playtestRuns)) console.log(line);
 }
 
@@ -210,7 +212,7 @@ function candidatePost(release: ReleaseState): string {
 }
 
 function playtestLines(playtest: PlaytestState, runs: number): string[] {
-  const lines = [`playtest: seed ${playtest.seed}, ${playtest.runs} runs, ${playtest.streak} of ${runs} since the last pass, passed ${playtest.passed ?? 'none'}`];
+  const lines = [`playtest: seed ${playtest.seed}, ${playtest.runs} plays, at most ${runs} per job, passed ${playtest.passed ?? 'none'}`];
   if (playtest.blocked) lines.push(`playtest blocked at ${playtest.blocked.sha}: ${playtest.blocked.reason}`);
   return [...lines, ...playtest.notes.map((note) => `playtest decision: ${note}`)];
 }
@@ -249,15 +251,14 @@ async function retry(ctx: Ctx, args: string[]): Promise<void> {
   if (readState(ctx.statePath).release?.issue === issue) console.log(retryPlaytest(ctx, decision));
 }
 
-// A member decided on a blocked playtest. The playtest runs again with a fresh budget of runs, and its review reads the decision.
 function retryPlaytest(ctx: Ctx, decision: string): string {
   updateState(ctx.statePath, (state: FactoryState) => {
     if (state.release === null) return state;
     const playtest = state.release.playtest;
     const notes = decision === '' ? playtest.notes : [...playtest.notes, decision];
-    return { ...state, release: { ...state.release, playtest: { ...playtest, streak: 0, blocked: null, notes } } };
+    return { ...state, release: { ...state.release, playtest: { ...playtest, blocked: null, notes } } };
   });
-  return `Lifted the playtest block of the release. It plays again with ${ctx.cfg.playtestRuns} runs${decision === '' ? '' : ' and reads the decision'}.`;
+  return `Lifted the playtest block of the release. A new playtest job plays up to ${ctx.cfg.playtestRuns} times${decision === '' ? '' : ' and reads the decision'}.`;
 }
 
 function pause(ctx: Ctx, args: string[]): void {

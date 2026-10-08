@@ -16,7 +16,7 @@ const mixer = new Mixer(MIX);
 mixer.unlockOn(window);
 const bank = await loadBank(mixer.ctx, sounds);
 let playing: AudioBufferSourceNode | null = null;
-const rejected = new Set<string>(); // files marked on this page; copied out as a list for the agent
+const rejected = new Set<string>();
 
 function play(id: string, file: string): void {
   playing?.stop();

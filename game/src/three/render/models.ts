@@ -1,7 +1,6 @@
 // Blender-made models from public/models/, built by the scripts in tools/blender/.
 // loadModels() runs once at boot. model() hands out clones with their own materials.
 // socket() gives the attach points that scripts mark with Kit.socket().
-// outlineOf() and outlineProps() give models their dark outline.
 
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -59,7 +58,6 @@ const NAMES = [
   'bridge',
   'pump_station',
   'lock_gate',
-  'glass_flats',
   'power_pole',
   'billboard',
   'crag',
@@ -86,6 +84,12 @@ const NAMES = [
   'guard_post',
   'army_truck',
   'barrier',
+  'engine_nozzle',
+  'engine_frame',
+  'ruin_compound',
+  'watchtower',
+  'glass_spire',
+  'scrap_wall',
   'fort_masonry_wall',
   'fort_masonry_tower',
   'fort_masonry_gate',
@@ -260,7 +264,6 @@ export async function loadModels(
   checkWeaponSockets();
 }
 
-// Position of a socket in the model's own space, as authored in Blender.
 export function socket(name: ModelName, socketName: string): THREE.Vector3 {
   const own = sockets.get(name);
   if (!own) throw new Error(`Model ${name} is not loaded. Call loadModels() before building views.`);
@@ -269,7 +272,6 @@ export function socket(name: ModelName, socketName: string): THREE.Vector3 {
   return at.clone();
 }
 
-// Records each socket_* node position and removes the node, so clones carry only meshes.
 function takeSockets(name: ModelName, root: THREE.Object3D): Map<string, THREE.Vector3> {
   root.updateMatrixWorld(true);
   const found: THREE.Object3D[] = [];
@@ -287,7 +289,6 @@ function takeSockets(name: ModelName, root: THREE.Object3D): Map<string, THREE.V
   return out;
 }
 
-// Mounts carry the head. Receivers carry the barrel and the extra. Barrels mark the tip rounds leave from.
 function checkWeaponSockets(): void {
   for (const pool of Object.values(WEAPON_POOLS)) {
     for (const m of pool.mount) socket(m, 'head');
@@ -312,7 +313,6 @@ function source(name: ModelName): THREE.Object3D {
   return src;
 }
 
-// A fresh copy. Materials are cloned too, because obstacle views dispose them on removal.
 export function model(name: ModelName): THREE.Object3D {
   const copy = source(name).clone(true);
   copy.traverse((o) => {
@@ -324,9 +324,6 @@ export function model(name: ModelName): THREE.Object3D {
   return copy;
 }
 
-// Many copies of one model as one InstancedMesh per model mesh. Each placement is a model-to-world
-// matrix. tints scale each copy's colors, one gray level per placement. The meshes share the loaded
-// geometry and materials, so they must never be disposed.
 export function instancedModel(name: ModelName, placements: THREE.Matrix4[], tints: number[]): THREE.Group {
   if (placements.length === 0) throw new Error(`Instanced ${name} needs at least one placement`);
   if (tints.length !== placements.length) throw new Error(`Instanced ${name} has ${placements.length} placements but ${tints.length} tints`);
@@ -356,10 +353,8 @@ export function instancedModel(name: ModelName, placements: THREE.Matrix4[], tin
   return group;
 }
 
-// A model material with this name is a lit lamp or window. It glows in its own color, so it shows at night.
 const GLOW_MATERIAL = 'glow';
 
-// glTF brings PBR materials. The rest of the scene is flat-shaded Lambert, so models match it.
 function toLambert(root: THREE.Object3D): THREE.Object3D {
   root.traverse((o) => {
     if (!(o instanceof THREE.Mesh)) return;
@@ -378,25 +373,20 @@ function toLambert(root: THREE.Object3D): THREE.Object3D {
   return root;
 }
 
-// A dark outline around trucks, a fixed number of screen pixels wide. It is real geometry, so the renderer's
-// antialiasing smooths it. Back faces are pushed outward along smoothed normals in screen space, so the width
-// holds at any zoom. The camera is orthographic, so clip w is 1 and an offset in clip units maps straight to pixels.
 const OUTLINE = {
-  width: { value: 0.5 }, // CSS pixels
-  viewport: { value: new THREE.Vector2(1, 1) }, // CSS pixel size of the canvas, read from the renderer before each outline draws
+  width: { value: 0.5 },
+  viewport: { value: new THREE.Vector2(1, 1) },
 };
 
 function readViewport(renderer: THREE.WebGLRenderer): void {
   renderer.getSize(OUTLINE.viewport.value);
 }
 
-// Stencil bits models mark on their pixels. Outlines draw only where neither bit is set, so a pushed back face of a
-// thin panel never pokes through a model. Outlines draw after opaque models, so the marks are there by then.
 export const TRUCK_BIT = 1;
 export const PROP_BIT = 2;
-export const READY_ARC_BIT = 4; // ready arcs and the selected gun's reach mark their pixels, so where they overlap a spot is shaded once
+export const READY_ARC_BIT = 4;
 export const SPENT_ARC_BIT = 8;
-export const OUTLINE_ORDER = 805; // after opaque models mark the stencil, before truck silhouettes
+export const OUTLINE_ORDER = 805;
 
 function outlineMaterial(): THREE.MeshBasicMaterial {
   const material = new THREE.MeshBasicMaterial({
@@ -424,12 +414,9 @@ function outlineMaterial(): THREE.MeshBasicMaterial {
   return material;
 }
 
-// Trucks and props keep separate materials, because the sight limit patches prop materials to clip at its edge.
 const truckOutline = outlineMaterial();
 const propOutline = outlineMaterial();
 
-// Faces split at hard edges, so vertices merge by position before normals are smoothed, or the pushed faces would
-// open cracks at every corner.
 function weld(geos: readonly THREE.BufferGeometry[]): THREE.BufferGeometry {
   const plain = geos.map((g) => {
     const p = new THREE.BufferGeometry();
@@ -446,8 +433,6 @@ function weld(geos: readonly THREE.BufferGeometry[]): THREE.BufferGeometry {
   return welded;
 }
 
-// One outline mesh around all truck geos, which share one space.
-// A group of lamps alone has no geos and gets no outline, so the result is empty or one mesh.
 export function outlineOf(geos: readonly THREE.BufferGeometry[]): THREE.Mesh[] {
   if (geos.length === 0) return [];
   const mesh = new THREE.Mesh(weld(geos), truckOutline);
@@ -457,10 +442,8 @@ export function outlineOf(geos: readonly THREE.BufferGeometry[]): THREE.Mesh[] {
   return [mesh];
 }
 
-// Instanced props share their model's geometry, so their welded outlines are shared too.
 const welded = new WeakMap<THREE.BufferGeometry, THREE.BufferGeometry>();
 
-// Gives every mesh under obj an outline child, and makes its materials mark their pixels for outlines.
 export function outlineProps(obj: THREE.Object3D): void {
   const meshes: THREE.Mesh[] = [];
   obj.traverse((o) => {

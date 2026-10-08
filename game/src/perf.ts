@@ -1,7 +1,7 @@
 // Named timers for work at seams: a turn, a route, the path preview. Plain TypeScript, so sim code
 // can use it in Node tests. Never call it inside hot loops; each call costs two clock reads.
 
-export type PerfStat = { last: number; max: number; total: number; calls: number }; // times in ms
+export type PerfStat = { last: number; max: number; total: number; calls: number };
 
 const stats = new Map<string, PerfStat>();
 
@@ -28,7 +28,6 @@ export function timed<T>(name: string, fn: () => T): T {
   }
 }
 
-// Counts events without timing them, such as route cache hits.
 export function count(name: string, n = 1): void {
   stat(name).calls += n;
 }

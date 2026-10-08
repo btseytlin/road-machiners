@@ -1,13 +1,6 @@
 // Nose's interior (C5): the Fallen Sun's nose and broken hull perched on a rock rise across the back of the ring, its
 // torn stern running into a crag at the back right, and in front of it an open sandy yard built up with scrap shelters,
 // a two-level timber platform with stairs up the rise, a red awning, a water tower, a jib crane and a van.
-//
-// The layout is authored in noseFrame(), from the south gate: u runs along the ship toward its nose, v runs back, away
-// from that gate, and both are in tiles from the site center. The rise and the crag are baked props in the same frame
-// (src/sim/nose.ts), so the map draws them and they block trucks. The ship rests on the rise's two sockets, so its pose
-// is the rise's decision. The radar dish on its nose turns.
-//
-// Offsets are site tiles: x is map x, z is map y.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../../data/physics';
@@ -21,37 +14,26 @@ import { spin } from '../site-motion';
 import { fitsCurtain, type SiteBuilder } from '../sites';
 
 const S = PHYSICS.metersPerTile;
-const ROLL = THREE.MathUtils.degToRad(-4); // the ship's top leans toward the gate
-// The ship's sections, each origin in meters along the ship from the nose joint. ship_nose and the hull rings and ribs
-// have their origin at their rear joint; the stern has its origin at its front joint and runs back.
+const ROLL = THREE.MathUtils.degToRad(-4);
 const SECTIONS: readonly { name: ModelName; at: number }[] = [
   { name: 'ship_nose', at: 0 },
   { name: 'ship_hull_ring', at: -45 },
   { name: 'ship_hull_ribs', at: -90 },
   { name: 'ship_hull_stern', at: -90 },
 ];
-const DISH_TURN = 8; // seconds per turn of the radar dish
-const DISH_SCALE = 1.5; // the 10 m dish on a 36 m hull
-// The rise stands this far back from the center, in tiles, along its front edge, and its hole leaves the WNW gate's
-// open ground. Past bend.u the edge bends toward the gate by bend.slope tiles per tile. Past west, the nose's tip and
-// the rubble's fall, the rise has fallen to the sand. All are authored in nose_rock_kit.py and nose_rise.py, so the code
-// checks the gate against them and keeps the rubble on the rise.
+const DISH_TURN = 8;
+const DISH_SCALE = 1.5;
 export const RISE = { front: 1, bend: { u: -26.25, slope: 1.6 }, west: 10.25, hole: { u: 23, v: 20, r: 8.5 } };
 
-// Where the rise's front edge lies at u, in tiles back from the center.
 export function riseFront(u: number): number {
   return RISE.front - Math.max(0, RISE.bend.u - u) * RISE.bend.slope;
 }
-const HOLE_TOLERANCE = 1; // tiles the WNW gate may lie off the hole's center
+const HOLE_TOLERANCE = 1;
 
-// The yard's open ground at each gate, in tiles past half the gate's width. It is the 34 m disc nose_rise leaves bare.
 export const GATE_CLEAR = 5.5;
-// A shelter's scale ranges over `scale`, and its footprint disc is `reach` tiles of radius per unit of scale. Its
-// center stands `rockClear` tiles off the rock's boxes.
 const SHELTER = { scale: [1.1, 1.4], reach: 1.1, gap: 0.3, rows: 3.9, along: 3.9, rowStart: 4.3, rockClear: 2, jitter: { u: 0.45, v: 0.45, yaw: 0.2 }, lane: 2, skip: 0.1 };
-const SCAFFOLD_RUN = [-10, -7, -4, -1]; // u of each two-level platform, which are 3 tiles long
-const SCAFFOLD_BACK = 0.7; // tiles from a scaffold's center to the terrace face behind it
-// The lean_to model, 8 by 5 m, at this scale. The goods stand under its roof, in tiles from its center.
+const SCAFFOLD_RUN = [-10, -7, -4, -1];
+const SCAFFOLD_BACK = 0.7;
 const AWNING = {
   u: 5,
   v: -4.6,
@@ -72,9 +54,9 @@ const CRATES = [
   { u: 9, v: -12 },
   { u: -3, v: -11.5 },
   { u: 12.5, v: -17 },
-  { u: 10.5, v: 15.5 }, // by the rubble past the nose's tip
+  { u: 10.5, v: 15.5 },
 ];
-const RUBBLE = { count: 44, scale: [2, 6], reach: 29.3 }; // rocks along the terrace foot, in meters of radius
+const RUBBLE = { count: 44, scale: [2, 6], reach: 29.3 };
 const ROCK_SINK = 0.25 * 1.1;
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -82,7 +64,6 @@ type Disc = { x: number; z: number; r: number };
 type Spot = { x: number; z: number; yaw: number };
 type Shelter = Spot & { scale: number; r: number };
 
-// The ship's frame at a site: unit u and v in site offsets, and the yaws that turn a model's +x along u and toward the gate.
 type Frame = { u: { x: number; z: number }; v: { x: number; z: number }; yaw: number; faceYaw: number; south: FortGate; wnw: FortGate };
 
 function frameOf(site: Site): Frame {
@@ -106,7 +87,6 @@ export function buildNose(b: SiteBuilder, site: Site): void {
   b.root.userData.structures = taken;
 }
 
-// The WNW gate must lie where nose_rise leaves its hole, or the rise would cover the gate's ground.
 function checkHole(site: Site, f: Frame): void {
   const at = { x: f.wnw.face.x - site.pos.x, z: f.wnw.face.y - site.pos.y };
   const u = at.x * f.u.x + at.z * f.u.z;
@@ -114,8 +94,6 @@ function checkHole(site: Site, f: Frame): void {
   if (Math.hypot(u - RISE.hole.u, v - RISE.hole.v) > HOLE_TOLERANCE) throw new Error(`Nose's WNW gate lies at u ${u.toFixed(1)}, v ${v.toFixed(1)}, not at the hole of nose_rise (${RISE.hole.u}, ${RISE.hole.v})`);
 }
 
-// The ship resting on the rise's two sockets, in the frame the rise prop stands in: its group stands at the front
-// socket and leans to the rear one. The sections rest in it, and the radar dish turns on the nose.
 function addShip(b: SiteBuilder, f: Frame): void {
   const frame = new THREE.Group();
   frame.name = 'nose-frame';
@@ -144,12 +122,10 @@ function addShip(b: SiteBuilder, f: Frame): void {
   b.addMover(dish, spin(UP, DISH_TURN));
 }
 
-// The open ground inside each gate.
 function gateDiscs(site: Site): Disc[] {
   return fortressGates(site).map((g) => ({ x: g.face.x - site.pos.x, z: g.face.y - site.pos.y, r: g.width / 2 + GATE_CLEAR }));
 }
 
-// The platforms along the terrace foot, the awning, the water tower, the jib crane, crates and the van. Each claims its ground.
 function addYard(b: SiteBuilder, f: Frame, taken: Disc[]): void {
   for (const u of SCAFFOLD_RUN) {
     const p = placeAt(f, u, RISE.front - SCAFFOLD_BACK);
@@ -176,8 +152,6 @@ function addYard(b: SiteBuilder, f: Frame, taken: Disc[]): void {
   taken.push({ ...p, r: 1.4 });
 }
 
-// C5's red awning: a rust tin roof sloping down to its open front, toward the south gate, over a stall of crates and
-// drums.
 function addAwning(b: SiteBuilder, f: Frame, taken: Disc[]): void {
   const p = placeAt(f, AWNING.u, AWNING.v);
   b.addModel('lean_to', p.x, p.z, f.faceYaw, AWNING.scale).name = 'nose-awning';
@@ -188,8 +162,6 @@ function addAwning(b: SiteBuilder, f: Frame, taken: Disc[]): void {
   taken.push({ ...p, r: 2.4 });
 }
 
-// Shelters in loose rows with alleys, from the terrace toward the south gate, each clear of the curtain, the gates, a
-// lane to the south gate and every other structure. Returns how many stand.
 function addShelters(b: SiteBuilder, site: Site, f: Frame, taken: Disc[]): number {
   const placed = shelterRows(site, f, taken);
   b.addInstances('scrap_shelter_flat', placed.filter((_, i) => hash2(i, 50) < 0.5)).name = 'nose-shelters';
@@ -197,7 +169,6 @@ function addShelters(b: SiteBuilder, site: Site, f: Frame, taken: Disc[]): numbe
   return placed.length;
 }
 
-// The rows run from the terrace toward the south gate, and back past the nose's tip, where the yard runs on to the WNW gate.
 function shelterRows(site: Site, f: Frame, taken: Disc[]): Shelter[] {
   const placed: Shelter[] = [];
   const rock = noseRocks(site).flatMap((p, k) => propBoxes(propObstacle(p, k)));
@@ -215,7 +186,6 @@ function shelterRows(site: Site, f: Frame, taken: Disc[]): Shelter[] {
   return placed;
 }
 
-// A candidate near a row's slot, in a size of its own. Most doors face the gate, the rest along the ship either way.
 function shelterSpot(f: Frame, u: number, v: number, row: number, k: number): Shelter {
   const jitter = (a: number, b: number) => (hash2(a, b) - 0.5) * 2;
   const facing = hash2(row + 100, k);
@@ -236,8 +206,6 @@ function shelterFits(site: Site, spot: Shelter, taken: Disc[], f: Frame, rock: r
   return !taken.some((d) => Math.hypot(d.x - spot.x, d.z - spot.z) < d.r + spot.r + SHELTER.gap);
 }
 
-// Rubble along the terrace foot, up to where the rise falls to the sand, as one instanced rock model, each rock inside
-// the curtain and clear of the gates and the structures.
 function addRubble(b: SiteBuilder, site: Site, f: Frame, clear: Disc[]): void {
   const rocks: (Spot & { scale: number; lift: number })[] = [];
   const [lo, hi] = RUBBLE.scale;
@@ -251,8 +219,6 @@ function addRubble(b: SiteBuilder, site: Site, f: Frame, clear: Disc[]): void {
   b.addInstances('rock', rocks).name = 'nose-rocks';
 }
 
-// Whether a rubble rock at u along the terrace foot stays on the rise, inside the curtain, and clear of the scaffolds
-// and everything in clear.
 function rubbleFits(site: Site, u: number, rock: Disc, clear: Disc[]): boolean {
   if (u > RISE.west || Math.hypot(rock.x, rock.z) + rock.r > RUBBLE.reach) return false;
   if (clear.some((g) => Math.hypot(g.x - rock.x, g.z - rock.z) < g.r + rock.r)) return false;

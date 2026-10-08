@@ -27,7 +27,6 @@ beforeAll(async () => {
   await initPhysics();
 });
 
-// Plays n turns through the real turn pipeline with physics movement.
 function play(w: World, n: number): { w: World } {
   let d = buildDrive(w);
   for (let i = 0; i < n; i++) {

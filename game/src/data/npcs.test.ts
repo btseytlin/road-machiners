@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { STATE_WEIGHTS, TRAITS, type TraitWeights } from './npcs';
 
-// `<table>.<decision>.<option>` for every mul at or below 0. A mul of 0 would remove an option a driver can take.
 function nonPositiveMuls(tables: Record<string, TraitWeights>): string[] {
   const bad: string[] = [];
   for (const [name, table] of Object.entries(tables)) {

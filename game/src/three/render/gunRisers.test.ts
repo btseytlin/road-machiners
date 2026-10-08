@@ -72,7 +72,6 @@ describe('placing any item on any cell', () => {
     const problems: string[] = [];
     for (const id of Object.keys(CHASSIS)) {
       const { w, h, cells } = baseGrid(id);
-      // One part per kind and size: placement reads nothing else of a part.
       const shapes = [...new Map(Object.values(PARTS).map((def) => [`${def.kind}${def.w}x${def.h}`, def])).values()];
       const items = [
         ...shapes.map((def) => ({ label: def.id, item: (x: number, y: number, rot: 0 | 1) => ({ id: 'g', kind: 'part', x, y, rot, part: { id: 'p', defId: def.id, hp: 1, wear: 0 } }) })),
@@ -106,8 +105,6 @@ describe('placing any item on any cell', () => {
   }, budget(120_000));
 });
 
-// Spots that no shape can rest: a three-row gun on column 4 of the Lincoln spans the hood and the greenhouse roof, which
-// restOn() cannot trim away along the long axis (issue 149 task file, Conclusion: UK1).
 const UNRESTABLE: Record<string, string[]> = {
   lincoln: ['amRifle rot 0 at 4,3', 'recoilless rot 0 at 4,3', 'battleRifle rot 0 at 4,3'],
 };

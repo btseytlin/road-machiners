@@ -4,7 +4,7 @@ import { BROKEN_WING, BROKEN_WING_POINT, REGION, scalePoint } from '../data/regi
 import { START_KITS } from '../data/start';
 import { TERRAIN, type DeckSpec } from '../data/terrain';
 import { FALLEN_SUN_DECKS } from '../data/territory';
-import { bridgeCut, buildDecks, crossesRail, deckAt, deckById, DECKS, nearRail, propBase, underDeck, type Deck } from './bridge';
+import { bridgeCut, buildDecks, crossesRail, deckAt, deckById, deckCenterAt, DECKS, nearRail, propBase, underDeck, type Deck } from './bridge';
 import { blockingBoxes, boxDistance, propBoxes, type PosedBox } from './mapgen';
 import { territoryPieces } from './territory';
 import type { Obstacle } from './types';
@@ -13,6 +13,7 @@ import { dist, segmentDist } from './vec';
 import { deckHeight, deckSegments, groundAt, heightAt, isCliff, markHeightAt, tileAt, type Terrain } from './terrain';
 import { newWorld } from './world';
 import { TEST_MAP } from '../test/map';
+import { defaultSetup } from './settings';
 
 const B = deckById('canyon-bridge');
 const at = (along: number, across: number) => ({
@@ -92,7 +93,7 @@ describe('the Broken Wing deck', () => {
 });
 
 describe('Canyon Bridge', () => {
-  const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+  const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
   const t = w.terrain;
 
   it('finds points near a rail as the distance to each rail does, on and around the deck', () => {
@@ -116,7 +117,6 @@ describe('Canyon Bridge', () => {
   it('cuts the causeway, so the canyon floor lies far below the deck', () => {
     const mid = at(B.length / 2, 0);
     expect(groundAt(t, mid.x, mid.y)).toBeLessThan(heightAt(t, mid.x, mid.y) - 3);
-    // Beside the deck the cut ground is low too, while the abutments stay at deck level.
     const beside = at(B.length / 2, B.width + 4);
     expect(groundAt(t, beside.x, beside.y)).toBeLessThan(heightAt(t, mid.x, mid.y) - 3);
     for (const along of [0, B.length]) {
@@ -131,7 +131,6 @@ describe('Canyon Bridge', () => {
     const deck = heightAt(t, onDeck.x, onDeck.y);
     expect(markHeightAt(t, onDeck, floor.x, floor.y)).toBe(deck);
     expect(markHeightAt(t, floor, floor.x, floor.y)).toBe(groundAt(t, floor.x, floor.y));
-    // Past the deck ends a mark lies on the ground.
     const past = at(-3, 0);
     expect(markHeightAt(t, onDeck, past.x, past.y)).toBe(heightAt(t, past.x, past.y));
   });
@@ -189,7 +188,47 @@ describe('Canyon Bridge', () => {
   });
 });
 
-// A test deck along +x at y 50, 4 tiles wide, through stations given as [x, rise].
+describe('deckCenterAt', () => {
+  const near = (p: { x: number; y: number }, q: { x: number; y: number }) => {
+    expect(p.x).toBeCloseTo(q.x, 9);
+    expect(p.y).toBeCloseTo(q.y, 9);
+  };
+
+  it('maps a point beside the rail to the centre line at the same distance along', () => {
+    near(deckCenterAt(B, at(5, 3.9).x, at(5, 3.9).y, 1), at(5, 0));
+    near(deckCenterAt(B, at(5, -7).x, at(5, -7).y, 1), at(5, 0));
+  });
+
+  it('clamps points past either end to the margin from that end', () => {
+    near(deckCenterAt(B, at(-3, 2).x, at(-3, 2).y, 1), at(1, 0));
+    near(deckCenterAt(B, at(B.length + 3, -2).x, at(B.length + 3, -2).y, 1), at(B.length - 1, 0));
+  });
+
+  it('gives the same point again for its own result', () => {
+    for (const p of [at(-2, 1), at(4, 3), at(B.length + 1, -3)]) {
+      const once = deckCenterAt(B, p.x, p.y, Math.SQRT1_2);
+      near(deckCenterAt(B, once.x, once.y, Math.SQRT1_2), once);
+    }
+  });
+
+  it('with a margin of half a tile diagonal, always lands in a tile whose centre is on the deck', () => {
+    for (const deck of DECKS) {
+      for (let along = -2; along <= deck.length + 2; along += 0.37) {
+        for (let across = -deck.width; across <= deck.width; across += 0.41) {
+          const p = { x: deck.from.x + deck.axis.x * along - deck.axis.y * across, y: deck.from.y + deck.axis.y * along + deck.axis.x * across };
+          const c = deckCenterAt(deck, p.x, p.y, Math.SQRT1_2);
+          expect(deckAt(Math.floor(c.x) + 0.5, Math.floor(c.y) + 0.5)?.deck).toBe(deck);
+        }
+      }
+    }
+  });
+
+  it('fails loudly on a negative margin or one that leaves no segment', () => {
+    expect(() => deckCenterAt(B, B.from.x, B.from.y, -1)).toThrow();
+    expect(() => deckCenterAt(B, B.from.x, B.from.y, B.length / 2)).toThrow();
+  });
+});
+
 const spec = (id: string, stations: [number, number][], skirt = true): DeckSpec => ({ id, line: stations.map(([x, rise]) => ({ at: { x, y: 50 }, rise })), width: 4, cut: null, skirt });
 
 describe('raised deck ends', () => {
@@ -240,7 +279,6 @@ describe('raised deck ends', () => {
     const before = { x: mid.x - flap.axis.x * 2, y: mid.y - flap.axis.y * 2 };
     const beyond = { x: mid.x + flap.axis.x * 4, y: mid.y + flap.axis.y * 4 };
 
-    // Half a tile past the lip's middle lies 1.5 tiles from either rail, but within reach of the lip.
     expect(flap.rails.every(([c, d]) => segmentDist(past, c, d) > 1)).toBe(true);
     expect(nearRail(past.x, past.y, 1)).toBe(true);
     expect(crossesRail(before, beyond, 0)).toBe(true);
@@ -263,8 +301,6 @@ describe('the height a prop stands on', () => {
   const pier: Obstacle = { id: 'hullDrum-7', kind: 'landmark', look: 'hullDrum', pos: piece.pos, r: piece.r, yaw: piece.yaw };
   const top = Math.max(...propBoxes(pier).map((b) => b.z1)) / PHYSICS.metersPerTile;
 
-  // The baked map with the ground under the pier sunk into a pit, as its seat in the furrow's gouge levels it, so the
-  // pier's top lies a little under the deck line.
   function withPit(): Terrain {
     const on = deckAt(pier.pos.x, pier.pos.y)!;
     const floor = deckHeight(t, on.deck, on.along) - top - 0.1;
@@ -339,8 +375,6 @@ describe('marks beside a deck that climbs, runs level and comes down', () => {
     }
   });
 
-  // Every mark beside the truck's deck follows that deck's rule: on the deck line where the truck is nearer it than the
-  // ground, else on the ground. Marks on the deck line step no more than the deck does, so no mark tears from the deck.
   it('follow the one deck beside every Fallen Sun deck for a truck on it, and step with the deck line (IV4)', () => {
     let lifted = 0;
     for (const spec of FALLEN_SUN_DECKS) {
@@ -354,7 +388,6 @@ describe('marks beside a deck that climbs, runs level and comes down', () => {
         for (const side of [-1, 1])
           for (let across = deck.width / 2 + 0.25; across <= deck.width / 2 + 8; across += 0.5) {
             let last: number | null = null;
-            // From an eighth of a tile in, so no mark lies on an end, where rounding may put it off the deck.
             for (let a = 0.125; a < deck.length; a += 0.25) {
               const p = on(deck, a, side * across);
               if (dist(p, truck) > TERRAIN.vision.radius) {

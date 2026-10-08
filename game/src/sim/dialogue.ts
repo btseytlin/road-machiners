@@ -1,7 +1,6 @@
 // Talk between the player and NPCs: radio calls and the horn. A radio call joins the player and one NPC, and
 // radio works in sight only. A player call opens on the hub, which lists the topics this NPC can take up. An
 // NPC call opens on the topic it raises. Turns wait while a call is open. Topic content lives in
-// src/data/dialogue.ts, and its logic in src/sim/dialogue-rules.ts.
 
 import { BUSY_LINE, END, HONK_RANGE, HUB, REFUSED, TOPICS, TRAIT_TALK, type DialogueOption, type Topic, type TopicId, type Voice } from '../data/dialogue';
 import { inCombat, inCombatWithOther, inFeud, isHostile } from './combat';
@@ -15,10 +14,8 @@ import { practice } from './progress';
 import { canVehicleSee } from './vision';
 import { playerCommand, requireActivePlayer, update } from './world';
 
-// An option the player can pick now. The hub lists topics, and a topic node lists its own options.
 export type OfferedOption = { text: string; topic: TopicId | null; option: DialogueOption | null };
 
-// The one place talk reads traits: the first voice among the driver's traits, and the union of their topics.
 export function talkOf(npc: Vehicle): Voice & { topics: TopicId[] } {
   const talks = npcTraits(npc).map((id) => TRAIT_TALK[id]);
   const voice = talks.find((t) => t.voice)?.voice;
@@ -34,7 +31,6 @@ function isSettled(world: World, npc: Vehicle, topic: Topic): boolean {
   return topic.once && world.player.talked[npc.id]?.[topic.id] !== undefined;
 }
 
-// A call the driver refused. It sits on no topic.
 function isRefused(call: Call): boolean {
   return call.topic === null && call.node === REFUSED;
 }
@@ -45,13 +41,11 @@ function openCall(world: World): Call {
   return call;
 }
 
-// The topics the player can raise with this driver now. A driver in a feud takes up only topics asked during feuds.
 function askable(world: World, npc: Vehicle): Topic[] {
   const feud = inFeud(world, npc, playerVehicle(world));
   return talkOf(npc).topics.map((id) => TOPICS[id]).filter((t) => t.ask && (!feud || t.ask.duringFeud) && holds(world, npc, t.ask.when, {}));
 }
 
-// The options on offer right now, in display order. Hang up is always the last, and the only one after a refusal.
 export function currentOptions(world: World): OfferedOption[] {
   const call = openCall(world);
   const npc = vehicleById(world, call.with);
@@ -63,7 +57,6 @@ export function currentOptions(world: World): OfferedOption[] {
   return [...options, hangUp];
 }
 
-// The line the NPC says at the current node.
 export function currentLine(world: World): string {
   const call = openCall(world);
   if (isRefused(call)) return call.line.text;
@@ -83,7 +76,6 @@ export function placeholders(text: string): string[] {
   return [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
 }
 
-// Moves the call to a node and has the NPC say its line.
 function enter(world: World, call: Call, topic: TopicId | null, node: string): void {
   call.topic = topic;
   call.node = node;
@@ -91,7 +83,6 @@ function enter(world: World, call: Call, topic: TopicId | null, node: string): v
   say(world, call.with, currentLine(world), call.vars);
 }
 
-// Taking up a topic practices social. The same topic with the same driver pays only the first time.
 function enterTopic(world: World, npc: Vehicle, call: Call, topic: Topic): void {
   call.vars = topic.prepare ? PREPARES[topic.prepare](world, npc) : {};
   practice(world, 'call', 1, null, `${npc.id}:${topic.id}`);
@@ -111,8 +102,6 @@ function begin(world: World, npc: Vehicle): Call {
   return call;
 }
 
-// The player calls a truck in sight. A truck busy fighting another, or in a feud with the player with no topic to
-// take up, answers with a refusal, and the player can only hang up. The refusal stays out of the event log.
 export function callVehicle(world: World, npcId: string): World {
   return update(world, (w) => {
     requireActivePlayer(w);
@@ -129,25 +118,20 @@ export function callVehicle(world: World, npcId: string): World {
   });
 }
 
-// The line a driver answers with instead of taking the player's call, or null when it takes the call.
 function refusalOf(world: World, npc: Vehicle): string | null {
   if (busyElsewhere(world, npc, playerVehicle(world))) return BUSY_LINE;
   if (inFeud(world, npc, playerVehicle(world)) && askable(world, npc).length === 0) return talkOf(npc).refusal;
   return null;
 }
 
-// A driver in combat with another truck that is not at odds with the player. A foe of the player is part
-// of the player's fight, so it takes calls and raises its demands and pleas even while it targets another truck.
 function busyElsewhere(world: World, npc: Vehicle, me: Vehicle): boolean {
   return inCombatWithOther(world, npc, me.id) && !isHostile(world, npc, me);
 }
 
-// The player's reply goes to the log only on a call the driver took.
 function reply(world: World, call: Call, text: string): void {
   if (!isRefused(call)) say(world, world.player.vehicleId, text, call.vars);
 }
 
-// The player picks an offered option by its index in currentOptions().
 export function chooseOption(world: World, index: number): World {
   return update(world, (w) => {
     const offered = currentOptions(w)[index];
@@ -161,7 +145,6 @@ export function chooseOption(world: World, index: number): World {
   });
 }
 
-// A topic picked from the hub. A settled `once` topic gets the repeat line, and the call stays on the hub.
 function askTopic(world: World, npc: Vehicle, call: Call, topic: Topic): void {
   if (isSettled(world, npc, topic)) return say(world, npc.id, talkOf(npc).repeatLine, {});
   enterTopic(world, npc, call, topic);
@@ -174,10 +157,6 @@ function follow(world: World, npc: Vehicle, call: Call, option: DialogueOption):
   enter(world, call, call.topic, option.go);
 }
 
-// A call opened during a turn ends when the player or the NPC is knocked out or killed later in that turn, or the
-// NPC is gone. It counts as hanging up.
-// A call the driver raised earlier in the turn also ends, without its hang-up effects, once the reason for it is
-// gone, like a tow offer dropped for danger or a plea that ran out. Its answers would act on nothing.
 export function endCallIfOut(world: World): void {
   const call = world.player.call;
   if (!call) return;
@@ -191,7 +170,6 @@ function lostReason(world: World, npc: Vehicle, call: Call): boolean {
   return raise !== null && !holds(world, npc, raise.when, call.vars);
 }
 
-// True while the player and this vehicle talk: neither shoots the other.
 export function onCall(world: World, a: Vehicle, b: Vehicle): boolean {
   const call = world.player.call;
   if (!call) return false;
@@ -199,16 +177,11 @@ export function onCall(world: World, a: Vehicle, b: Vehicle): boolean {
   return pair.includes(call.with) && pair.includes(world.player.vehicleId);
 }
 
-// The vehicle ids on the radio now: both trucks of the open call, and the player's truck while its beacon is on.
-export function onAir(world: World): string[] {
-  const ids = new Set<string>();
+export function callTrucks(world: World): string[] {
   const call = world.player.call;
-  if (call) ids.add(world.player.vehicleId).add(call.with);
-  if (world.player.beacon) ids.add(world.player.vehicleId);
-  return [...ids];
+  return call ? [world.player.vehicleId, call.with] : [];
 }
 
-// The vehicle ids each kind of event puts on the radio. A honk, aid and patch work are not radio talk.
 type Talk = { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>, playerId: string) => string[] };
 const pair = (e: { by: string; client: string }): string[] => [e.by, e.client];
 const RADIO_TALK: Talk = {
@@ -221,7 +194,6 @@ const RADIO_TALK: Talk = {
   towOffer: (e) => [e.by],
 };
 
-// The vehicle ids that talked over the radio in these events.
 export function radioSpeakers(events: readonly GameEvent[], playerId: string): string[] {
   return [...new Set(events.flatMap((e) => (RADIO_TALK[e.t] as ((e: GameEvent, id: string) => string[]) | undefined)?.(e, playerId) ?? []))];
 }
@@ -239,9 +211,6 @@ export function hangUp(world: World): World {
   });
 }
 
-// A turn step: the first NPC in vehicle order that sees the player, is awake, is not busy fighting another truck
-// and wants to raise a topic calls. A knocked-out driver keeps its old goals, so it must not read them here. The highest priority topic wins. A driver in a feud with the player calls only with a topic
-// raised during feuds. While the player is in combat, only topics raised during combat call. One call at a time.
 export function raiseCalls(world: World): void {
   if (world.player.call || world.player.state !== 'active' || world.player.frozen) return;
   const me = playerVehicle(world);
@@ -264,13 +233,10 @@ function raisedTopic(world: World, npc: Vehicle, me: Vehicle): Topic | null {
   return wanted[0] ?? null;
 }
 
-// A feud with the player or the player's combat stops a call unless the topic is raised during it.
 function allowedNow(raise: NonNullable<Topic['raise']>, feud: boolean, combat: boolean): boolean {
   return (!feud || raise.duringFeud) && (!combat || raise.duringCombat);
 }
 
-// The horn is a signal, not a call. The player honks, and every NPC in earshot whose class answers, that is not
-// hostile, not knocked out and not busy fighting another truck honks back, nearest first. Honking takes no turn.
 export function honk(world: World): World {
   return playerCommand(world, (w) => {
     const me = playerVehicle(w);
@@ -282,7 +248,6 @@ export function honk(world: World): World {
   });
 }
 
-// A driver in sight that honks back practices social a little.
 function practiceHonk(world: World, me: Vehicle, npc: Vehicle): void {
   if (canVehicleSee(world, me, npc.pos)) practice(world, 'honk', 1, null, npc.id);
 }

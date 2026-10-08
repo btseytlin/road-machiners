@@ -5,7 +5,6 @@ import { decodeMap, encodeMap, PROP_KINDS, TYPE_IDS, type BakedProp } from './te
 
 const PROP_BYTES = 1 + 4 * 4 + 2 * 2;
 
-// A 3 x 3 tile draft with distinct heights, types and three props: a rock, a crag and a pole of a power line.
 function smallDraft(): MapDraft {
   const d = newDraft(3);
   d.heights.forEach((_, k) => (d.heights[k] = k * 0.25 - 2));
@@ -37,8 +36,8 @@ describe('map file', () => {
   });
 
   it('stores prop kinds and ground types in this order, which only a new file version may change', () => {
-    expect(PROP_KINDS).toEqual(['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'shipCache', 'reactor', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock', 'tankTrap', 'fortMasonryWall', 'fortMasonryTower', 'fortMasonryGate', 'fortMasonryBastion', 'fortMasonryInner', 'fortShipWall', 'fortShipTower', 'fortShipGate', 'fortScrapWall', 'fortScrapTower', 'fortScrapGate', 'fortScrapBastion', 'fortScrapInner', 'fortPatchworkWall', 'fortPatchworkTower', 'fortPatchworkGate', 'fortCompoundWall', 'fortCompoundTower', 'fortCompoundGate', 'fortRingWall', 'fortRingGate', 'fortYardWall', 'fortYardTower', 'fortYardGate', 'noseRise', 'noseCrag', 'escapePod', 'habitat', 'wingShard', 'powerCell']);
-    expect(TYPE_IDS).toEqual(['road', 'hardpan', 'sand', 'scrub', 'scree', 'mud', 'gravel', 'saltCrust', 'asphalt', 'ash', 'field', 'dirtyWater', 'toxic', 'track', 'canal', 'concrete']);
+    expect(PROP_KINDS).toEqual(['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'shipCache', 'reactor', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock', 'tankTrap', 'fortMasonryWall', 'fortMasonryTower', 'fortMasonryGate', 'fortMasonryBastion', 'fortMasonryInner', 'fortShipWall', 'fortShipTower', 'fortShipGate', 'fortScrapWall', 'fortScrapTower', 'fortScrapGate', 'fortScrapBastion', 'fortScrapInner', 'fortPatchworkWall', 'fortPatchworkTower', 'fortPatchworkGate', 'fortCompoundWall', 'fortCompoundTower', 'fortCompoundGate', 'fortRingWall', 'fortRingGate', 'fortYardWall', 'fortYardTower', 'fortYardGate', 'noseRise', 'noseCrag', 'engineNozzle', 'engineFrame', 'watchtower', 'ruinCompound', 'deadTruck', 'glassSpire', 'scrapWall', 'escapePod', 'habitat', 'wingShard', 'powerCell']);
+    expect(TYPE_IDS).toEqual(['road', 'hardpan', 'sand', 'scrub', 'scree', 'mud', 'gravel', 'saltCrust', 'asphalt', 'ash', 'field', 'dirtyWater', 'toxic', 'track', 'canal', 'concrete', 'glass']);
   });
 
   it('round-trips pool ground types', () => {

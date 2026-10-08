@@ -7,7 +7,6 @@ import type { PartInstance, Vehicle, World } from './types';
 import { activateUtilities, advanceUtilityEffects, hasWorkingUtility, pointReach, tickCharges, utilityBlock, utilityOrderError, wornReload } from './utility';
 import { setUtilityOrder } from './world';
 
-// A trader truck with the given utility mounted on its deck.
 function withUtility(defId: string): { w: World; v: Vehicle; part: PartInstance } {
   const w = emptyWorld();
   const v = addVehicle(w, 'traders', 'hauler', [defId], { x: 40, y: 30 });
@@ -15,7 +14,6 @@ function withUtility(defId: string): { w: World; v: Vehicle; part: PartInstance 
   return { w, v, part };
 }
 
-// The player's truck with the given utility mounted on its deck.
 function playerWith(defId: string): { w: World; part: PartInstance } {
   const w = emptyWorld();
   const part = makePart(w, defId, 0);

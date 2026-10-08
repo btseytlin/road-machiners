@@ -10,11 +10,9 @@ import { tileOf } from './oldworld';
 
 const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun') as TerritoryDef;
 const at = (x: number, y: number): Vec => ({ x: fallenSun.pos.x + x, y: fallenSun.pos.y + y });
-// A spur out of the north notch onto open land, from inside the outline to 8 tiles past it.
 const SPUR: FarmRoad = { points: [at(-1.8, -33), at(-2.2, -45), at(-4.3, -53.5)], width: 2.5, surface: 'track' };
 const END = SPUR.points.at(-1)!;
 
-// Flat ground over the whole region, with no marks and no props.
 function flatDraft(): MapDraft {
   return newDraft(REGION.size);
 }
@@ -45,7 +43,6 @@ describe('road marks', () => {
   it('throws on a spur over a cliff', () => {
     const d = flatDraft();
     const w = d.size + 1;
-    // A step of 2 height units across the spur's outer end.
     for (let j = 0; j <= d.size; j++) for (let i = 0; i <= d.size; i++) if (j < Math.round(END.y) + 1) d.heights[j * w + i] = 2;
 
     expect(() => markRoads(d, fallenSun, [SPUR], 'spur')).toThrow(/cliff/);

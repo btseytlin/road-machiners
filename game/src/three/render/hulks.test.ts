@@ -46,7 +46,6 @@ describe('hulks', () => {
     const ground = terrain.heights[0] * S;
 
     expect(bus.max.x - bus.min.x).toBeGreaterThan(buggy.max.x - buggy.min.x + 2);
-    // The skirt sinks below the ground, and the tilt and jag move the lowest point by a few centimeters.
     for (const box of [buggy, bus]) {
       expect(box.min.y).toBeLessThan(ground + 0.15);
       expect(box.min.y).toBeGreaterThan(ground - 0.6);

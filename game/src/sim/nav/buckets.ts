@@ -4,10 +4,8 @@ import { boxSegmentDistance, type PosedBox } from '../mapgen';
 import type { Obstacle } from '../types';
 import { segmentDist, type Vec } from '../vec';
 
-// What names an obstacle for a cache: world clones copy obstacles, so a cache keys on id and place, never identity.
 export type ObstacleMark = { id: string; x: number; y: number; r: number; shape: string };
 
-// The shape string names the model a prop is drawn with and its facing, which set its boxes.
 function shapeOf(o: Obstacle): string {
   return o.kind === 'landmark' ? `${o.look}:${o.yaw}` : o.kind;
 }
@@ -26,18 +24,15 @@ function marksObstacle(m: ObstacleMark, o: Obstacle): boolean {
   return m.id === o.id && m.x === o.pos.x && m.y === o.pos.y && m.r === o.r && m.shape === shapeOf(o);
 }
 
-// What routes keep clear of. Site edges and parked vehicles are circles. A prop blocks by the ground outlines of
-// its boxes that reach below truck roofs. Its r is then its reach, so a circle test with r never misses the boxes,
-// and its key names its pose for cache keys.
 export type Blocker = { pos: Vec; r: number; prop?: { key: string; boxes: readonly PosedBox[] } };
 
-const BUCKET = 8; // tiles per bucket side
+const BUCKET = 8;
 const HALF_DIAG = (BUCKET * Math.SQRT2) / 2;
 
 export class ObstacleBuckets<B extends Blocker = Blocker> {
   private readonly cols: number;
   private readonly cells: B[][];
-  private readonly outside: B[] = []; // blockers centered off the map sit in no bucket and are always candidates
+  private readonly outside: B[] = [];
   private readonly maxR: number;
 
   constructor(blockers: readonly B[], size: number) {
@@ -54,9 +49,6 @@ export class ObstacleBuckets<B extends Blocker = Blocker> {
     this.maxR = maxR;
   }
 
-  // Every circle that, grown by reach, can touch segment ab, and every prop with a box outline closer than reach
-  // to it. Buckets whose center is farther than reach + the largest radius + half a bucket diagonal cannot hold
-  // such a blocker.
   alongSegment(a: Vec, b: Vec, reach: number): B[] {
     const out = this.outside.slice();
     const pad = reach + this.maxR;
@@ -76,7 +68,6 @@ export class ObstacleBuckets<B extends Blocker = Blocker> {
   }
 }
 
-// A circle stays a candidate for the caller's own test. A prop is one only when a box outline lies within reach.
 function mayTouch(o: Blocker, a: Vec, b: Vec, reach: number): boolean {
   if (!o.prop) return true;
   if (segmentDist(o.pos, a, b) >= o.r + reach) return false;

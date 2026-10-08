@@ -9,9 +9,8 @@ import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import type { GameEvent, Vehicle, World } from './types';
 import type { Vec } from './vec';
 
-const FULL_SPEED = 6; // tiles per turn, a scout at top speed
+const FULL_SPEED = 6;
 
-// from is the point the blow comes from, which picks the struck side.
 function applyCrash(world: World, a: Vehicle, b: Vehicle | null, what: string, from: Vec, impact: number): void {
   applyContactCrash(world, a, b, what, impact, estimateCrashGeometry(a, b, from));
 }
@@ -26,12 +25,17 @@ const total = (hits: { damage: number }[]) => hits.reduce((a, h) => a + h.damage
 const partAt = (v: Vehicle, x: number, y: number) => mountedItems(v).find((it) => itemCells(it).some((c) => c.x === x && c.y === y))!.part;
 const partOf = (v: Vehicle, defId: string) => mountedParts(v).find((p) => p.defId === defId)!;
 
-// Moves the scout's ram bar from the nose to the tail mount.
 function ramToRear(v: Vehicle): void {
   const item = mountedItems(v).find((it) => it.part.defId === 'ram')!;
   const owner = v.items.find((it) => it.id === item.id)!;
   owner.y = 7;
   expect(mountedItems(v).some((it) => it.part.defId === 'ram')).toBe(true);
+}
+
+function plowToNose(v: Vehicle): void {
+  const item = mountedItems(v).find((it) => it.part.defId === 'plowRam')!;
+  Object.assign(v.items.find((it) => it.id === item.id)!, { x: 3, y: 0, rot: 0 });
+  expect(mountedItems(v).some((it) => it.part.defId === 'plowRam')).toBe(true);
 }
 
 describe('rams', () => {
@@ -107,7 +111,6 @@ describe('slow bumps', () => {
 });
 
 describe('rams as attacks', () => {
-  // A trader rams a scavenger nose first, with a scavenger mate watching from nearby.
   function ramSetup(): { w: World; trader: Vehicle; victim: Vehicle; mate: Vehicle } {
     const w = emptyWorld({ x: 80, y: 80 });
     const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 40, y: 40 }, 0);
@@ -187,7 +190,6 @@ describe('rams as attacks', () => {
   });
 });
 
-// Two haulers of one mass, the second facing the first from `gap` tiles. The rammer drives at 5 tiles a turn.
 function duel(rammerParts: string[], targetParts: string[], gap = 6): { w: World; rammer: Vehicle; target: Vehicle } {
   const w = emptyWorld({ x: 1, y: 1 });
   const rammer = addVehicle(w, 'raiders', 'hauler', rammerParts, { x: 30, y: 30 }, 0);
@@ -206,11 +208,13 @@ describe('ram value', () => {
   it('rises with a ram bar on the rammer nose against an equal truck', () => {
     const bare = duel(['cannon', 'stockEngine'], ['cannon', 'stockEngine']);
     const barred = duel(['cannon', 'stockEngine', 'plowRam'], ['cannon', 'stockEngine']);
+    plowToNose(barred.rammer);
     expect(ramValue(barred.w, barred.rammer, barred.target)).toBeGreaterThan(ramValue(bare.w, bare.rammer, bare.target));
   });
 
   it('is not vetoed by a broken ram bar on a ram that hurts the target far more', () => {
     const { w, rammer, target } = duel(['cannon', 'stockEngine', 'plowRam'], ['cannon', 'stockEngine']);
+    plowToNose(rammer);
     const bar = mountedParts(rammer, 'armor')[0];
     bar.hp = 1;
     expect(ramValue(w, rammer, target)).toBeGreaterThan(0);
@@ -232,7 +236,7 @@ describe('ram hit chance', () => {
     near.target.speed = 1;
     const far = duel(['cannon', 'stockEngine'], ['cannon', 'stockEngine'], 24);
     far.target.speed = 5;
-    far.target.heading = Math.PI / 2; // crossing the ram line
+    far.target.heading = Math.PI / 2;
     const chance = (d: typeof near) => ramHitChance(d.w, d.rammer, d.target, ramImpact(d.w, d.rammer, d.target)!);
     expect(chance(near)).toBeGreaterThan(chance(far));
     expect(chance(far)).toBeLessThan(0.3);

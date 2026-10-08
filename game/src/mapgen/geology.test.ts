@@ -12,7 +12,6 @@ function total(a: Float32Array): number {
   return s;
 }
 
-// Fixed test rules, so tuning GEOLOGY for the map does not move these examples.
 const RAIN_RULES: RainRules = {
   steps: 80,
   rainPerStep: 0.01,
@@ -27,10 +26,8 @@ const RAIN_RULES: RainRules = {
   spreadRate: 0.2,
 };
 
-// Rain with no spreading of cuts, to test how water routes and digs on its own.
 const UNSPREAD: RainRules = { ...RAIN_RULES, spreadPasses: 0 };
 
-// A plane that falls 0.2 units per tile toward +y, with small bumps so water gathers into lines.
 function tiltedPlane(size: number): MapDraft {
   const d = newDraft(size);
   const n = size + 1;
@@ -40,7 +37,6 @@ function tiltedPlane(size: number): MapDraft {
   return d;
 }
 
-// How far the lowest corner of a row sits below the mean of the corners 3 tiles to each side of it.
 function deepestDip(d: MapDraft, row: number): number {
   const n = d.size + 1;
   const h = (i: number) => d.heights[row * n + i];
@@ -109,7 +105,6 @@ describe("rain", () => {
   });
 });
 
-// A flat map with a square block 4 units tall in the middle, walled by vertical steps.
 function block(size: number): MapDraft {
   const d = newDraft(size);
   const n = size + 1;
@@ -169,7 +164,6 @@ describe("slump", () => {
   });
 });
 
-// A flat 64 tile map with a square of loose sand upwind of the middle.
 function sandPatch(): MapDraft {
   const d = newDraft(64);
   const n = d.size + 1;
@@ -248,7 +242,6 @@ describe("wind", () => {
   });
 });
 
-// Rolling ground from -2 to 6 units with a steep ridge, so every rule has work to do.
 function relief(size: number): MapDraft {
   const d = newDraft(size);
   const n = size + 1;
@@ -295,7 +288,6 @@ describe("geologyLayer", () => {
   });
 });
 
-// Fixed dune rules on a wind toward +x, so ridges run along y and repeat every 10 tiles along x.
 const DUNE_RULES: DuneRules = {
   minSand: 0.1,
   fullSand: 0.3,
@@ -314,7 +306,6 @@ function sandSheet(size: number, depth: number): MapDraft {
   return d;
 }
 
-// Heights along row y from x = 1 to size - 1.
 function row(d: MapDraft, y: number): number[] {
   const n = d.size + 1;
   return Array.from({ length: d.size - 1 }, (_, x) => d.heights[y * n + x + 1]);

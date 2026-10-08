@@ -1,8 +1,6 @@
 // Plays one progression run and writes its full activity log: every game event, snapshots of the player and every NPC,
 // how the run ended and a summary. The release playtest of the factory reads it. See src/sim/progression/activity.ts.
 // The log goes to a part file that becomes the log only when the run ends. An in-game error or stall ends the log
-// with an error line and still exits 0, since the error is what the reader looks for. A bad argument exits 1.
-// Usage: npm run progression:playthrough -- --seed 7 --turns 2250 --out tmp/playthrough.jsonl [--archetype markov] [--every 50] [--sha abc123]
 import { closeSync, mkdirSync, openSync, renameSync, writeSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { activityFrom } from '../src/sim/progression/activity.ts';

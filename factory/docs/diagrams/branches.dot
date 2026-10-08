@@ -5,8 +5,8 @@ digraph branches {
   edge [color="#374151", penwidth=1.6, arrowsize=0.8, fontname="Helvetica", fontsize=11];
   issue [label="factory/issue-N"]; dev [label="dev", fillcolor="#c7d2fe"]; rel [label="release/day", fillcolor="#c7d2fe"]; main [label="main", fillcolor="#c7d2fe"];
   task [label="factory/issue-N\nrelease task"]; hotfix [label="factory/issue-N\nhotfix, from main"]; chg [label="factory-change/id\nfrom main"];
-  issue -> dev [label="approve"]; dev -> rel [label="release cut"]; rel -> main [label="ship"];
-  task -> rel [label="approve"]; hotfix -> main [label="hotfix approve"];
+  issue -> dev [label="merge queue"]; dev -> rel [label="release cut"]; rel -> main [label="ship"];
+  task -> rel [label="merge queue"]; hotfix -> main [label="hotfix approve"];
   edge [color="#dc2626", fontcolor="#dc2626", style=dashed, penwidth=1.3];
   main -> dev [label="after ship or hotfix", constraint=false];
   main -> rel [label="after hotfix", constraint=false];
