@@ -21,12 +21,12 @@ import {
   formatNpcTraits,
   type LogLine,
 } from "./format";
-import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, moneyLabel, overdriveSwitch, versionLabel, type RescueReadout } from "./hud-readout";
+import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, overdriveSwitch, versionLabel, type RescueReadout } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
 import { aimMarks } from "./weapons";
 import { createSwitch } from "./switch";
 import { Tips } from "./tips";
-import { kph } from "./units";
+import { kph, moneyText } from "./units";
 import { playerVehicle } from "../sim/damage";
 import { affordableRanks, pendingPerkPairs } from "../sim/progress";
 import { canDouse } from "../sim/engine-heat";
@@ -314,7 +314,7 @@ export class Hud {
     this.rescue.replaceChildren(
       el("h3", {}, "Under tow"),
       el("div", {}, `${r.tower} tows you to ${r.town}.`),
-      el("div", { class: "dim" }, `Fee ${moneyLabel(r.fee)} on arrival.`),
+      el("div", { class: "dim" }, `Fee ${moneyText(r.fee)} on arrival.`),
       el(
         "div",
         { class: "rescue-buttons" },

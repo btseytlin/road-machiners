@@ -32,7 +32,7 @@ export type Trait = {
 
 // The stake of drivers who seldom trade: what a starting wallet of NPC_RESOURCES.money holds above an upkeep reserve,
 // so their loads stay as they were before stakes.
-const BASE_TRADE_STAKE = 600;
+const BASE_TRADE_STAKE = 20000;
 
 // An NPC knows the union of its traits' sites.
 export const TRAITS: Record<TraitId, Trait> = {
@@ -51,11 +51,11 @@ export const TRAITS: Record<TraitId, Trait> = {
   // crashes in 20, ask for truces, take nearly every truce and spare a beaten foe. Threatened or warned off a wreck, they mostly give way.
   // A trader on its way hires about one free merc in two it sees. Traders push on for one more deal, so they keep
   // a quarter less fuel for the way to a pump. A trader too poor for any trade hauls free cargo to earn a stake: a
-  // haul weight of 1 loses to trade 30 whenever a trade is affordable. One load costs at most the trade stake of 2500,
+  // haul weight of 1 loses to trade 30 whenever a trade is affordable. One load costs at most the trade stake of 83300 cents (833 M),
   // under two thirds of the starting wallet. About one trader in five gives fuel or supplies
   // when asked, and about one in 35 offers it unprompted to a poor, low player.
   trader: {
-    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: ['pump-station', 'dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1, fuelMargin: 0.75, robs: 'offDuty', tradeStake: 2500,
+    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: ['pump-station', 'dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1, fuelMargin: 0.75, robs: 'offDuty', tradeStake: 83300,
     weights: {
       idle: { trade: { add: 30 }, haul: { add: 1 } }, strandedSeen: { tow: { add: 9 } },
       hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, ramChance: { ram: { mul: 0.001 } },
@@ -134,11 +134,11 @@ export const TRAITS: Record<TraitId, Trait> = {
   },
   // Supply convoys haul fuel drums from the Pump Station and water from the oases to the towns. An idle convoy
   // hauls about two trips in three and trades between towns on the side the third, haul 30 against trade 15. A trade
-  // load costs at most the stake of 2500. It stops for salvage only at about the minimum chance. Like traders, convoys
+  // load costs at most the stake of 83300 cents (833 M). It stops for salvage only at about the minimum chance. Like traders, convoys
   // avoid fights and leave them to their guard, and mostly give way when threatened or warned off a wreck. A convoy
   // never robs.
   supplier: {
-    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: ['pump-station', 'dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'never', tradeStake: 2500,
+    towns: ['bowl', 'nose'], bases: [], markets: TOWN_MARKETS, salvageSites: [], supplySites: ['dustwell', 'green-pit'], travelSites: [], haulSites: ['pump-station', 'dustwell', 'green-pit'], contactReactRadius: 12, boldness: 1, fuelMargin: 1, robs: 'never', tradeStake: 83300,
     weights: {
       idle: { haul: { add: 30 }, trade: { add: 15 }, scavenge: { mul: 0.001 } }, strandedSeen: { tow: { add: 9 } },
       hostileSeen: { fight: { mul: 0.002 } }, attacked: { fightBack: { mul: 0.1 } }, threatened: { comply: { add: 1 }, fightBack: { mul: 0.1 } }, warnedOff: { comply: { add: 1 }, fightBack: { mul: 0.1 } },

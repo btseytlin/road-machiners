@@ -8,6 +8,7 @@ import { WORLD_SETTINGS } from '../data/modes';
 import { percent } from '../sim/settings';
 import { el, panel } from './dom';
 import { openNewGame, type NewGameActions } from './new-game';
+import { moneyText } from './units';
 
 // Shows the choice and resolves when the player picks Migrate. New game opens the New game screen over it, whose Back
 // returns here and whose Start reloads into the new game.
@@ -54,7 +55,7 @@ function savePanel(title: string): HTMLElement {
 
 function reportLines(report: CarryReport): string[] {
   const garage = report.toGarage.map((id) => partDef(id).name);
-  const sold = report.sold.map((s) => `${s.units} ${GOODS[s.good].name} sold for $${s.money}`);
+  const sold = report.sold.map((s) => `${s.units} ${GOODS[s.good].name} sold for ${moneyText(s.money)}`);
   return [
     ...(garage.length > 0 ? [`Moved to the garage: ${garage.join(', ')}`] : []),
     ...sold,

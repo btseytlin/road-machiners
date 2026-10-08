@@ -62,12 +62,12 @@ describe('a raider unfit to hunt', () => {
   it('is repaired at camp, guns and armor included, when it can pay, and then may raid again', () => {
     const { w, v } = raider();
     crippleGear(v);
-    getResources(w, v).money = 5000;
+    getResources(w, v).money = 166667;
     expect(thinkNpc(w, v)).toMatchObject({ kind: 'resupply', targetId: 'kiln' });
     parkAtCamp(v);
     resolveNpcActivities(w);
     for (const part of [...gunsOf(v), ...armorOf(v)]) expect(part.hp).toBe(maxHp(part));
-    expect(getResources(w, v).money).toBeLessThan(5000);
+    expect(getResources(w, v).money).toBeLessThan(166667);
     expect(topGoal(v)).toBeNull();
     expect(fitToHunt(w, v)).toBe(true);
     forceOption('idle', 'raid');
@@ -131,7 +131,7 @@ describe('the lie-up for fresh gear', () => {
   it('holds a raider with junk guns that camp service cannot rebuild', () => {
     const { w, v } = raider();
     for (const gun of gunsOf(v)) { gun.wear = 5; gun.hp = 0; }
-    getResources(w, v).money = 5000;
+    getResources(w, v).money = 166667;
     serveAtCamp(w, v);
     for (const plate of armorOf(v)) expect(plate.hp).toBe(maxHp(plate));
     expect(topGoal(v)).toMatchObject({ kind: 'rearm', until: w.turn + RAIDER_LIE_UP });
@@ -145,7 +145,7 @@ describe('the lie-up for fresh gear', () => {
   it('ends without fresh gear once the driver is fit again', () => {
     const { w, v } = raider();
     getResources(w, v).health = RULES.maxHealth * 0.4;
-    getResources(w, v).money = 5000;
+    getResources(w, v).money = 166667;
     serveAtCamp(w, v);
     expect(topGoal(v)?.kind).toBe('rearm');
     const items = itemIds(v);

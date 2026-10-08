@@ -446,7 +446,7 @@ describe('social on patch prices', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
-    npc.resources!.money = 10000;
+    npc.resources!.money = 333333;
     addGoods(w, npc, 'parts', 3);
     breakEngine(npc);
     expect(laborPrice(w, npc.id, 5)).toBe(laborPrice(w, npc.id, 0));
@@ -456,7 +456,7 @@ describe('social on patch prices', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
-    npc.resources!.money = 10000;
+    npc.resources!.money = 333333;
     breakEngine(npc);
     setParts(w, playerVehicle(w), 3);
     const paidPrice = (social: number): number => {
@@ -495,14 +495,15 @@ describe('road mechanic', () => {
   }
 
   it('an NPC client pays the perk multiple for a patch by the player', () => {
-    const { w, npc } = brokenNpc(10000);
+    const { w, npc } = brokenNpc(333333);
     const base = priceWith(w, npc.id, 'paid', []);
     expect(base).toBeGreaterThan(0);
-    expect(priceWith(w, npc.id, 'paid', ['roadMechanic'])).toBe(Math.round(base * PERK_NUMBERS.roadMechanic.price));
+    // Both prices round the unrounded labor to a cent, so they can differ from an exact multiple by a cent.
+    expect(Math.abs(priceWith(w, npc.id, 'paid', ['roadMechanic']) - base * PERK_NUMBERS.roadMechanic.price)).toBeLessThanOrEqual(1);
   });
 
   it('an NPC that cannot pay the raised price gets no paid deal', () => {
-    const { w, npc } = brokenNpc(10000);
+    const { w, npc } = brokenNpc(333333);
     npc.resources!.money = priceWith(w, npc.id, 'paid', []);
     expect(dealAvailable('paid')(w, npc)).toBe(true);
     w.player.perks = ['roadMechanic'];
@@ -759,7 +760,7 @@ describe('the Patcher crane on roadside patches', () => {
     if (slow?.kind !== 'deal' || fast?.kind !== 'deal') throw new Error('Expected deal terms');
 
     const oldTurns = Math.ceil(slow.parts * PATCH_TURNS_PER_PART);
-    expect(slow.price).toBe(oldTurns * PATCH.laborPerTurn);
+    expect(slow.price).toBe(Math.round(oldTurns * PATCH.laborPerTurn));
     expect(fast.price).toBe(slow.price);
     expect(fast.turns).toBeLessThan(slow.turns);
   });

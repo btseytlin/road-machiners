@@ -49,7 +49,7 @@ import { el, panel } from "./dom";
 import { contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, heldContractDue, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
 import { InventoryView, truckChips } from "./inventory";
 import type { UiHost } from "./host";
-import { fuelLiters } from "./units";
+import { fuelLiters, moneyAmount, moneyText } from "./units";
 import { fuelCap, suppliesCap } from "../sim/stats";
 import { npcName } from "../sim/spawn";
 import { vehicleHasPerk } from "../sim/progress";
@@ -238,7 +238,7 @@ export class TownScreen {
     const cards = shown.map((p) => {
       const kind = partDef(p.defId).kind;
       const price = partTradePrice(w, me, p, "buy");
-      const buy = this.button(`Buy ${price}`, (x) => buyStockPart(x, p.id), w.player.money < price);
+      const buy = this.button(`Buy ${moneyText(price)}`, (x) => buyStockPart(x, p.id), w.player.money < price);
       return partCard({
         world: w,
         part: p,
@@ -289,7 +289,7 @@ export class TownScreen {
         world: w,
         part: p,
         base: compareBase(this.inventory.selectedPart(), p),
-        action: this.button(`Sell ${partTradePrice(w, me, p, "sell")}`, (x) => sellPart(x, p.id)),
+        action: this.button(`Sell ${moneyText(partTradePrice(w, me, p, "sell"))}`, (x) => sellPart(x, p.id)),
         onHover: this.hintMounts(kind),
       });
     });
@@ -316,7 +316,7 @@ export class TownScreen {
       { class: "service" },
       createIcon(k),
       el("div", { class: "service-meter" }, el("span", {}, `${amount(have)} / ${amount(cap)}`), bar(have / cap)),
-      el("span", { class: "dim" }, fuel ? `${price} per ${amount(1)}` : `${price} each`),
+      el("span", { class: "dim" }, fuel ? `${moneyAmount(price)} per ${amount(1)}` : `${moneyAmount(price)} each`),
       this.button(`+${amount(1)}`, (x) => buySupply(x, k, 1), afford < 1),
       this.button(`Fill ${amount(afford)}`, (x) => buySupply(x, k, afford), afford < 1),
     );
@@ -332,8 +332,8 @@ export class TownScreen {
       { class: "town-repair" },
       createIcon("tools"),
       broken ? el("span", { class: "bad" }, `${broken} broken`) : null,
-      this.button(basics === 0 ? "Basics fine" : `Repair basics ${basics}`, repairBasics, basics === 0),
-      this.button(all === 0 ? "No repairs" : `Repair all ${all}`, repairAll, all === 0),
+      this.button(basics === 0 ? "Basics fine" : `Repair basics ${moneyText(basics)}`, repairBasics, basics === 0),
+      this.button(all === 0 ? "No repairs" : `Repair all ${moneyText(all)}`, repairAll, all === 0),
     );
   }
 
@@ -357,7 +357,7 @@ export class TownScreen {
             "div",
             { class: "card-foot" },
             el("span", { class: "dim" }, own ? "Your truck" : `vs ${chassisDef(me.chassisId).name}`),
-            own ? null : this.button(cost >= 0 ? `Swap ${cost}` : `Swap, get ${-cost} back`, (x) => buyChassis(x, id), w.player.money < cost),
+            own ? null : this.button(cost >= 0 ? `Swap ${moneyText(cost)}` : `Swap, get ${moneyText(-cost)} back`, (x) => buyChassis(x, id), w.player.money < cost),
           ),
         ),
       );
@@ -369,7 +369,7 @@ export class TownScreen {
         "div",
         { class: "note" },
         createIcon("money"),
-        `Your truck trades in for ${tradeIn}.`,
+        `Your truck trades in for ${moneyText(tradeIn)}.`,
       ),
       el("div", { class: "cards trucks" }, ...cards),
     );
@@ -458,7 +458,7 @@ const CONTRACT_ICON: Record<Contract["kind"], IconName> = {
 };
 
 function priceEl(price: number): HTMLElement {
-  return el("span", { class: "price" }, createIcon("money"), `${price}`);
+  return el("span", { class: "price" }, createIcon("money"), moneyAmount(price));
 }
 
 const PROFIT_TONE = { gain: "better", loss: "worse", even: "same" } as const;
@@ -516,7 +516,7 @@ function contractRow(w: World, c: Contract, action: HTMLElement, posted = false)
     { class: "job" },
     createIcon(CONTRACT_ICON[c.kind]),
     el("span", {}, contractSummary(c)),
-    el("span", { class: "price" }, createIcon("money"), `${c.reward}`),
+    el("span", { class: "price" }, createIcon("money"), moneyAmount(c.reward)),
     clock,
     action,
   );
@@ -703,11 +703,11 @@ export class TruckTradeScreen {
     };
     const theirs = spareParts(npc).map((p) => {
       const price = truckPartPrice(w, p, "buy");
-      return card(p, this.button(`Buy ${price}`, (x) => buyTruckPart(x, npc.id, p.id), w.player.money < price));
+      return card(p, this.button(`Buy ${moneyText(price)}`, (x) => buyTruckPart(x, npc.id, p.id), w.player.money < price));
     });
     const mine = spareParts(me).map((p) => {
       const price = truckPartPrice(w, p, "sell");
-      return card(p, this.button(`Sell ${price}`, (x) => sellTruckPart(x, npc.id, p.id), npc.resources!.money < price));
+      return card(p, this.button(`Sell ${moneyText(price)}`, (x) => sellTruckPart(x, npc.id, p.id), npc.resources!.money < price));
     });
     return el(
       "div",
@@ -732,7 +732,7 @@ export class TruckTradeScreen {
       { class: "service" },
       createIcon(k),
       el("div", { class: "service-meter" }, el("span", {}, `${amount(have)} / ${amount(cap)}`), bar(have / cap)),
-      el("span", { class: "dim" }, `${fuel ? `${price} per ${amount(1)}` : `${price} each`}, ${amount(offer)} on offer`),
+      el("span", { class: "dim" }, `${fuel ? `${moneyAmount(price)} per ${amount(1)}` : `${moneyAmount(price)} each`}, ${amount(offer)} on offer`),
       this.button(`+${amount(SUPPLY_STEP)}`, (x) => buyTruckSupply(x, npc.id, k, SUPPLY_STEP), most < SUPPLY_STEP),
       this.button(`Fill ${amount(most)}`, (x) => buyTruckSupply(x, npc.id, k, most), most < 1),
     );

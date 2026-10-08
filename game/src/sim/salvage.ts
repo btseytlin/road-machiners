@@ -187,6 +187,16 @@ export function canReachSalvage(vehicle: Vehicle, stock: SalvageStock): boolean 
   return vehicle.speed <= RULES.parkedSpeed && salvageInRange(vehicle, stock);
 }
 
+// The stock a loot or scavenge goal searches, or why the goal ends. A move arrives at the closest point its route
+// reaches, like beside a truck parked on the salvage. Parked there out of search range, the driver gives the salvage
+// up, as a point goal ends on arrival.
+export function searchTarget(world: World, vehicle: Vehicle, stockId: string | null): { stock: SalvageStock } | { ended: string } {
+  const stock = world.salvage.find((entry) => entry.id === stockId);
+  if (!stock) return { ended: 'salvage no longer available' };
+  const arrived = world.events.some((e) => e.t === 'arrived' && e.vehicle === vehicle.id);
+  return arrived && !salvageInRange(vehicle, stock) ? { ended: 'salvage out of reach' } : { stock };
+}
+
 // Site stock follows its site's reach, so a site is searched from a pad. Wreck stock has no site.
 export function salvageInRange(vehicle: Vehicle, stock: SalvageStock): boolean {
   const site = REGION.locations.find((l) => l.id === stock.id);

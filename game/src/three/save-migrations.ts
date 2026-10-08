@@ -481,6 +481,110 @@ function withFulfilledFlag_26_27(world: SavedJson): SavedJson {
   return { ...world, player: { ...player, contracts: (player.contracts as SavedJson[]).map(flagged) }, shops };
 }
 
+// Step 29 to 30: money becomes integer cents of M, and 1 M is the price of 5 L of fuel. The old fuel unit of 5 L cost
+// 3 money, so every money number grows by 100 / 3. Balances, rewards, fees and prices round to a cent. Cost bases and
+// the money a profit, free tow or aid practice counted are averages or XP inputs, so they scale exactly.
+export const CENTS_PER_MONEY_29_30 = 100 / 3;
+const MONEY_PRACTICE_29_30 = ['profit', 'freeTow', 'aid'];
+
+function scaled_29_30(value: unknown, what: string): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Saved ${what} is ${String(value)}, not a number`);
+  return value * CENTS_PER_MONEY_29_30;
+}
+
+function cents_29_30(value: unknown, what: string): number {
+  return Math.round(scaled_29_30(value, what));
+}
+
+function scaledRecord_29_30(record: SavedJson, what: string): SavedJson {
+  return Object.fromEntries(Object.entries(record).map(([k, v]) => [k, scaled_29_30(v, `${what} ${k}`)]));
+}
+
+function contractCents_29_30(c: SavedJson): SavedJson {
+  return { ...c, reward: cents_29_30(c.reward, `contract ${String(c.id)} reward`) };
+}
+
+function callVarsCents_29_30(vars: SavedJson): SavedJson {
+  const centsVar = (v: SavedJson): SavedJson => {
+    if (v.kind === 'money') return { ...v, amount: cents_29_30(v.amount, 'call money') };
+    if (v.kind === 'deal') return { ...v, price: cents_29_30(v.price, 'call deal price') };
+    if (v.kind === 'prices') {
+      const goods = (v.goods as SavedJson[]).map((g) => ({ ...g, buy: cents_29_30(g.buy, 'call buy price'), sell: cents_29_30(g.sell, 'call sell price') }));
+      return { ...v, goods };
+    }
+    return v;
+  };
+  return Object.fromEntries(Object.entries(vars).map(([k, v]) => [k, centsVar(v as SavedJson)]));
+}
+
+function callCents_29_30(call: SavedJson): SavedJson {
+  const line = call.line as SavedJson;
+  return { ...call, vars: callVarsCents_29_30(call.vars as SavedJson), line: { ...line, vars: callVarsCents_29_30(line.vars as SavedJson) } };
+}
+
+function stateCents_29_30(state: SavedJson): SavedJson {
+  const data = state.data as SavedJson;
+  const what = `${String(data.kind)} state ${String(state.id)}`;
+  if (data.kind === 'tow') return { ...state, data: { ...data, fee: cents_29_30(data.fee, `${what} fee`), waived: cents_29_30(data.waived, `${what} waived fee`) } };
+  if (data.kind === 'towPromise' || data.kind === 'escort') return { ...state, data: { ...data, fee: cents_29_30(data.fee, `${what} fee`) } };
+  if (data.kind === 'patch' || data.kind === 'aid') return { ...state, data: { ...data, price: cents_29_30(data.price, `${what} price`) } };
+  return state;
+}
+
+function feeCents_29_30(e: SavedJson): SavedJson {
+  return { ...e, fee: cents_29_30(e.fee, `${String(e.t)} fee`) };
+}
+
+const EVENT_CENTS_29_30: Record<string, (e: SavedJson) => SavedJson> = {
+  money: (e) => ({ ...e, amount: cents_29_30(e.amount, 'money event') }),
+  practice: (e) => (MONEY_PRACTICE_29_30.includes(e.source as string) ? { ...e, amount: scaled_29_30(e.amount, `${String(e.source)} practice`) } : e),
+  contract: (e) => ({ ...e, contract: contractCents_29_30(e.contract as SavedJson) }),
+  towOffer: feeCents_29_30,
+  towDone: feeCents_29_30,
+  escortPaid: feeCents_29_30,
+  escortHired: feeCents_29_30,
+  aid: (e) => ({ ...e, paid: cents_29_30(e.paid, 'aid paid') }),
+  stateEnded: (e) => ({ ...e, state: stateCents_29_30(e.state as SavedJson) }),
+  say: (e) => ({ ...e, vars: callVarsCents_29_30(e.vars as SavedJson) }),
+};
+
+function eventCents_29_30(e: SavedJson): SavedJson {
+  const convert = EVENT_CENTS_29_30[e.t as string];
+  return convert ? convert(e) : e;
+}
+
+function vehicleCents_29_30(v: SavedJson): SavedJson {
+  const resources = v.resources as SavedJson | null;
+  if (!resources) return v;
+  return { ...v, resources: { ...resources, money: cents_29_30(resources.money, `vehicle ${String(v.id)} money`) } };
+}
+
+function withCents_29_30(world: SavedJson): SavedJson {
+  const player = world.player as SavedJson;
+  const call = player.call as SavedJson | null;
+  return {
+    ...world,
+    player: {
+      ...player,
+      money: cents_29_30(player.money, 'player money'),
+      costBasis: scaledRecord_29_30(player.costBasis as SavedJson, 'cost basis'),
+      contracts: (player.contracts as SavedJson[]).map(contractCents_29_30),
+      call: call ? callCents_29_30(call) : null,
+    },
+    shops: Object.fromEntries(
+      Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(contractCents_29_30) }]),
+    ),
+    vehicles: (world.vehicles as SavedJson[]).map(vehicleCents_29_30),
+    removed: (world.removed as SavedJson[]).map(vehicleCents_29_30),
+    salvage: (world.salvage as SavedJson[]).map((stock) => {
+      const pile = stock.pile as SavedJson | undefined;
+      return pile ? { ...stock, pile: { ...pile, basis: scaledRecord_29_30(pile.basis as SavedJson, `pile ${String(stock.id)} basis`) } } : stock;
+    }),
+    states: (world.states as SavedJson[]).map(stateCents_29_30),
+    events: (world.events as SavedJson[]).map(eventCents_29_30),
+  };
+}
+
 // MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
 // or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
@@ -580,6 +684,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withoutRetiredStock_27_28,
   // 28 to 29: the world gets the default Roaming setup, every setting at 100%, which is how it played so far.
   (world) => ({ ...world, setup: { mode: 'roaming', settings: { damage: 1, fuelUse: 1, supplyUse: 1 } } }),
+  // 29 to 30: money becomes integer cents of M, 1 M per 5 L of fuel.
+  withCents_29_30,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
