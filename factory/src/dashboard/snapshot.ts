@@ -6,11 +6,11 @@ import { ghClient } from '../github';
 import { must } from '../exec';
 import { readState } from '../state';
 import { featureMerges, type Feature } from '../stages/release-common';
-import { DashboardHistory } from './history';
 import { LABELS, type Labels } from './labels';
 import { createWorkerKey, readLiveOperations } from './live';
 import { ADHOC_LABEL, QUEUE_OF, RELEASE_CANDIDATE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from '../types';
 import type { Card, FactoryState, GitHub, Queue, Run, RunResult } from '../types';
+import type { AnalyticsRunner, Analytics } from './analytics';
 import type { DashboardConfig } from './config';
 import type { HostSampler, HostLoad } from './host';
 
@@ -21,7 +21,6 @@ export type Operations = ReturnType<typeof buildOperations> & { pauseReason: Pau
 export type PublicCard = { issue: number; title: string; column: string; blocked: boolean; releaseTask: boolean };
 export type DevMerge = { issue: number; createdAt: string; mergedAt: string };
 export type GithubSnapshot = { cards: PublicCard[]; features: Feature[]; merges: DevMerge[]; releaseKey: string; provisional: boolean };
-export type Analytics = { ranges: ReturnType<DashboardHistory['summarize']>[]; posts: ReturnType<DashboardHistory['readPosts']> };
 export type Snapshot = {
   generatedAt: string; repoUrl: string; playUrl: string; channelUrl: string | null;
   operations: Source<Operations>; github: Source<GithubSnapshot>; analytics: Source<Analytics>; host: Source<HostLoad>;
@@ -171,10 +170,7 @@ export class SnapshotCollector {
   private analytics = createSource<Analytics>();
   private host = createSource<HostLoad>();
   private live = createSource<ReturnType<typeof readLiveOperations>>();
-  private readonly history: DashboardHistory;
-  constructor(private readonly config: DashboardConfig, private readonly publicGithub: PublicGitHub, private readonly hostSampler: HostSampler) {
-    this.history = new DashboardHistory(config.home, config.tickIntervalMs);
-  }
+  constructor(private readonly config: DashboardConfig, private readonly publicGithub: PublicGitHub, private readonly hostSampler: HostSampler, private readonly analyticsRunner: AnalyticsRunner) {}
   private refreshState(): void {
     try {
       const path = join(this.config.home, 'state', 'state.json');
@@ -186,10 +182,8 @@ export class SnapshotCollector {
   }
   private async refreshAnalytics(): Promise<void> {
     try {
-      const now = new Date();
-      await this.history.refresh(now);
-      const ranges = [1, 7, 30].map((days) => this.history.summarize(now, days));
-      this.analytics = recordSuccess({ ranges, posts: this.config.publicChannel === null ? [] : this.history.readPosts(now, this.config.publicChannel) });
+      const panels = await this.analyticsRunner.read(join(this.config.home, 'ledger.jsonl'), new Date(), this.config.tickIntervalMs * 3);
+      this.analytics = recordSuccess(panels);
     } catch (error) { this.analytics = recordFailure(this.analytics, 'analytics', error); }
   }
   private refreshLive(): void {
