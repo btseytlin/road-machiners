@@ -10,6 +10,7 @@ import { mkdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
+import { gpuArgs } from './gpu.mjs';
 
 const BUILD_LIMIT_MS = 600000; // software drawing renders about 150 icons, each in four passes
 const cpu = process.argv.includes('--cpu');
@@ -23,7 +24,7 @@ function writeAtomic(path, data) {
 
 const server = await createServer({ server: { port: 5191, strictPort: false }, logLevel: 'error' });
 await server.listen();
-const browser = await chromium.launch({ args: cpu ? [] : ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ args: cpu ? [] : gpuArgs() });
 try {
   const page = await browser.newPage();
   const errors = [];

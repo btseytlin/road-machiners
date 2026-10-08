@@ -1,12 +1,13 @@
 // Boots the game in headless Chromium on the GPU, plays turns, and fails on page errors, the crash screen,
 // a blank canvas or a low frame rate. Screenshots go to .playtest/.
 // It also fails on HUD panels whose single control does not fill the panel, so a click in the box's edge or corner is dead.
-// The GPU is Metal on a Mac and Vulkan on Linux, like the factory's NVIDIA host. A run that falls back to software drawing fails.
+// scripts/gpu.mjs picks the GPU flags. A run that falls back to software drawing fails.
 // With --cpu, Chromium draws in software and the frame rate is printed but not checked.
 // With --no-fps-gate, the GPU run prints the frame rate but does not check it, for hosts shared with other jobs.
 // Usage: npm run playtest -- [--url http://localhost:5173] [--turns 12, or 4 with --cpu] [--cpu] [--no-fps-gate]
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
+import { gpuArgs, isSoftware, rendererOf } from './gpu.mjs';
 
 const arg = (name, fallback) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -26,29 +27,13 @@ const timeoutsOff = process.env.TEST_TIMEOUTS === 'off';
 const TURN_LIMIT_MS = timeoutsOff ? 0 : cpu ? 60000 : 10000;
 const BOOT_LIMIT_MS = timeoutsOff ? 0 : 30000;
 
-const GPU_ARGS = {
-  darwin: ['--use-angle=metal'],
-  linux: ['--use-angle=vulkan', '--enable-features=Vulkan', '--disable-vulkan-surface'],
-};
-const SOFTWARE_RENDERERS = /SwiftShader|llvmpipe/;
-
-function launchArgs() {
-  if (cpu) return [];
-  const angle = GPU_ARGS[process.platform];
-  if (!angle) throw new Error(`No GPU flags for ${process.platform}. Run with --cpu.`);
-  return [...angle, '--enable-gpu', '--ignore-gpu-blocklist'];
-}
-
 mkdirSync('.playtest', { recursive: true });
-const browser = await chromium.launch({ args: launchArgs() });
+const browser = await chromium.launch({ args: cpu ? [] : gpuArgs() });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
 if (timeoutsOff) page.setDefaultTimeout(0);
-const renderer = await page.evaluate(() => {
-  const gl = document.createElement('canvas').getContext('webgl2');
-  return gl ? gl.getParameter(gl.getExtension('WEBGL_debug_renderer_info')?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER) : 'no WebGL2';
-});
+const renderer = await rendererOf(page);
 console.log(`renderer ${renderer}`);
-if (!cpu && SOFTWARE_RENDERERS.test(renderer)) {
+if (!cpu && isSoftware(renderer)) {
   await browser.close();
   console.error(`FAIL\nThe GPU playtest got the software renderer ${renderer}. Run with --cpu on a machine without a GPU.`);
   process.exit(1);
