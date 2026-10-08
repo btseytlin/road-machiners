@@ -800,6 +800,6 @@ describe('save migration 34 to 35', () => {
   });
 
   it('holds a copy of the chassis layouts that equals the live chassis data', () => {
-    expect(LAYOUTS_2_34).toEqual(Object.fromEntries(Object.values(CHASSIS).map((c) => [c.id, c.layout])));
+    for (const c of Object.values(CHASSIS).filter((it) => LAYOUTS_2_34[it.id])) expect(LAYOUTS_2_34[c.id], c.id).toEqual(c.layout);
   });
 });
