@@ -47,18 +47,18 @@ describe('sim ids in words', () => {
   it('words notes with their numbers formatted for each language', () => {
     const leak: SimNote = { id: 'tankLeak', fuel: 1.25 };
     expect(both(noteText(leak))).toEqual({ en: 'Fuel tank leaks: fuel -1.3', ru: 'Бак течёт, топливо −1,3.' });
-    expect(both(noteText({ id: 'filledSupplies', site: 'dustwell' }))).toEqual({ en: 'Filled supplies at Dustwell', ru: 'Припасы пополнены: Пыльный колодец' });
+    expect(both(noteText({ id: 'filledSupplies', site: 'dustwell' }))).toEqual({ en: 'Filled supplies at Dustwell', ru: 'Припасы пополнены в пункте Пыльный колодец' });
   });
 
   it('words a tow fee with the towed truck', () => {
     const { w, npc } = scene();
-    expect(both(moneyReasonText(w, { kind: 'towing', vehicle: npc.id }))).toEqual({ en: 'towing Roamer Ada Voss', ru: 'буксировка: Бродяга Ada Voss' });
+    expect(both(moneyReasonText(w, { kind: 'towing', vehicle: npc.id }))).toEqual({ en: 'towing Roamer Ada Voss', ru: 'буксировка бродяги Ada Voss' });
   });
 
   it('words refusals, naming who loots and why a part does not fit', () => {
     const { w, npc } = scene();
     const looting: Refusal = { id: 'looting', by: npc.id, place: 'wreck' };
-    expect(both(refusalText(w, looting))).toEqual({ en: 'Roamer Ada Voss is looting this wreck', ru: 'Эти обломки уже грабит Бродяга Ada Voss' });
+    expect(both(refusalText(w, looting))).toEqual({ en: 'Roamer Ada Voss is looting this wreck', ru: 'Эти обломки уже грабит бродяга Ada Voss' });
     expect(both(refusalText(w, { id: 'badLayout', cause: { id: 'noFit' } })).en).toBe('Does not fit there. Items would fall off the grid or overlap.');
     expect(both(refusalText(w, { id: 'needsXp', cost: 1200, have: 30 }))).toEqual({ en: 'Needs 1,200 XP, you have 30 XP', ru: 'Нужно 1 200 опыта, у вас 30' });
   });

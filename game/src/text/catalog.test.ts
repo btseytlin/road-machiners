@@ -9,7 +9,7 @@ const CATALOGS: Record<Locale, Readonly<Record<string, EnEntry | Noun>>> = { en:
 const KEYS = Object.keys(EN);
 
 const SAME_AS_ENGLISH = new Set(['radio.band', 'radio.frequency', 'language.en', 'language.ru']);
-const RU_NOUN = /^(part|chassis|site|terrain|faction)\.[^.]+$|^npc\.[^.]+(\.profession)?$|^good\.[^.]+(\.lower)?$/;
+const RU_NOUN = /^(part|chassis|site|terrain|faction)\.[^.]+$|^npc\.[^.]+\.profession$|^good\.[^.]+(\.lower|\.subject)?$/;
 const RU_NOUN_KEYS = new Set(['vehicle.yours', 'job.theTruck', 'job.somePart', 'log.anObstacle', 'log.something', 'log.you']);
 const hasWords =(text: string): boolean => /\p{L}{2,}/u.test(text.replace(/\{[^}]*\}/g, ''));
 
@@ -62,7 +62,8 @@ describe('the catalog', () => {
   });
 
   it('gives every Russian name its forms in every case and its gender', () => {
-    const names = KEYS.filter((key) => RU_NOUN.test(key) || RU_NOUN_KEYS.has(key));
+    const templates = KEYS.filter((key) => key.endsWith('.profession')).map((key) => key.slice(0, -'.profession'.length));
+    const names = KEYS.filter((key) => RU_NOUN.test(key) || RU_NOUN_KEYS.has(key) || templates.includes(key));
     expect(names.length).toBeGreaterThan(150);
     expect(names.filter((key) => nounOf('ru', key) === null)).toEqual([]);
     for (const key of RU_NOUN_KEYS) expect(KEYS).toContain(key);

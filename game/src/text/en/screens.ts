@@ -304,7 +304,7 @@ export const SCREENS = {
   'weapon.targetGone': 'target unavailable',
   'weapon.noTarget': 'no target',
   'weapon.slotLabel': m('{name}: {status}, {target}', { name: 'text', status: 'text', target: 'text' }),
-  'weapon.slotTitle': m('{name}: {rounds} × {damage} damage, pen {pen}, range {range} m, arc {arc}°, fires every {cooldown} turn(s), {magazine} shots, reloads in {reload} turn(s). {status}, {target}', { name: 'text', rounds: 'int', damage: 'dec', pen: 'dec', range: 'int', arc: 'int', cooldown: 'int', magazine: 'int', reload: 'int', status: 'text', target: 'text' }),
+  'weapon.slotTitle': m('{name}: {rounds} × {damage} damage, pen {pen}, range {range} m, arc {arc}°, fires every {cooldown, plural, one {# turn} other {# turns}}, {magazine} shots, reloads in {reload, plural, one {# turn} other {# turns}}. {status}, {target}', { name: 'text', rounds: 'int', damage: 'dec', pen: 'dec', range: 'int', arc: 'int', cooldown: 'count', magazine: 'int', reload: 'count', status: 'text', target: 'text' }),
   'weapon.holdTitle': 'Hold fire: stop auto fire and clear this gun\'s target',
   'weapon.hold': 'Hold',
   'weapon.reloadTitle': m('Reload: drop the magazine and refill it in {n, plural, one {# turn} other {# turns}}', { n: 'count' }),

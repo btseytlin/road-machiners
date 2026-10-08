@@ -27,7 +27,7 @@ describe('trading tip text', () => {
   });
 
   it('tells a tip in Russian without the English verb', () => {
-    expect(resolve(tipText({ kind: 'tip', tip: { shop: 'bowl', good: 'salt', dear: true } }), 'ru')).toBe('Заезжал недавно — Чаша. Там втридорога: соль.');
+    expect(resolve(tipText({ kind: 'tip', tip: { shop: 'bowl', good: 'salt', dear: true } }), 'ru')).toBe('Недавно был в Чаше. Там соль продавали втридорога.');
   });
 });
 
