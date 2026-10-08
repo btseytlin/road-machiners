@@ -5,6 +5,7 @@
     "build": "tsc && vite build",
     "typecheck": "tsc",
     "test": "vitest run",
+    "test:cached": "vite-node scripts/test-cache.mjs --",
     "playtest": "node scripts/playtest.mjs",
     "ui-playtest": "node scripts/ui-playtest.mjs http://localhost:5173",
     "perf": "node scripts/perf.mjs",
