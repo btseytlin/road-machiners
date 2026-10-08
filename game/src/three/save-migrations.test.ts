@@ -33,6 +33,7 @@ import FORMAT_2_23 from './save-fixtures/format-2-23.json';
 import FORMAT_2_24 from './save-fixtures/format-2-24.json';
 import FORMAT_2_25 from './save-fixtures/format-2-25.json';
 import FORMAT_2_26 from './save-fixtures/format-2-26.json';
+import FORMAT_2_27 from './save-fixtures/format-2-27.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -582,17 +583,34 @@ describe('save migration 25 to 26', () => {
 });
 
 describe('save migration 26 to 27', () => {
-  const before = structuredClone(FORMAT_2_26);
-  const next = MIGRATIONS[26](FORMAT_2_26) as { salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
+  type Contracts = { contracts: Record<string, unknown>[] };
+  const next = MIGRATIONS[26](FORMAT_2_26) as { turn: number; player: Contracts & { money: number }; shops: Record<string, Contracts> };
+
+  it('starts every held and posted bounty unfulfilled', () => {
+    expect(next.player.contracts[0]).toEqual({ ...FORMAT_2_26.player.contracts[0], fulfilled: false });
+    expect(next.shops.bowl.contracts[0]).toEqual({ ...FORMAT_2_26.shops.bowl.contracts[0], fulfilled: false });
+  });
+
+  it('keeps every other contract and field', () => {
+    expect(next.player.contracts[1]).toEqual(FORMAT_2_26.player.contracts[1]);
+    expect(next.shops.bowl.contracts[1]).toEqual(FORMAT_2_26.shops.bowl.contracts[1]);
+    expect(next.shops.nose).toEqual(FORMAT_2_26.shops.nose);
+    expect({ ...next, player: { ...next.player, contracts: [] }, shops: {} }).toEqual({ ...FORMAT_2_26, player: { ...FORMAT_2_26.player, contracts: [] }, shops: {} });
+  });
+});
+
+describe('save migration 27 to 28', () => {
+  const before = structuredClone(FORMAT_2_27);
+  const next = MIGRATIONS[27](FORMAT_2_27) as { salvage: { id: string }[]; player: { scavenged: string[] }; vehicles: { job: { stockId: string } | null }[] };
 
   it('drops the Glass Flats stock and its searched mark, and keeps every other stock', () => {
-    expect(next.salvage.map((stock) => stock.id)).toEqual(FORMAT_2_26.salvage.map((stock) => stock.id).filter((id) => id !== 'glass-flats'));
+    expect(next.salvage.map((stock) => stock.id)).toEqual(FORMAT_2_27.salvage.map((stock) => stock.id).filter((id) => id !== 'glass-flats'));
     expect(next.player.scavenged).toEqual(['podfield', 'wreck4']);
   });
 
   it('ends a search of the old stock, keeps other searches and does not mutate its input', () => {
     expect(next.vehicles[0].job).toBeNull();
-    expect(next.vehicles[1]).toEqual(FORMAT_2_26.vehicles[1]);
-    expect(FORMAT_2_26).toEqual(before);
+    expect(next.vehicles[1]).toEqual(FORMAT_2_27.vehicles[1]);
+    expect(FORMAT_2_27).toEqual(before);
   });
 });

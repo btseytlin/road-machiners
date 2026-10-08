@@ -9,7 +9,7 @@ import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, to
 import { LogPanel } from "./log";
 import { ERROR_REPORT_URL } from "../config";
 import {
-  contractDue,
+  heldContractDue,
   contractSummary,
   eventText,
   formatNpcActivity,
@@ -38,8 +38,8 @@ import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
 // A hint marks an action that can never run here, and says why. combat is the turns of combat left when it blocks the action.
 // target names what the action acts on, so the key runs the shown action and nothing re-decides it.
 export type ContextTarget =
-  | { kind: 'aid' }
-  | { kind: 'trade' }
+  | { kind: 'aid'; id: string }
+  | { kind: 'trade'; id: string }
   | { kind: 'shop' }
   | { kind: 'downed'; id: string }
   | { kind: 'oasis' }
@@ -374,7 +374,7 @@ export class Hud {
         el(
           "div",
           { class: "contract-line" },
-          `${contractSummary(c)} — ${contractDue(c)}`,
+          `${contractSummary(c)} — ${heldContractDue(c)}`,
         ),
       ),
     );

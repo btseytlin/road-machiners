@@ -1,5 +1,5 @@
 {
- "format": "2.27",
+ "format": "2.28",
  "shape": {
   "broken": [],
   "craters": [],
@@ -877,6 +877,18 @@
      },
      {
       "deadline": "number",
+      "fulfilled": "boolean",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "targetName": "string",
+      "template": "string",
+      "tier": "number",
+      "window": "number"
+     },
+     {
+      "deadline": "number",
       "good": "string",
       "id": "string",
       "kind": "string",
@@ -886,17 +898,6 @@
       "tier": "number",
       "to": "string",
       "units": "number",
-      "window": "number"
-     },
-     {
-      "deadline": "number",
-      "id": "string",
-      "kind": "string",
-      "reward": "number",
-      "shop": "string",
-      "targetName": "string",
-      "template": "string",
-      "tier": "number",
       "window": "number"
      }
     ],
@@ -951,6 +952,18 @@
      },
      {
       "deadline": "number",
+      "fulfilled": "boolean",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "targetName": "string",
+      "template": "string",
+      "tier": "number",
+      "window": "number"
+     },
+     {
+      "deadline": "number",
       "good": "string",
       "id": "string",
       "kind": "string",
@@ -960,17 +973,6 @@
       "tier": "number",
       "to": "string",
       "units": "number",
-      "window": "number"
-     },
-     {
-      "deadline": "number",
-      "id": "string",
-      "kind": "string",
-      "reward": "number",
-      "shop": "string",
-      "targetName": "string",
-      "template": "string",
-      "tier": "number",
       "window": "number"
      }
     ],
@@ -1017,6 +1019,18 @@
      },
      {
       "deadline": "number",
+      "fulfilled": "boolean",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "targetName": "string",
+      "template": "string",
+      "tier": "number",
+      "window": "number"
+     },
+     {
+      "deadline": "number",
       "good": "string",
       "id": "string",
       "kind": "string",
@@ -1026,17 +1040,6 @@
       "tier": "number",
       "to": "string",
       "units": "number",
-      "window": "number"
-     },
-     {
-      "deadline": "number",
-      "id": "string",
-      "kind": "string",
-      "reward": "number",
-      "shop": "string",
-      "targetName": "string",
-      "template": "string",
-      "tier": "number",
       "window": "number"
      }
     ],
@@ -1091,6 +1094,18 @@
      },
      {
       "deadline": "number",
+      "fulfilled": "boolean",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "targetName": "string",
+      "template": "string",
+      "tier": "number",
+      "window": "number"
+     },
+     {
+      "deadline": "number",
       "good": "string",
       "id": "string",
       "kind": "string",
@@ -1100,17 +1115,6 @@
       "tier": "number",
       "to": "string",
       "units": "number",
-      "window": "number"
-     },
-     {
-      "deadline": "number",
-      "id": "string",
-      "kind": "string",
-      "reward": "number",
-      "shop": "string",
-      "targetName": "string",
-      "template": "string",
-      "tier": "number",
       "window": "number"
      }
     ],
@@ -1157,6 +1161,18 @@
      },
      {
       "deadline": "number",
+      "fulfilled": "boolean",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "targetName": "string",
+      "template": "string",
+      "tier": "number",
+      "window": "number"
+     },
+     {
+      "deadline": "number",
       "good": "string",
       "id": "string",
       "kind": "string",
@@ -1166,17 +1182,6 @@
       "tier": "number",
       "to": "string",
       "units": "number",
-      "window": "number"
-     },
-     {
-      "deadline": "number",
-      "id": "string",
-      "kind": "string",
-      "reward": "number",
-      "shop": "string",
-      "targetName": "string",
-      "template": "string",
-      "tier": "number",
       "window": "number"
      }
     ],
