@@ -35,24 +35,25 @@ describe('worn parts in vehicle stats', () => {
 });
 
 describe('the overdrive engine cutoff', () => {
-  // Wear 2 takes the stock engine from 50 to 40 max HP, so 15% is exactly 6 HP.
+  // The last whole HP at or below the cutoff share of the engine's worn max HP is `blocked`, one more is `allowed`.
   function wornEngine() {
     const w = emptyWorld();
     const me = w.vehicles[0];
     const engine = mountedParts(me, 'engine')[0];
     engine.wear = 2;
     engine.hp = maxHp(engine);
-    return { w, me, engine };
+    const blocked = Math.floor(RULES.overdriveMinEngineShare * maxHp(engine));
+    return { w, me, engine, blocked, allowed: blocked + 1 };
   }
 
-  it('blocks at exactly 15% of the worn max HP and below, and allows one HP above', () => {
-    const { me, engine } = wornEngine();
-    expect(maxHp(engine)).toBe(40);
-    engine.hp = 6;
+  it('blocks at 15% of the worn max HP and below, and allows one HP above', () => {
+    const { me, engine, blocked, allowed } = wornEngine();
+    expect(maxHp(engine)).toBeLessThan(PARTS.stockEngine.hp);
+    engine.hp = blocked;
     expect(canOverdrive(me)).toBe(false);
-    engine.hp = 5;
+    engine.hp = blocked - 1;
     expect(canOverdrive(me)).toBe(false);
-    engine.hp = 7;
+    engine.hp = allowed;
     expect(canOverdrive(me)).toBe(true);
   });
 
@@ -65,15 +66,15 @@ describe('the overdrive engine cutoff', () => {
   });
 
   it('gives no boost with the flag on and a blocked engine', () => {
-    const { w, me, engine } = wornEngine();
-    engine.hp = 6;
+    const { w, me, engine, blocked, allowed } = wornEngine();
+    engine.hp = blocked;
     const off = vehicleStats(w, me);
     w.player.overdrive = true;
     expect(inOverdrive(w, me)).toBe(false);
     const on = vehicleStats(w, me);
     expect(on.maxSpeed).toBe(off.maxSpeed);
     expect(on.accel).toBe(off.accel);
-    engine.hp = 7;
+    engine.hp = allowed;
     expect(inOverdrive(w, me)).toBe(true);
     expect(vehicleStats(w, me).maxSpeed).toBeCloseTo(off.maxSpeed * RULES.overdriveBoost);
   });

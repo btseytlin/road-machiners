@@ -66,8 +66,9 @@ export const RULES = {
   wheelLoss: 0.15, // share of speed and turning lost per broken wheel
   tankLeak: 1, // fuel lost per turn with a broken tank
 
-  // Global damage multipliers. Tune these to make every fight faster or slower.
-  weaponDamage: 1.2375, // every weapon round and splash
+  // Global damage multipliers. Tune these to make every fight faster or slower. Arena duels between rolled NPCs, most of
+  // them on parts at the last wear step, last about 28 turns on average and 17 at the median at these values.
+  weaponDamage: 1.98, // every weapon round and splash
   crashDamage: 1.125, // every crash and ram, into trucks and obstacles alike
 
   // Stray fire. A round that misses its target may hit another truck whose center lies within reach of the line

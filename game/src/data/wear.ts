@@ -3,24 +3,19 @@
 // Part condition. A part gains one wear step each time it drops to 0 HP. See src/sim/condition.ts.
 export const CONDITION = {
   maxWear: 4, // last wear step a broken part can be rebuilt from; one more makes it junk
-  hpLoss: 0.1, // share of def max HP lost per wear step, for every part kind
   // Value factor per wear step, indexed by wear (0 = pristine). A pristine part carries a heavy premium
   // over one wear step in, so the drop from step 0 to 1 is much steeper than later steps. One entry per
   // step up to maxWear; a junk part past the last step is worth its scrap value only (see sim/wear.ts).
   valueFactor: [1, 0.7, 0.55, 0.45, 0.35],
-  // Job stat loss per wear step. Cargo and core parts lose max HP only.
-  statLoss: {
-    spread: 0.15, // share of weapon spread added
-    damage: 0.05, // share of weapon round damage lost
-    pen: 0.05, // share of weapon round penetration lost
-    range: 0.05, // share of weapon range lost
+  // Share of its def max HP and of every job stat a part loses per wear step: gun damage, penetration and range,
+  // engine gun power, armor and scanner range. Gun spread and engine fuel use and heat rise by the same share. Set
+  // by mirror duels in the combat harness: of two like trucks, the one two steps less worn wins about two fights in
+  // three, one step about 60%, and pristine against the last step about 80%.
+  stepLoss: 0.027,
+  // Engine speed loss per wear step, kept apart from stepLoss since it sets who outruns whom.
+  speedLoss: {
     speedBonus: 0.26, // engine top speed bonus lost, in tiles per turn, a fifth of the smallest engine step
     accelBonus: 0.1, // engine acceleration bonus lost, in the chassis accel unit
-    capacity: 0.05, // share of engine gun power lost
-    fuelMult: 0.05, // share of engine fuel use added
-    heat: 0.05, // share of engine heat added
-    armor: 0.12, // share of an armor part's armor lost
-    scannerRange: 0.1, // share of scanner range lost
   },
 };
 

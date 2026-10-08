@@ -113,7 +113,16 @@ function practiceRoughGround(world: World): void {
 // ---- Part condition.
 
 export function maxHp(part: PartInstance): number {
-  return Math.round(partDef(part.defId).hp * (1 - CONDITION.hpLoss * part.wear));
+  return Math.round(partDef(part.defId).hp * worse(part.wear));
+}
+
+// The share of a stat a part keeps after `steps` wear steps, and the share a cost of it grows to.
+function worse(steps: number): number {
+  return 1 - CONDITION.stepLoss * steps;
+}
+
+function costlier(steps: number): number {
+  return 1 + CONDITION.stepLoss * steps;
 }
 
 // The def with the part's worn max HP and job stat. The caller names the def type it knows the part has.
@@ -121,26 +130,26 @@ export function wornDef<T extends PartDef>(part: PartInstance): T {
   const def = partDef(part.defId);
   const steps = part.wear;
   const hp = maxHp(part);
-  const loss = CONDITION.statLoss;
+  const keep = worse(steps);
   switch (def.kind) {
     case 'weapon': {
-      const round = { ...def.round, damage: def.round.damage * (1 - loss.damage * steps), pen: def.round.pen * (1 - loss.pen * steps) };
-      return { ...def, hp, round, range: def.range * (1 - loss.range * steps), spread: def.spread * (1 + loss.spread * steps) } as T;
+      const round = { ...def.round, damage: def.round.damage * keep, pen: def.round.pen * keep };
+      return { ...def, hp, round, range: def.range * keep, spread: def.spread * costlier(steps) } as T;
     }
     case 'engine':
       return {
         ...def,
         hp,
-        speedBonus: def.speedBonus - loss.speedBonus * steps,
-        accelBonus: def.accelBonus - loss.accelBonus * steps,
-        capacity: def.capacity * (1 - loss.capacity * steps),
-        fuelMult: def.fuelMult * (1 + loss.fuelMult * steps),
-        heat: def.heat * (1 + loss.heat * steps),
+        speedBonus: def.speedBonus - CONDITION.speedLoss.speedBonus * steps,
+        accelBonus: def.accelBonus - CONDITION.speedLoss.accelBonus * steps,
+        capacity: def.capacity * keep,
+        fuelMult: def.fuelMult * costlier(steps),
+        heat: def.heat * costlier(steps),
       } as T;
     case 'armor':
-      return { ...def, hp, armor: def.armor * (1 - loss.armor * steps), blastArmor: def.blastArmor * (1 - loss.armor * steps) } as T;
+      return { ...def, hp, armor: def.armor * keep, blastArmor: def.blastArmor * keep } as T;
     case 'scanner':
-      return { ...def, hp, range: def.range * (1 - loss.scannerRange * steps) } as T;
+      return { ...def, hp, range: def.range * keep } as T;
     default: // cargo and core parts lose max HP only
       return { ...def, hp } as T;
   }

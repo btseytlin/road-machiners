@@ -45,7 +45,7 @@ describe('combat harness', () => {
   });
 
   it('names the courier side when it flees a stronger truck', () => {
-    const r = runFight({ ...FIGHT, a: parseLineup('merc:snowball'), b: parseLineup('courier:standard'), seed: 3, maxTurns: 40 });
+    const r = runFight({ ...FIGHT, a: parseLineup('buggy'), b: parseLineup('courier:standard'), seed: 3, maxTurns: 40 });
     expect(r.outcome).toBe('b fled');
   });
 

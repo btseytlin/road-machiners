@@ -52,7 +52,7 @@ Details: [character](wiki/mechanics/character.md), [skills tables](wiki/skills.m
 
 ## Truck
 
-The truck is equipment, not the character. It can be changed, upgraded, stripped and lost. The inventory grid is a top view of the truck where every cell is a tradeoff: a deck cell holds a gun, a scanner or cargo, never all three. Mass and engine power are soft limits: each kilogram and each gun costs speed, so no truck is best at everything. Every part has one job and one weakness, and no part beats another of its kind at everything but price. Parts wear, break down on the road and finally turn to junk, so a loadout never settles for good and old trucks give way to new ones.
+The truck is equipment, not the character. It can be changed, upgraded, stripped and lost. The inventory grid is a top view of the truck where every cell is a tradeoff: a deck cell holds a gun, a scanner or cargo, never all three. Mass and engine power are soft limits: each kilogram and each gun costs speed, so no truck is best at everything. Every part has one job and one weakness, and no part beats another of its kind at everything but price. Parts wear, break down on the road and finally turn to junk, so a loadout never settles for good and old trucks give way to new ones. Most trucks run on rebuilt parts and pristine ones are rare. Better gear tilts a fight but does not decide it: of two like trucks, the one with parts two wear steps less worn wins about two fights in three.
 
 Details: [truck](wiki/mechanics/truck.md), [items tables](wiki/items.md).
 

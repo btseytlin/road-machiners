@@ -122,6 +122,7 @@ describe('wear', () => {
   it('fails the engine or the transmission outright and strands the truck', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
+    const wearBefore = new Map([mountedParts(me, 'engine')[0], corePart(me, 'transmission')].map((p) => [p.id, p.wear]));
     const chance = WEAR.failureChancePerTile;
     (WEAR as { failureChancePerTile: number }).failureChancePerTile = 1;
     try {
@@ -133,7 +134,7 @@ describe('wear', () => {
     const driveParts = [mountedParts(me, 'engine')[0], corePart(me, 'transmission')];
     const failed = driveParts.filter((p) => p.hp === 0);
     expect(failed).toHaveLength(1);
-    expect(failed[0].wear).toBe(1);
+    expect(failed[0].wear).toBe(wearBefore.get(failed[0].id)! + 1);
     expect(isStranded(w, me)).toBe(true);
     expect(w.events).toContainEqual({ t: 'breakdown', vehicle: me.id, part: failed[0].id });
   });
@@ -228,17 +229,19 @@ describe('stat loss per wear step', () => {
 
   it('lowers max HP by a share of def HP per step', () => {
     const def = partDef('cab');
-    expect(maxHp(part('cab', 2))).toBe(Math.round(def.hp * (1 - 2 * CONDITION.hpLoss)));
+    expect(maxHp(part('cab', 2))).toBe(Math.round(def.hp * (1 - 2 * CONDITION.stepLoss)));
   });
+
+  const keep = 1 - 2 * CONDITION.stepLoss;
+  const costlier = 1 + 2 * CONDITION.stepLoss;
 
   it('widens weapon spread and cuts damage, penetration and range, and keeps the pristine def intact', () => {
     const def = partDef('mg') as WeaponDef;
     const worn = wornDef<WeaponDef>(part('mg', 2));
-    const loss = CONDITION.statLoss;
-    expect(worn.spread).toBeCloseTo(def.spread * (1 + 2 * loss.spread));
-    expect(worn.round.damage).toBeCloseTo(def.round.damage * (1 - 2 * loss.damage));
-    expect(worn.round.pen).toBeCloseTo(def.round.pen * (1 - 2 * loss.pen));
-    expect(worn.range).toBeCloseTo(def.range * (1 - 2 * loss.range));
+    expect(worn.spread).toBeCloseTo(def.spread * costlier);
+    expect(worn.round.damage).toBeCloseTo(def.round.damage * keep);
+    expect(worn.round.pen).toBeCloseTo(def.round.pen * keep);
+    expect(worn.range).toBeCloseTo(def.range * keep);
     expect(worn.round).not.toBe(def.round);
     expect([worn.cooldown, worn.magazine, worn.reload, worn.arc, worn.mass]).toEqual([def.cooldown, def.magazine, def.reload, def.arc, def.mass]);
   });
@@ -246,22 +249,21 @@ describe('stat loss per wear step', () => {
   it('cuts engine speed, accel bonus and gun power, and raises fuel use and heat', () => {
     const def = partDef('stockEngine') as EngineDef;
     const worn = wornDef<EngineDef>(part('stockEngine', 2));
-    const loss = CONDITION.statLoss;
-    expect(worn.speedBonus).toBeCloseTo(def.speedBonus - 2 * loss.speedBonus);
-    expect(worn.accelBonus).toBeCloseTo(def.accelBonus - 2 * loss.accelBonus);
-    expect(worn.capacity).toBeCloseTo(def.capacity * (1 - 2 * loss.capacity));
-    expect(worn.fuelMult).toBeCloseTo(def.fuelMult * (1 + 2 * loss.fuelMult));
-    expect(worn.heat).toBeCloseTo(def.heat * (1 + 2 * loss.heat));
+    expect(worn.speedBonus).toBeCloseTo(def.speedBonus - 2 * CONDITION.speedLoss.speedBonus);
+    expect(worn.accelBonus).toBeCloseTo(def.accelBonus - 2 * CONDITION.speedLoss.accelBonus);
+    expect(worn.capacity).toBeCloseTo(def.capacity * keep);
+    expect(worn.fuelMult).toBeCloseTo(def.fuelMult * costlier);
+    expect(worn.heat).toBeCloseTo(def.heat * costlier);
   });
 
   it('lowers armor on armor parts', () => {
     const def = partDef('plates') as ArmorDef;
-    expect(wornDef<ArmorDef>(part('plates', 2)).armor).toBeCloseTo(def.armor * (1 - 2 * CONDITION.statLoss.armor));
+    expect(wornDef<ArmorDef>(part('plates', 2)).armor).toBeCloseTo(def.armor * keep);
   });
 
   it('shortens scanner range', () => {
     const def = partDef('scanner') as ScannerDef;
-    expect(wornDef<ScannerDef>(part('scanner', 2)).range).toBeCloseTo(def.range * (1 - 2 * CONDITION.statLoss.scannerRange));
+    expect(wornDef<ScannerDef>(part('scanner', 2)).range).toBeCloseTo(def.range * keep);
   });
 
   it('costs cargo and core parts max HP only', () => {

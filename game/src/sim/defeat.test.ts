@@ -1,6 +1,5 @@
 import { NPCS } from '../data/npcs';
 import { describe, expect, it } from 'vitest';
-import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { CONDITION } from '../data/wear';
 import { autoOrders, isHostile } from './combat';
@@ -18,7 +17,7 @@ import { maxHealthOf } from './health';
 import { PERK_NUMBERS } from '../data/skills';
 import { territoryOfStock } from './territory';
 import { refreshVision } from './vision';
-import type { Vehicle, World } from './types';
+import type { PartInstance, Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
 
 // Every goods unit and part id a vehicle and the stocks hold, for checking that nothing is lost or copied.
@@ -223,9 +222,11 @@ describe('waking', () => {
     const truck = next.vehicles[0];
     expect(next.player.state).toBe('active');
     expect(next.events).toContainEqual({ t: 'wake' });
-    const patched = (defId: string) => Math.max(1, Math.round(partDef(defId).hp * RULES.defeatPatch));
-    expect(corePart(truck, 'cab').hp).toBe(patched('cab'));
-    expect(coreParts(truck, 'wheel').find((p) => p.id === wheel.id)!.hp).toBe(patched(wheel.defId));
+    const patched = (p: PartInstance) => Math.max(1, Math.round(maxHp(p) * RULES.defeatPatch));
+    const cab = corePart(truck, 'cab');
+    const brokenWheel = coreParts(truck, 'wheel').find((p) => p.id === wheel.id)!;
+    expect(cab.hp).toBe(patched(cab));
+    expect(brokenWheel.hp).toBe(patched(brokenWheel));
   });
 
   it('leaves junk core parts broken on waking', () => {

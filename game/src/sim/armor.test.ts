@@ -69,7 +69,8 @@ describe('walkLane', () => {
     const fresh = plated();
     const worn = plated();
     worn.plate.wear = 3;
-    const round = { damage: 10, pen: 20, blast: false, armorShare: 1 };
+    // Large enough that a few percent of armor shows past whole-HP rounding.
+    const round = { damage: 100, pen: 20, blast: false, armorShare: 1 };
     const freshHits = walkLane(fresh.w, fresh.v, 'front', 2, round);
     const wornHits = walkLane(worn.w, worn.v, 'front', 2, round);
     expect(wornHits[1].damage).toBeGreaterThan(freshHits[1].damage);
@@ -169,7 +170,7 @@ describe('knockout', () => {
     expect(mountedParts(me, 'engine')).toHaveLength(1);
     advanceKnockout(w);
     expect(w.events.some((e) => e.t === 'wake')).toBe(true);
-    expect(cab.hp).toBe(Math.max(1, Math.round(partDef('cab').hp * RULES.defeatPatch)));
+    expect(cab.hp).toBe(Math.max(1, Math.round(maxHp(cab) * RULES.defeatPatch)));
     expect(wheel.hp).toBeGreaterThan(0);
   });
 

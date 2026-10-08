@@ -111,8 +111,9 @@ describe('NPC equipment generation', () => {
       expect(average(NPCS.courier, 'poor', armor)).toBeGreaterThanOrEqual(0.75);
     }, budget(120_000));
 
+    // Past the first extra gun the worn engine's gun power caps a gunwagon, so the test spans the whole priority range.
     it('gives more guns for more firepower', () => {
-      const low = average(withPriorities(NPCS.gunwagon, { firepower: 1 }), 'standard', guns);
+      const low = average(withPriorities(NPCS.gunwagon, { firepower: 0 }), 'standard', guns);
       const high = average(withPriorities(NPCS.gunwagon, { firepower: PRIORITY_TOP }), 'standard', guns);
       expect(high).toBeGreaterThan(low);
     }, budget(120_000));
@@ -121,7 +122,7 @@ describe('NPC equipment generation', () => {
       for (let seed = 1; seed <= 12; seed++) {
         const v = rolled(NPCS.gunwagon, 'loaded', seed);
         const engine = mountedItems(v, 'engine')[0];
-        expect(1 - gunDrag(v, (partDef(engine.part.defId) as EngineDef).capacity), describeLoadout(v)).toBeLessThanOrEqual(MAX_GUN_SLOWDOWN);
+        expect(1 - gunDrag(v, wornDef<EngineDef>(engine.part).capacity), describeLoadout(v)).toBeLessThanOrEqual(MAX_GUN_SLOWDOWN);
       }
     }, budget(120_000));
 
@@ -130,9 +131,10 @@ describe('NPC equipment generation', () => {
       expect(room(withPriorities(NPCS.trader, { cargo: PRIORITY_TOP }))).toBeGreaterThan(room(withPriorities(NPCS.trader, { cargo: 0 })));
     }, budget(120_000));
 
+    // A gunwagon's guns stop at its worn engine's gun power whatever its speed priority, so a buggy shows the trade.
     it('keeps a faster truck for more speed priority', () => {
       const speed = (template: NpcTemplate) => average(template, 'loaded', topSpeed);
-      expect(speed(withPriorities(NPCS.gunwagon, { speed: PRIORITY_TOP }))).toBeGreaterThan(speed(withPriorities(NPCS.gunwagon, { speed: 0 })));
+      expect(speed(withPriorities(NPCS.buggy, { speed: PRIORITY_TOP }))).toBeGreaterThan(speed(withPriorities(NPCS.buggy, { speed: 0 })));
     }, budget(120_000));
   });
 
