@@ -43,7 +43,8 @@ async function play(ctx: Ctx, release: ReleaseState, sha: string, dir: string): 
   const log = releaseLog(ctx, 'playtest');
   const { seed } = release.playtest;
   const turns = ctx.cfg.playtestTurns;
-  await ctx.container.shell(dir, `npm ci && npm run progression:playthrough -- --seed ${seed} --turns ${turns} --sha ${sha} --out ${LOG}`, log);
+  // The full game suite runs here with no cache, since the cache could hide an input its fingerprint misses. The candidate builds only a commit this run passed.
+  await ctx.container.shell(dir, `npm ci && npm test && npm run progression:playthrough -- --seed ${seed} --turns ${turns} --sha ${sha} --out ${LOG}`, log);
   if (!existsSync(join(home, LOG))) throw new Error('The progression harness wrote no playtest log');
   const facts = logFacts(readFileSync(join(home, LOG), 'utf8'), { seed, turns, sha });
   writeFileSync(join(home, OUT_DIR, 'playtest-facts.json'), `${JSON.stringify(facts, null, 2)}\n`);

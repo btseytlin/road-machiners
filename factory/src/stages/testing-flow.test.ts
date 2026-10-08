@@ -34,6 +34,7 @@ let commentBodies: string[] = [];
 let priorComments: { login: string; body: string }[] = [];
 let shellScript = '';
 let shellEnv: Record<string, string> | undefined;
+let shellMounts: Record<string, string> | undefined;
 let photoButtons: unknown;
 let albums: { path: string; caption: string }[][] = [];
 let albumFails = false;
@@ -117,9 +118,10 @@ function fakeCtx(agent: (run: AgentRun) => void, shellFailures = 0, failureText 
         const findings = reviews.length > 0 ? reviews.shift() : [];
         return findings ? reportStream(findings) : '';
       },
-      shell: async (_dir: string, script: string, _log: string, env?: Record<string, string>) => {
+      shell: async (_dir: string, script: string, _log: string, env?: Record<string, string>, mounts?: Record<string, string>) => {
         shellScript = script;
         shellEnv = env;
+        shellMounts = mounts;
         calls.push('checks');
         if (failuresLeft-- > 0) throw new Error(failureText);
       },
@@ -199,6 +201,16 @@ describe('testing stage', () => {
     await runStage(ctx, 7);
     expect(shellScript).toContain('\nnpm run playtest -- --no-fps-gate\n');
     expect(shellScript).not.toContain('--cpu');
+  });
+
+  it('runs the cached tests with the cache folder mounted, and the full suite on a branch without the script', async () => {
+    const ctx = fakeCtx((run) => writeOutputs(run, JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' })));
+    await runStage(ctx, 7);
+    expect(shellScript).toContain('npm run test:cached -- --cache /test-cache');
+    expect(shellScript).toContain(`grep -q '"test:cached"' package.json`);
+    expect(shellScript).toContain('step "branch has no test:cached, full suite"\n  npm test\n');
+    expect(shellMounts).toEqual({ [`${home}/test-cache`]: '/test-cache' });
+    expect(existsSync(`${home}/test-cache`)).toBe(true);
   });
 
   it('posts one photo with everything in the caption, records it and moves to Approval', async () => {

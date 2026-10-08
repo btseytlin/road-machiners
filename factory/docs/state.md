@@ -17,6 +17,7 @@ One card position spans several stores. A position is consistent when every stor
 - Web root: the published builds. Written by checks, approve, ship and the dev build.
 - Telegram: the posts with buttons. Written by checks, candidate, approve and ship.
 - Source maps: `$FACTORY_HOME/sourcemaps/<commit>/` holds the maps of each release, dev and candidate build, and `published.jsonl` lists those builds. Written by ship, hotfix, the dev build and candidate. Read by the error service.
+- Test cache: `$FACTORY_HOME/test-cache/` holds the pass entries of the game test tool. The tool writes and reads them in the checks container, the only one that mounts the folder. The tick deletes files older than `FACTORY_TEST_CACHE_DAYS`.
 - Error reports: `$FACTORY_HOME/error-reports/` holds `store.json`, which ties each error fingerprint to its issue and counts reports and rejects, and `reports/<fingerprint>/<commit>.json.gz`. Written only by the error service. Agent stages of an `error-report` issue read its reports.
 
 ## Card positions

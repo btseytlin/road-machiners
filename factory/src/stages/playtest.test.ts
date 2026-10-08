@@ -64,7 +64,7 @@ describe('playtest', () => {
     const { f, shells, prompts, models } = setup();
     f.agentWrites = { 'playtest.json': review(), 'playtest.md': '## Run\nAll good.' };
     await playtest(f.ctx, 11);
-    expect(shells).toEqual([`npm ci && npm run progression:playthrough -- --seed ${SEED} --turns 100 --sha abc1234 --out .factory/playtest/log.jsonl`]);
+    expect(shells).toEqual([`npm ci && npm test && npm run progression:playthrough -- --seed ${SEED} --turns 100 --sha abc1234 --out .factory/playtest/log.jsonl`]);
     expect(models).toEqual(['opus']);
     expect(prompts[0]).toContain(`seed ${SEED}, 100 turns`);
     expect(prompts[0]).toContain('commit abc1234');
