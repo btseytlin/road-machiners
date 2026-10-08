@@ -28,7 +28,7 @@ Jill Jane, "J.J.", runs Waste Of Time Radio from a mast nobody has found. Her br
 
 ## Settlement people
 
-Bowl and Nose have locals the player talks to in town. `src/data/locals.ts` holds them, their questions and the journal notes their rumors leave. Keep new lines in these voices:
+Bowl and Nose have locals the player talks to in town. `src/data/locals.ts` holds them and the journal notes their rumors leave. What each says is an ink quest in `src/data/quests/`. Keep new lines in these voices:
 
 - Bowl is run by the canal families, a say for every gate, and guarded by the Bowl Farmers. Its people talk warm and slow, of crops, canals, water and seed. They think Nose is soldiers playing at a town.
 - Nose is an Army post that became a town. The Army runs it: command gives orders, dispatch hands them out. Its people talk short and to the point. They think Bowl is slow but needed, since its grain feeds them.

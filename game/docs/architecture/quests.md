@@ -1,6 +1,6 @@
 # Quests
 
-Quests are scripts written in [ink](https://github.com/inkle/ink/blob/master/Documentation/WritingWithInk.md), run by inkjs. They serve town talk and full text quests. Radio calls keep their own engine in `src/sim/dialogue.ts`.
+Quests are scripts written in [ink](https://github.com/inkle/ink/blob/master/Documentation/WritingWithInk.md), run by inkjs. They serve town talk and full text quests. Each local of Bowl and Nose is one quest, named in `LOCALS` in `src/data/locals.ts`. Radio calls keep their own engine in `src/sim/dialogue.ts`.
 
 ## Content
 
@@ -33,7 +33,16 @@ Quests are scripts written in [ink](https://github.com/inkle/ink/blob/master/Doc
 - Each `EXTERNAL` in `world.ink` has one function in `src/sim/quests.ts`: a query in `QUEST_QUERIES` or an effect in `QUEST_EFFECTS`.
 - A query only reads the world. An effect changes the world of the running command, and ink never runs it ahead of a pick.
 - Money crosses in whole M: `money()` reads it and `give_money(amount)` pays it.
+- `note(id)` writes a journal note and `has_note(id)` reads one. `found(site)` reads whether a town or location is found, and `searched(wreck)` whether a story wreck is searched. Each throws on an id the game does not know.
+- `has_work()` and `board_full()` read the board of the town the truck is parked at, and `take_work()` takes its best offer as the Contracts tab does. They throw away from a town. The offer is the best-paying open contract the truck can take, from `townWork()` in `src/sim/dialogue-rules.ts`.
 - Game state such as money is read through a query, never copied into an ink variable.
+
+## Text and the talk window
+
+- Inline markup is `<b>`, `<i>`, `<shake>`, `<pop>` and `<color=rust>`, closed by `</name>`. Square brackets would break ink choices, so markup uses angle brackets.
+- A line tag sets how the line reveals: `# reveal: all`, `word` or `char`, and `# speed: slow`, `normal` or `fast`. Words is the default. `# work_offer` shows the town's best offer under the line.
+- `MARKS` and `LINE_TAGS` in `src/ui/quest-text.ts` list them. A new effect is one entry there and its CSS in `style.css`. Unknown or unclosed markup and unknown tags fail `npm run quests:check`.
+- `src/ui/quest-screen.ts` is the talk window. It shows whenever `player.quests.live` is set, so a start, a pick and a load all show it. It lies over every other screen. It keeps the exchanges of this talk above the newest one. Digits pick, a click, Space or Enter shows the rest of the reveal at once, and Escape leaves the quest.
 
 ## Saves
 
@@ -47,4 +56,5 @@ Quests are scripts written in [ink](https://github.com/inkle/ink/blob/master/Doc
 
 - `npm run quest -- <quest>` plays a quest in the terminal on a new game, compiled fresh from the sources, so an edit plays without a build. Choices are numbered from 1. `--checkpoint <name>` starts at another checkpoint than the first. `--picks 1,2` plays those choices, and without it the player types picks. `--set name=value` sets a world or quest variable before the start. `--save <file>` writes the quest state as a save holds it. `--load <file>` checks that state against the sources. With an open session of the quest it resumes at its checkpoint, and with no open session it starts the quest with the saved variables, so one quest's outcome carries into the next.
 - `npm run quests:check` fails on compile errors and warnings, broken checkpoint tags, saved types it cannot hold, game functions missing on either side and a stale bundle. It then walks every choice from every checkpoint through the runner and fails on ink errors, on states from which no choice leads to an end, and on sections never reached. It names the picks that lead to each problem. A Vitest test runs the same check.
-- The walk merges states by ink's position, variables, visit counts up to 3 and money. It stops at 5,000 states and fails, since an unchecked quest must not pass. Game queries answer as on a new game, so a branch on a game query is walked on one side only.
+- The walk merges states by ink's position, variables, which sections were seen, money, notes and held contracts. A visit count only tells seen from unseen, so a count that matters lives in a variable. The walk stops at 5,000 states per world and fails, since an unchecked quest must not pass.
+- `gameScenes()` in `src/test/quest-check.ts` gives the worlds each quest is walked in: a new game, and a veteran who holds every note, has found every place, has searched every story wreck and holds a full board. A local's quest is walked parked at their town. So a branch on a game query is walked both ways when the two worlds answer it differently.
