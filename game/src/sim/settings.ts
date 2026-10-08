@@ -12,7 +12,6 @@ export function defaultSetup(mode: GameModeId): WorldSetup {
   return { mode, settings };
 }
 
-// A checked copy of a setup. Throws naming the first bad field.
 export function parseSetup(raw: unknown): WorldSetup {
   const setup = record(raw, 'World setup');
   onlyKeys(setup, ['mode', 'settings'], 'world setup field');
@@ -24,8 +23,6 @@ export function parseSetup(raw: unknown): WorldSetup {
   return { mode: setup.mode, settings: { ...defaultSetup(setup.mode).settings, ...pickSettings(settings) } };
 }
 
-// A setup with every bad or missing setting at its default, and the ids it reset. Rescue uses it, and reports them.
-// An unknown or missing mode gives default Roaming, with every setting reset.
 export function repairSetup(raw: unknown): { setup: WorldSetup; reset: SettingId[] } {
   const { mode, settings } = knownParts(raw);
   const setup = defaultSetup(mode);
@@ -45,7 +42,6 @@ export function supplyUseScale(world: World): number {
   return world.setup.settings.supplyUse;
 }
 
-// "Roaming, Damage 150%, Fuel use 100%, Supply use 100%", for the help menu and bug reports.
 export function setupLabel(setup: WorldSetup): string {
   const parts = SETTING_IDS.map((id) => `${WORLD_SETTINGS[id].name} ${percent(setup.settings[id])}`);
   return [GAME_MODES[setup.mode].name, ...parts].join(', ');
@@ -62,13 +58,11 @@ function validSetting(id: SettingId, value: unknown): value is number {
   return Math.abs(steps - Math.round(steps)) < 1e-9;
 }
 
-// The mode and settings object of a setup, as far as they are known: default Roaming with no settings otherwise.
 function knownParts(raw: unknown): { mode: GameModeId; settings: Record<string, unknown> } {
   if (!isRecord(raw) || !isMode(raw.mode)) return { mode: 'roaming', settings: {} };
   return { mode: raw.mode, settings: isRecord(raw.settings) ? raw.settings : {} };
 }
 
-// The given settings but the skipped ones.
 function pickSettings(settings: Record<string, unknown>, skip: readonly SettingId[] = []): Partial<WorldSettings> {
   return Object.fromEntries(SETTING_IDS.filter((id) => !skip.includes(id)).map((id) => [id, settings[id]])) as Partial<WorldSettings>;
 }

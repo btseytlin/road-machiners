@@ -11,13 +11,11 @@ import { TERRAIN_CHUNK, type TerrainChunk } from './terrain';
 const VISIBLE = 0;
 const EXPLORED = 1;
 const DARK = 2;
-const UNSET = 255; // before the first update, so it writes every chunk
+const UNSET = 255;
 
 type Look = { grey: number; bright: number };
 type FogChunk = { x: number; y: number; width: number; depth: number; look: THREE.BufferAttribute };
 
-// Fog chunks keep the per-tile fog state they last drew. An update rewrites only the chunks whose
-// vertices touch a tile with a changed state.
 export class FogView {
   private readonly chunks: FogChunk[] = [];
   private readonly perSide: number;
@@ -25,7 +23,6 @@ export class FogView {
   private readonly dirty: Uint8Array;
   private readonly lookOf: Look[] = [{ grey: 0, bright: 1 }, TERRAIN.fog.seen, TERRAIN.fog.unseen];
 
-  // Each update also passes the clearly seen tiles to the sight limit, which greys props by them.
   constructor(world: World, ground: TerrainChunk[], private readonly limit: SightLimit) {
     const n = world.size;
     this.perSide = Math.ceil(n / TERRAIN_CHUNK);
@@ -53,7 +50,6 @@ export class FogView {
       const s = visible[t] ? VISIBLE : explored[t] ? EXPLORED : DARK;
       if (s === this.state[t]) continue;
       this.state[t] = s;
-      // Tile (x, y) feeds the four vertices x..x+1, y..y+1. A vertex on a chunk border belongs to both chunks.
       const x = t % n;
       const y = (t - x) / n;
       const cx0 = x % C === 0 && x > 0 ? x / C - 1 : Math.floor(x / C);
@@ -69,7 +65,6 @@ export class FogView {
     }
   }
 
-  // Each vertex averages the look of the up to four tiles around it, so edges blend.
   private writeChunk(chunk: FogChunk, n: number): void {
     const array = chunk.look.array as Float32Array;
     for (let j = 0; j <= chunk.depth; j++) for (let i = 0; i <= chunk.width; i++) {
@@ -93,8 +88,6 @@ export class FogView {
   }
 }
 
-// Mixes the lit ground color toward its own grey, then scales its brightness, by the fogLook attribute.
-// Chains any shader patch the material already has, like the sight limit.
 function greyOut(mat: THREE.MeshLambertMaterial): void {
   const before = mat.onBeforeCompile.bind(mat);
   const key = mat.customProgramCacheKey.bind(mat);

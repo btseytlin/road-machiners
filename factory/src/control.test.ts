@@ -68,7 +68,6 @@ const seed = (patch: Partial<FactoryState>): void => writeState(statePath, { ...
 const command = (body: object): Command => ({ by: 'Ann', reason: 'the gate failed on load', ...body }) as Command;
 const ctrlLines = () => readLedger(ROOT, new Date(0)).filter((line) => line.kind === 'control');
 
-// A card stuck in Testing with every store holding something of it.
 function busyCard(): void {
   cards = [card(4, 'Testing', ['factory-stuck', 'needs-info', 'hotfix'])];
   seed({
@@ -81,7 +80,6 @@ function busyCard(): void {
   });
 }
 
-// The work clone of an issue holds the task file and the approval the stages write.
 function stageArtifacts(issue: number, names: { task: boolean; approval: boolean }): void {
   const game = join(workDir(fakeCtx(), issue), 'game');
   if (names.task) {
@@ -233,7 +231,6 @@ describe('move', () => {
     expect(existsSync(replyMediaDir(ROOT, 43))).toBe(true);
   });
 
-  // A move to approval asks the committee again, so only Hardening and Merging keep the approval.
   it.each([
     ['triage', 'Triage', false, false],
     ['implement', 'Implementation', false, false],
@@ -484,7 +481,6 @@ describe('move and merge preconditions and write order', () => {
     expect(calls).toContain('close 4 not planned');
     expect(calls).toContain('move 4 Done');
     expect(readState(statePath).approvalPosts).toEqual({ 43: 5 });
-    // Both moves to Done say dropped, so the dashboard reads one drop and no operator move.
     expect(readLedger(ROOT, new Date(0)).filter((line) => line.kind === 'card').map((line) => line.kind === 'card' && line.step)).toEqual(['dropped', 'dropped']);
   });
 });

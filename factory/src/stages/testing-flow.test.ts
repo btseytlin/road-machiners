@@ -52,7 +52,6 @@ const result = (cost: number) => `${JSON.stringify({ type: 'result', total_cost_
 const out = (run: AgentRun) => `${run.clone}/${run.dir}/.factory`;
 const APPROVAL = JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' });
 
-// The agent of each run. Each run saves its session, as Claude Code does, so a continued round finds it.
 function fakeCtx(agent: (run: AgentRun, index: number) => void, shellFailures: string[] = [], budget = 10): Ctx {
   const failures = [...shellFailures];
   const fake = {
@@ -121,7 +120,6 @@ function fakeCtx(agent: (run: AgentRun, index: number) => void, shellFailures: s
   return fake as unknown as Ctx;
 }
 
-// A round that leaves a whole post: approval and screenshot.
 function posts(run: AgentRun): void {
   writeFileSync(`${out(run)}/approval.json`, APPROVAL);
   writeFileSync(`${out(run)}/screenshot.png`, pngBytes(0));

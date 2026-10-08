@@ -117,7 +117,6 @@ describe('free spots', () => {
   const hub = territoryPieces(fallenSun as never).find((p) => p.look === 'shipHub')!;
 
   it('counts the lane inside a hull a truck drives through as free, by its low boxes', () => {
-    // On the cage's axis, 1.5 tiles toward its south end: under the ribs, clear of both caches.
     const lane = { x: cage.pos.x + Math.cos(cage.yaw) * -1.5, y: cage.pos.y + Math.sin(cage.yaw) * -1.5 };
     expect(isFree(world, lane, 0.6, null)).toBe(true);
   });

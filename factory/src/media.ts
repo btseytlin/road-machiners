@@ -3,9 +3,6 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { join } from 'node:path';
 import { MEDIA_DIR } from './types';
 
-// Reference images from an issue are fetched by the host before the agent starts, since the agent's network reaches neither GitHub's attachment redirect target nor any other media host.
-// The host fetches only from GitHub's own attachment hosts, follows only redirects to GitHub's own storage, and keeps what it fetched in a folder the agent reads but cannot change.
-
 export const MEDIA_MOUNT = `/work/${MEDIA_DIR}`;
 export const MAX_FILES = 12;
 export const MAX_BYTES = 10 * 1024 * 1024;
@@ -13,27 +10,24 @@ export const TIMEOUT_MS = 20_000;
 const MAX_HOPS = 3;
 const MAX_SIDE = 16384;
 
-// Where an attachment link may point. Anything else in an image tag is listed as not seen.
 const SOURCE_HOSTS = ['github.com', 'user-images.githubusercontent.com', 'private-user-images.githubusercontent.com'];
 const SOURCE_PATHS = [/^\/user-attachments\/(assets\/[0-9a-f-]{36}|files\/\d+\/[\w.-]+)$/i, /^\/[\w.-]+\/[\w.-]+\/assets\/\d+\/[0-9a-f-]{36}$/i, /^\/\d+\/[\w.-]+$/];
-// Where GitHub's attachment URLs redirect to. Exact hosts only, so no wildcard opens the way to other buckets.
 const REDIRECT_HOSTS = [...SOURCE_HOSTS, 'objects.githubusercontent.com', 'github-production-user-asset-6210df.s3.amazonaws.com', 'github-production-repository-file-5c1aeb.s3.amazonaws.com'];
 const TOKEN_HOST = 'github.com';
-// The game's own site. Only root-level image files and /concepts/<name> images, with plain names, never a query, so no page, API or secret path matches.
 const FIRST_PARTY_HOST = 'roam-game.online';
 const FIRST_PARTY_PATH = /^\/(concepts\/)?[A-Za-z0-9][A-Za-z0-9_-]{0,99}\.(jpg|jpeg|png|webp)$/;
 
 export type ImageType = 'png' | 'jpeg' | 'gif' | 'webp';
 export type MediaEntry = {
-  url: string; // without its query, which can carry a signature
-  source: string; // where the issue shows it, like "issue body" or "comment by ann"
+  url: string;
+  source: string;
   status: 'ok' | 'skipped' | 'failed';
-  file?: string; // file name inside the media folder
+  file?: string;
   type?: ImageType;
   width?: number;
   height?: number;
   bytes?: number;
-  sha256?: string; // set for a committee reply image, which has no URL to name it
+  sha256?: string;
   reason?: string;
 };
 export type MediaText = { source: string; text: string };
@@ -46,7 +40,6 @@ function plainUrl(raw: string): string {
   return `${url.origin}${url.pathname}`;
 }
 
-// Images an issue shows: markdown images, HTML image tags and bare attachment links, in order, without repeats.
 export function extractMediaUrls(text: string): string[] {
   const found: { at: number; url: string }[] = [];
   const add = (pattern: RegExp) => { for (const m of text.matchAll(pattern)) found.push({ at: m.index ?? 0, url: m[1] }); };
@@ -86,7 +79,6 @@ export function detectType(data: Buffer): ImageType | null {
   return null;
 }
 
-// Reads the size from the header, so a file that is only named like an image fails here. WebP has none checked.
 type Size = { width: number; height: number };
 const SIZERS: Record<ImageType, (data: Buffer) => Size | null> = {
   png: (data) => (data.length >= 24 && data.toString('latin1', 12, 16) === 'IHDR' ? { width: data.readUInt32BE(16), height: data.readUInt32BE(20) } : null),
@@ -95,7 +87,6 @@ const SIZERS: Record<ImageType, (data: Buffer) => Size | null> = {
   webp: (data) => (data.length >= 30 ? { width: 1, height: 1 } : null),
 };
 
-// Reads the size from the header, so a file that is only named like an image fails here. WebP gets a length check only.
 export function imageSize(data: Buffer, type: ImageType): Size | null {
   return SIZERS[type](data);
 }
@@ -124,7 +115,6 @@ async function readCapped(res: Response): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
-// Checks one hop before a request goes out. A first-party image may only redirect to first-party images. Otherwise only GitHub's own hosts, over plain https, may be asked.
 function checkedHop(url: string, firstParty: boolean): URL {
   const target = parseHttps(url);
   if (firstParty) {
@@ -135,12 +125,10 @@ function checkedHop(url: string, firstParty: boolean): URL {
   return target;
 }
 
-// The token goes only to the first hop, and only when that hop is github.com.
 function hopHeaders(opts: MediaOptions, target: URL, hop: number): Record<string, string> {
   return opts.token && hop === 0 && target.hostname === TOKEN_HOST ? { Authorization: `Bearer ${opts.token}` } : {};
 }
 
-// Follows redirects by hand, so every hop is checked before a request goes out.
 async function download(opts: MediaOptions, start: string): Promise<Buffer> {
   let url = start;
   const firstParty = firstPartySource(start);
@@ -159,7 +147,6 @@ function hostOf(raw: string): string {
   try { return new URL(raw).hostname; } catch { return 'an invalid URL'; }
 }
 
-// Names come from the URL's hash, never from the URL, so no path or traversal text reaches the disk.
 function fileFor(url: string, type: ImageType): string {
   return `ref-${createHash('sha256').update(url).digest('hex').slice(0, 12)}.${type === 'jpeg' ? 'jpg' : type}`;
 }
@@ -201,8 +188,6 @@ function safePlain(raw: string): string {
   return parseHttps(raw) === null ? 'an invalid URL' : plainUrl(raw);
 }
 
-// Fetches every image the texts show into the folder. Files stay across stages, so a link that expired since the first stage still resolves.
-// The result lists every image with its status. The caller decides what a failure means.
 export async function fetchMedia(opts: MediaOptions): Promise<MediaEntry[]> {
   mkdirSync(opts.dir, { recursive: true });
   const cache = readManifest(opts.dir);
@@ -221,7 +206,6 @@ export async function fetchMedia(opts: MediaOptions): Promise<MediaEntry[]> {
   return entries;
 }
 
-// The part of every stage prompt that names the images. Paths are the ones inside the agent container.
 export function mediaSection(entries: MediaEntry[]): string {
   if (entries.length === 0) return 'The issue shows no reference images.';
   const lines = entries.map((entry, index) => entry.status === 'ok'

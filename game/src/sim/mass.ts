@@ -12,9 +12,6 @@ export function vehicleMass(v: Vehicle): number {
   return mass;
 }
 
-// Top speed and turning scale by this. 1 at the chassis handling mass, above 1 when lighter and below 1 when heavier,
-// so every kilogram of armor, guns and cargo costs speed. It follows the square root of handling mass over mass.
-// Past the rated mass it also takes (rated / mass) to the power RULES.overloadExponent, so an overloaded truck slows hard.
 export function loadFactor(v: Vehicle, extraMass = 0): number {
   const ch = chassisDef(v.chassisId);
   const mass = vehicleMass(v) + extraMass;

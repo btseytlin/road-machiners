@@ -18,7 +18,6 @@ function parseArgs(argv) {
   return { cache: resolve(dir), filters: args.filter((_, i) => i !== at && i !== at + 1) };
 }
 
-// Every module that the test file imported, found through the module graph of the run.
 function importsOf(project, file) {
   const seen = new Set();
   const stack = [...(project.vite.moduleGraph.getModulesByFile(file) ?? [])];

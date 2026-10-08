@@ -44,7 +44,6 @@ function fakeCtx(): Ctx {
     container: { shell: record('shell') },
     repo: {
       fetch: record('fetch'), headHash: async () => 'abc1234',
-      // A clone's build output, as the game's build leaves it, maps included.
       prepareWorkClone: async (...args: unknown[]) => {
         calls.push(`prepare ${args.join(' ')}`);
         mkdirSync(`${String(args[2])}/game/dist`, { recursive: true });

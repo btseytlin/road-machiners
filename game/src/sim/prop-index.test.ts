@@ -11,7 +11,6 @@ import { defaultSetup } from './settings';
 
 const SIGHT_KINDS: Obstacle['kind'][] = ['rock', 'wreck', 'building', 'landmark'];
 
-// The full scans the index replaced, kept as the reference answers.
 const scanSight = (w: World, a: Vec, b: Vec) => w.obstacles.filter((o) => SIGHT_KINDS.includes(o.kind) && dist(a, o.pos) < dist(a, b) + propReach(o));
 const scanSightAround = (w: World, c: Vec, r: number) => w.obstacles.filter((o) => SIGHT_KINDS.includes(o.kind) && dist(c, o.pos) < r + propReach(o));
 const scanShade = (w: World, c: Vec, r: number) => w.obstacles.filter((o) => TIME.obstacleShade[o.kind] !== undefined && dist(c, o.pos) <= r + TIME.shadeReach + o.r);

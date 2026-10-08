@@ -11,7 +11,6 @@ export type SavePanelActions = {
   list: () => SlotInfo[];
   manualSlots: () => SlotId[];
   save: (slot: SlotId) => void;
-  // Leaves a boot request and reloads the page.
   reboot: (slot: SlotId) => void;
   exportSave: () => void;
   exportLog: () => void;

@@ -46,7 +46,7 @@ describe('market', () => {
 
   it('saturates a stall on a far smaller lot than a garage', () => {
     const w = emptyWorld();
-    const units = 6; // near a stall's own restocked shelf size
+    const units = 6;
     const stall = initShop(w, 'salvage-yard');
     const garage = initShop(w, 'bowl');
     recordTrade('salvage-yard', stall, 'scrap', units, 'sell');
@@ -71,7 +71,6 @@ describe('market', () => {
     expect(last).toBeGreaterThan(0);
     for (let i = 0; i < 500; i++) {
       w.turn++;
-      // Stay well before the next restock so only drift, not a fresh roll, moves pressure.
       state.restockAt = w.turn + SHOPS.bowl.restockTurns;
       advanceShop(w, 'bowl', state);
       expect(state.pressure.scrap).toBeLessThanOrEqual(last);
@@ -90,7 +89,6 @@ describe('market', () => {
     expect(s1.stock.length).toBeGreaterThanOrEqual(SHOPS['salvage-yard'].stockSize[0]);
     expect(s1.stock.length).toBeLessThanOrEqual(SHOPS['salvage-yard'].stockSize[1]);
 
-    // Force a restock and check the same rng state gives the same fresh stock again.
     s1.restockAt = w1.turn;
     s2.restockAt = w2.turn;
     advanceShop(w1, 'salvage-yard', s1);
@@ -154,15 +152,11 @@ describe('market', () => {
   });
 
   it('prices a good made locally below the same good sold farther from any maker', () => {
-    // Bowl makes scrap, so it prices lowest; Nose, farther from any scrap maker, prices dearer.
     expect(goodBasePrice('bowl', 'scrap')).toBeLessThan(goodBasePrice('nose', 'scrap'));
-    // Nose makes salt; Bowl sits far from Nose, the only salt maker, so it prices dearer still.
     expect(goodBasePrice('nose', 'salt')).toBeLessThan(goodBasePrice('bowl', 'salt'));
   });
 
   it('prices a good higher the farther a shop sits from its nearest maker', () => {
-    // Salt has one maker, Nose. Granary sits about half the Bowl-Nose distance from Nose, so it
-    // should price salt between Nose's own make price and Bowl's, the farthest point that trades it.
     const nose = goodBasePrice('nose', 'salt');
     const granary = goodBasePrice('granary', 'salt');
     const bowl = goodBasePrice('bowl', 'salt');
@@ -193,22 +187,17 @@ describe('market', () => {
   });
 
   it('pays a full truck load of a haul about haulWages tier wages times the trip turns, lot pressure included', () => {
-    // Salt is made only at Nose. A full scout load bought there and sold at Bowl, the farthest point
-    // that trades it, is the design's own worked example for what distance should pay.
     const w = emptyWorld();
     const units = freeCells(addVehicle(w, 'raiders', 'scout', [], { x: 0, y: 0 }));
     const buy = lotPrice('nose', initShop(w, 'nose'), 'salt', 'buy', ECONOMY.spread, units);
     const sell = lotPrice('bowl', initShop(w, 'bowl'), 'salt', 'sell', ECONOMY.spread, units);
     const turns = estimateTurns(siteOf('nose').pos, siteOf('bowl').pos);
-    const target = turns * EFFORT.wage[1] * EFFORT.haulWages; // salt is tier 1
+    const target = turns * EFFORT.wage[1] * EFFORT.haulWages;
     expect(sell - buy).toBeGreaterThan(target * 0.7);
     expect(sell - buy).toBeLessThan(target * 1.3);
   });
 
   it('pays a shorter haul less in total, but not less per turn, than a longer one', () => {
-    // Granary sits well short of Bowl on the road out from Nose, salt's only maker. A modest lot,
-    // sized like an actual haul contract rather than a full truck dump, keeps a small stall's thin
-    // stock from swamping the comparison.
     const w = emptyWorld();
     const units = 5;
     const routeProfit = (sellShop: string) => {

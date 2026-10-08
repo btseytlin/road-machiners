@@ -8,7 +8,6 @@ import type { JobOutcome } from './ledger';
 
 export const ACTIVITIES = ['starting', 'model', 'reading', 'editing', 'command', 'tests', 'typecheck', 'playtest', 'build', 'publish', 'install', 'git', 'lock', 'review', 'design', 'investigate', 'waiting', 'finished'] as const;
 export type Activity = typeof ACTIVITIES[number];
-// An agent names its milestone in the card's words, like "Building orchard buildings". The public dashboard shows it, so the text cannot carry paths, commands or markup, and fits one table cell.
 export const MILESTONE_PATTERN = /^[A-Za-z0-9 ,.'-]{3,80}$/;
 export type Milestone = string;
 export type ActivityData = { type: 'activity'; activity: Activity; phase: 'running' | 'completed' | 'failed'; source: 'runner' | 'agent'; milestone?: Milestone | null; progressAt?: string | null; ownerPid?: number | null };
@@ -81,7 +80,6 @@ export function recordObservation(home: string, producer: string, data: Observat
   const path = resolveObservationPath(home, producer);
   validateObservationData(data);
   mkdirSync(join(home, 'observations'), { recursive: true });
-  // Match the state lock's deadline: observation writes are small local transactions.
   withLockSync(`${path}.lock`, 30_000, () => writeObservation(home, path, producer, data, now));
 }
 function writeObservation(home: string, path: string, producer: string, data: ObservationData, now: Date): void {

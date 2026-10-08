@@ -163,7 +163,6 @@ describe("utility log", () => {
 });
 
 describe("harpoon log", () => {
-  // The player with a harpoon and a seen trader hauler, and the player's harpoon shot at it.
   function harpooned(rounds: ShotRound[]) {
     const w = emptyWorld();
     const me = w.vehicles[0];
@@ -257,7 +256,6 @@ describe("claymore log", () => {
 });
 
 describe("caltrops log", () => {
-  // A hit of 8 on each of the truck's wheels, as a caltrop field deals.
   const wheelHits = (v: { items: { kind: string; part?: PartInstance }[] }) =>
     v.items.flatMap((i) => (i.part && partDef(i.part.defId).kind === "core" && i.part.defId.includes("wheel") ? [{ part: i.part.id, damage: 8 }] : []));
 

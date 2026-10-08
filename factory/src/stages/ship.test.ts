@@ -46,7 +46,6 @@ describe('ship', () => {
       { cmd: 'git', args: ['rev-parse', 'HEAD'], env: undefined },
       { cmd: 'butler', args: ['push', join(ROOT, 'work', 'release-main', 'game', 'dist'), 'u/g:html5', '--userversion', 'abc1234'], env: { BUTLER_API_KEY: 'secret' } },
     ]);
-    // The maps stay on the host under the commit, so itch never gets them.
     expect(existsSync(join(ROOT, 'work', 'release-main', 'game', 'dist', 'assets', 'index.js.map'))).toBe(false);
     expect(existsSync(join(ROOT, 'sourcemaps', CLONE_SHA, 'assets', 'index.js.map'))).toBe(true);
     expect(readPublished(ROOT)).toEqual([{ sha: CLONE_SHA, kind: 'release', publishedAt: '2026-09-29T10:00:00.000Z' }]);

@@ -49,7 +49,6 @@ function makeStorage(): Storage {
 
 type Saved = { player: { explored: unknown }; obstacles: { id: string }[]; vehicles: object[]; broken: object[] };
 
-// The saved world of a slot, as a script reading the database sees it.
 function savedWorldOf(slots: SaveSlots, slot: SlotId): Saved {
   return (slots.get(slot) as { world: Saved }).world;
 }
@@ -446,7 +445,6 @@ describe('game save', () => {
 describe('saved world settings', () => {
   const tuned = (damage: number, fuelUse: number) => parseSetup({ mode: 'roaming', settings: { damage, fuelUse, supplyUse: 1 } });
 
-  // A current save of a new world whose setup is replaced by `setup` as stored JSON.
   function storedWith(setup: unknown): SaveSlots {
     const slots = makeSlots();
     const save = JSON.parse(JSON.stringify(saveOf(newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')))));
@@ -469,7 +467,6 @@ describe('saved world settings', () => {
     const slots = makeSlots();
     const save = JSON.parse(JSON.stringify(saveOf(newWorld(1337, startKit('standard'), TEST_MAP, tuned(2, 2)))));
     delete save.world.setup;
-    // A save of that age still holds the last turn's events, the removed vehicles and the trails.
     save.world.events = [];
     save.world.removed = [];
     for (const vehicle of save.world.vehicles) vehicle.trail = [];

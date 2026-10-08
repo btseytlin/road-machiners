@@ -15,7 +15,6 @@ function defaults(): Settings {
   return { muted: false, volume: { ...MIX.busVolume } };
 }
 
-// Invalid stored settings stop the boot, like an invalid save.
 export function parseSettings(raw: string | null): Settings {
   if (raw === null) return defaults();
   const s = JSON.parse(raw);
@@ -24,35 +23,26 @@ export function parseSettings(raw: string | null): Settings {
   return s;
 }
 
-// Knob steps from silent to full volume.
 const STEPS = 20;
-// A knob's pointer swings this many degrees each side of straight up.
 const SWEEP = 135;
-// Pixels of drag travel for the whole range.
 const DRAG_FULL_PX = 160;
-// Drag travel in pixels that changes nothing, so a click never adjusts.
 const DRAG_DEAD_PX = 3;
-// A drag sets whole percents.
 const DRAG_STEPS = 100;
 
-// A volume dragged from where the press began: up or right raises it, down or left lowers it.
 export function dragged(start: number, dx: number, dy: number): number {
   if (Math.abs(dx) + Math.abs(dy) < DRAG_DEAD_PX) return start;
   const value = Math.round((start + (dx - dy) / DRAG_FULL_PX) * DRAG_STEPS) / DRAG_STEPS;
   return Math.min(1, Math.max(0, value));
 }
 
-// A volume turned some steps, clamped to the knob's range and snapped to whole steps.
 export function turned(value: number, steps: number): number {
   return Math.min(1, Math.max(0, Math.round(value * STEPS + steps) / STEPS));
 }
 
-// The pointer angle of a knob at a volume, from -SWEEP at 0 to +SWEEP at full.
 export function knobAngle(value: number): number {
   return (value * 2 - 1) * SWEEP;
 }
 
-// A plastic transport key from an old CD player, with the skip-forward mark.
 function nextButton(onclick: () => void): HTMLElement {
   const button = el("button", { class: "radio-next", title: "Next track", "aria-label": "Next track", onclick });
   button.innerHTML = `<svg viewBox="0 0 14 8" focusable="false"><path d="M0 0L5 4L0 8ZM5 0L10 4L5 8Z"/><rect x="10.5" width="1.6" height="8"/></svg>`;
@@ -67,7 +57,6 @@ export class SoundSettings {
   private knobs = new Map<Bus, HTMLElement>();
   private readouts = new Map<Bus, HTMLElement>();
 
-  // The knobs and mute live on the radio's faceplate, the next track key in the strip above its screen.
   constructor(private mixer: Mixer, private storage: Storage, faceplate: HTMLElement, keys: HTMLElement, nextTrack: () => void) {
     this.settings = parseSettings(storage.getItem(KEY));
     this.muteSwitch = el("div", { class: "radio-mute" });
@@ -83,7 +72,6 @@ export class SoundSettings {
     this.save();
   }
 
-  // The whole column under a knob is its handle: drag it, turn the wheel, or use the arrow keys while the knob is focused.
   private knob(bus: Bus): HTMLElement {
     const dial = el("div", { class: "knob-dial" }, el("span", { class: "knob-notch" }));
     const knob = el("div", { class: "knob", role: "slider", tabindex: 0, "aria-label": `${LABEL[bus]} volume`, "aria-valuemin": 0, "aria-valuemax": 100 }, dial);
@@ -97,7 +85,6 @@ export class SoundSettings {
     return cell;
   }
 
-  // A drag keeps the pointer captured on the column, so the map and other panels never see it. It ends when the capture does.
   private bindDrag(cell: HTMLElement, bus: Bus): void {
     let drag: { pointerId: number; x: number; y: number; value: number } | null = null;
     cell.addEventListener("pointerdown", (e) => {
@@ -124,7 +111,6 @@ export class SoundSettings {
     });
   }
 
-  // Handled keys stay off the game.
   private bindKeys(knob: HTMLElement, bus: Bus): void {
     knob.addEventListener("keydown", (e) => {
       const steps = KNOB_KEYS[e.code];
@@ -153,7 +139,6 @@ export class SoundSettings {
     knob.style.setProperty("--knob-angle", `${knobAngle(volume)}deg`);
   }
 
-  // The switch is rebuilt only when the mute flips, not on a knob turn.
   private applyMute(): void {
     this.mixer.setMuted(this.settings.muted);
     const muted = this.settings.muted;
@@ -162,7 +147,6 @@ export class SoundSettings {
     );
   }
 
-  // Only the player's own changes are stored, so untouched groups follow new mix defaults.
   private save(): void {
     this.storage.setItem(KEY, JSON.stringify(this.settings));
   }

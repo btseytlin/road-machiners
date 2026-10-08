@@ -22,7 +22,7 @@ Find what is broken and fix it yourself, in this session.
 Run up:uverify on {{taskFile}}. Its stance is that the change is broken. Prove it with probes, then fix each break.
 
 Then run the `/code-review` skill on the change, and fix every correctness finding it reports.
-Read its other findings and fix the ones that make the code shorter or clearer: dead code, comments that no longer match, duplicated logic.
+Read its other findings and fix the ones that make the code shorter or clearer: dead code and duplicated logic.
 
 While you attack and review:
 

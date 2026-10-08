@@ -11,19 +11,18 @@ import { listSaves } from './save-slots';
 import { TurnFailure } from './travel';
 
 export type ErrorReport = {
-  build: string; // release, dev or candidate
+  build: string;
   version: string;
   error: { name: string; message: string; stack: string };
   userAgent: string;
   turn: number | null;
-  log: string[]; // newest first
-  world: object | null; // the save of the world in memory
-  autosave: string | null; // the stored Autosave as written, null when there is none or it is the world in memory
+  log: string[];
+  world: object | null;
+  autosave: string | null;
   autosaveIsWorld: boolean;
-  drive: (Omit<DriveSnapshot, 'snapshot'> & { snapshot: string }) | null; // a failed turn's start, the Rapier snapshot in base64
+  drive: (Omit<DriveSnapshot, 'snapshot'> & { snapshot: string }) | null;
 };
 
-// What the running game shows the reporter. Boot errors come before it and report no world.
 export type ReportSource = { world: () => World; log: () => string[]; slots: SaveSlots };
 
 type Post = (url: string, init: RequestInit) => Promise<Response>;
@@ -43,8 +42,6 @@ export class ErrorReporter {
     this.source = source;
   }
 
-  // Sends `err` unless this session already sent the same error, so an error that repeats every frame sends once.
-  // A failed send only warns, since a report must never change the game.
   report(err: unknown): Promise<void> {
     const error = describeError(err);
     const key = `${error.name}: ${error.message}`;
@@ -89,7 +86,6 @@ function encodeDrive(drive: DriveSnapshot): NonNullable<ErrorReport['drive']> {
   return { ...handles, snapshot: toBase64(snapshot) };
 }
 
-// String.fromCharCode takes its bytes as arguments, so a large snapshot goes in slices under the engines' argument limit.
 const BASE64_SLICE = 0x8000;
 
 function toBase64(bytes: Uint8Array): string {

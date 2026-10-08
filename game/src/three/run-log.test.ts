@@ -13,7 +13,6 @@ function start(): World {
   return { ...newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')), turn: 400 };
 }
 
-// The next world, as a command makes it: a clone with fresh events.
 function after(world: World, change: (w: World) => void): World {
   const next = cloneWorld(world);
   next.events = [];

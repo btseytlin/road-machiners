@@ -16,7 +16,7 @@ Four buses feed the master: `ui`, `sfx`, `ambient` and `music`. Each has a playe
 
 - World sounds, like guns, hits and crashes, play where they happen. Pan follows the screen position, and level halves at `MIX.halfGainMeters` from the camera focus. They use the same points as the visual effects, so fog of war silences what the player cannot see.
 - Each turn plays at most one result sting, the most important one: defeat, level-up, discovery or money.
-- The engine is one recorded loop per chassis. Its pitch and level follow speed over the turn, so speeding up revs and braking drops. Continuous sounds are always bent loops like this, never short clips per state. While heat damages the engine, the loop crossfades to a strained loop, one for light trucks and one for heavy ones, started with it and bent the same way, and falls back to the healthy note over two turns once the damage stops. The source of each strained loop lives in `sounds.ts`.
+- The engine is one recorded loop per chassis. Its pitch and level follow speed over the turn, so speeding up revs and braking drops. Continuous sounds are always bent loops like this, never short clips per state. While heat damages the engine, the loop crossfades to a strained loop, one for light trucks and one for heavy ones, started with it and bent the same way, and falls back to the healthy note over two turns once the damage stops. [Processed takes](#processed-takes) names the source of each strained loop.
 - A hard slowdown adds the air brake where the truck is. Passing or reaching an order point makes no sound of its own.
 - Wind rises near dust storms.
 - Calm music plays out of combat, from a playlist shuffled once per session. After each fight it comes back as the next track, so every track plays before any repeats.
@@ -66,7 +66,7 @@ World one-shots, the `sfx` cues with the `field` setup that do not loop, get two
 - A gentle cut above 8 kHz puts every take at the 10 m the prompt asks for. Generated takes come out close and bright.
 - Bass and treble move back to within `MIX.tone.spread` of the anchor's tone in `MIX.tone`. A cut may go up to 12 dB and a boost up to 6 dB, since a boost also raises noise.
 
-`npm run sfx:report` lists every world one-shot's loudness and tone beside the anchor. It flags the takes that import could not bring into range. Fix those by hand with ffmpeg, as the comments in `sounds.ts` show.
+`npm run sfx:report` lists every world one-shot's loudness and tone beside the anchor. It flags the takes that import could not bring into range. Fix those by hand with ffmpeg, as [Processed takes](#processed-takes) shows.
 
 ## Generating with ElevenLabs
 
@@ -74,8 +74,25 @@ World one-shots, the `sfx` cues with the `field` setup that do not loop, get two
 
 - Every prompt starts with the `SOUND_STYLE` of the cue's setup, so a set of sounds shares one microphone and place. Combat accents use the `stinger` style, and base loops use `score`.
 - Prompt style plus subject must stay under 450 characters, or the API refuses it.
-- Generated heavy sounds come out thin. Check the spectrogram and process the take with ffmpeg rather than generating again. The horn and air brake comments in `sounds.ts` show the processing used.
+- Generated heavy sounds come out thin. Check the spectrogram and process the take with ffmpeg rather than generating again. [Processed takes](#processed-takes) lists the processing used.
 - Raw takes stay in `tmp/sfx-raw/`, and each file's tag names its source. After an import change, `npm run sfx:reimport` rebuilds every file from those sources. `npm run sfx:reimport -- field` rebuilds only the world one-shots, and cue names rebuild those cues.
+
+## Processed takes
+
+These takes went through ffmpeg or Demucs before import. Each filter chain is the `-af` argument.
+
+- Horns came out thin and high. Each generated take runs through `asetrate=44100*0.55,aresample=44100,bass=g=8:f=120,volume=8dB,asoftclip=type=tanh`.
+- Air brakes are the one approved take, `arrive-1790459643829.mp3`. It runs through `asetrate=44100*<rate>,aresample=44100,lowpass=f=1400:p=1,highpass=f=60,afade=t=in:d=0.12` at rates 0.88, 0.8 and 0.95.
+- Harpoon takes came out thin, with a high whine. Fire takes run through `asetrate=44100*0.85,aresample=44100,lowpass=f=6000,lowpass=f=6000,bass=g=6:f=120`.
+- Harpoon hook takes run through `lowpass=f=8000:p=1,bass=g=4:f=150`.
+- Harpoon tear takes run through `asetrate=44100*0.85,aresample=44100,lowpass=f=5000,lowpass=f=5000,bass=g=4:f=150`.
+- Oil takes came out as bright hiss. They run through `asetrate=44100*0.8,aresample=44100,lowpass=f=3000,lowpass=f=3000,bass=g=4:f=150`, so they glug.
+- The strained engine has two variants. Variant 1 is a 4 s ElevenLabs loop with the engine's prompt style and this subject: "Heavy old diesel engine at full throttle in a failing state: coarse labored growl, heavy knocking, clattering and ticking, a missing cylinder stumble." Variant 2 is a 2 s overheated truck engine take, supplied by hand.
+- The desert blues take, `music-calm-1791230467032.mp3`, runs through `highpass=f=40,equalizer=f=250:t=q:w=1:g=2,equalizer=f=1500:t=q:w=1:g=-4,volume=3dB,asoftclip=type=tanh,volume=-3dB,lowpass=f=6500,treble=g=-3:f=4000` for tape grit.
+- The doom metal take, `music-calm-1791230995351.mp3`, runs through `asetrate=44100*0.9,aresample=44100,equalizer=f=1500:t=q:w=1:g=-3,lowpass=f=7000,treble=g=-3:f=4000` to sit back as road music.
+- The town take, `music-town-1791232434318.mp3`, is split with Demucs htdemucs. The drums stem goes back quiet and muffled, so the metal clanks drop out. The bass, other, vocals and drums stems are mixed with `-filter_complex` `[3]lowpass=f=2500,volume=-12dB[d];[0][1][2][d]amix=inputs=4:normalize=0,acompressor=threshold=-22dB:ratio=3:attack=5:release=200:makeup=2,treble=g=-3:f=5000`.
+- The outpost take, `music-outpost-1791233198633.mp3`, gets the same Demucs split and mix as the town take.
+- The abandoned territories take, `music-abandoned-1791234140171.mp3`, runs through `atempo=0.95,acompressor=threshold=-24dB:ratio=4:attack=2:release=300:makeup=2,lowpass=f=3500,treble=g=-4:f=2500,aecho=0.8:0.6:120|260:0.25|0.15` and is cut from 20 s. It sits far back and calm, and its cue volume is lower than the other music.
 
 ## Beat loops
 

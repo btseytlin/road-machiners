@@ -13,8 +13,6 @@ const GRID_TAPS = `float sum = 0.0;
 				}
 				shadow = sum / 9.0;`;
 
-// Patches the shared shader chunk once. Call it before the first render. Only the 2D getShadow changes,
-// which comes before getPointShadow.
 export function installShadowFilter(): void {
   const chunk: string = THREE.ShaderChunk.shadowmap_pars_fragment;
   if (chunk.includes(GRID_TAPS)) return;
@@ -24,7 +22,6 @@ export function installShadowFilter(): void {
   THREE.ShaderChunk.shadowmap_pars_fragment = head.replace(NOISY_TAPS, () => GRID_TAPS) + chunk.slice(head.length);
 }
 
-// Turns on PCF shadow maps with the smooth filter. Call it before the first render.
 export function enableSunShadows(renderer: THREE.WebGLRenderer): void {
   installShadowFilter();
   renderer.shadowMap.enabled = true;

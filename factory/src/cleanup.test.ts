@@ -10,7 +10,6 @@ const state = (over: Partial<FactoryState> = {}): FactoryState => ({ ...structur
 const card = (issue: number, column: Card['column']): Card => ({ itemId: `i${issue}`, issue, column, labels: [] });
 const running = (stage: Job['stage'], issue: number | null): Job => ({ id: `${stage}-${issue}`, stage, issue, pid: 1, startedAt: '', log: '' });
 
-// A work root with each named clone, each holding a task file and installed packages.
 function work(...names: string[]): string {
   const root = mkdtempSync(join(tmpdir(), 'work-'));
   for (const name of names) {

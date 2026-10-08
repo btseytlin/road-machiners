@@ -2,14 +2,14 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SEPARATOR, checkFragmentation, checkGuidance, checkSeparators, collectComponents, inspectSource, isGuidance } from './quality-policy.mjs';
+import { SEPARATOR, checkComments, checkFragmentation, checkGuidance, checkSeparators, collectComponents, inspectSource, isGuidance } from './quality-policy.mjs';
 
 const root = process.cwd();
 const sourcePattern = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const ignoredPattern = /(?:^|\/)(?:node_modules|dist|tmp|\.worktrees|\.pi|\.playtest|\.agents|\.claude)\//;
 const typeProjects = ['game', 'factory', 'factory/dashboard'];
 const browserPaths = /^factory\/(?:dashboard|src\/dashboard)\//;
-const maxBuffer = 64 * 1024 * 1024; // Bounds captured Git and linter output, including the repo-wide baseline.
+const maxBuffer = 64 * 1024 * 1024;
 
 function runGit(...args) {
   return execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer });
@@ -28,7 +28,6 @@ function readHeadFiles() {
   return [];
 }
 
-// The commits a merge in progress brings in. Their code is not new debt, since the gate passed it on their own branch.
 function readMergeHeads() {
   const file = path.resolve(root, runGit('rev-parse', '--git-path', 'MERGE_HEAD').trim());
   if (!existsSync(file)) return [];
@@ -54,7 +53,6 @@ function readGuidance(directory, files) {
   return readSources(directory, docs.filter(file => !lstatSync(path.join(directory, file)).isSymbolicLink()));
 }
 
-// Text files holding the separator, found by git grep, which skips binary files. Staged mode searches the index.
 function readSeparatorFiles(directory, staged) {
   const result = spawnSync('git', ['grep', staged ? '--cached' : '--untracked', '-lzIF', '-e', SEPARATOR], { cwd: root, encoding: 'utf8', maxBuffer });
   if (result.status !== 0 && result.status !== 1) throw new Error(result.stderr || 'git grep failed.');
@@ -86,9 +84,9 @@ function readLintReport(result) {
   return report.diagnostics;
 }
 
-function collectFindings(directory, sources, config) {
+function collectFindings(directory, sources, config, maxDocstringLines) {
   const findings = runLint(directory, [...sources.keys()], config);
-  for (const [file, source] of sources) findings.push(...inspectSource(file, source).findings);
+  for (const [file, source] of sources) findings.push(...inspectSource(file, source).findings, ...checkComments(file, source, maxDocstringLines));
   return findings;
 }
 
@@ -124,24 +122,23 @@ function findRegressions(current, previous) {
   });
 }
 
-function readParentSources(parent, baseline, config) {
+function readParentSources(parent, baseline, config, maxDocstringLines) {
   const sources = new Map(selectSources(parent.files).map(file => [file, runGit('show', `${parent.ref}:${file}`)]));
   mkdirSync(baseline, { recursive: true });
   writeSources(baseline, sources);
   const baselineConfig = path.join(baseline, '.oxlintrc.json');
   copyFileSync(config, baselineConfig);
-  return { sources, findings: collectFindings(baseline, sources, baselineConfig) };
+  return { sources, findings: collectFindings(baseline, sources, baselineConfig, maxDocstringLines) };
 }
 
-// A merge passes when each finding and each component is no worse than in one of its parents. A normal commit has HEAD alone.
 function checkQuality(directory, baseline, files, parents, staged) {
   const current = readSources(directory, selectSources(files));
   const config = path.join(directory, '.oxlintrc.json');
-  const previous = parents.map((parent, index) => readParentSources(parent, path.join(baseline, String(index)), config));
-  const currentFindings = collectFindings(directory, current, config);
+  const { maxFilesPerKloc, maxGuidanceWords, maxDocstringLines } = JSON.parse(readFileSync(path.join(directory, '.quality.json'), 'utf8'));
+  const previous = parents.map((parent, index) => readParentSources(parent, path.join(baseline, String(index)), config, maxDocstringLines));
+  const currentFindings = collectFindings(directory, current, config, maxDocstringLines);
   const regressions = previous.map(parent => new Set(findRegressions(currentFindings, parent.findings)));
   const findings = currentFindings.filter(finding => regressions.every(set => set.has(finding)));
-  const { maxFilesPerKloc, maxGuidanceWords } = JSON.parse(readFileSync(path.join(directory, '.quality.json'), 'utf8'));
   const fragmented = previous.map(parent => checkFragmentation(current, collectComponents(parent.sources), maxFilesPerKloc));
   const failures = fragmented[0].filter(failure => fragmented.every(list => list.some(other => componentOf(other) === componentOf(failure))));
   failures.push(...checkGuidance(readGuidance(directory, files), maxGuidanceWords));
@@ -155,7 +152,6 @@ function componentOf(failure) {
   return failure.slice(0, failure.indexOf(':'));
 }
 
-// A project with no node_modules of its own, like factory/dashboard, resolves packages from its parent folder.
 function linkModules(directory, project) {
   const installed = path.join(root, project, 'node_modules');
   const modules = path.join(directory, project, 'node_modules');
@@ -172,13 +168,10 @@ function checkTypes(directory) {
   }
 }
 
-// A commit that touches the dashboard or its server side runs the page against fixtures in the Playwright image, so a stale page fails the commit.
-// The image tag follows the installed Playwright version. Missing Docker or Playwright fails the commit and never skips the test.
 function mount(source, target, readonly) {
   return ['--mount', `type=bind,src=${source},dst=${target}${readonly ? ',readonly' : ''}`];
 }
 
-// The snapshot holds symlinks to the real node_modules, which dangle inside the container. Each one becomes an empty folder with the real one mounted over it.
 function mountModules(directory) {
   return ['game', 'factory'].flatMap(project => {
     const mountPoint = path.join(directory, project, 'node_modules');

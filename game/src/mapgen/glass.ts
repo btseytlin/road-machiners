@@ -1,7 +1,6 @@
 // Fused glass of a territory, from its GlassRules: tiles marked glass where value noise passes a cover share that
 // grows from the centre to the edge, kept off the dirt roads and the yards round every piece, building and cache, then
 // glass spires drawn wholly on the glass. Glass ground is drivable and does no harm; a spire is impassable glass. It
-// runs last in a territory's fill, on the territory's own draws, so it shifts no other territory.
 
 import type { TerritoryDef } from '../data/region';
 import type { BuildingGroup, GlassRules, TerritoryRules, WreckRules } from '../data/territory';
@@ -18,10 +17,9 @@ import { BUILT_GLASS, BUILT_SCRUB } from './newworld';
 import { BUILT_NONE, prop, tileCenter, tilesWithin } from './oldworld';
 import { clearOf, draw } from './territory';
 
-const NOISE_SEEDS = 2 ** 31 - 1; // the largest noise seed drawn, so a seed stays in the int32 range the noise hashes
-const GLAZED = new Set([BUILT_NONE, BUILT_SCRUB]); // marks glass may take: bare ground, and scrub the heat burnt off
+const NOISE_SEEDS = 2 ** 31 - 1;
+const GLAZED = new Set([BUILT_NONE, BUILT_SCRUB]);
 
-// Checks the rules, marks the glass from one noise seed drawn from the territory's draws, then draws the spires.
 export function fillGlass(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, glass: GlassRules, rng: Rng): void {
   checkGlass(t, glass);
   markGlass(d, t, glass, keptProps(d, t, rules), randInt(rng, 0, NOISE_SEEDS));
@@ -33,13 +31,10 @@ function checkGlass(t: TerritoryDef, glass: GlassRules): void {
   if (!(glass.cell > 0)) throw new Error(`${t.id} glass cell ${glass.cell} is not positive`);
 }
 
-// Marks glass on every tile inside the territory that glazes. keep holds the props whose yards stay sand.
 export function markGlass(d: MapDraft, t: TerritoryDef, glass: GlassRules, keep: readonly BakedProp[], noiseSeed: number): void {
   for (const tile of tilesWithin(d.size, t.pos, t.radius)) if (glazes(d, t, glass, keep, noiseSeed, tile)) d.built[tile] = BUILT_GLASS;
 }
 
-// Whether a tile turns to glass: bare or scrub ground inside the territory, not too steep to drive, farther than clear
-// from every kept prop's footprint, where the noise falls under the cover share at its distance from the centre.
 function glazes(d: MapDraft, t: TerritoryDef, glass: GlassRules, keep: readonly BakedProp[], noiseSeed: number, tile: number): boolean {
   const c = tileCenter(d.size, tile);
   if (!GLAZED.has(d.built[tile]) || siteGap(t, c) >= 0 || steep(d, tile)) return false;
@@ -47,7 +42,6 @@ function glazes(d: MapDraft, t: TerritoryDef, glass: GlassRules, keep: readonly 
   return noiseAt(noiseSeed, c.x / glass.cell, c.y / glass.cell) < lerp(glass.cover[0], glass.cover[1], dist(c, t.pos) / t.radius);
 }
 
-// The props whose yards stay sand: the wreck's pieces and caches, and the buildings already placed in the territory.
 function keptProps(d: MapDraft, t: TerritoryDef, rules: TerritoryRules): BakedProp[] {
   const looks = new Set(buildingGroups(rules).map((g) => g.look));
   const buildings = d.props.filter((p) => looks.has(p.kind) && siteGap(t, p.pos) < 0);
@@ -64,8 +58,6 @@ function buildingGroups(rules: TerritoryRules): BuildingGroup[] {
   return [...(rules.wreck?.buildings ?? []), ...(rules.farm?.buildings ?? [])];
 }
 
-// Spires drawn inside the territory, each wholly on glass tiles, clear of every prop, and the debris gap from every
-// loot spot so a truck can still park beside one.
 function placeSpires(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, glass: GlassRules, rng: Rng): void {
   const spots = d.props.filter((p) => tableOfKind(rules, p.kind) !== null && siteGap(t, p.pos) < 0);
   const pick = (): Vec => {

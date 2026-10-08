@@ -9,7 +9,6 @@ import { chunkGeometry, deckFloorCap, TERRAIN_CHUNK } from './terrain';
 const S = PHYSICS.metersPerTile;
 const t = TEST_MAP.terrain;
 
-// The chunks whose area meets a deck's rails, as [x, y, width, depth] in tiles.
 function chunksUnder(deck: Deck): [number, number, number, number][] {
   const points = deck.rails.flat();
   const lo = (v: number) => Math.floor(v / TERRAIN_CHUNK) * TERRAIN_CHUNK;
@@ -20,7 +19,6 @@ function chunksUnder(deck: Deck): [number, number, number, number][] {
   return out;
 }
 
-// The most any drawn terrain point inside a deck's outline, inset by `inset` tiles, rises above the deck, in meters.
 function worstRise(deck: Deck, inset: number): number {
   let worst = -Infinity;
   for (const [cx, cy, w, d] of chunksUnder(deck)) {

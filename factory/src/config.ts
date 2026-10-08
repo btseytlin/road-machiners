@@ -2,8 +2,6 @@ import { readFileSync } from 'node:fs';
 import { parseEnv } from 'node:util';
 import type { FactoryConfig, TokenPrice } from './types';
 
-// Git tracks settings.env, so the server runs main's settings. `local` holds secrets and host paths and never leaves its host.
-// A key in both would leave one of them dead, so it stops the factory.
 export function readEnvFiles(settingsPath: string, localPath: string): Record<string, string> {
   const settings = parseEnv(readFileSync(settingsPath, 'utf8'));
   const local = parseEnv(readFileSync(localPath, 'utf8'));
@@ -12,8 +10,6 @@ export function readEnvFiles(settingsPath: string, localPath: string): Record<st
   return { ...settings, ...local } as Record<string, string>;
 }
 
-// Every key is required, except the itch keys. A missing key stops the factory before it touches GitHub or Telegram.
-// Only the release uses the itch keys, so without them the release alone fails loud.
 const KEYS = {
   observationHeartbeatMs: 'FACTORY_OBSERVATION_HEARTBEAT_MS',
   observationMaxEventBytes: 'FACTORY_OBSERVATION_MAX_EVENT_BYTES',
@@ -104,7 +100,6 @@ export function loadConfig(env: Record<string, string | undefined>): FactoryConf
   return cfg;
 }
 
-// Every model the factory picks must have a price, so a run cut off before its result can still be priced.
 function checkPrices(cfg: FactoryConfig): void {
   const unpriced = [cfg.designModel, cfg.buildModel, cfg.triageModel, cfg.advisorModel].filter((model) => !(model in cfg.tokenPrices));
   if (unpriced.length) throw new Error(`FACTORY_MODEL_PRICES has no price for ${unpriced.join(', ')}.`);
@@ -112,7 +107,6 @@ function checkPrices(cfg: FactoryConfig): void {
 
 const PRICE_FIELDS = ['input', 'output', 'cacheRead', 'cacheWrite5m', 'cacheWrite1h'] as const;
 
-// "model=input/output/cacheRead/cacheWrite5m/cacheWrite1h", one entry per model, separated by spaces.
 function parsePrices(key: string, raw: string): Record<string, TokenPrice> {
   return Object.fromEntries(raw.split(/\s+/).map((entry) => {
     const [model, rates] = entry.split('=');
@@ -124,7 +118,6 @@ function parsePrices(key: string, raw: string): Record<string, TokenPrice> {
   }));
 }
 
-// The pools split the server, so their shares cannot add up to more than all of it.
 function checkCpuShares(cfg: FactoryConfig): void {
   const sum = cfg.cpuLight + cfg.cpuImplement + cfg.cpuTest;
   if (sum > 1) throw new Error(`FACTORY_CPU_LIGHT, FACTORY_CPU_IMPLEMENT and FACTORY_CPU_TEST add up to ${sum}. They split the server's CPUs, so they must add up to 1 or less.`);

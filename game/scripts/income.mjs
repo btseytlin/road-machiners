@@ -1,13 +1,6 @@
 // Runs the income harness (src/sim/progression/income.ts): one child process per seed and policy, up to --jobs at a
 // time. Each child writes <out>/<seed>-<policy>.json, and the parent writes <out>/report.md from all of them. Both go
 // through a temp file and a rename, so a killed run leaves no half-written file. A run whose JSON already exists for
-// the same build is skipped, so a batch picks up where it stopped.
-// Usage: npm run income -- [--seeds 1,2,3 or 1-6] [--days 2] [--policy robber,convoyRobber,trader,scavenger] [--jobs 3]
-//   [--candidate A] [--out tmp/income/<candidate>]
-// Report only: npm run income -- --report tmp/income/A[,tmp/income/A2] --baseline tmp/income/baseline
-// writes the run tables and the gate report to the first directory's report.md.
-// A turn takes about half a second, so a day (450 turns) takes about 4 minutes per seed and policy. --days may be
-// fractional for a smoke run.
 import { execSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
@@ -30,9 +23,6 @@ function writeAtomic(path, text) {
   renameSync(temp, path);
 }
 
-// The build a run measures: the last commit that changed game code, outside tests and this harness in
-// src/sim/progression/, and a hash of any uncommitted change to it, so a candidate diff left in a worktree reads as its
-// own build. A fix to what the harness samples leaves the build the runs measured unchanged.
 function buildId() {
   const paths = "src ':(exclude)src/**/*.test.ts' ':(exclude)src/sim/progression/**'";
   const commit = execSync(`git log -1 --format=%h -- ${paths}`, { encoding: 'utf8' }).trim();

@@ -60,7 +60,6 @@ async function checkInstruments(page) {
 const DOCK_VIEWPORTS = [[1920, 1080], [1280, 720], [1280, 656], [1024, 656], [900, 656], [800, 656], [700, 800]];
 const DOCK_PANELS = ['.instruments', '.weapons', '.truck-condition', '.log', '.turn-control', '.recenter', '.info'];
 
-// Long weather, the Cool engine button, the most weapons a random truck mounts, and a hovered truck.
 async function loadHeavyHud(page) {
   await page.evaluate(async () => {
     const { runCommand } = await import('/src/ui/console.ts');
@@ -86,13 +85,11 @@ async function loadHeavyHud(page) {
       game.hovered = game.state.player.vehicleId;
       game.refreshInfo();
     }
-    // Tips are transient, not panels.
     document.head.append(Object.assign(document.createElement('style'), { textContent: '#ui .tip { display: none !important }' }));
     return { guns, other: other.id, seen: getComputedStyle(document.querySelector('.info')).display, hov: game.hovered };
   }).then(r => console.log(JSON.stringify(r)));
 }
 
-// Keeps the first `count` mounted weapons of the player's truck and drops the rest.
 async function trimGuns(page, count) {
   await page.evaluate(async count => {
     const game = window.__ROAM__;
@@ -121,7 +118,6 @@ const inside = (r, box, tol = 1) => r.x >= box.x - tol && r.right <= box.right +
 async function checkDockLayout(page, [width, height]) {
   await page.setViewportSize({ width, height });
   const m = await page.evaluate(([selectors, narrow]) => {
-    // Narrow screens let the inspection panel cover the dock's top by design.
     if (narrow) document.querySelector('.info').style.visibility = 'hidden';
     const shown = node => node && node.offsetParent !== null && getComputedStyle(node).visibility !== 'hidden';
     const box = node => node.getBoundingClientRect().toJSON();
@@ -159,7 +155,6 @@ async function checkDockLayout(page, [width, height]) {
   for (const c of m.controls) assert(c.ok, `Weapon control "${c.name}" must take the click at its center ${at}, hit ${c.hit}`);
 }
 
-// The panel sits on the bottom edge, and below the instruments when they do not fit side by side. Gives whether it is stacked.
 function assertDockPlace(m, at) {
   const weapons = m.rects['.weapons'], instruments = m.rects['.instruments'];
   assert(near(m.viewport.height - weapons.bottom, 14), `Weapons bottom must sit 14px above the screen bottom ${at}: ${weapons.bottom} of ${m.viewport.height}`);
@@ -169,13 +164,11 @@ function assertDockPlace(m, at) {
   return stacked;
 }
 
-// Nothing scrolls or clips.
 function assertDockFits(m, at) {
   assert(m.fits.panel && m.fits.grid, `The weapons panel must not scroll or clip ${at}`);
   for (const c of m.controls) assert(inside(c.box, m.rects['.weapons']), `Weapon control "${c.name}" must lie inside the panel ${at}`);
 }
 
-// One row up to five guns, two balanced rows above that.
 function assertDockRows(slots, at) {
   const tops = [...new Set(slots.map(r => Math.round(r.y)))];
   assert.equal(tops.length, slots.length <= 5 ? 1 : 2, `Rows must be one up to five guns and two above ${at}: ${tops}`);
@@ -184,7 +177,6 @@ function assertDockRows(slots, at) {
   assert(slots.length > 10 || first <= 5, `No row may hold more than five guns ${at}`);
 }
 
-// Every element alike, two-row elements smaller, the panel no taller than the instruments and compact.
 function assertDockSize(m, stacked, at) {
   const weapons = m.rects['.weapons'], guns = m.slots.length;
   assert(m.slots.every(r => near(r.width, m.slots[0].width) && near(r.height, m.slots[0].height)), `All gun elements must share one size ${at}`);
@@ -194,14 +186,12 @@ function assertDockSize(m, stacked, at) {
   assert(guns < 6 || weapons.width * weapons.height <= 512 * 188 / 2 || m.viewport.width !== 1280 || m.viewport.height !== 656, `Six guns must take at most half of the old panel ${at}: ${weapons.width}x${weapons.height}`);
 }
 
-// On wide screens the weapons sit right of the instruments with level bottoms.
 function assertDockLevel(m, stacked, width, at) {
   if (width < 1280) return;
   assert(!stacked, `The weapons must sit beside the instruments ${at}`);
   assert(near(m.rects['.weapons'].bottom, m.rects['.instruments'].bottom), `Weapons and instruments bottoms must be level ${at}`);
 }
 
-// No filler text and no old glyphs, and one inventory icon per gun.
 function assertDockText(m, at) {
   assert(!/hold fire|no target|target unavailable/i.test(m.text), `The panel must carry no filler text ${at}: ${m.text}`);
   assert.equal(m.icons, m.slots.length, `Each gun must show one inventory icon ${at}`);
@@ -213,7 +203,6 @@ const readIconLooks = page => page.evaluate(() => [...document.querySelectorAll(
   return { label: node.getAttribute('aria-label'), background: style.backgroundColor, image: style.backgroundImage, padding: style.padding };
 }));
 
-// A gun shows its drawing alone: no tone tile, no image and no padding behind it.
 function assertDockIcons(looks, at) {
   for (const icon of looks) {
     assert.equal(icon.background, 'rgba(0, 0, 0, 0)', `Weapon icon "${icon.label}" must have no tile ${at}`);
@@ -222,7 +211,6 @@ function assertDockIcons(looks, at) {
   }
 }
 
-// The weapons dock with one, five and the most guns a random truck mounts, at every viewport.
 async function checkWeaponDock(page) {
   await loadHeavyHud(page);
   const most = await page.locator('.weapon-pick').count();
@@ -234,7 +222,6 @@ async function checkWeaponDock(page) {
   }
 }
 
-// Saves the weapon panel unselected and with a gun selected, and checks the icons carry no tile.
 async function checkWeaponIcons(page, guns, distinct) {
   await page.setViewportSize({ width: 1280, height: 720 });
   const shoot = suffix => page.locator('.weapons').screenshot({ path: `.playtest/weapon-icons-${guns}g${suffix}.png`, timeout: 180000 });
@@ -313,7 +300,6 @@ async function checkLogScroll(page) {
   const before = await topRow();
   await page.evaluate(() => { const g = window.__ROAM__; g.hud.note(g.world, 'A new line arrives', 'dim'); });
   assert.equal(await topRow(), before, 'A scrolled-back log must keep its top row when a line arrives');
-  // Expanding rewraps the lines at another width, so only the reading position, not the row, carries over.
   const scrolled = () => page.evaluate(() => document.querySelector('.log-lines').scrollTop > 0);
   await page.locator('.log-expand').click({ force: true });
   assert(await scrolled(), 'A scrolled-back log must stay scrolled back after expanding');
@@ -325,13 +311,10 @@ async function shotLog(page, name) {
   await page.screenshot({ path: `.playtest/${name}.png`, clip: await page.locator('.log').boundingBox(), animations: 'allow' });
 }
 
-// The gap between the log's top and the dock above it: the contracts' pre-issue spot, 246px from the bottom on wide
-// screens, and 8px above the narrow log.
 const dockGap = page => (page.viewportSize().width <= 720 ? 8 : 12);
 
 const near = (a, b) => Math.abs(a - b) <= 1;
 
-// Gives the player one or more held contracts copied from the boards, or none, and waits for the contracts panel.
 async function holdContracts(page, count) {
   await page.evaluate(count => {
     const g = window.__ROAM__;
@@ -343,7 +326,6 @@ async function holdContracts(page, count) {
   await page.waitForFunction(count => (getComputedStyle(document.querySelector('.contracts')).display !== 'none') === (count > 0), count);
 }
 
-// Hovers the player's truck, or ends the hover, and lets the layout settle for two frames.
 async function hover(page, on) {
   await page.evaluate(on => {
     const g = window.__ROAM__;
@@ -364,8 +346,6 @@ const boxes = page => page.evaluate(() => {
   };
 });
 
-// The radio sits above the log, or above the contracts while the player holds some, clear of the other right-hand
-// panels, with its knobs and a broadcast on screen.
 async function checkRadio(page) {
   await page.waitForFunction(() => document.querySelector('.radio-text')?.textContent.trim(), null, { timeout: 30000 });
   const size = page.viewportSize();
@@ -382,9 +362,6 @@ async function checkRadio(page) {
   }
 }
 
-// The contracts keep their pre-issue spot and the hover panel stops above the log. While the hover panel shows, the
-// radio is away or clear of it, and it comes back once the hover ends. On a tall screen it stays during the hover.
-// radioStays is null where the hover panel's content decides.
 async function checkRightColumn(page, radioStays) {
   const size = page.viewportSize();
   const at = `At ${size.width}x${size.height}`;
@@ -395,7 +372,6 @@ async function checkRightColumn(page, radioStays) {
   assert(m.contracts, `${at} the contracts must show`);
   assert(near(m.log.y - m.contracts.bottom, dockGap(page)), `${at} the contracts must sit ${dockGap(page)}px above the log, got ${m.log.y - m.contracts.bottom}`);
   assert(!doRectsOverlap(m.log, m.info), `${at} the hover panel must stop above the log`);
-  // Where the contracts at their old spot were clear of the hover panel, they still are.
   const old = { ...m.contracts, y: m.log.y - dockGap(page) - m.contracts.height, bottom: m.log.y - dockGap(page) };
   if (!doRectsOverlap(old, m.info)) assert(!doRectsOverlap(m.contracts, m.info), `${at} the hover panel must not cover the contracts`);
   if (m.radio) assert(!doRectsOverlap(m.radio, m.info), `${at} the hover panel must not cover the radio`);
@@ -406,7 +382,6 @@ async function checkRightColumn(page, radioStays) {
 
 const KNOB_BUSES = ['Music', 'Effects', 'Wind', 'Interface'];
 
-// Turns every radio knob with the real mouse from a point in its column outside the dial, at the given viewport.
 async function checkKnobs(url, viewport) {
   const page = await browser.newPage({ viewport });
   const errors = [];
@@ -552,7 +527,6 @@ try {
   await checkVisibleReadouts(page);
   assert.deepEqual(await page.locator('.modal:visible').boundingBox(), inventoryFrame, 'Character and inventory must share one frame');
   await page.keyboard.press('Escape');
-  // The truck starts in the wasteland now, so the town frame is checked only when E opens a modal.
   await page.keyboard.press('e');
   if (await page.locator('.modal:visible').count()) {
     await checkVisibleReadouts(page);

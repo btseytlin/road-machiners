@@ -41,7 +41,6 @@ const turns = (w: World, n: number): World => {
   return next;
 };
 
-// Parks the truck in reach of the wreck, as the stop point does. src/phys/opening.test.ts drives there.
 function parkedBy(w: World): World {
   const next = structuredClone(w);
   const me = playerVehicle(next);
@@ -51,7 +50,6 @@ function parkedBy(w: World): World {
   return next;
 }
 
-// Searches the wreck and runs the search job out.
 function searched(w: World): World {
   let next = startSearch(parkedBy(w), OPENING_WRECK_ID);
   for (let i = 0; i < 6 && playerVehicle(next).job; i++) next = turns(next, 1);
@@ -71,7 +69,6 @@ describe('new-game opening', () => {
       expect([stock.fuel, stock.supplies]).toEqual([0, 0]);
       expect(salvagePlace(stock)).toBe('wreck');
       expect(isRoadWreck(stock)).toBe(false);
-      // Nothing else sits on it: not a prop, not a road wreck.
       const o = w.obstacles.find((x) => x.id === OPENING_WRECK_ID)!;
       const touching = w.obstacles.filter((x) => x !== o && x.kind !== 'site' && dist(x.pos, o.pos) < x.r + o.r + REGION.obstacles.gap);
       expect(touching.map((x) => x.id)).toEqual([]);
@@ -94,7 +91,6 @@ describe('new-game opening', () => {
     const rock = TEST_MAP.props.find((p) => p.kind === 'rock')!;
     const heading = 0;
     const { ahead, side } = REGION.playerStart.wreck;
-    // A start pose whose wreck spot is the rock's own spot.
     const start = { pos: { x: rock.pos.x - ahead, y: rock.pos.y - side }, heading };
     expect(() => newWorld(1, KIT, TEST_MAP, defaultSetup('roaming'), false, start)).toThrow(/opening-wreck .* overlaps/);
   });
@@ -129,7 +125,6 @@ describe('new-game opening', () => {
     expect(cage).toBeDefined();
     expect(isMounted(playerVehicle(w).chassisId, cage)).toBe(false);
 
-    // Auto patch is off, so a parked idle truck patches nothing on its own.
     const idle = turns(w, 2);
     expect(part(idle, 'stockEngine').hp).toBe(9);
     expect(playerVehicle(idle).job).toBeNull();
@@ -149,7 +144,6 @@ describe('new-game opening', () => {
   }, budget(60_000));
 });
 
-// The first free armor spot that fits the cage, as the inventory offers it.
 function armorSpot(w: World): Spot {
   const me = playerVehicle(w);
   const cage = cageItem(w)!;

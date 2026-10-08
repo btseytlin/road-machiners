@@ -12,11 +12,10 @@ import { drawRoads } from "./roads";
 import type { RenderScope } from "./scope";
 
 const S = PHYSICS.metersPerTile;
-const TEXTURE_SIDE = 2048; // 16 MiB RGBA before mipmaps, independent of region area.
-export const TERRAIN_CHUNK = 32; // Roughly two normal camera widths, allowing offscreen terrain culling.
-const FACET_TINT = 0.04; // largest brightness shift of one ground triangle, so flat ground reads as low-poly facets
+const TEXTURE_SIDE = 2048;
+export const TERRAIN_CHUNK = 32;
+const FACET_TINT = 0.04;
 
-// A canvas over the whole map and its margin, one per ground layer.
 function mapCanvas(w: World): PaintCanvas {
   const from = -TERRAIN_MARGIN;
   const res = TEXTURE_SIDE / (w.size + 2 * TERRAIN_MARGIN);
@@ -35,7 +34,6 @@ function mapCanvas(w: World): PaintCanvas {
 
 const groundTextures = new WeakMap<Terrain, THREE.CanvasTexture>();
 
-// The painted ground of a terrain, painted once. main.ts paints it while assets load.
 export function groundTexture(w: World): THREE.CanvasTexture {
   let texture = groundTextures.get(w.terrain);
   if (!texture) {
@@ -50,13 +48,11 @@ function paintTexture(w: World): THREE.CanvasTexture {
   paintGroundCanvas(c, w.terrain, { hillshade: 0.35 });
   const texture = new THREE.CanvasTexture(c.ctx.canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
-  // Canvas row 0 is map y at the top edge, and the UVs grow with map y, so the image must not be flipped.
   texture.flipY = false;
   texture.magFilter = THREE.NearestFilter;
   return texture;
 }
 
-// The ground map's uv per meter. The map spans the world plus TERRAIN_MARGIN tiles on each side.
 export function groundUvPerMeter(size: number): number {
   return 1 / ((size + 2 * TERRAIN_MARGIN) * S);
 }
@@ -69,25 +65,19 @@ export type TerrainChunk = {
   mesh: THREE.Mesh;
 };
 
-// Meters the drawn ground stays under a deck inside its outline. Near a deck's ends the abutment lies within
-// centimeters of the deck line, and the drawn triangles, split along one diagonal, would poke through the plates.
 const DECK_FLOOR_GAP = 0.5;
 
-// The highest the ground is drawn at a map point inside a deck outline, in tiles, or null off every deck.
-// Render only: groundAt, physics, nav and sight keep the baked ground.
 export function deckFloorCap(t: Terrain, x: number, y: number): number | null {
   const on = deckAt(x, y);
   return on === null ? null : deckHeight(t, on.deck, on.along) - DECK_FLOOR_GAP / S;
 }
 
-// The drawn height of a terrain corner in tiles: its baked height, kept under any deck above it.
 function drawnHeight(t: Terrain, x: number, y: number): number {
   const h = t.heights[y * (t.size + 1) + x];
   const cap = deckFloorCap(t, x, y);
   return cap === null ? h : Math.min(h, cap);
 }
 
-// The ground mesh geometry of one chunk, in world meters, from map corner (x, y) over width by depth tiles.
 export function chunkGeometry(t: Terrain, x: number, y: number, width: number, depth: number): THREE.PlaneGeometry {
   const geo = new THREE.PlaneGeometry(width * S, depth * S, width, depth).rotateX(-Math.PI / 2);
   const pos = geo.getAttribute("position");
@@ -104,11 +94,8 @@ export function chunkGeometry(t: Terrain, x: number, y: number, width: number, d
   return geo;
 }
 
-// Terrain chunks register with the scope, so only chunks near the view are drawn. Returned for the fog,
-// which greys out the ground per corner. Roads are part of the ground material.
 export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
   const chunks: TerrainChunk[] = [];
-  // Flat shading lights each ground triangle by its own face, so slopes read as low-poly facets.
   const material = new THREE.MeshLambertMaterial({ map: groundTexture(w), flatShading: true });
   drawRoads(material, mapCanvas(w), w.terrain);
   facetGround(material);
@@ -132,9 +119,6 @@ export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
   return chunks;
 }
 
-// Tints each ground triangle by a hash of its tile and its half, so flat ground shows facets like slopes do.
-// PlaneGeometry splits each tile quad along its anti-diagonal, where the tile fractions sum to 1. It reads the
-// world XZ varying vRoadXZ that drawRoads adds, so it runs after drawRoads.
 function facetGround(material: THREE.MeshLambertMaterial): void {
   const before = material.onBeforeCompile.bind(material);
   const key = material.customProgramCacheKey.bind(material);
@@ -159,8 +143,6 @@ const FACET_FRAGMENT = `{
   diffuseColor.rgb *= 1.0 + (facetHash - 0.5) * 2.0 * facetTint;
 }`;
 
-// An unseen flat quad on each straight piece of a deck, so a click on the deck picks the deck, not the ground under
-// it. The deck's model draws the deck.
 function deckPick(t: Terrain, deck: Deck, scope: RenderScope): void {
   for (const seg of deckSegments(t, deck)) piecePick(deck, seg, scope);
 }

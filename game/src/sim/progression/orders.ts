@@ -1,8 +1,6 @@
 // A bot's player commands: Orders runs them one after another and keeps their events, and upgradeGear is the shop
 // upgrade routine every bot shares. At any shop it buys what ./gear.ts picks for the bot's job, the part
 // that adds most to it within the budget, and mounts it. The parts on offer are the shop's stock and the spares the bot
-// holds, which cost nothing. A better chassis comes only when no part gains. A chassis counts by its value, or its top
-// speed for a bot that wants speed.
 
 import { chassisDef, PLAYER_CHASSIS } from '../../data/chassis';
 import { startKit } from '../../data/start';
@@ -19,37 +17,28 @@ import type { ThreatAnswer } from '../parley';
 import type { GameEvent, GridItem, PartInstance, Vehicle, World } from '../types';
 import { isJunk } from '../wear';
 
-// Where money goes and comes from. Each money-moving command names its key; money the turn moves by itself is
-// 'contracts' for contract rewards and penalties and 'fees' for tow, patch and escort pay.
 export const LEDGER_KEYS = ['fuel', 'supplies', 'repairs', 'gear', 'goodsBought', 'goodsSold', 'lootSales', 'contracts', 'fees', 'other'] as const;
 export type LedgerKey = (typeof LEDGER_KEYS)[number];
 export type Ledger = Record<LedgerKey, number>;
 
 export const emptyLedger = (): Ledger => Object.fromEntries(LEDGER_KEYS.map((k) => [k, 0])) as Ledger;
 
-// Units of the parts good every bot keeps for field repair: what the standard start kit carries.
 export const REPAIR_PARTS = startKit('standard').cargo.parts ?? 0;
 
-// What the bot did that the events do not say: a demand and the driver's answer, and goods and spares it looted.
 export type BotNote =
   | { kind: 'demand'; target: string; answer: ThreatAnswer; guarded: boolean }
   | { kind: 'took'; from: string; goods: Record<string, number>; parts: PartInstance[] };
 
-// The world after the bot's commands, every event those commands raised, the money each moved and the bot's notes.
 export type BotTurn = { world: World; events: GameEvent[]; ledger: Ledger; notes: BotNote[] };
 
 export class Orders {
   readonly events: GameEvent[] = [];
   readonly ledger = emptyLedger();
   readonly notes: BotNote[] = [];
-  // False for a bot that must not spend on gear, so a run measures its trade alone.
   buysGear = true;
-  // A bot that repairs in the field pays the garage only for the built-in parts that keep the truck driving, strips
-  // its spare parts into the parts good and spends that on the rest.
   fieldRepair = false;
   constructor(public world: World) {}
 
-  // A command that moves money names where it goes: a purchase counts as spending, a sale as income.
   run(command: (w: World) => World, key: LedgerKey = 'other'): void {
     const before = this.world.player.money;
     this.world = command(this.world);
@@ -57,7 +46,6 @@ export class Orders {
     this.events.push(...this.world.events);
   }
 
-  // Runs a loot command and notes the goods and spares it brought in from `from`.
   loot(from: string, command: (w: World) => World): void {
     const goods = goodsCount(this.me);
     const spares = new Set(spareParts(this.me).map((p) => p.id));
@@ -72,20 +60,12 @@ export class Orders {
   }
 }
 
-// skip names part kinds a bot leaves alone. job picks parts that help it fight or earn. budgetJob lets a driver that
-// trades and hunts reserve trading capital while buying fighting gear. A chassis kept avoids paying the swap spread.
-// lootRoom is the cells a bot with a fighter's gear keeps free for loot, and minSpeed the top speed it keeps for the
-// chase. A part that leaves fewer free cells, or a top speed below the lower of minSpeed and the current one, stays on
-// the shelf.
 export type UpgradeStyle = { skip: readonly PartKind[]; chassis: 'value' | 'speed' | 'keep'; job: GearJob; budgetJob?: GearJob; lootRoom?: number; minSpeed?: number };
 
-// The footprint of the biggest part in the game. A fighter that keeps this many cells free can always take the best
-// part of a wreck it knocked out.
 export const BIGGEST_PART_CELLS = Math.max(...Object.values(PARTS).map((p) => p.w * p.h));
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;
 type Option = { gain: number; cost: number; take: (o: Orders) => void };
-// A part the bot could mount, what it costs, and how it reaches the truck or garage storage.
 type Candidate = Offer & { acquire: (o: Orders) => void };
 
 export function upgradeGear(o: Orders, style: UpgradeStyle): void {
@@ -108,8 +88,6 @@ function chooseBudgetJob(style: UpgradeStyle): GearJob {
   return style.budgetJob ?? style.job;
 }
 
-// A bot with no gun mounts the cheapest one the shop sells or it holds as a spare, from money above the upkeep
-// reserve. Working capital does not hold it back, since every bot shoots back and the hunter earns only with a gun.
 export function rearm(o: Orders): void {
   if (!o.buysGear) return;
   const shop = shopAt(o.world);
@@ -124,12 +102,7 @@ function strongest(options: Option[]): Option | null {
   return options.reduce<Option | null>((best, option) => (!best || option.gain > best.gain ? option : best), null);
 }
 
-// ---- Chassis.
-
-// A chassis change moves the cargo through the new grid, and goods may not fit. So the bot changes chassis only with
-// no goods but its repair parts, a few single cells that fit any grid.
 function chassisOptions(o: Orders, style: UpgradeStyle): Option[] {
-  // Chassis sell only in a town, as buyChassis() requires.
   const load = Object.entries(goodsCount(o.me)).some(([good, n]) => good !== 'parts' || n > REPAIR_PARTS);
   if (style.chassis === 'keep' || !townAt(o.world) || load) return [];
   const current = chassisDef(o.me.chassisId);
@@ -139,8 +112,6 @@ function chassisOptions(o: Orders, style: UpgradeStyle): Option[] {
     return gain > 0 ? [{ gain, cost: def.value - chassisTradeIn(o.world), take: (orders: Orders) => orders.run((w) => buyChassis(w, id), 'gear') }] : [];
   });
 }
-
-// ---- Parts.
 
 function candidates(o: Orders, shop: string): Candidate[] {
   const stock = shopState(o.world, shop).stock.map((part) => ({ part, price: partTradePrice(o.world, o.me, part, 'buy'), acquire: (orders: Orders) => orders.run((w) => buyStockPart(w, part.id), 'gear') }));
@@ -154,14 +125,12 @@ function mount(o: Orders, c: Candidate, replaced: PartItem | null): void {
     o.run((w) => sellPart(w, replaced.part.id), 'gear');
   }
   c.acquire(o);
-  // A part the truck now holds may stand on the mount it is going to, so its own cells count as free.
   const held = o.me.items.find((it): it is PartItem => it.kind === 'part' && it.part.id === c.part.id);
   const spot = installSpot(o.me, held ?? probe(c.part));
   if (!spot) throw new Error(`No mount for the ${partDef(c.part.defId).name}`);
   mountBought(o, c.part.id, spot);
 }
 
-// A bought part lands in garage storage or loose in the grid; either way it moves onto the spot.
 export function mountBought(o: Orders, partId: string, spot: Spot): void {
   if (o.world.player.storage.some((p) => p.id === partId)) o.run((w) => takeFromStorage(w, partId, spot));
   else o.run((w) => moveItem(w, itemOf(w, partId), spot));

@@ -127,7 +127,7 @@ describe('side b hp left', () => {
     expect(r.outcome).toBe('won');
     expect(r.bHpLeft).toBeGreaterThan(0);
     expect(r.bHpLeft).toBeLessThan(1);
-  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
+  }, 90_000);
 
   it('is null for a fight that is not won', () => {
     expect(runFight({ ...FIGHT, maxTurns: 1 }).bHpLeft).toBeNull();

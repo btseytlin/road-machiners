@@ -9,12 +9,10 @@ import { bundleOf } from './bundle';
 import { agentHome, fillPrompt, playtestCommand, readOutput, resetOutputs } from './common';
 import { candidateDir, changeLines, featureLine, openReleaseTasks, releaseFeatures, releaseLog, requireRelease, trackingLink, type Feature } from './release-common';
 
-// The build of the candidate lives under this web folder, kept while the tracking card waits in Approval.
 export const CANDIDATE_SCOPE = 'rc';
 
 const SERVER_TRIES = 60;
 
-// Starts the dev server with a bounded wait, plays the game, keeps the newest screenshot, then stops the server.
 const playtestScript = (playtest: string) => `set -u
 mkdir -p ${OUT_DIR}
 npm ci
@@ -38,8 +36,6 @@ shot=$(ls -t .playtest/*.png | head -n 1)
 cp "$shot" ${OUT_DIR}/screenshot.png
 `;
 
-// Posts the release branch as a playable candidate. Ship acts on this post alone. It builds only the commit the release
-// playtest passed, and the post records that commit, so a later move of the release drops it.
 export async function candidate(ctx: Ctx, issue: number): Promise<void> {
   const release = requireRelease(ctx);
   if (release.issue !== issue) throw new Error(`Issue #${issue} is not the tracking issue of the open release, #${release.issue} is`);
@@ -69,11 +65,9 @@ export async function candidate(ctx: Ctx, issue: number): Promise<void> {
     add: (id) => updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: id, candidateSha: sha }, postCaptions: { ...state.postCaptions, [id]: caption } })),
     drop: (id) => updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: null, candidateSha: null }, postCaptions: Object.fromEntries(Object.entries(state.postCaptions).filter(([name]) => name !== String(id))) })),
   });
-  // A caption holds 1024 characters, so the whole changelog goes in a message under the post. It splits only past Telegram's message limit.
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, changes, photoId);
 }
 
-// The candidate builds only the release head the playtest passed. Returns that commit.
 async function requirePlaytested(ctx: Ctx, release: ReleaseState): Promise<string> {
   await ctx.repo.fetch();
   const sha = await ctx.repo.headHash(release.branch);
@@ -82,8 +76,6 @@ async function requirePlaytested(ctx: Ctx, release: ReleaseState): Promise<strin
   return sha;
 }
 
-// A reply to the old post can open a release task while this build runs. This build lacks that task, so it is not posted.
-// A merge during the build moved the release past the played commit, so the tick plays the new head first.
 async function staleBuild(ctx: Ctx, release: ReleaseState, sha: string): Promise<boolean> {
   const open = await openReleaseTasks(ctx);
   if (open.length > 0) {
@@ -97,8 +89,6 @@ async function staleBuild(ctx: Ctx, release: ReleaseState, sha: string): Promise
   return true;
 }
 
-// The release agent may add views of the changes in `.factory/evidence.json`. An image the post cannot show is logged and left out.
-// The candidate post is a photo with the Ship button, so it needs the screenshot.
 function candidateEvidence(ctx: Ctx, issue: number, home: string): Evidence {
   const { evidence, problem } = readShown(home);
   if (problem !== null) ctx.log('candidate', issue, problem);
@@ -106,7 +96,6 @@ function candidateEvidence(ctx: Ctx, issue: number, home: string): Evidence {
   return evidence;
 }
 
-// One line per change, with the issues bundled into it indented under it, so the changelog sums up a bundle in one line.
 async function changelogInput(ctx: Ctx, features: Feature[]): Promise<string> {
   const state = readState(ctx.statePath);
   const lines: string[] = [];
@@ -117,7 +106,6 @@ async function changelogInput(ctx: Ctx, features: Feature[]): Promise<string> {
   return `${lines.join('\n')}\n`;
 }
 
-// The candidate post. The changelog follows in a message under it.
 export function candidateCaption(day: string, url: string, link: string, pr: string, count: number): string {
   const head = `ROAM release candidate ${day}\n\nPlay: ${url}\nPR: ${pr}\nIssue: ${link}`;
   const changes = count === 0 ? 'No changes in this candidate.' : `${count} changes, listed in the message under this post.`;

@@ -1,7 +1,6 @@
 // Spatial indexes over world.obstacles for hot queries: sight lines, shade rays and breakable props on a walk. Each
 // query reads the buckets near its segment instead of filtering every obstacle.
 // update() clones the world every turn, so an index is keyed by each obstacle's id and place in order, never by array
-// identity. A hit returns the current world's own objects by slot.
 
 import { TIME } from '../data/time';
 import { marksOf, ObstacleBuckets, sameMarks, type Blocker, type ObstacleMark } from './nav/buckets';
@@ -15,7 +14,6 @@ type Slot = Blocker & { at: number };
 
 const SIGHT_BLOCKING: Obstacle['kind'][] = ['rock', 'wreck', 'building', 'landmark'];
 
-// What each index holds and the radius a slot's circle covers it with.
 const MEMBERS: Record<PropIndexKind, { has: (o: Obstacle) => boolean; radius: (o: Obstacle) => number }> = {
   sight: { has: (o) => SIGHT_BLOCKING.includes(o.kind), radius: propReach },
   shade: { has: (o) => TIME.obstacleShade[o.kind] !== undefined, radius: (o) => o.r },
@@ -46,7 +44,6 @@ class Entry {
   }
 }
 
-// A live world and a preview world can alternate, so a few entries stay.
 const KEPT = 4;
 const entries: Entry[] = [];
 
@@ -61,25 +58,20 @@ function entryFor(world: World): Entry {
   return entry;
 }
 
-// Members of the index whose circle can touch the segment a-b grown by `reach`, in no set order. A caller applies
-// its own exact test.
 export function propsAlong(world: World, kind: PropIndexKind, a: Vec, b: Vec, reach: number): Obstacle[] {
   return propSlotsAlong(world, kind, a, b, reach).map((at) => world.obstacles[at]);
 }
 
-// The same members as indices into world.obstacles, for a caller that needs world order.
 export function propSlotsAlong(world: World, kind: PropIndexKind, a: Vec, b: Vec, reach: number): number[] {
   const slots = entryFor(world).buckets(kind, world.obstacles).alongSegment(a, b, reach);
   return slots.filter((s) => segmentDist(s.pos, a, b) <= s.r + reach).map((s) => s.at);
 }
 
-// Members of the index whose circle can touch the disc of `radius` around center, in no set order.
 export function propsAround(world: World, kind: PropIndexKind, center: Vec, radius: number): Obstacle[] {
   const slots = entryFor(world).buckets(kind, world.obstacles).alongSegment(center, center, radius);
   return slots.filter((s) => dist(center, s.pos) <= s.r + radius).map((s) => world.obstacles[s.at]);
 }
 
-// Obstacles that can shade a point within `radius` of center. Anything farther than the shade reach cannot block.
 export function shadeCastersAround(world: World, center: Vec, radius: number): Obstacle[] {
   return propsAround(world, 'shade', center, radius + TIME.shadeReach);
 }

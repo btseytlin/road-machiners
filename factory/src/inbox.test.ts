@@ -7,7 +7,6 @@ import type { Card, Ctx, FactoryConfig, FactoryState, ReleaseState } from './typ
 
 const ROOT = resolve('tmp/factory-inbox-test');
 const statePath = join(ROOT, 'state.json');
-// The post every test command acts on. Its caption is in the state, so the status edit works.
 const POST = 42;
 const withPost = (state: FactoryState): FactoryState => ({ ...state, postCaptions: { [POST]: 'Post' } });
 
@@ -61,7 +60,6 @@ describe('drainInbox', () => {
     expect(calls[0]).toBe(`create ${'x'.repeat(80)}|${'x'.repeat(100)}\nmore\n\nRequested by Ann in the committee chat.|adhoc`);
     expect(calls[1]).toBe('addCard 9 Implementation');
     expect(readState(statePath).adhocReplies).toEqual({ '9': { chat: '-5', messageId: 3 } });
-    // Hermes answers the member itself.
     expect(sent).toEqual([]);
   });
 
