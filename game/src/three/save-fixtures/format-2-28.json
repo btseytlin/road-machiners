@@ -1,0 +1,5 @@
+{
+  "player": { "vehicleId": "player", "headlights": true, "money": 420 },
+  "turn": 300,
+  "seed": 1337
+}

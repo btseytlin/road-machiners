@@ -25,12 +25,13 @@ import { siteEdgeCrossings, siteGap } from "./sites";
 import type { World } from "./types";
 import { TEST_MAP } from "../test/map";
 import { FALLEN_SUN_DECKS, TERRITORIES } from "../data/territory";
+import { defaultSetup } from "./settings";
 
 // Several tests below read the start world without changing it (destinations, canyon shape,
 // cliff checks), so they share one.
 let startWorld: World | undefined;
 function worldOnMap(): World {
-  startWorld ??= newWorld(1337, START_KITS.standard, TEST_MAP);
+  startWorld ??= newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
   return startWorld;
 }
 
@@ -174,6 +175,33 @@ describe("terrain grid", () => {
         for (let k = 0; k <= steps; k++) {
           const p = { x: road[i - 1].x + ((road[i].x - road[i - 1].x) * k) / steps, y: road[i - 1].y + ((road[i].y - road[i - 1].y) * k) / steps };
           expect(siteGap(orchard, p)).toBeGreaterThan(0);
+        }
+      }
+    }
+  });
+
+  it('enters Glass Flats by a spur from the south road and an approach from the Salvage Yard road, with no road through it', () => {
+    const flats = REGION.locations.find((site) => site.id === 'glass-flats')!;
+    const entering = REGION.roads.filter((road) => road.some((p) => siteGap(flats, p) < 0));
+    expect(entering).toHaveLength(2);
+    const [s1, s2] = entering;
+    // S1 is one straight piece from the south road's junction, which keeps the links through it.
+    expect(s1).toHaveLength(2);
+    expect(dist(s1[0], { x: 440, y: 420 })).toBeLessThan(0.01);
+    expect(dist(s2[0], { x: 485, y: 310 })).toBeLessThan(0.01);
+    for (const road of entering) {
+      expect(REGION.roads.some((other) => other !== road && other.some((p) => dist(p, road[0]) < 0.01))).toBe(true);
+      const firstInside = road.findIndex((p) => siteGap(flats, p) < 0);
+      expect(firstInside).toBe(road.length - 1);
+      for (let i = 1; i < firstInside; i++) expect(siteEdgeCrossings(flats, road[i - 1], road[i])).toEqual([]);
+    }
+    // Every other road stays outside: no point along it, a quarter tile apart, lies inside.
+    for (const road of REGION.roads.filter((r) => !entering.includes(r))) {
+      for (let i = 1; i < road.length; i++) {
+        const steps = Math.ceil(dist(road[i - 1], road[i]) * 4);
+        for (let k = 0; k <= steps; k++) {
+          const p = { x: road[i - 1].x + ((road[i].x - road[i - 1].x) * k) / steps, y: road[i - 1].y + ((road[i].y - road[i - 1].y) * k) / steps };
+          expect(siteGap(flats, p)).toBeGreaterThan(0);
         }
       }
     }

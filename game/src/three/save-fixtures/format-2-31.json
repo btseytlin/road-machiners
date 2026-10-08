@@ -1,0 +1,7 @@
+{
+  "turn": 60,
+  "vehicles": [
+    { "id": "player", "job": null },
+    { "id": "npc1", "job": null }
+  ]
+}

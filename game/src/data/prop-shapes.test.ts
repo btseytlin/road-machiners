@@ -35,6 +35,18 @@ const ORCHARD_SIZES = [
   { model: 'woodpile', meters: 4, boxes: WHOLE, scale: 1 },
 ] as const;
 
+// The length and height of each Glass Flats model in game, in meters, measured from the issue 112 game-style concept
+// against its 6 m pickups at 40 px per tile (tmp/models/<name>/asset-brief.md). Every one is built at its in-game size
+// and drawn at scale 1.
+const GLASS_FLATS_SIZES = [
+  { model: 'engine_nozzle', meters: 26, tall: 7.9 },
+  { model: 'engine_frame', meters: 32, tall: 15.6 },
+  { model: 'ruin_compound', meters: 17, tall: 6.2 }, // 16 m of walls, 19 m with the crate by the door
+  { model: 'watchtower', meters: 4, tall: 9.6 }, // 3.4 m of feet, with the ladder and the lookout pole
+  { model: 'glass_spire', meters: 10, tall: 7.5 },
+  { model: 'scrap_wall', meters: 7.6, tall: 3.6 },
+] as const;
+
 function shapeBoxes(model: string): readonly Box[] {
   const shape = (SHAPES as Record<string, { boxes: Box[] } | undefined>)[model];
   if (shape === undefined) throw new Error(`Model ${model} has no shape in prop-shapes.json. Run npm run models:shapes.`);
@@ -79,6 +91,22 @@ describe('orchard model sizes (IV11)', () => {
 
   it('fails loudly on a model missing from prop-shapes.json', () => {
     expect(() => shapeBoxes('no_such_model')).toThrow('no shape');
+  });
+});
+
+describe('Glass Flats model sizes', () => {
+  it.each(GLASS_FLATS_SIZES)('$model is $meters m long and $tall m tall, within 15%', ({ model, meters, tall }) => {
+    const boxes = shapeBoxes(model);
+    expect(Math.abs(lengthOf(boxes) - meters)).toBeLessThanOrEqual(meters * 0.15);
+    expect(Math.abs(Math.max(...boxes.map((b) => b.z1)) - tall)).toBeLessThanOrEqual(tall * 0.15);
+  });
+
+  // Trucks drive under the engine frame's arches: only its feet and the ends of its fallen girders come below truck
+  // clearance, all outside an 18 x 14 m middle.
+  it('keeps every engine frame box below truck clearance outside the middle of the arches', () => {
+    const low = shapeBoxes('engine_frame').filter((b) => b.z0 < PHYSICS.truckClearance);
+    expect(low.length).toBeGreaterThan(0);
+    for (const b of low) expect(b.x1 <= -9 || b.x0 >= 9 || b.y1 <= -7 || b.y0 >= 7, JSON.stringify(b)).toBe(true);
   });
 });
 
@@ -222,11 +250,13 @@ describe('prop shapes', () => {
     }
   });
 
-  // A truck drives through the cage and the shells along their length, so no box low enough to hit it crosses a
-  // lane along the axis, even after the boxes merge down to the cap. Lane half-widths are in model meters.
+  // A truck drives through the cage, the shells and the Glass Flats engine nozzle along their length, so no box low
+  // enough to hit it crosses a lane along the axis, even after the boxes merge down to the cap. Lane half-widths are in
+  // model meters.
   it.each([
     ['ship_cage', 5],
     ['hull_shell', 10],
+    ['engine_nozzle', 4],
   ] as const)('keeps a lane open through %s', (name, half) => {
     const boxes = SHAPES[name].boxes;
     const low = boxes.filter((b) => b.z0 < PHYSICS.truckClearance);

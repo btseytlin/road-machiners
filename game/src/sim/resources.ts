@@ -3,6 +3,7 @@ import { skillEffect } from './progress';
 import { heatAt } from './sun';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import type { DriverResources, Vehicle, World } from './types';
+import { supplyUseScale } from './settings';
 
 export function getResources(world: World, vehicle: Vehicle): DriverResources {
   if (vehicle.id === world.player.vehicleId) return world.player;
@@ -27,7 +28,7 @@ function heatDrain(world: World, vehicle: Vehicle): number {
 export function consumeVehicleSupplies(world: World, vehicle: Vehicle): void {
   const resources = getResources(world, vehicle);
   const use = Math.max(0, 1 - skillEffect(world, vehicle, 'toughness', 'supplies'));
-  resources.supplies = Math.max(0, resources.supplies - RULES.suppliesPerTurn * use * heatDrain(world, vehicle));
+  resources.supplies = Math.max(0, resources.supplies - RULES.suppliesPerTurn * supplyUseScale(world) * use * heatDrain(world, vehicle));
   if (resources.supplies > 0) return;
   // Starving only weakens a driver down to the floor. Health already below it stays as it is.
   const lost = Math.max(0, Math.min(RULES.starveDamage, resources.health - RULES.starveFloor));

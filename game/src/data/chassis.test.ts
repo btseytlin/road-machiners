@@ -50,10 +50,10 @@ const SEAT_CAB: Record<string, string> = {
   wagon: 'An open gun platform. On its 6x5 grid a six-cell cab leaves no deck block, which tier 2 requires, and cuts the deck from 11 cells to 6.',
 };
 
-// Chassis values before the layout rules. The rules move deck cells, and base makes up the price.
+// Chassis values in cents before the layout rules. The rules move deck cells, and base makes up the price.
 const VALUES = {
-  scout: 2444, hauler: 3676, buggy: 1928, wagon: 3022, courier: 2320, van: 3080, longbed: 5384,
-  carrier: 4876, tractor: 4382, jeep: 2186, convertible: 2992, bus: 3800, loader: 5088, niva: 3148, bukhanka: 3450, lincoln: 4288,
+  scout: 81467, hauler: 122534, buggy: 64267, wagon: 100733, courier: 77333, van: 102666, longbed: 179466,
+  carrier: 162534, tractor: 146067, jeep: 72867, convertible: 99734, bus: 126667, loader: 169600, niva: 104934, bukhanka: 115000, lincoln: 142933,
 };
 
 // Chassis with no free 2 by 2 block of deck cells, with the reason. A stale entry fails the test.
@@ -105,8 +105,8 @@ describe('chassis grids', () => {
   });
 
   it('keeps the scout worth what it was before its cab moved', () => {
-    // 800 base plus the modifier of 6 deck cells and 10 armor cells.
-    expect(CHASSIS.scout.value).toBe(2444);
+    // 26667 cents of base plus the modifier of 6 deck cells and 10 armor cells.
+    expect(CHASSIS.scout.value).toBe(81467);
     expect(CHASSIS.scout.ratedMass).toBe(RATED_MASS);
   });
 

@@ -32,6 +32,14 @@ export function toMap(p: V3): Vec {
   return { x: p.x / S, y: p.z / S };
 }
 
+// A circle on the ground in physics space: center x and z and radius, in meters.
+export type Circle = { x: number; z: number; r: number };
+
+// A map circle of radius r tiles, in physics space.
+export function toPhysCircle(p: Vec, r: number): Circle {
+  return { x: p.x * S, z: p.y * S, r: r * S };
+}
+
 // Ground point under a map point, in physics space.
 export function groundPoint(t: Terrain, p: Vec): V3 {
   return toPhys(p, heightAt(t, p.x, p.y));
@@ -40,6 +48,19 @@ export function groundPoint(t: Terrain, p: Vec): V3 {
 // Map heading grows from +x toward +z. A rotation about y by -heading turns +x onto it.
 export function headingQuat(heading: number): Quat {
   return { x: 0, y: Math.sin(-heading / 2), z: 0, w: Math.cos(-heading / 2) };
+}
+
+// v turned by the unit quaternion q.
+export function rotateBy(q: Quat, v: V3): V3 {
+  // t = 2 (q.xyz × v); v' = v + w t + q.xyz × t
+  const tx = 2 * (q.y * v.z - q.z * v.y);
+  const ty = 2 * (q.z * v.x - q.x * v.z);
+  const tz = 2 * (q.x * v.y - q.y * v.x);
+  return {
+    x: v.x + q.w * tx + (q.y * tz - q.z * ty),
+    y: v.y + q.w * ty + (q.z * tx - q.x * tz),
+    z: v.z + q.w * tz + (q.x * ty - q.y * tx),
+  };
 }
 
 // Sine of the nose pitch: positive when the nose points uphill.

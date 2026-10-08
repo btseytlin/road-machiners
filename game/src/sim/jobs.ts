@@ -9,6 +9,7 @@ import { GOODS } from "../data/goods";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { STRIP } from "../data/salvage";
+import { WORK } from "../data/utilities";
 import { PERK_NUMBERS } from "../data/skills";
 import { inCombat } from "./combat";
 import { playerVehicle } from "./damage";
@@ -22,6 +23,7 @@ import { repairPlan, repairTurn } from "./repair";
 import { practice, vehicleHasPerk } from "./progress";
 import { finishTruckPickup } from "./salvage";
 import { isSearchStalled, searchTurn } from "./search";
+import { hasWorkingUtility } from "./utility";
 import type { GridItem, Job, PartInstance, RefitJob, RefitPickup, Vehicle, World } from "./types";
 import { getKnownSite } from "./npc-decisions";
 import { canUseSite } from "./sites";
@@ -160,15 +162,16 @@ function stripItem(v: Vehicle, partId: string): PartItem | null {
   return item?.kind === "part" ? item : null;
 }
 
-// Units of the parts good a stripped part yields, from its value.
-export function stripYield(part: PartInstance): number {
-  return Math.max(1, Math.round((partValue(part) * STRIP.yieldShare) / GOODS.parts.value));
+// Units of the parts good a stripped part yields to this truck, from its value. A working scraper raises the share.
+export function stripYield(v: Vehicle, part: PartInstance): number {
+  const share = hasWorkingUtility(v, "scraper") ? WORK.scraperStripShare : STRIP.yieldShare;
+  return Math.max(1, Math.round((partValue(part) * share) / GOODS.parts.value));
 }
 
 // The part's own cells free up first, so they count as room for its yield.
 function stripFits(v: Vehicle, item: PartItem): boolean {
   const size = itemSize(item);
-  return freeCells(v) + size.w * size.h >= stripYield(item.part);
+  return freeCells(v) + size.w * size.h >= stripYield(v, item.part);
 }
 
 // A strip stops when its part left the grid or got mounted, or its yield no longer fits.
@@ -257,7 +260,7 @@ function stripTurn(world: World, v: Vehicle, job: Extract<Job, { kind: "strip" }
 // isStripStalled ran this turn, so the part is still a spare and its yield fits once it is gone.
 function finishStrip(world: World, v: Vehicle, partId: string): void {
   const part = findStripItem(v, partId).part;
-  const units = stripYield(part);
+  const units = stripYield(v, part);
   v.items = v.items.filter((it) => !(it.kind === "part" && it.part.id === partId));
   const added = addGoods(world, v, "parts", units);
   if (added < units) throw new Error(`Stripped parts would not fit on ${v.name}`);

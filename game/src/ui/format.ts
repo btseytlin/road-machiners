@@ -9,6 +9,7 @@ import { TERRAIN } from '../data/terrain';
 import { TIME } from '../data/time';
 import { playerVehicle, vehicleById } from '../sim/damage';
 import { gaveUp, isKnockedOut } from '../sim/defeat';
+import { OPENING_WRECK_ID } from '../sim/opening';
 import type { Work, WorkLeft } from '../sim/states';
 import { dist, type Vec } from '../sim/vec';
 import { REGION } from '../data/region';
@@ -25,7 +26,8 @@ import { isJunk, maxHp } from '../sim/wear';
 import { clockOf } from '../sim/sun';
 import type { PartHit } from '../sim/armor';
 import { shotDamage } from '../sim/combat';
-import type { GameEvent, GridItem, Job, NpcState, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
+import { shutDownTurnsLeft } from '../sim/utility';
+import type { GameEvent, GridItem, Job, NpcState, Obstacle, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
 
 // What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
@@ -105,7 +107,7 @@ function aidWorkLabel(world: World, v: Vehicle, s: NpcState): string {
 export function workProgress(work: WorkLeft): number {
   return 1 - work.turnsLeft / work.total;
 }
-import { damage, fuelLiters, hp } from './units';
+import { damage, fuelLiters, hp, moneyAmount, moneyText } from './units';
 import { npcName } from '../sim/spawn';
 
 // A part's condition in one word: junk, pristine, or a rebuild count for a part that has broken and
@@ -137,10 +139,13 @@ export function conditionStatus(part: PartInstance): { text: string; tone: 'dim'
   return { text: `${hp(part.hp)}/${hp(maxHp(part))} HP`, tone: 'dim' };
 }
 
+// Ids of obstacles a truck can hit: road, kill and opening wrecks, rocks and town buildings.
+const OBSTACLE_ID = new RegExp(`^(wreck|rock|bld|${OPENING_WRECK_ID}$)`);
+
 export function vehicleName(world: World, id: string): string {
   if (id === world.player.vehicleId) return 'You';
   const v = findAny(world, id);
-  return v ? npcName(v) : id.startsWith('wreck') || id.startsWith('rock') || id.startsWith('bld') ? 'an obstacle' : 'something';
+  return v ? npcName(v) : OBSTACLE_ID.test(id) ? 'an obstacle' : 'something';
 }
 
 function findAny(world: World, id: string): Vehicle | undefined {
@@ -271,7 +276,7 @@ function partDamage(hits: PartHit[]): Map<string, number> {
 
 // Short part names for damage popups, by part kind and core role.
 const PART_SHORT = {
-  weapon: 'Gun', engine: 'Eng', armor: 'Arm', cargo: 'Cargo', scanner: 'Scan', store: 'Store',
+  weapon: 'Gun', engine: 'Eng', armor: 'Arm', cargo: 'Cargo', scanner: 'Scan', store: 'Store', utility: 'Util',
   cab: 'Cab', transmission: 'Trans', wheel: 'Whl', tank: 'Tank',
 } as const;
 
@@ -298,9 +303,13 @@ function spanLine(cls: string, spans: LogSpan[]): LogLine {
   return { text: spans.map((s) => s.text).join(''), cls, spans };
 }
 
+function shotText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLine | null {
+  return firedWithLine(world, e) ? harpoonText(world, e) : gunShotText(world, e);
+}
+
 // A shot by or at the player, or one whose stray rounds or blast hit the player. Trucks hit that the shot was not
 // aimed at follow as stray damage.
-function shotText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLine | null {
+function gunShotText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLine | null {
   const me = world.player.vehicleId;
   const damaged = shotDamage(e);
   if (e.shooter !== me && e.target !== me && !damaged.has(me)) return null;
@@ -309,6 +318,42 @@ function shotText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLine |
     ...damageSpans(world, id, h),
   ]);
   return spanLine(hurts(damaged.get(me)) ? 'bad' : '', [...aimedSpans(world, e, damaged.get(e.target) ?? []), ...strays]);
+}
+
+// Whether the shot came from a gun that ties a line, the harpoon.
+function firedWithLine(world: World, e: Extract<GameEvent, { t: 'shot' }>): boolean {
+  const part = carriedPart(world, e.shooter, e.weapon);
+  const def = part && partDef(part.defId);
+  return def?.kind === 'weapon' && def.line !== undefined;
+}
+
+// A harpoon shot by or at the player: "Harpoon → Buggy: line on Engine (40%)", or "missed", then the damage per
+// part. Its one round strays into nobody. The chance is the round's.
+function harpoonText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLine | null {
+  const me = world.player.vehicleId;
+  if (e.shooter !== me && e.target !== me) return null;
+  const onTarget = shotDamage(e).get(e.target) ?? [];
+  const what = harpoonOutcome(world, e);
+  return spanLine(e.target === me && hurts(onTarget) ? 'bad' : '', [
+    { text: `${partName(world, e.shooter, e.weapon)} → ${vehicleName(world, e.target)}: ${what}`, cls: '' },
+    { text: ` (${Math.round(e.chance * 100)}%)`, cls: 'dim' },
+    ...damageSpans(world, e.target, onTarget),
+  ]);
+}
+
+// What the harpoon holds after its shot: "line on Engine", or "missed" when no line holds.
+function harpoonOutcome(world: World, e: Extract<GameEvent, { t: 'shot' }>): string {
+  const line = world.lines.find((l) => l.from === e.shooter && l.fromPart === e.weapon && l.to === e.target);
+  return line ? `line on ${partName(world, e.target, line.toPart)}` : 'missed';
+}
+
+// A truck pulled hard enough to tear a harpoon line, and the part the line held took the tear.
+function lineTornText(world: World, e: Extract<GameEvent, { t: 'lineTorn' }>): LogLine {
+  const mine = e.vehicle === world.player.vehicleId;
+  return spanLine(mine ? 'bad' : '', [
+    { text: `${vehicleName(world, e.vehicle)} ${mine ? 'tear' : 'tears'} free of a harpoon line`, cls: '' },
+    ...damageSpans(world, e.vehicle, [{ part: e.part, damage: e.damage }]),
+  ]);
 }
 
 function hurts(hits: PartHit[] | undefined): boolean {
@@ -393,7 +438,7 @@ function patchText(world: World, e: Extract<GameEvent, { t: 'patch' }>): LogLine
 function aidText(world: World, e: Extract<GameEvent, { t: 'aid' }>): LogLine {
   const me = world.player.vehicleId;
   if (e.fuel === 0 && e.supplies === 0) return { text: `Nothing changed hands with ${vehicleName(world, e.giver === me ? e.receiver : e.giver)}.`, cls: 'dim' };
-  const moved = `${fillLine('{aid}', { aid: { kind: 'aid', fuel: e.fuel, supplies: e.supplies } })}${e.paid > 0 ? ` for ${e.paid}` : ''}`;
+  const moved = `${fillLine('{aid}', { aid: { kind: 'aid', fuel: e.fuel, supplies: e.supplies } })}${e.paid > 0 ? ` for ${moneyText(e.paid)}` : ''}`;
   if (e.giver === me) return { text: `You give ${vehicleName(world, e.receiver)} ${moved}.`, cls: '' };
   return { text: `${vehicleName(world, e.giver)} gives you ${moved}.`, cls: 'good' };
 }
@@ -410,7 +455,7 @@ function sayText(world: World, e: Extract<GameEvent, { t: 'say' }>): LogLine {
 }
 
 function towOfferText(world: World, e: Extract<GameEvent, { t: 'towOffer' }>): LogLine {
-  return { text: `${vehicleName(world, e.by)} offers to tow you to ${siteName(e.town)} for ${e.fee > 0 ? e.fee : 'free'}.`, cls: '' };
+  return { text: `${vehicleName(world, e.by)} offers to tow you to ${siteName(e.town)} for ${e.fee > 0 ? moneyText(e.fee) : 'free'}.`, cls: '' };
 }
 
 function towHitchedText(world: World, e: Extract<GameEvent, { t: 'towHitched' }>): LogLine {
@@ -421,17 +466,17 @@ function towDoneText(world: World, e: Extract<GameEvent, { t: 'towDone' }>): Log
   const by = vehicleName(world, e.by);
   const free = e.fee === 0;
   if (e.client === world.player.vehicleId) {
-    return free ? { text: `${by} tows you into town for free.`, cls: '' } : { text: `${by} tows you into town and takes ${e.fee}.`, cls: 'bad' };
+    return free ? { text: `${by} tows you into town for free.`, cls: '' } : { text: `${by} tows you into town and takes ${moneyText(e.fee)}.`, cls: 'bad' };
   }
-  return { text: `${by} tows ${vehicleName(world, e.client)} in${free ? ' for free' : ` and takes ${e.fee}`}.`, cls: 'dim' };
+  return { text: `${by} tows ${vehicleName(world, e.client)} in${free ? ' for free' : ` and takes ${moneyText(e.fee)}`}.`, cls: 'dim' };
 }
 
 function escortPaidText(world: World, e: Extract<GameEvent, { t: 'escortPaid' }>): LogLine {
-  return { text: `${vehicleName(world, e.client)} pays ${vehicleName(world, e.by)} ${e.fee} for the escort.`, cls: 'dim' };
+  return { text: `${vehicleName(world, e.client)} pays ${vehicleName(world, e.by)} ${moneyText(e.fee)} for the escort.`, cls: 'dim' };
 }
 
 function escortHiredText(world: World, e: Extract<GameEvent, { t: 'escortHired' }>): LogLine {
-  return { text: `${vehicleName(world, e.client)} hires ${vehicleName(world, e.by)} as escort to ${siteName(e.site)} for ${e.fee}.`, cls: 'dim' };
+  return { text: `${vehicleName(world, e.client)} hires ${vehicleName(world, e.by)} as escort to ${siteName(e.site)} for ${moneyText(e.fee)}.`, cls: 'dim' };
 }
 
 function escortRefusedText(world: World, e: Extract<GameEvent, { t: 'escortRefused' }>): LogLine {
@@ -501,6 +546,9 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   aidStarted: (e) => [e.giver, e.receiver],
   escortHired: (e) => [e.by, e.client],
   escortRefused: (e) => [e.by, e.client],
+  caltrops: (e) => [e.vehicle],
+  lineTorn: (e) => [e.vehicle],
+  claymore: (e) => [e.vehicle, e.other],
 };
 
 function unnoticed(world: World, e: GameEvent): boolean {
@@ -513,11 +561,19 @@ function searchedText(stock: string): { text: string; cls: string } {
   return { text: `Search done${site ? ` at ${site.name}` : ''}.`, cls: 'good' };
 }
 
-const CONTRACT_OUTCOME = { accepted: ['Contract taken', ''], expiring: ['Contract due soon', 'bad'], done: ['Contract done', 'good'], failed: ['Contract failed', 'bad'], lapsed: ['Contract lapsed', 'dim'] } as const;
+// The loot one search turn revealed, like "Found 3 Scrap, Machine gun, 12 L of fuel."
+function foundText(_world: World, e: Extract<GameEvent, { t: 'found' }>): LogLine {
+  const stores = e.fuel > 0 || e.supplies > 0 ? [fillLine('{aid}', { aid: { kind: 'aid', fuel: e.fuel, supplies: e.supplies } })] : [];
+  const items = [...Object.entries(e.goods).map(([good, count]) => `${count} ${GOODS[good].name}`), ...e.parts.map((defId) => partDef(defId).name), ...stores];
+  return { text: `Found ${items.join(', ')}.`, cls: 'good' };
+}
+
+const CONTRACT_OUTCOME = { accepted: ['Contract taken', ''], fulfilled: ['Bounty met', 'good'], expiring: ['Contract due soon', 'bad'], done: ['Contract done', 'good'], failed: ['Contract failed', 'bad'], lapsed: ['Contract lapsed', 'dim'] } as const;
 
 function contractText(c: Contract, outcome: keyof typeof CONTRACT_OUTCOME): { text: string; cls: string } {
   const [label, cls] = CONTRACT_OUTCOME[outcome];
-  const tail = outcome === 'expiring' ? `, ${contractDue(c)}` : `, pays ${c.reward}`;
+  if (outcome === 'fulfilled' && c.kind === 'bounty') return { text: `${label}: ${c.targetName} beaten, claim ${moneyText(c.reward)} at ${siteName(c.shop)}`, cls };
+  const tail = outcome === 'expiring' ? `, ${contractDue(c)}` : `, pays ${moneyText(c.reward)}`;
   return { text: `${label}: ${contractSummary(c)}${tail}`, cls };
 }
 
@@ -528,7 +584,8 @@ export function contractSummary(c: Contract): string {
     const rebuilt = CONTRACTS.fetch.maxWear === 1 ? 'rebuilt at most once' : `rebuilt at most ${CONTRACTS.fetch.maxWear} times`;
     return `Bring ${partDef(c.defId).name} to ${siteName(c.shop)}: working, ${rebuilt}`;
   }
-  return `Knock out or wreck any ${c.targetName}`;
+  if (c.fulfilled) return `${c.targetName} beaten, claim at ${siteName(c.shop)}`;
+  return `Knock out or wreck any ${c.targetName}, claim at ${siteName(c.shop)}`;
 }
 
 // How long a contract allows from acceptance, in whole game hours.
@@ -539,6 +596,11 @@ export function contractWindow(c: Contract): string {
 // The game time a contract is due. It fails at the end of its deadline turn.
 export function contractDue(c: Contract): string {
   return `by ${clockLabel(c.deadline + 1)}`;
+}
+
+// The due time of a held contract. A met bounty no longer runs against its deadline.
+export function heldContractDue(c: Contract): string {
+  return c.kind === 'bounty' && c.fulfilled ? 'Ready' : contractDue(c);
 }
 
 export function clockLabel(turn: number): string {
@@ -576,6 +638,52 @@ function infoText(world: World, e: Extract<GameEvent, { t: 'info' }>): LogLine |
   return e.debug && !world.player.fullLog ? null : { text: e.text, cls: 'dim' };
 }
 
+// Caltrops on the player's wheels read as bad, the player's caltrops on another truck as good, the rest dim.
+function caltropsText(world: World, e: Extract<GameEvent, { t: 'caltrops' }>): LogLine | null {
+  const me = world.player.vehicleId;
+  const [text, cls] = e.vehicle === me ? ['You drive into caltrops', 'bad'] : [`${vehicleName(world, e.vehicle)} drives into caltrops`, e.source === me ? 'good' : 'dim'];
+  return spanLine(cls, [{ text, cls: '' }, ...damageSpans(world, e.vehicle, e.hits)]);
+}
+
+// An emitter pulse the player fired, naming the trucks it shut down, or one that shut the player down. Others log
+// nothing.
+function pulseText(world: World, e: Extract<GameEvent, { t: 'pulse' }>): LogLine | null {
+  const me = playerVehicle(world);
+  if (e.vehicle === me.id) {
+    if (e.hit.length === 0) return { text: 'Your emitter pulse catches nobody', cls: 'dim' };
+    return { text: `Your emitter pulse shuts down ${e.hit.map((id) => vehicleName(world, id)).join(', ')}`, cls: 'good' };
+  }
+  if (!e.hit.includes(me.id)) return null;
+  const left = shutDownTurnsLeft(world, me);
+  return { text: `${vehicleName(world, e.vehicle)}'s emitter pulse shuts your truck down for ${left} ${left === 1 ? 'turn' : 'turns'}`, cls: 'bad' };
+}
+
+// An armed claymore ram that broke and blew up on its own truck, with the damage it did there.
+function cookOffText(world: World, e: Extract<GameEvent, { t: 'claymoreCookOff' }>): LogLine {
+  const me = world.player.vehicleId;
+  const hitByMe = world.vehicles.find((v) => v.id === e.vehicle)?.lastHitBy === me;
+  const [text, cls] = e.vehicle === me ? ['Your claymore ram breaks and blows up', 'bad'] : [`${vehicleName(world, e.vehicle)}'s claymore ram breaks and blows up`, hitByMe ? 'good' : 'dim'];
+  return spanLine(cls, [{ text, cls: '' }, ...damageSpans(world, e.vehicle, e.hits)]);
+}
+
+const OBSTACLE_NAMES: Record<Obstacle['kind'], string> = { rock: 'a rock', wreck: 'a wreck', building: 'a building', water: 'the water', site: 'a structure', landmark: 'a landmark' };
+
+// A claymore ram blast the player set off, one that hit the player, or a seen one between other trucks. The line
+// lists the blasted truck's damage. The ram's owner sees its own damage on its truck.
+function claymoreText(world: World, e: Extract<GameEvent, { t: 'claymore' }>): LogLine {
+  const me = world.player.vehicleId;
+  const obstacle = world.obstacles.find((o) => o.id === e.other);
+  if (obstacle) {
+    const who = e.vehicle === me ? 'Your' : `${vehicleName(world, e.vehicle)}'s`;
+    return spanLine(e.vehicle === me ? 'bad' : 'dim', [{ text: `${who} claymore ram blows up against ${OBSTACLE_NAMES[obstacle.kind]}`, cls: '' }, ...damageSpans(world, e.vehicle, e.selfHits)]);
+  }
+  const [who, whom, cls] =
+    e.vehicle === me ? ['Your', vehicleName(world, e.other), 'good']
+    : e.other === me ? [`${vehicleName(world, e.vehicle)}'s`, 'your truck', 'bad']
+    : [`${vehicleName(world, e.vehicle)}'s`, vehicleName(world, e.other), 'dim'];
+  return spanLine(cls, [{ text: `${who} claymore ram blasts ${whom}`, cls: '' }, ...damageSpans(world, e.other, e.hits)]);
+}
+
 // Events whose log line has its own function.
 const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
   activity: activityText,
@@ -587,6 +695,13 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   npcWake: (world, e) => ({ text: `${vehicleName(world, e.vehicle)} regains consciousness`, cls: 'dim' }),
   stateEnded: stateEndedText,
   empty: () => null, // the HUD shows ammo; the log holds no gun state
+  utility: () => null, // the utility row and the world show a use; effects with news log their own events
+  caltrops: caltropsText,
+  lineTorn: lineTornText,
+  pulse: pulseText,
+  claymore: claymoreText,
+  claymoreCookOff: cookOffText,
+  found: foundText,
   say: sayText,
   job: jobText,
   weather: weatherText,
@@ -631,7 +746,7 @@ export function eventText(world: World, e: GameEvent): LogLine | null {
     case 'skillUp':
       return { text: skillUpText(e.skill, e.level), cls: 'good' };
     case 'money':
-      return { text: `${e.amount > 0 ? '+' : ''}${e.amount} money: ${e.reason}`, cls: e.amount > 0 ? 'good' : 'bad' };
+      return { text: `${e.amount > 0 ? '+' : ''}${moneyText(e.amount)}: ${e.reason}`, cls: e.amount > 0 ? 'good' : 'bad' };
     case 'discover': {
       const loc = [...REGION.towns, ...REGION.locations].find((l) => l.id === e.location);
       return { text: `Discovered ${loc?.name ?? e.location}`, cls: 'good' };
@@ -695,8 +810,8 @@ export function estimateText(e: SaleEstimate): string {
     case "none": return "";
     case "unrecorded": return "?";
     case "even": return "0";
-    case "gain": return `+${e.perUnit}`;
-    case "loss": return `\u2212${e.perUnit}`;
+    case "gain": return `+${moneyAmount(e.perUnit)}`;
+    case "loss": return `\u2212${moneyAmount(e.perUnit)}`;
   }
 }
 
@@ -704,10 +819,10 @@ export function estimateTitle(e: SaleEstimate): string {
   switch (e.kind) {
     case "none": return "";
     case "unrecorded": return "No cost on record";
-    default: return `Avg cost ${e.avgCost}`;
+    default: return `Avg cost ${moneyAmount(e.avgCost)}`;
   }
 }
 
 export function lotTitle(direction: "buy" | "sell", count: number, total: number): string {
-  return direction === "buy" ? `Buy ${count} for ${total} total` : `Sell all ${count} for ${total} total`;
+  return direction === "buy" ? `Buy ${count} for ${moneyAmount(total)} total` : `Sell all ${count} for ${moneyAmount(total)} total`;
 }

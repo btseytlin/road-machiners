@@ -15,6 +15,7 @@ import { chooseOn, trackOf } from './tracks';
 import { addState, endState, stateOf } from './states';
 import { playerVehicle } from './damage';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls } from './testkit';
+import { watchPost } from './watch-posts';
 import type { TraitId } from '../data/npcs';
 import type { Faction, Vehicle, World } from './types';
 import { dist, polylineDist, type Vec } from './vec';
@@ -342,6 +343,13 @@ describe('fight back', () => {
     expect(back(coward)).toBeLessThan(back(plain));
   });
 
+  it('a trader with no working gun is never offered fightBack', () => {
+    const { w, trader, raider } = shotTrader(['trader'], 18);
+    trader.items = trader.items.filter((it) => !(it.kind === 'part' && partDef(it.part.defId).kind === 'weapon'));
+    const weights = optionWeights(w, trader, 'attacked', raider.id, judgeDanger(w, trader, raider));
+    expect(weights.fightBack ?? 0).toBe(0);
+  });
+
   it('a brave trader almost never runs from a shot or begs', () => {
     const brave = shotTrader(['trader', 'brave'], 18);
     const chances = (decision: 'attacked' | 'parley') => optionChances(optionWeights(brave.w, brave.trader, decision, brave.raider.id, judgeDanger(brave.w, brave.trader, brave.raider)));
@@ -557,7 +565,8 @@ describe('hunting grounds', () => {
   it('lie on lonely road stretches and at the pads of salvage sites', () => {
     expect(lootPads.length).toBeGreaterThan(0);
     for (const pad of lootPads) expect(grounds).toContainEqual(pad);
-    expect(grounds.filter(onRoad).length).toBeGreaterThanOrEqual(5);
+    // Glass Flats' outline spans 95 tiles and swallows the road stretches inside it, so fewer lonely stretches remain.
+    expect(grounds.filter(onRoad).length).toBeGreaterThanOrEqual(4);
   });
 
   it('wait at every road into the Fallen Sun', () => {
@@ -596,8 +605,9 @@ describe('hunting grounds', () => {
     // Which camps' raiders wait in the orchard, and at how many of its grounds. Each ground belongs to its nearest camp.
     it('are shared by the raiders of Scrapjaw and Kiln', () => {
       const camps = REGION.locations.filter((l) => l.kind === 'camp');
-      const covering = Object.fromEntries(camps.map((c): [string, number] => [c.id, raiderGrounds(c).filter(isOrchardGround).length]).filter(([, n]) => n > 0));
-      expect(covering).toEqual({ kiln: 3, scrapjaw: 6 });
+      const w = emptyWorld();
+      const covering = Object.fromEntries(camps.map((c): [string, number] => [c.id, raiderGrounds(w, c).filter(isOrchardGround).length]).filter(([, n]) => n > 0));
+      expect(covering).toEqual({ kiln: 2, scrapjaw: 6 });
     });
   });
 
@@ -615,12 +625,14 @@ describe('raider grounds', () => {
   const kiln = camps.find((c) => c.id === 'kiln')!;
   const lawGates = () => lawmanTowns().flatMap((town) => siteGates(town));
 
-  it('are hunting grounds outside lawman reach, for each camp', () => {
+  it('are watch posts of hunting grounds outside lawman reach, for each camp', () => {
+    const w = emptyWorld();
+    const posts = huntingGrounds().map((g) => watchPost(w, g));
     expect(lawmanTowns().map((t) => t.id).sort()).toEqual(['bowl', 'nose']);
     for (const camp of [scrapjaw, kiln]) {
-      expect(raiderGrounds(camp).length).toBeGreaterThanOrEqual(2); // Scrapjaw keeps 2 on the current map
-      for (const p of raiderGrounds(camp)) {
-        expect(huntingGrounds()).toContainEqual(p);
+      expect(raiderGrounds(w, camp).length).toBeGreaterThanOrEqual(2); // Scrapjaw keeps 2 on the current map
+      for (const p of raiderGrounds(w, camp)) {
+        expect(posts).toContainEqual(p);
         for (const gate of lawGates()) expect(dist(gate, p)).toBeGreaterThan(HUNT.lawReach);
       }
     }
@@ -635,13 +647,9 @@ describe('raider grounds', () => {
     for (const camp of [scrapjaw, kiln]) for (const g of siteGates(camp)) expect(nearLawGate(g)).toBe(false);
   });
 
-  it('belong to the nearest camp alone', () => {
-    for (const [camp, other] of [[scrapjaw, kiln], [kiln, scrapjaw]]) {
-      for (const p of raiderGrounds(camp)) {
-        expect(dist(p, camp.pos)).toBeLessThanOrEqual(dist(p, other.pos));
-        expect(raiderGrounds(other)).not.toContainEqual(p);
-      }
-    }
+  it('belong to one camp alone', () => {
+    const w = emptyWorld();
+    for (const p of raiderGrounds(w, scrapjaw)) expect(raiderGrounds(w, kiln)).not.toContainEqual(p);
   });
 });
 

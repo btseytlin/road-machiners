@@ -4,6 +4,7 @@
 // The class lists below only sort samples. They decide no game rule. The game never imports this module.
 // The physics layer drives every NPC in Rapier once the caller widens PERF.liveMargin; see scripts/traffic.mjs.
 
+import { defaultSetup } from '../sim/settings';
 import { PHYSICS } from '../data/physics';
 import { START_KITS } from '../data/start';
 import { TERRAIN_TYPES } from '../data/terrain';
@@ -230,7 +231,7 @@ function formatOne(s: TrafficSummary): string {
 // Plays one seed with the player parked at its start town in god mode, like the stuck soak.
 export async function recordTraffic(seed: number, turns: number, layer: TrafficLayer): Promise<TrafficRun> {
   if (!TRAFFIC_LAYERS.includes(layer)) throw new Error(`unknown traffic layer "${layer}"`);
-  let w = newWorld(seed, START_KITS.standard, TEST_MAP);
+  let w = newWorld(seed, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
   w.player.god = true;
   const run: TrafficRun = { seed, layer, turns, samples: [], npcTurns: 0, resupplyStarts: 0, maxDry: 0, collisions: 0 };
   const play = layer === 'physics' ? await physicsPlayer(w) : farPlayer();

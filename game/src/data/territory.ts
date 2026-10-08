@@ -10,12 +10,12 @@
 import type { PropKind } from '../sim/terrain';
 import type { LandmarkLook } from '../sim/types';
 import type { Vec } from '../sim/vec';
-import { onOrchardRoad, REGION } from './region';
+import { GLASS_FLATS_ENDS, onOrchardRoad, REGION } from './region';
 import type { DeckSpec, DeckStation } from './terrain';
 
 export { onOrchardRoad };
 
-export type SpotTable = 'landmark' | 'hullScrap' | 'roadWreck' | 'farmStores' | 'armyStores';
+export type SpotTable = 'landmark' | 'hullScrap' | 'roadWreck' | 'farmStores' | 'armyStores' | 'engineScrap' | 'cityStores';
 // Loot spots that are wrecks, so their prompts keep wreck wording. Every other loot spot is a plain place.
 export const WRECK_LOOKS: readonly PropKind[] = ['armyTruck', 'shipCache', 'hullCache'];
 export type Hazard = {
@@ -119,8 +119,12 @@ export type WreckRules = {
   spotLook: PropKind; // the prop kind of a field spot drawn in a patch
   spotTable: SpotTable;
   spotRadius: [number, number]; // tiles, a field spot's footprint
+  // Authored loot spots of several looks, each group rolling its own table, placed as a farm's buildings are. A
+  // building must keep clear of every piece's boxes.
+  buildings: BuildingGroup[];
   seatEase: number; // tiles over which the ground levelled under a piece eases back to the crater relief
-  rimRocks: RimRocks;
+  // Rim rocks on the bank of the basin centred on the territory, or null for a wreck with no basin under it.
+  rimRocks: RimRocks | null;
   // Floor vertex indices of the territory's basin, from..to, wrapping past the last vertex. The bank of that arc is
   // painted red-brown scree.
   scree: { from: number; to: number } | null;
@@ -132,11 +136,20 @@ export type WreckRules = {
   decks: WreckDeck[];
   landing: number; // tiles of landing strip past a deck's lip, kept clear of props and other decks
 };
-// A territory is a wreck or a farm.
+// Fused glass: ground marked glass where value noise passes the cover share, and spire props drawn standing on it.
+// src/mapgen/glass.ts bakes it after the wreck or farm.
+export type GlassRules = {
+  cell: number; // tiles per cell of the noise lattice, so the size of one glass field
+  cover: [number, number]; // the share of open tiles that turn to glass at the centre and at the edge, linear between
+  clear: number; // tiles of sand kept round every piece, building and cache: the yards stay unglazed
+  spires: DebrisRule; // impassable glass, drawn wholly on glass tiles
+};
+// A territory is a wreck or a farm, either with fused glass.
 export type TerritoryRules = {
   seed: number; // offset of the territory's own draws, so adding a territory shifts no other's
   wreck: WreckRules | null;
   farm: FarmRules | null;
+  glass: GlassRules | null;
   spotGap: number; // tiles between the centres of two loot spots
   debrisGap: number; // tiles of open ground kept between debris and every loot spot, so a truck can park beside one
   reactor: Reactor | null;
@@ -228,6 +241,50 @@ function dig(s: number, c: number, face: number, arcs: Emplacement['arcs'], trap
 function block(s0: number, s1: number, c0: number, c1: number, rows: GroveBlock['rows'], turn: number): GroveBlock {
   return { at: AT((s0 + s1) / 2, (c0 + c1) / 2), size: { x: s1 - s0, y: Math.abs(c1 - c0) }, rows, turn };
 }
+
+// Glass Flats is laid out from docs/concepts/glass-flats-game-style-issue-112.jpg, a 1280 x 720 gameplay concept at the
+// game camera, 40 px per tile along screen x and half that along screen y. Positions are tiles from the centre, the
+// crossroads ground before the engine mouth at concept pixel (640, 300) (map +x east, +y south):
+// dx = (px - 640) / 40, du = (300 - py) / 20, tiles = ((dx - du) / √2, (-dx - du) / √2).
+// Each comment names the concept pixels of a thing's foot; a departure from them says why. The models were built at
+// their measured sizes (tmp/models/common.md): the nozzle 26 m long, the frame 30 m, a compound 16 x 11 m, a tower 3.4 m
+// square, a spire cluster 10 m and a wall 7.6 m, so each r is its model's reference radius and draws at scale 1.
+const NOZZLE_R = 3.25;
+const FRAME_R = 3.75;
+const COMPOUND_R = 2.45;
+const TOWER_R = 0.6;
+// Compounds stand square to the map as in the concept: ALONG_X turns a compound's long side along map x, ALONG_Y along
+// map y. A ruin has settled a little, and its spot lies a little off its authored place.
+const ALONG_X = 0;
+const ALONG_Y = Math.PI / 2;
+// The town is spread √5 times wider round the centre than the concept draws it, so Glass Flats covers five times the
+// concept's ground and its roads, ruins, towers and patches stand far apart across wide glass fields. Every position
+// below is in the concept's tiles and goes through wide, except the engine's: its pieces, its caches, the crossroads
+// before its mouth and the nook by its west feet keep the concept's shape.
+const SPREAD = Math.sqrt(5);
+const wide = (x: number, y: number): Vec => ({ x: x * SPREAD, y: y * SPREAD });
+const compound = (x: number, y: number, turn: number) => ({ at: wide(x, y), r: COMPOUND_R, turn, shoulder: false });
+// A tower at concept tiles (x, y) beside the compound at (cx, cy) keeps its offset from that compound, so it stays at
+// the compound's corner.
+const tower = (cx: number, cy: number, x: number, y: number, yaw: number): HullPiece => {
+  const c = wide(cx, cy);
+  return { look: 'watchtower', at: { x: c.x + x - cx, y: c.y + y - cy }, yaw, r: TOWER_R };
+};
+// The loose broken walls and junk of an outer patch, round its one dead truck.
+const RUINS: DebrisRule[] = [
+  { look: 'scrapWall', count: 2, radius: [0.85, 1] },
+  { look: 'junk', count: 1, radius: [0.5, 0.8] },
+];
+// Hull chunks and a wall by the engine.
+const ENGINE_DEBRIS: DebrisRule[] = [
+  { look: 'hullChunk', count: 2, radius: [0.8, 1.2] },
+  { look: 'scrapWall', count: 1, radius: [0.85, 1] },
+];
+// The crossroads before the engine mouth, where the four inner roads meet: concept pixels (697, 342).
+const CROSSROADS: Vec = { x: 2.5, y: 0.5 };
+// A dirt road of the spread town: a point given as [x, y] is in concept tiles and goes through wide, a Vec stays.
+const townRoad = (width: number, points: (Vec | [number, number])[]): FarmRoad =>
+  dirt(width, points.map((p) => (Array.isArray(p) ? wide(p[0], p[1]) : p)));
 
 export const TERRITORIES: Record<string, TerritoryRules> = {
   'fallen-sun': {
@@ -330,6 +387,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       // Field spots roll a scrap-heavy table at road-wreck size. With the 9 caches the Fallen Sun keeps 24 spots.
       spotTable: 'hullScrap',
       spotRadius: [0.6, 0.8],
+      buildings: [],
       seatEase: 3,
       // Rock walls along the north rim: the concept's grey crags run from (620,40) to (1000,330), bearings -111° to
       // -41°, and its red-brown hills on the north-west rim from (200,100) to (480,60), bearings -164° to -138°. They
@@ -503,6 +561,7 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
       landing: 12,
     },
     farm: null,
+    glass: null,
     spotGap: 6,
     debrisGap: 1.5,
     relief: null,
@@ -774,10 +833,146 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { look: 'barrier', count: 10, radius: [0.5, 0.5], near: ['quonset', 'guardPost', 'bunker'], reach: 4 },
       ],
     },
+    glass: null,
     spotGap: 6,
     debrisGap: 3,
     reactor: null,
     relief: 0.1,
+  },  // Glass Flats: a crashed ship's engine half buried in a glass desert, with the roofless compounds of a New World
+  // town round it. The nozzle and the frame are pieces; the compounds are buildings, each a loot spot; the caches lie in
+  // the engine; dead trucks lie in the outer patches; fused glass covers the open ground.
+  'glass-flats': {
+    seed: 2,
+    wreck: {
+      pieces: [
+        // The hollow ribbed nozzle (420,165)-(697,300): its axis's ground line runs (455,218) to (650,273), so its
+        // centre stands at (552,245) and its mouth opens toward the crossroads at the concept's lower right. Its yaw is
+        // the measured -0.27 (tmp/models/engine_nozzle/asset-brief.md).
+        { look: 'engineNozzle', at: { x: -3.5, y: -0.4 }, yaw: -0.27, r: NOZZLE_R },
+        // The collapsed frame, feet at (685,130) and (995,205) round a footprint centre at (838,159), yawed -0.75 so its
+        // arches span its length as in the concept (tmp/models/engine_frame/asset-brief.md).
+        { look: 'engineFrame', at: { x: -1.5, y: -8.5 }, yaw: -0.75, r: FRAME_R },
+        // Watchtowers at the concept's eight: one by the engine, the rest each at a corner of its compound, off the roads.
+        { look: 'watchtower', at: { x: -5.5, y: -11 }, yaw: 0.1, r: TOWER_R }, // (796,67), moved 4.5 tiles north-east from (615,75), by the frame's west end
+        tower(-10.5, 0.5, -14.5, 3.5, -0.2), // (187,116), moved from (115,175) to the back compound's south-west corner
+        tower(-9, 9.8, -12.5, 7.3, 0.3), // (79,232), moved from (255,200) to compound A's north-west corner
+        tower(-13.3, -8.8, -15, -4.8, 0), // (349,36), moved from (440,120) to the top-left compound's south corner
+        tower(2.1, -18, -1.6, -15.5, 0.15), // (994,78), moved from (1100,100) off the north compound to its corner
+        tower(11.5, -8.5, 8.8, -12.5, -0.1), // (1242,248), moved from (1005,250) to the east compound's north-west corner
+        tower(12, 2.5, 8.4, 4.9, 0.2), // (739,488), moved from (925,370) to compound B's south-west corner
+        tower(2.2, 10.8, -0.8, 13.9, -0.15), // (224,492), moved from (640,550) to the south compound's corner
+      ],
+      // The rich loot lies in the engine, where sight is short.
+      caches: [
+        // Just inside the nozzle's mouth, 2 tiles in from its centre along its axis, where a truck drives in (665,277).
+        { at: { x: -1.6, y: -0.9 } },
+        // Under the frame's arches, at its middle between the feet (838,159).
+        { at: { x: -1.5, y: -8.5 } },
+        // Beside the frame's west feet, in the nook between them and the nozzle's back, at the north-west lane's end
+        // (inferred).
+        { at: { x: -6.2, y: -4.6 } },
+      ],
+      cacheLook: 'hullCache',
+      // Engine caches roll engine scrap: batteries and engine parts.
+      cacheTable: 'engineScrap',
+      cacheRadius: 0.7,
+      patches: [
+        // Outer patches, each with a dead truck and broken walls, inferred from the setting image's ruins and vehicles
+        // out to the edge: north-east, east, south, south-west and north-west, then two in the wide north-east, east
+        // of S2's lane and north under the cliffs.
+        { at: wide(18, -27), radius: 8, debris: RUINS, spots: 1 },
+        { at: wide(26, -3), radius: 8, debris: RUINS, spots: 1 },
+        { at: wide(1, 22), radius: 8, debris: RUINS, spots: 1 },
+        { at: wide(-20, 19), radius: 8, debris: RUINS, spots: 1 },
+        { at: wide(-19, -12), radius: 8, debris: RUINS, spots: 1 },
+        { at: wide(30, -17), radius: 8, debris: RUINS, spots: 1 },
+        { at: wide(9, -36), radius: 8, debris: RUINS, spots: 1 },
+        // One inner patch by the engine (inferred: the concept's loose plates and walls round the engine pieces), north
+        // of the frame's west end.
+        { at: { x: -5, y: -15 }, radius: 4.5, debris: ENGINE_DEBRIS, spots: 0 },
+      ],
+      spotLook: 'deadTruck',
+      spotTable: 'roadWreck',
+      spotRadius: [0.6, 0.8],
+      buildings: [
+        {
+          look: 'ruinCompound',
+          // A compound's yard and block: textiles, water, meds and scrap the townsfolk left.
+          table: 'cityStores',
+          turnJitter: 0.06,
+          shift: 0.3,
+          poses: [
+            // A, the compound with the tarp (290,290), moved 4.7 tiles south-west from (-6.5,5.8) across the west road.
+            compound(-9, 9.8, ALONG_Y),
+            // Behind the nozzle (380,175), moved 1.5 tiles west from (-9,0.2) off the nozzle's back, toward the west road.
+            compound(-10.5, 0.5, ALONG_X),
+            // In front of the nozzle (545,295): the concept's (-1.9,1.5) lies on the nozzle, so it stands 9 tiles south
+            // across the west road.
+            compound(-3.5, 10.5, ALONG_X),
+            // Top left (400,40), moved 4 tiles south from (-13.4,-4.9) between the ring road and the north-west lane, onto
+            // flat ground.
+            compound(-13.3, -8.8, ALONG_Y),
+            // Top right (1110,120): the concept's (1.9,-14.7) touches the frame's east feet, so it stands 3.3 tiles north,
+            // off the north road and the bumps there.
+            compound(2.1, -18, ALONG_X),
+            // Right of the frame (1000,260), moved 6.6 tiles east from (4.9,-7.8) off the frame's feet and the north road.
+            compound(11.5, -8.5, ALONG_Y),
+            // B (940,430), moved 3.7 tiles south-east from (9.9,-0.7) across the east road, clear of the pit's steep sides
+            // at (10-12, 6-8).
+            compound(12, 2.5, ALONG_X),
+            // Bottom centre (700,510), moved 7 tiles south-west from (8.5,6.4) off the pit's steep sides, west of the south
+            // road.
+            compound(2.2, 10.8, ALONG_Y),
+            // Three outer compounds past the ring road, inferred from the setting image's ruins out to the edge: west,
+            // north and south-west, where the south-east edge leaves no room and the south has a cliff.
+            compound(-23, 2, ALONG_Y),
+            compound(4, -26.3, ALONG_X),
+            compound(-10.5, 20, ALONG_Y),
+          ],
+        },
+      ],
+      seatEase: 3,
+      // No basin lies under Glass Flats: its ground is open flats.
+      rimRocks: null,
+      scree: null,
+      // The dirt road web (inferred where the concept's tracks leave its frame): a ring road round the core, four roads
+      // from the crossroads before the engine mouth out to the ring, a lane to the frame's west feet, and a lane from
+      // each approach's end to the ring.
+      roads: [
+        // The four roads from the crossroads: west past the nozzle's south side between it and compound A, the concept's
+        // track along (144,136)-(560,352); north between the nozzle's mouth and the frame's east feet; east, the
+        // concept's track to the right edge; and south.
+        townRoad(LANE, [CROSSROADS, [0, 5], [-10, 5.5], [-16.5, 5]]),
+        townRoad(LANE, [CROSSROADS, [5, -6], [6.5, -12], [7, -21.5]]),
+        townRoad(LANE, [CROSSROADS, [9, -2], [16, -5]]),
+        townRoad(LANE, [CROSSROADS, [6.5, 7], [6.5, 16.6]]),
+        // The ring road, clockwise from the east, about 36 to 47 tiles out.
+        townRoad(RING, [[16, -5], [16.5, -9], [13, -18.5], [7, -21.5], [-5, -20.5], [-12, -17], [-17.5, -11.5], [-19, -2], [-16.5, 5], [-13.5, 13], [-5, 17.5], [3.5, 18], [11, 14.5], [17.4, 10], [17.2, 4], [16, -5]]),
+        // The north-west lane, from the ring between the north-west compound and the frame to the nook by the frame's
+        // west feet, where the third cache lies.
+        townRoad(LANE, [[-12, -17], { x: -8.5, y: -10 }, { x: -8.5, y: -5.5 }]),
+        // From S1's end at the south-east edge in to the ring's south-east corner.
+        townRoad(LANE, [GLASS_FLATS_ENDS[0], [11, 14.5]]),
+        // From S2's end at the north-east edge, south of the north-east patch, to the ring's north-east corner.
+        townRoad(LANE, [GLASS_FLATS_ENDS[1], [13, -18.5]]),
+      ],
+      // A spur out past the edge into the wasteland, as the setting image's tracks leave outward (inferred), in tiles
+      // from the centre: south-west into the scrub between Kiln Camp and Green Pit, so raiders have a way in.
+      spurs: [dirt(LANE, [wide(-13.5, 13), [-60, 40], [-82, 55]])],
+      spurFade: 5,
+      decks: [],
+      landing: 0,
+    },
+    farm: null,
+    // Glass covers about two fifths of the territory, five times the glass of the territory before it was spread. The
+    // cover share is highest at the centre, where the tracks and the clear yards round the compounds and the engine
+    // leave less open ground. Cells of 6 tiles give fields as wide as the concept's. Spires of 0.6 to 1.2 tiles stand
+    // big and small as its pyramids do; 85 put 8 in the zoom-1 core view before the spread, so 425 keep that density.
+    glass: { cell: 6, cover: [0.55, 0.45], clear: 1, spires: { look: 'glassSpire', count: 425, radius: [0.6, 1.2] } },
+    spotGap: 6,
+    debrisGap: 1.5,
+    reactor: null,
+    relief: null,
   },
 };
 

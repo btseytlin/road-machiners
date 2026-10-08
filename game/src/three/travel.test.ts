@@ -12,9 +12,10 @@ import { endTurn, newWorld, setMoveOrder } from "../sim/world";
 import { addRopeFrames, canTravel, overshoots, Travel } from "./travel";
 import { addState } from "../sim/states";
 import { TEST_MAP } from "../test/map";
+import { defaultSetup } from "../sim/settings";
 
 function makeSafeWorld() {
-  const world = newWorld(1337, startKit("standard"), TEST_MAP);
+  const world = newWorld(1337, startKit("standard"), TEST_MAP, defaultSetup('roaming'));
   world.vehicles = [playerVehicle(world)];
   world.events = [];
   return world;

@@ -9,15 +9,20 @@
 // band just inside the road.
 // A pad is a paler floor of the same dirt inside a worn orange outline, where the road ends. A territory's
 // dirt roads, the mask's green channel, take the same detail tinted grey-brown, with a darker soft shoulder.
+// Fused glass is drawn as flat plates under the roads: a grid of square plates, each split into two triangles along a
+// diagonal picked by a hash, each triangle tinted by its own hash, with thin pale seams on every plate and triangle
+// edge. Where the glass lies comes from the glass field, a blurred map of the glass tiles read with linear filtering.
+// Noise bends the field's half line, so a glass field ends in a smooth, wandering edge and not the tile grid's stairs.
+// The ground paint under glass tiles is plain hardpan, see groundPaint.ts, and the glass covers it up to that edge.
 
 import * as THREE from "three";
 import { PHYSICS } from "../../data/physics";
 import { REGION } from "../../data/region";
 import { TERRAIN_TYPES } from "../../data/terrain";
-import { desertWeight, lookTypes, ROAD_PLAIN, ROAD_SAND, type PaintCanvas } from "../../render/groundPaint";
+import { desertWeight, glassField, lookTypes, ROAD_PLAIN, ROAD_SAND, type PaintCanvas } from "../../render/groundPaint";
 import { sitePads } from "../../sim/sites";
 import type { Terrain } from "../../sim/terrain";
-import { PAL } from "../../render/palette";
+import { mix, PAL } from "../../render/palette";
 import { paintRoadDetail, paintRoadMask, paintRoadTone, ROAD_DETAIL_SIDE, ROAD_TONE_PIXELS, ROAD_TONE_SIDE, type RoadImage } from "../../render/roadPaint";
 
 const S = PHYSICS.metersPerTile;
@@ -38,6 +43,32 @@ const DIRT_EDGE = 0.44;
 const DIRT_WANDER = 0.2; // how far the slow tone moves the dirt road's edge, half as far as a region road's
 const DIRT_SOFT = 0.15; // mask span over which the shoulder fades in outside the edge and lightens inside it
 const DIRT_SHOULDER = 0.9; // shade of the darkest shoulder, at the edge
+// Glass plates are two tiles across, about the size of a truck and a half, which the issue 112 concept shows as its
+// plates beside its 1.5-tile pickups. A tile-sized plate read as a tiled floor, a bigger one as plain flat colour.
+const GLASS_PLATE = 2;
+// Largest brightness shift of one glass triangle. Four times the ground's FACET_TINT, so the plates read as separate
+// panes of glass catching the light, as in the concept, and not as the ground's faint low-poly facets.
+const GLASS_TINT = 0.16;
+// Meters across a seam: about 2 screen pixels at zoom 1, a thin crisp line like the concept's, wide enough not to
+// break up at zoom 0.5.
+const GLASS_SEAM = 0.25;
+const GLASS_SEAM_MIX = 0.45; // how far a seam goes toward its pale color, so it keeps a hint of the plate's shade
+// Committee patch: the plates read as a neat triangulated overlay. The grid is bent by noise, seams show only in
+// patches and fade along their length, and dust tints the glass in broad patches, so the field looks weathered.
+const GLASS_WARP = 2.2; // meters a plate edge wanders
+const GLASS_WARP_SCALE = 2.5; // meters over which that wander changes
+// Noise bends the glass edge, in field units: the field falls about 0.45 per tile across the edge, so 0.35 moves the
+// edge about 0.8 tiles. The wide wobble makes bays and points, the fine one roughens them.
+const GLASS_EDGE_WOBBLE = 0.35;
+const GLASS_EDGE_SCALE = 1.6; // tiles over which the wide wobble changes
+const GLASS_EDGE_FINE = 0.12;
+const GLASS_EDGE_FINE_SCALE = 0.5; // tiles over which the fine wobble changes
+const GLASS_DUST_MIX = 0.35; // how far dusty patches go toward the sand color
+// The glass ground color before plates, a little dusty like the ground paint's own noise made it.
+const GLASS_BASE = mix(TERRAIN_TYPES.glass.color, PAL.sand[3], 0.07);
+const GLASS_DUST = mix(PAL.glass.top, 0xb9a47c, 0.6);
+// Pale seam glass, whiter than the lit glass, so seamed plates read apart from flat dark water.
+const GLASS_SEAM_COLOR = mix(PAL.glass.top, 0xffffff, 0.45);
 
 // Paints the road mask on `mask`, which must map the map like the ground canvas, and draws roads and
 // pads on the ground material of terrain `t`.
@@ -66,6 +97,14 @@ export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas
     stoneColor: { value: new THREE.Color(PAL.stoneGrey) },
     dirtGroundLuma: { value: luma(new THREE.Color(DIRT_UNDER)) },
     dirtTint: { value: dirtTint() },
+    glassField: { value: glassTexture(t) },
+    glassFieldMeters: { value: t.size * S },
+    glassBase: { value: new THREE.Color(GLASS_BASE) },
+    glassPlate: { value: GLASS_PLATE * S },
+    glassTint: { value: GLASS_TINT },
+    glassSeam: { value: GLASS_SEAM },
+    glassSeamColor: { value: new THREE.Color(GLASS_SEAM_COLOR) },
+    glassDust: { value: new THREE.Color(GLASS_DUST) },
     ...padUniforms(pixel),
   };
   const before = material.onBeforeCompile.bind(material);
@@ -106,12 +145,29 @@ uniform vec3 rimColor;
 uniform vec3 stoneColor;
 uniform float dirtGroundLuma;
 uniform vec3 dirtTint;
+uniform sampler2D glassField;
+uniform float glassFieldMeters;
+uniform vec3 glassBase;
+uniform float glassPlate;
+uniform float glassTint;
+uniform float glassSeam;
+uniform vec3 glassSeamColor;
+uniform vec3 glassDust;
 uniform vec2 padCenters[PAD_COUNT];
 uniform vec2 padAxes[PAD_COUNT];
 uniform vec2 padHalf;
 uniform float padBorder;
 uniform vec3 padDust;
-uniform vec3 padMark;`;
+uniform vec3 padMark;
+float glassHash(vec2 p) {
+  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float glassNoise(vec2 p) {
+  vec2 i = floor(p);
+  vec2 f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(glassHash(i), glassHash(i + vec2(1.0, 0.0)), f.x), mix(glassHash(i + vec2(0.0, 1.0)), glassHash(i + vec2(1.0, 1.0)), f.x), f.y);
+}`;
 
 // Samples everything at the road pixel center, so edges step in whole road pixels like the ground
 // paint. Under 0.5 the mask is off the road. The tone moves that line by meters and the dither frays it.
@@ -123,7 +179,37 @@ uniform vec3 padMark;`;
 // a road, by the same weight, so it keeps its brightness whatever ground it crosses.
 // Off a region road, a dirt road fades in over its shoulder and is darkest at its edge. A region road keeps priority
 // where the two meet. A pad covers the road under it. Its outline skips a few pixels, like worn paint.
+// Glass comes first, so any road drawn over it wins. Its plates and seams follow the exact ground position, not the
+// road pixel, so their lines stay straight and thin.
 const ROAD_FRAGMENT = `{
+  float glassEdge = texture2D(glassField, vRoadXZ / glassFieldMeters).r
+    + (glassNoise(vRoadXZ / ${(GLASS_EDGE_SCALE * S).toFixed(2)}) - 0.5) * ${GLASS_EDGE_WOBBLE.toFixed(2)}
+    + (glassNoise(vRoadXZ / ${(GLASS_EDGE_FINE_SCALE * S).toFixed(2)} + 53.1) - 0.5) * ${GLASS_EDGE_FINE.toFixed(2)};
+  float glassSoft = fwidth(glassEdge) * 0.75;
+  float glassCover = smoothstep(0.5 - glassSoft, 0.5 + glassSoft, glassEdge);
+  if (glassCover > 0.0) {
+    vec3 groundColor = diffuseColor.rgb;
+    diffuseColor.rgb = glassBase;
+    vec2 glassAt = vRoadXZ + (vec2(glassNoise(vRoadXZ / ${GLASS_WARP_SCALE.toFixed(2)}), glassNoise(vRoadXZ / ${GLASS_WARP_SCALE.toFixed(2)} + 31.7)) - 0.5) * ${GLASS_WARP.toFixed(2)};
+    vec2 plateAt = glassAt / glassPlate;
+    vec2 plateCell = floor(plateAt);
+    vec2 plateIn = plateAt - plateCell;
+    float plateFlip = step(0.5, fract(sin(dot(plateCell, vec2(27.17, 91.43))) * 43758.5453));
+    float plateU = mix(plateIn.x, 1.0 - plateIn.x, plateFlip);
+    float plateHalf = plateU + plateIn.y > 1.0 ? 1.0 : 0.0;
+    float plateHash = fract(sin(dot(plateCell + plateHalf * vec2(0.53, 0.29), vec2(12.9898, 78.233))) * 43758.5453);
+    float glassBroad = glassNoise(vRoadXZ / 7.0);
+    float glassFine = glassNoise(vRoadXZ / 0.8);
+    diffuseColor.rgb *= 1.0 + (plateHash - 0.5) * 2.0 * glassTint + (glassBroad - 0.5) * 0.16 + (glassFine - 0.5) * 0.06;
+    diffuseColor.rgb = mix(diffuseColor.rgb, glassDust, smoothstep(0.35, 0.8, glassNoise(vRoadXZ / 4.0 + 7.3)) * ${GLASS_DUST_MIX.toFixed(2)});
+    float plateEdge = min(min(plateIn.x, 1.0 - plateIn.x), min(plateIn.y, 1.0 - plateIn.y));
+    float seamDist = min(plateEdge, abs(plateU + plateIn.y - 1.0) * 0.70710678) * glassPlate;
+    float seamSoft = fwidth(seamDist) * 1.5;
+    float seam = 1.0 - smoothstep(glassSeam * 0.5 - seamSoft, glassSeam * 0.5 + seamSoft, seamDist);
+    seam *= smoothstep(0.4, 0.8, glassNoise(vRoadXZ / 3.0 + 19.1)) * (0.4 + 0.6 * glassFine);
+    diffuseColor.rgb = mix(diffuseColor.rgb, glassSeamColor, seam * ${GLASS_SEAM_MIX});
+    diffuseColor.rgb = mix(groundColor, diffuseColor.rgb, glassCover);
+  }
   vec2 roadAt = roadOrigin + (floor((vRoadXZ - roadOrigin) / roadPixel) + 0.5) * roadPixel;
   vec2 roadMaskAt = texture2D(roadMask, (roadAt - roadOrigin) / roadMaskMeters).rg;
   float roadCover = roadMaskAt.r;
@@ -191,6 +277,16 @@ function maskTexture(c: PaintCanvas): THREE.DataTexture {
     cover[i * 2 + 1] = rgba[i * 4 + 1];
   }
   const texture = new THREE.DataTexture(cover, c.size, c.size, THREE.RGFormat);
+  texture.magFilter = THREE.LinearFilter;
+  texture.minFilter = THREE.LinearFilter;
+  texture.needsUpdate = true;
+  return texture;
+}
+
+// The glass field, one texel per tile. Linear filtering blends it between tile centers.
+function glassTexture(t: Terrain): THREE.DataTexture {
+  const texture = new THREE.DataTexture(glassField(t), t.size, t.size, THREE.RedFormat);
+  texture.unpackAlignment = 1;
   texture.magFilter = THREE.LinearFilter;
   texture.minFilter = THREE.LinearFilter;
   texture.needsUpdate = true;

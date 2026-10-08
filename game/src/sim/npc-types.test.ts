@@ -8,7 +8,7 @@ import { chassisDef } from '../data/chassis';
 import { makePart } from './factory';
 import { freeCells, goodsCount, mountedParts } from './grid';
 import { addGoods } from './inventory';
-import { huntingGrounds, optionChances, optionWeights, patrolPoints, raiderGrounds } from './npc-decisions';
+import { huntingGrounds, optionChances, optionWeights, raiderGrounds, raiderPatrolPosts } from './npc-decisions';
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { siteGates, sitePads } from './sites';
 import { spawnInitial, spawnNpcs } from './spawn';
@@ -18,6 +18,7 @@ import { tileAt } from './terrain';
 import type { NpcActivity, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { cloneWorld } from './world';
+import { emptyHidden } from './salvage';
 import { budget } from '../test/budget';
 
 function siteById(id: string) {
@@ -86,12 +87,12 @@ describe('patrols', () => {
     expect(optionWeights(w, npc, 'idle', null, null)).not.toHaveProperty('patrol');
   });
 
-  it('offers raiders a patrol of their camp, within the patrol radius of its gates', () => {
+  it('offers raiders a patrol of their camp, to the watch posts around its gates', () => {
     forceOption('idle', 'patrol');
     for (const id of ['scrapjaw', 'kiln']) {
       const camp = siteById(id);
-      expect(patrolPoints(camp).length).toBeGreaterThanOrEqual(1);
       const w = emptyWorld({ x: 600, y: 600 });
+      expect(raiderPatrolPosts(w, camp).length).toBeGreaterThanOrEqual(1);
       const npc = createNpc(w, 'buggy', ['raider'], 'buggy', ['mg', 'stockEngine'], sitePads(camp)[0]);
       expect(optionWeights(w, npc, 'idle', null, null)).toHaveProperty('patrol');
       const goals = idleGoals(w, npc.id, 30).filter((g) => g.kind === 'patrol');
@@ -99,7 +100,7 @@ describe('patrols', () => {
       for (const goal of goals) {
         expect(goal.targetId).toBe(id);
         expect(goal.reason).toBe('patrol the roads near camp');
-        expect(Math.min(...siteGates(camp).map((gate) => dist(gate, goal.destination!)))).toBeLessThanOrEqual(NPC_BEHAVIOR.patrolRadius);
+        expect(raiderPatrolPosts(w, camp)).toContainEqual(goal.destination);
       }
     }
   });
@@ -113,7 +114,7 @@ describe('patrols', () => {
       const goals = idleGoals(w, npc.id, 30).filter((g) => g.kind === 'raid');
       expect(goals.length).toBeGreaterThan(25);
       for (const goal of goals) {
-        expect(raiderGrounds(camp)).toContainEqual(goal.destination);
+        expect(raiderGrounds(w, camp)).toContainEqual(goal.destination);
       }
     }
   });
@@ -137,7 +138,7 @@ describe('couriers', () => {
     const w = emptyWorld({ x: 300, y: 300 });
     const npc = createNpc(w, 'courier', ['courier'], 'courier', ['mg', 'flatFour'], { x: 30, y: 30 });
     npc.brain!.goals = [{ kind: 'travel', targetId: 'nose', destination: { ...siteById('nose').pos }, phase: 'travel', reason: 'test travel' }];
-    w.salvage = [{ id: 'wreck-test', pos: { x: 34, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [makePart(w, 'plates', 0)] }];
+    w.salvage = [{ id: 'wreck-test', pos: { x: 34, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [makePart(w, 'plates', 0)], hidden: emptyHidden() }];
     const chances = optionChances(optionWeights(w, npc, 'salvageSeen', 'wreck-test', null));
     expect(chances.loot).toBeCloseTo(MIN_CHANCE, 4);
   });
@@ -159,7 +160,7 @@ describe('mercs', () => {
     const w = emptyWorld({ x: 300, y: 300 });
     const pad = sitePads(bowl)[0];
     const npc = createNpc(w, 'merc', ['merc'], 'hauler', ['cannon', 'workhorseDiesel'], pad);
-    w.salvage = [{ id: 'wreck-test', pos: { x: pad.x + 4, y: pad.y }, radius: 0.6, goods: { scrap: 2 }, parts: [] }];
+    w.salvage = [{ id: 'wreck-test', pos: { x: pad.x + 4, y: pad.y }, radius: 0.6, goods: { scrap: 2 }, parts: [], hidden: emptyHidden() }];
     const chances = optionChances(optionWeights(w, npc, 'idle', null, null));
     expect(chances.scavenge).toBeCloseTo(MIN_CHANCE, 2);
     expect(chances.trade ?? MIN_CHANCE).toBeCloseTo(MIN_CHANCE, 2);
@@ -311,7 +312,8 @@ describe('vultures', () => {
         seen++;
         const defs = mountedParts(v).map((p) => partDef(p.defId));
         expect(defs.some((d) => d.kind === 'cargo')).toBe(true);
-        expect(defs.find((d) => d.kind === 'weapon')!.range).toBeGreaterThanOrEqual(15);
+        // A vulture may mount a short side gun beside its main one, so the longest weapon is the main gun.
+        expect(Math.max(...defs.filter((d) => d.kind === 'weapon').map((d) => d.range))).toBeGreaterThanOrEqual(15);
       }
     }
     expect(seen).toBeGreaterThan(10);
@@ -321,7 +323,7 @@ describe('vultures', () => {
     const w = emptyWorld({ x: 300, y: 300 });
     const npc = createNpc(w, 'vulture', ['vulture'], 'scout', ['longRifle', 'stockEngine'], { x: 30, y: 30 });
     npc.brain!.goals = [{ kind: 'prowl', targetId: null, destination: { x: 200, y: 200 }, phase: 'travel', reason: 'test prowl' }];
-    w.salvage = [{ id: 'wreck-test', pos: { x: 34, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [makePart(w, 'plates', 0)] }];
+    w.salvage = [{ id: 'wreck-test', pos: { x: 34, y: 30 }, radius: 0.6, goods: { scrap: 2 }, parts: [makePart(w, 'plates', 0)], hidden: emptyHidden() }];
     const chances = optionChances(optionWeights(w, npc, 'salvageSeen', 'wreck-test', null));
     expect(chances.loot).toBeGreaterThanOrEqual(0.9);
   });

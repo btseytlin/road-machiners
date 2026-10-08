@@ -14,8 +14,9 @@ import { damagePart, isJunk, maxHp, restorePart } from './wear';
 import { playerVehicle } from './damage';
 import { makePart, makeVehicle } from './factory';
 import { maxHealthOf } from './health';
-import { corePart, mountedParts } from './grid';
-import { addGoods, stowPart } from './inventory';
+import { corePart, mountedParts, type Spot } from './grid';
+import { addGoods, applyRefitLayout, planItemMove, stowPart } from './inventory';
+import { disarm } from './claymore';
 import { generateNpcLoadout } from './npc-loadout';
 import { grantXp, isPerkId, pickedFromPair } from './progress';
 import { isTerritory, nearestPad, type Site } from './sites';
@@ -140,12 +141,49 @@ function giveGoods(w: World, good: string, count: number): void {
   if (addGoods(w, playerVehicle(w), good, count) < count) throw new CheatError(`No room for ${count} ${good}`);
 }
 
+// The full shop's move: places a truck item as a garage refit would, at once, anywhere and in combat too. The rules
+// of where an item fits still hold.
+export function instantMoveItem(world: World, itemId: string, to: Spot): World {
+  return update(world, (w) => {
+    const me = playerVehicle(w);
+    const result = planItemMove(me, itemId, to);
+    if (result.error !== null) throw new CheatError(result.error);
+    const item = me.items.find((it) => it.id === itemId);
+    if (item?.kind === 'part') disarm(item.part);
+    applyRefitLayout(w, me, result.plan.items);
+  });
+}
+
 export function toggleGod(world: World): World {
   return update(world, (w) => { w.player.god = !w.player.god; });
 }
 
 export function toggleFullLog(world: World): World {
   return update(world, (w) => { w.player.fullLog = !w.player.fullLog; });
+}
+
+export function toggleFrozen(world: World): World {
+  return update(world, (w) => { w.player.frozen = !w.player.frozen; });
+}
+
+// Runs on the turn draft after NPC drivers plan, so frozen drivers drive nowhere. Physics then gives a frozen truck no
+// throttle and no brakes (src/phys/drive.ts), so it rolls where it is pushed or pulled.
+export function freezeDriving(world: World): void {
+  if (!world.player.frozen) return;
+  for (const v of npcs(world)) v.order = null;
+}
+
+// Runs on the turn draft after NPC gun and utility orders, so frozen drivers neither fire nor use utilities.
+export function freezeFire(world: World): void {
+  if (!world.player.frozen) return;
+  for (const v of npcs(world)) {
+    v.weaponOrders = {};
+    v.utilityOrders = {};
+  }
+}
+
+function npcs(world: World): Vehicle[] {
+  return world.vehicles.filter((v) => v.brain !== null && v.id !== world.player.vehicleId);
 }
 
 // Runs on the turn draft before destruction and defeat checks, so nothing the turn did can break the truck.
@@ -173,6 +211,16 @@ function freeSpotNear(w: World, center: Vec, radius: number, ignoreId: string | 
 function circlePoints(center: Vec, r: number, count: number): Vec[] {
   return Array.from({ length: count }, (_, i) => {
     const a = (2 * Math.PI * i) / count;
+    return { x: center.x + Math.cos(a) * r, y: center.y + Math.sin(a) * r };
+  });
+}
+
+// count points on a circle around center, ordered from the one straight along heading outward to both sides, so a
+// spawn lands ahead of the truck when it can.
+function frontFirst(center: Vec, heading: number, r: number, count: number): Vec[] {
+  const step = (2 * Math.PI) / count;
+  return Array.from({ length: count }, (_, i) => {
+    const a = heading + Math.ceil(i / 2) * step * (i % 2 === 0 ? -1 : 1);
     return { x: center.x + Math.cos(a) * r, y: center.y + Math.sin(a) * r };
   });
 }
@@ -326,9 +374,9 @@ function gearLevelOf(level: number): GearLevel {
 function spawnInDraft(w: World, tpl: NpcTemplate, hostile: boolean): void {
   const loadout = generateNpcLoadout(w, tpl);
   const radius = chassisDef(loadout.chassisId).radius;
-  const center = playerVehicle(w).pos;
-  const circle = circlePoints(center, CHEATS.spawnDistance, CHEATS.spawnAngles);
-  const spot = firstFree(w, circle, radius, null) ?? freeSpotNear(w, center, radius, null);
+  const me = playerVehicle(w);
+  const circle = frontFirst(me.pos, me.heading, CHEATS.spawnDistance, CHEATS.spawnAngles);
+  const spot = firstFree(w, circle, radius, null) ?? freeSpotNear(w, me.pos, radius, null);
   if (!spot) throw new CheatError(`No free spot to spawn ${tpl.name}`);
   const v = spawnAt(w, tpl, loadout, spot);
   if (hostile) turnHostile(w, v);
