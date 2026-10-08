@@ -10,7 +10,7 @@ import { MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, NPCS, TRAITS, type TraitId } from
 import { SHOPS } from '../data/market';
 import { partDef } from '../data/parts';
 import { getKnownSite, getUpkeepReserve, optionChances, optionWeights, tradeOffers, tradeSpend, tripFuelCost, visibleDowned, visibleSalvage } from './npc-decisions';
-import { affordableBuyCount, getTradePrice } from './economy';
+import { affordableBuyCount, getLotTradePrice, getTradePrice } from './economy';
 import { cargoRoom } from './inventory';
 import { ECONOMY, GOODS } from '../data/goods';
 import { endTurn, newWorld } from './world';
@@ -22,7 +22,7 @@ import { chooseOn, trackOf } from './tracks';
 import { watchStalls } from './npc-watchdog';
 import { CANNOT_HOLD, canTakeAny } from './salvage';
 import { beginSearch } from './search';
-import { hiddenUnits, salvageUnits } from './salvage';
+import { hiddenUnits, salvageInRange, salvageUnits } from './salvage';
 import { knockOutNpc } from './defeat';
 import { chassisDef } from '../data/chassis';
 import { cloneWorld } from './world';
@@ -296,14 +296,14 @@ describe('NPC activities', () => {
     const w = emptyWorld({ x: 50, y: 50 });
     const npc = addVehicle(w, 'traders', 'hauler', ['trailerBox', 'stockEngine'], { x: 10, y: 10 });
     npc.brain = npcBrain('trader', npc.pos, ['trader']);
-    npc.resources!.money = 5000;
+    npc.resources!.money = 166700;
     forceOption('idle', 'trade');
     planNpcOrders(w);
     const source = [...REGION.towns, ...REGION.locations].find((s) => s.id === topGoal(npc)?.targetId)!;
     npc.pos = { ...sitePads(source)[0] };
     resolveNpcActivities(w);
     expect(topGoal(npc)?.kind).toBe('sell');
-    expect(5000 - npc.resources!.money).toBeLessThanOrEqual(TRAITS.trader.tradeStake);
+    expect(166700 - npc.resources!.money).toBeLessThanOrEqual(TRAITS.trader.tradeStake);
   });
 
   it('gives a trade the wallet above the upkeep reserve, capped by the stake', () => {
@@ -311,7 +311,7 @@ describe('NPC activities', () => {
     const reserve = getUpkeepReserve(npc);
     npc.resources!.money = reserve + 200;
     expect(tradeSpend(w, npc)).toBe(200);
-    npc.resources!.money = reserve + 10_000;
+    npc.resources!.money = reserve + TRAITS.trader.tradeStake * 2;
     expect(tradeSpend(w, npc)).toBe(TRAITS.trader.tradeStake);
   });
 
@@ -341,7 +341,7 @@ describe('NPC activities', () => {
     }
 
     it('drops a run whose load profit does not cover the trip fuel', () => {
-      const { w, npc } = hauler(50);
+      const { w, npc } = hauler(1700);
       const losing = pairs(w, npc).filter((p) => p.loadProfit <= p.fuel);
       expect(losing.length).toBeGreaterThan(0);
       const offers = tradeOffers(w, npc).map((o) => `${o.value.source}:${o.value.good}:${o.value.sellShop}`);
@@ -368,7 +368,7 @@ describe('NPC activities', () => {
     });
 
     it('sends a driver with no paying run to other idle work without a stall', () => {
-      const { w, npc } = hauler(50);
+      const { w, npc } = hauler(1700);
       expect(tradeOffers(w, npc)).toHaveLength(0);
       expect(optionChances(optionWeights(w, npc, 'idle', null, null)).trade).toBeUndefined();
       let world = w;
@@ -727,14 +727,14 @@ describe('NPC activities', () => {
       const { w, npc } = createTrader();
       at(npc, 'bowl');
       addGoods(w, npc, 'salt', 2);
-      tankAt(w, npc, 0.1, 500);
+      tankAt(w, npc, 0.1, 16700);
       npc.brain!.goals = [goal('sell', 'bowl')];
       const fuel = getResources(w, npc).fuel;
-      const salt = getTradePrice(w, npc, 'bowl', 'salt', 'sell') * 2;
+      const salt = getLotTradePrice(w, npc, 'bowl', 'salt', 2, 'sell');
       resolveNpcActivities(w);
       expect(goodsCount(npc).salt ?? 0).toBe(0);
       expect(getResources(w, npc).fuel).toBe(Math.floor(fuelCap(npc)));
-      expect(getResources(w, npc).money).toBe(500 + salt - (getResources(w, npc).fuel - fuel) * ECONOMY.supplyPrice.fuel);
+      expect(getResources(w, npc).money).toBe(16700 + salt - (getResources(w, npc).fuel - fuel) * ECONOMY.supplyPrice.fuel);
     });
 
     it('a trader that buys trade cargo at a town buys the planned cargo first, then fills the tank from the rest', () => {
@@ -751,7 +751,7 @@ describe('NPC activities', () => {
     it('a trader with plenty of money buying trade cargo also tops up its tank', () => {
       const { w, npc } = createTrader();
       at(npc, 'bowl');
-      tankAt(w, npc, 0.1, getUpkeepReserve(npc) + 5000);
+      tankAt(w, npc, 0.1, getUpkeepReserve(npc) + 166700);
       npc.brain!.goals = [goal('trade', 'bowl', { purchase: { good: 'grain', sellShop: 'nose' } })];
       resolveNpcActivities(w);
       expect(goodsCount(npc).grain ?? 0).toBeGreaterThan(0);
@@ -764,7 +764,7 @@ describe('NPC activities', () => {
         const npc = addVehicle(w, 'raiders', 'scout', ['mg', 'stockEngine'], { x: 10, y: 10 });
         npc.brain = npcBrain('buggy', npc.pos, ['raider']);
         addGoods(w, npc, 'scrap', 2);
-        tankAt(w, npc, 0.1, 500);
+        tankAt(w, npc, 0.1, 16700);
         return { w, npc };
       };
       for (const [site, full] of [['salvage-yard', false], ['scrapjaw', true]] as const) {
@@ -1275,6 +1275,41 @@ describe('point goals', () => {
     const after = w.vehicles.find((v) => v.id === npc.id)!;
     expect(topGoal(after)?.kind).not.toBe('explore');
     expect(dist(after.pos, { x: 170, y: 150 })).toBeGreaterThan(RULES.arriveRadius * 2);
+  });
+});
+
+describe('loot out of reach', () => {
+  // A move arrives at the closest point its route reaches. A vulture whose move ended about 4 tiles from a hull cache,
+  // past its search range, waited there for 100 turns until the stall watchdog fired in a progression run.
+  function besideCache(gap: number) {
+    const w = emptyWorld({ x: 10, y: 10 });
+    const stock = w.salvage.find((s) => s.id.startsWith('hullCache-'))!;
+    const npc = addVehicle(w, 'scavengers', 'van', ['stockEngine'], { x: stock.pos.x, y: stock.pos.y + gap });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    npc.brain.goals = [{ kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'loot salvage on the way' }];
+    npc.speed = 0;
+    return { w, npc, stock };
+  }
+
+  it('gives the salvage up when the move arrives out of search range', () => {
+    const { w, npc, stock } = besideCache(4.2);
+    expect(salvageInRange(npc, stock)).toBe(false);
+    w.events.push({ t: 'arrived', vehicle: npc.id });
+    resolveNpcActivities(w);
+    expect(topGoal(npc)).toBeNull();
+  });
+
+  it('keeps the goal while the move is still under way', () => {
+    const { w, npc } = besideCache(4.2);
+    resolveNpcActivities(w);
+    expect(topGoal(npc)?.kind).toBe('loot');
+  });
+
+  it('searches when the move arrives in range', () => {
+    const { w, npc } = besideCache(2);
+    w.events.push({ t: 'arrived', vehicle: npc.id });
+    resolveNpcActivities(w);
+    expect(topGoal(npc)).toMatchObject({ kind: 'loot', phase: 'act' });
   });
 });
 

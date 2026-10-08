@@ -21,10 +21,10 @@ export const NPC_BEHAVIOR = {
   // six turns of driving, enough to leave a pad, a pocket between props or a jam of trucks, and well inside the
   // 80 tiles of gray vision, so the driver stays in the same area.
   stallJump: 20,
-  // Escort fee per tile of straight distance from the client to its destination. Bowl and Nose lie about 520 tiles
-  // apart. A trader load of about 8 units earns about 50 a unit there, so about 400. 0.15 a tile makes that escort
-  // cost about 78, a fifth of the load's profit.
-  escortFeePerTile: 0.15,
+  // Escort fee in cents per tile of straight distance from the client to its destination. Bowl and Nose lie about 520
+  // tiles apart. A trader load of about 8 units earns about 16.67 M a unit there, so about 133 M. 5 cents a tile makes
+  // that escort cost about 26 M, a fifth of the load's profit.
+  escortFeePerTile: 5,
   // Decline weight times this when the merc is weak. A decline weight of 1 against take 3 then wins about 7 to 1.
   weakDecline: 20,
   // A leader waits while an escort lags farther than this many tiles behind. A truck cruises about 3.4 tiles a
@@ -140,13 +140,13 @@ export const NPC_BEHAVIOR = {
   robNearGuards: 0.015,
   // What the target's cargo is worth to a robber or raider: goods and spare parts, not mounted gear. At or below
   // `poor` the weight is times `poorMul`, at or above `rich` it is unchanged, and between them it rises
-  // geometrically so the chance climbs evenly. Rob: a scumbag's 0.45 falls to the 1% floor up to 150 in cargo,
-  // robs about 5% at 300, 13% at 400 and 31% from 500. Raid: a raider's fight of 45 against manageable prey is
-  // about 4% against an empty truck, 13% against the start cargo (78), 50% at 200 and 96% from 400. A revenge
-  // grudge skips it.
+  // geometrically so the chance climbs evenly. Amounts are in cents. Rob: a scumbag's 0.45 falls to the 1% floor up
+  // to 50 M in cargo, robs about 5% at 100 M, 13% at 133 M and 31% from 167 M. Raid: a raider's fight of 45 against
+  // manageable prey is about 4% against an empty truck, 13% against the start cargo (26 M), 50% at 67 M and 96% from
+  // 133 M. A revenge grudge skips it.
   lootAppeal: {
-    rob: { poor: 150, rich: 500, poorMul: 0.02 },
-    raid: { poor: 0, rich: 400, poorMul: 0.002 },
+    rob: { poor: 5000, rich: 16667, poorMul: 0.02 },
+    raid: { poor: 0, rich: 13333, poorMul: 0.002 },
   },
   // Fight weight at a new hostile times this within lawGateReach of a lawman town's gate. A raider's fight weight of
   // 50 against manageable prey drops to 0.05, about 3%. A lawman gate never lowers fight back.
@@ -209,9 +209,9 @@ export const AID = {
   giftShare: 0.25,
   // A driver offers aid unprompted only to a player whose truck is below this share of its body condition...
   poorCondition: 0.5,
-  // ...and worth at most this much. That covers the start scout, worth about 3600 new, and worn tier 1 trucks, not
-  // geared tier 2 and 3 trucks like the combat start kit's hauler, worth about 6000.
-  poorValue: 4000,
+  // ...and worth at most this much, in cents. That covers the start scout, worth about 1200 M new, and worn tier 1
+  // trucks, not geared tier 2 and 3 trucks like the combat start kit's hauler, worth about 2000 M.
+  poorValue: 133333,
   // Turns both trucks stay parked side by side after the player presses [E] before the goods move.
   handoverTurns: 1,
 };

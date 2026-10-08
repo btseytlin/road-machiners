@@ -1,14 +1,60 @@
 {
-  "turn": 610,
-  "vehicles": [
-    { "id": "player", "brain": null },
-    {
-      "id": "npc4",
-      "brain": {
-        "goals": [
-          { "kind": "raid", "targetId": null, "destination": { "x": 300.8, "y": 104.2 }, "phase": "travel", "reason": "look for prey at known hunting grounds" }
-        ]
+  "turn": 900,
+  "player": {
+    "vehicleId": "player",
+    "money": -1000,
+    "fuel": 30,
+    "costBasis": { "scrap": 10.5, "salt": 21 },
+    "contracts": [{ "id": "c1", "shop": "bowl", "kind": "haul", "good": "salt", "units": 4, "to": "nose", "reward": 120, "deadline": 1200, "window": 300, "rush": false, "tier": 1 }],
+    "call": {
+      "with": "v2",
+      "topic": "trade",
+      "node": "offer",
+      "vars": {
+        "fee": { "kind": "money", "amount": 45 },
+        "deal": { "kind": "deal", "deal": "paid", "patcher": "npc", "price": 30, "parts": 1, "turns": 4 },
+        "town": { "kind": "town", "id": "bowl" }
+      },
+      "line": {
+        "text": "{prices}",
+        "vars": { "prices": { "kind": "prices", "town": "bowl", "goods": [{ "good": "salt", "buy": 31, "sell": 21 }] }, "far": { "kind": "distance", "tiles": 120 } }
       }
     }
+  },
+  "shops": {
+    "bowl": { "pressure": { "salt": 0.2 }, "contracts": [{ "id": "c2", "shop": "bowl", "kind": "bounty", "template": "raider", "targetName": "Rusty", "reward": 300, "deadline": 2000, "window": 500, "tier": 2 }] }
+  },
+  "vehicles": [
+    { "id": "player", "resources": null },
+    { "id": "v2", "resources": { "money": 1250, "fuel": 12.5, "supplies": 3, "health": 80 }, "brain": { "memories": [{ "turn": 800, "fact": { "kind": "prices", "shop": "bowl", "pressure": { "salt": 0.2 } } }] } }
+  ],
+  "removed": [{ "id": "v3", "resources": { "money": 7, "fuel": 0, "supplies": 0, "health": 0 } }],
+  "salvage": [
+    { "id": "s1", "units": 3 },
+    { "id": "s2", "pile": { "until": 1000, "fromPlayer": true, "basis": { "salt": 22.5 } } }
+  ],
+  "states": [
+    { "id": "st1", "kind": "tow", "holder": "v2", "other": "player", "turnsLeft": null, "born": 850, "data": { "kind": "tow", "site": "bowl", "fee": 55, "waived": 0, "hitched": true } },
+    { "id": "st2", "kind": "towPromise", "holder": "v2", "other": "v3", "turnsLeft": 40, "born": 850, "data": { "kind": "towPromise", "site": "nose", "fee": 18 } },
+    { "id": "st3", "kind": "escort", "holder": "v2", "other": "v3", "turnsLeft": null, "born": 850, "data": { "kind": "escort", "site": null, "fee": 78 } },
+    { "id": "st4", "kind": "patch", "holder": "v2", "other": "player", "turnsLeft": null, "born": 850, "data": { "kind": "patch", "deal": "paid", "parts": 1, "price": 32, "work": 4, "workLeft": 4 } },
+    { "id": "st5", "kind": "aid", "holder": "v2", "other": "player", "turnsLeft": 10, "born": 850, "data": { "kind": "aid", "giver": "player", "fuel": 4, "supplies": 2, "price": 22, "free": false, "agreed": true, "started": false, "work": 1, "workLeft": 1 } },
+    { "id": "st6", "kind": "trade", "holder": "v2", "other": "player", "turnsLeft": 10, "born": 850, "data": { "kind": "trade" } }
+  ],
+  "events": [
+    { "t": "money", "amount": -12, "reason": "Fuel" },
+    { "t": "practice", "source": "profit", "amount": 13.5, "difficulty": null, "target": "bowl:salt", "xp": 10.8 },
+    { "t": "practice", "source": "freeTow", "amount": 30, "difficulty": null, "target": "v3", "xp": 24 },
+    { "t": "practice", "source": "aid", "amount": 9, "difficulty": null, "target": "v2", "xp": 7.2 },
+    { "t": "practice", "source": "contract", "amount": 12, "difficulty": null, "target": "bowl", "xp": 12 },
+    { "t": "contract", "outcome": "done", "contract": { "id": "c3", "shop": "bowl", "kind": "fetch", "defId": "mg", "reward": 150, "deadline": 950, "window": 100, "tier": 1 } },
+    { "t": "towOffer", "by": "v2", "town": "bowl", "fee": 55 },
+    { "t": "towDone", "by": "v2", "client": "v3", "fee": 18 },
+    { "t": "escortPaid", "by": "v2", "client": "v3", "fee": 78 },
+    { "t": "escortHired", "by": "v2", "client": "v3", "site": "nose", "fee": 78 },
+    { "t": "aid", "giver": "player", "receiver": "v2", "fuel": 4, "supplies": 2, "paid": 22 },
+    { "t": "stateEnded", "ending": "done", "state": { "id": "st7", "kind": "patch", "holder": "v2", "other": "player", "turnsLeft": null, "born": 800, "data": { "kind": "patch", "deal": "paid", "parts": 1, "price": 15, "work": 4, "workLeft": 0 } } },
+    { "t": "say", "speaker": "v2", "text": "{fee}", "vars": { "fee": { "kind": "money", "amount": 3 } } },
+    { "t": "scrapPatch", "fuel": 2 }
   ]
 }

@@ -25,7 +25,7 @@ import { standingPressures } from './market';
 import { remember } from './memory';
 import { hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
-import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn } from './salvage';
+import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn, searchTarget } from './salvage';
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
@@ -1176,8 +1176,9 @@ function resolveSearch(world: World, vehicle: Vehicle, activity: NpcActivity): v
   if (taken) { finishGoal(world, vehicle, taken); return; }
   const truck = world.vehicles.find((v) => v.id === activity.targetId);
   if (truck) { resolveTruckLoot(world, vehicle, activity, truck); return; }
-  const stock = world.salvage.find((entry) => entry.id === activity.targetId);
-  if (!stock) { finishGoal(world, vehicle, 'salvage no longer available'); return; }
+  const found = searchTarget(world, vehicle, activity.targetId);
+  if ('ended' in found) { finishGoal(world, vehicle, found.ended); return; }
+  const { stock } = found;
   // A search already runs at this stock: keep parked and wait for it to finish.
   if (worksOnLoot(vehicle, stock.id)) { activity.phase = 'act'; return; }
   if (!canReachSalvage(vehicle, stock)) return;

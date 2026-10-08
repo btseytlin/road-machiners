@@ -261,7 +261,7 @@ describe('search in combat', () => {
 describe("critical vehicle readout", () => {
   it("keeps money, survival resources and driver condition visible", () => {
     const w = emptyWorld();
-    w.player.money = 1234;
+    w.player.money = 123450;
     w.player.fuel = 18.5;
     w.player.supplies = 7.25;
     expect(getHudReadout(w).resources.map((r) => r.label)).toEqual([
@@ -274,7 +274,7 @@ describe("critical vehicle readout", () => {
       getHudReadout(w)
         .resources.slice(0, 3)
         .map((r) => r.value),
-    ).toEqual(["1,234", "93 / 200 L", "7.3"]);
+    ).toEqual(["1,235", "93 / 200 L", "7.3"]);
   });
   it("shows fractional driver health as a whole number", () => {
     const w = emptyWorld();
@@ -343,9 +343,9 @@ describe("critical vehicle readout", () => {
 describe("rescue readout", () => {
   it("shows negative money as debt with a warning", () => {
     const w = emptyWorld();
-    w.player.money = -1200;
+    w.player.money = -120050;
     expect(getHudReadout(w).resources[0]).toMatchObject({
-      value: "Debt 1,200",
+      value: "Debt 1,201",
       warning: true,
     });
   });

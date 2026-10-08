@@ -100,7 +100,7 @@ Details: [social](wiki/mechanics/social.md).
 
 ## Economy
 
-The wasteland is a living economy that NPC traders move as much as the player. Every item has one value, and every price is a formula from it. Goods are cheap where they are made and dear far away, so profit comes from knowing routes, as in Dustland Delivery. Loot is finite and refills slowly, and nothing appears offscreen to keep the economy going. One turn of play is the unit of effort, and every price and reward is balanced against what a turn earns. Fuel and supplies limit how far a truck can go.
+The wasteland is a living economy that NPC traders move as much as the player. Every item has one value, and every price is a formula from it. Goods are cheap where they are made and dear far away, so profit comes from knowing routes, as in Dustland Delivery. Loot is finite and refills slowly, and nothing appears offscreen to keep the economy going. One turn of play is the unit of effort, and every price and reward is balanced against what a turn earns. One M is the price of 5 L of fuel at a town, and every price reads against it. Fuel and supplies limit how far a truck can go.
 
 Details: [economy](wiki/mechanics/economy.md), [economy reference](wiki/economy.md), [prototype content](wiki/mechanics/content.md).
 
