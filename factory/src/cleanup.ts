@@ -25,6 +25,7 @@ const NAMED: Record<string, { stages: string[]; keep: (state: FactoryState) => b
   'release-playtest': { stages: ['playtest'], keep: () => false },
   'release-baseline': { stages: ['playtest'], keep: () => false },
   waste: { stages: ['waste'], keep: () => false },
+  'merge-queue': { stages: ['merge'], keep: () => false },
 };
 const OWN = new Set(['land']);
 // Every stage that works in a clone installs these again, so an idle clone does not need them.

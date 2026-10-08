@@ -263,3 +263,19 @@ export async function catchUpBranch(ctx: Ctx, issue: number, stage: CardStage): 
   if (!(await ctx.repo.isMerged(commit, head))) throw new Error(`The agent left the merge of ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
   return true;
 }
+
+// The base moved on since design cut the branch. Testing and Hardening merge the current base in first,
+// so the committee plays what the merge will take, and conflicts reach the stage's agent in `.factory/merge-conflicts.md`.
+// The issue branch itself may have moved on GitHub too, so its new commits come in first.
+// Returns the base commit it merged.
+export async function mergeBase(ctx: Ctx, issue: number, base: string, home: string, stage: CardStage): Promise<string> {
+  await catchUpBranch(ctx, issue, stage);
+  const { commit, conflicts } = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
+  if (conflicts.length > 0) writeFileSync(`${home}/${OUT_DIR}/merge-conflicts.md`, `${conflicts.map((file) => `- ${file}`).join('\n')}\n`);
+  return commit;
+}
+
+// Checks the commit merged above, not the base branch. A parallel merge may move the base on meanwhile.
+export async function requireBaseMerged(ctx: Ctx, issue: number, base: string, commit: string): Promise<void> {
+  if (!(await ctx.repo.isMerged(commit, BRANCH(issue)))) throw new Error(`The agent left the merge of ${base} at ${commit.slice(0, 7)} into ${BRANCH(issue)} unfinished.`);
+}

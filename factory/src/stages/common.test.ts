@@ -190,7 +190,7 @@ describe('runAgent reference images', () => {
   });
 
   it('fetches an image that failed once more and runs the agent on the text with the image NOT AVAILABLE when it stays gone', async () => {
-    for (const stage of ['design', 'patch'] as const) {
+    for (const stage of ['design', 'verify'] as const) {
       let requests = 0;
       const counted = ((input: URL | string) => { requests += 1; return hosted(403)(input); }) as typeof fetch;
       const { ctx, runs } = agentCtx([], ASSET, [], counted);
@@ -220,17 +220,10 @@ describe('runAgent reference images', () => {
 });
 
 describe('stage prompts for reference images', () => {
-  const vars = { issue: '7', taskFile: 'f', branch: 'b', evidenceRules: '', visualRules: '', playtest: 'npm run playtest' };
-  it('tell the patch to act on the words, never on an image it lacks, and to go on with its reading when only that image decides', () => {
-    const text = fillPrompt('patch', { ...vars, played: 'abc' });
-    expect(text).toContain('act on the words, even when an image is NOT AVAILABLE');
-    expect(text).toContain('never describe what it shows');
-    expect(text).toContain('pick the most sensible reading of the text');
-    expect(text).toContain('That file is only for a game design fork or a major save bump.');
-  });
+  const vars = { issue: '7', taskFile: 'f', branch: 'b', task: 'Play it.', playtest: 'npm run playtest' };
 
   it('tell every stage to read the images and what a missing one means', () => {
-    for (const name of ['triage', 'design', 'implement', 'test', 'test-fix']) {
+    for (const name of ['triage', 'design', 'implement', 'test']) {
       const text = fillPrompt(name, vars);
       expect(text, name).toContain('Reference images from the issue are listed at the end of this prompt');
     }
@@ -246,13 +239,14 @@ describe('stage prompts for reference images', () => {
     }
   });
 
-  it('require the reference-versus-screenshot comparison in testing, inside the one visual review', () => {
-    const text = fillPrompt('test', { ...vars, visualRules: fillPrompt('visual-review', { taskFile: 'f' }) });
-    expect(text).toContain('a gameplay test is not enough');
-    expect(text).toContain('.factory/comparison.png');
-    // One look loop with one limit: the visual review's two repair rounds.
-    expect(text).not.toContain('three rounds');
-    expect(text).not.toContain('"Visual comparison"');
+  it('make testing own every fix, with a new plan as its only way back', () => {
+    const text = fillPrompt('test', vars);
+    expect(text).toContain('Fix every problem you find yourself, in this session');
+    expect(text).toContain('a look that does not match the issue');
+    expect(text).toContain('`.factory/needs-redesign.md`');
+    expect(text).toContain('the failure comes back to you in this conversation');
+    expect(text).toContain('Never describe an image you did not get.');
+    expect(text).not.toContain('visual-review.json');
   });
 
   it('make implementation capture and read real screenshots of any visible change, with or without a reference image', () => {
@@ -273,22 +267,6 @@ describe('stage prompts for reference images', () => {
     // The reference-image rules stay.
     expect(text).toContain('Read every available image with the Read tool before you build.');
     expect(text).toContain('When the task file asks for a visual acceptance check');
-  });
-
-  it('make testing read the final images against the issue and the docs, with no reference image needed', () => {
-    const text = fillPrompt('visual-review', { taskFile: 'f' });
-    expect(text).toContain('independent of what the implementation stage claimed');
-    expect(text).toContain('Read each shown image with the Read tool');
-    expect(text).toContain('`docs/DESIGN.md`');
-    expect(text).toContain('with no concept image');
-    expect(text).toContain('`tune`');
-    expect(text).toContain('`rebuild`');
-    expect(text).toContain('`plan`');
-    expect(text).toContain('at most twice');
-    expect(text).toContain('Never set `visual` false while `.factory/evidence.json` lists features');
-    expect(text).toContain('Do not approve a look you did not see');
-    const test = fillPrompt('test', { ...vars, visualRules: text });
-    expect(test).toContain('Visual review of the final build');
   });
 
   it('tell design how to read visual review findings', () => {

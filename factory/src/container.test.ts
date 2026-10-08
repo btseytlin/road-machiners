@@ -83,10 +83,8 @@ describe('dockerContainer', () => {
     expect(runCall(plain.calls).args.join(' ')).not.toContain('/opt/factory-check');
   });
 
-  it('tells the agents that write evidence to run the mounted command as their last step', () => {
-    for (const [name, round] of [['test', 'test'], ['test-fix-evidence', 'test'], ['patch', 'patch']]) {
-      expect(readFileSync(`prompts/${name}.md`, 'utf8'), name).toContain(`${EVIDENCE_CHECK_COMMAND} ${round}`);
-    }
+  it('tells the testing agent to run the mounted command before it ends', () => {
+    expect(readFileSync('prompts/test.md', 'utf8')).toContain(`${EVIDENCE_CHECK_COMMAND} test`);
   });
 
   it('mounts the reference images read only inside the clone, and only when the run has them', async () => {

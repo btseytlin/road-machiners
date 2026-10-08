@@ -33,7 +33,7 @@ const STEP_KINDS: Record<CardStep, 'path' | 'loop' | 'end' | 'other'> = {
   moved: 'other', 'merge-ordered': 'other', shipped: 'other', reported: 'other',
 };
 export const LOOP_STEPS = (Object.keys(STEP_KINDS) as CardStep[]).filter((step) => STEP_KINDS[step] === 'loop');
-const RETRY_STAGES: JobStage[] = ['triage', 'design', 'implement', 'patch', 'verify', 'harden', 'checks'];
+const RETRY_STAGES: JobStage[] = ['triage', 'design', 'implement', 'verify', 'harden', 'checks', 'merge'];
 // Each gate's passing and refusing steps. A pending card, a failed job, a patch, a redesign, a removal or an operator's drop decides nothing.
 const GATES: Record<Gate, { pass: CardStep[]; reject: CardStep[] }> = {
   triage: { pass: ['accepted'], reject: ['triage-wont-do'] },
@@ -47,6 +47,7 @@ const COLUMN_STAGE: Record<Column, (step: CardStep) => DeliveryStage | null> = {
   Testing: (step) => (step === 'approved' || step === 'conflict' ? 'harden' : 'preview'),
   Approval: (step) => (step === 'hardened' || step === 'merge-ordered' ? 'merge' : 'approval'),
   Hardening: () => 'harden',
+  Merging: () => 'merge',
   Done: () => null,
 };
 const stageOf = (line: CardLine): DeliveryStage | null => COLUMN_STAGE[line.to](line.step);

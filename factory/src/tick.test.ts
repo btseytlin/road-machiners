@@ -38,7 +38,7 @@ describe('chooseJobs card budget', () => {
   });
 
   it('does not charge checks, and lets a hotfix run at the budget', () => {
-    const spent = state({ cardStarts: { 4: starts(5, 3), 6: starts(5, 3) }, testPhase: { 4: 'checks' } });
+    const spent = state({ cardStarts: { 4: starts(5, 3), 6: starts(5, 3) }, postOnly: [4] });
     expect(chooseJobs(spent, [card(4, 'Testing')], NOW, big)).toEqual([{ stage: 'checks', issue: 4 }]);
     expect(chooseJobs(spent, [card(6, 'Implementation', [HOTFIX_LABEL])], NOW, big)).toEqual([{ stage: 'implement', issue: 6 }]);
   });
@@ -332,7 +332,7 @@ describe('tick', () => {
 
   it('starts each job on the CPUs and test workers of its pool, verify beside implement and checks alone on the test pool', async () => {
     const h = harness(null, true, [card(3, 'Implementation'), card(4, 'Testing'), card(5, 'Testing')]);
-    writeState(h.ctx.statePath, state({ testPhase: { 5: 'checks' } }));
+    writeState(h.ctx.statePath, state({ postOnly: [5] }));
     await tick(h.ctx, '/code', h.deps);
     expect(h.pinned.sort()).toEqual(['checks 2-3 4', 'implement 1 2', 'verify 1 2']);
   });
@@ -394,23 +394,28 @@ describe('tick', () => {
     expect(existsSync(join(agent.ctx.cfg.webRoot, 'fresh01'))).toBe(false);
   });
 
-  it('picks verify for a Testing card with no phase or a fix phase, and checks once verify is done', () => {
-    const cards = [card(1, 'Testing'), card(2, 'Testing'), card(3, 'Testing'), card(4, 'Testing')];
-    const phases = state({ testPhase: { 2: 'checks', 3: 'fix', 4: 'checks-after-fix' } });
-    const picks = chooseJobs(phases, cards, NOW, { ...CFG, maxJobsPerDay: 10, verifyWorkers: 2, testWorkers: 2 });
-    expect(picks).toEqual([{ stage: 'verify', issue: 1 }, { stage: 'checks', issue: 2 }, { stage: 'verify', issue: 3 }, { stage: 'checks', issue: 4 }]);
+  it('picks verify for a Testing card, and checks for one a control move sent to a post', () => {
+    const cards = [card(1, 'Testing'), card(2, 'Testing')];
+    const picks = chooseJobs(state({ postOnly: [2] }), cards, NOW, { ...CFG, maxJobsPerDay: 10, verifyWorkers: 2, testWorkers: 2 });
+    expect(picks).toEqual([{ stage: 'verify', issue: 1 }, { stage: 'checks', issue: 2 }]);
   });
 
-  it('picks harden for a Hardening card, and checks once harden set the phase, ahead of Testing', () => {
-    const cards = [card(1, 'Testing'), card(5, 'Hardening'), card(6, 'Hardening'), card(7, 'Hardening')];
-    const phases = state({ testPhase: { 6: 'checks', 7: 'fix' } });
-    const picks = chooseJobs(phases, cards, NOW, { ...CFG, maxJobsPerDay: 10, verifyWorkers: 3, testWorkers: 2 });
-    expect(picks).toEqual([{ stage: 'harden', issue: 5 }, { stage: 'checks', issue: 6 }, { stage: 'harden', issue: 7 }, { stage: 'verify', issue: 1 }]);
+  it('picks harden for a Hardening card, ahead of Testing', () => {
+    const cards = [card(1, 'Testing'), card(5, 'Hardening'), card(6, 'Hardening')];
+    const picks = chooseJobs(state({}), cards, NOW, { ...CFG, maxJobsPerDay: 10, verifyWorkers: 3, testWorkers: 2 });
+    expect(picks).toEqual([{ stage: 'harden', issue: 5 }, { stage: 'harden', issue: 6 }, { stage: 'verify', issue: 1 }]);
   });
 
-  it('runs a patch for an Implementation card with a queued patch, in the implement queue', () => {
-    const picks = chooseJobs(state({ patching: { 4: 'abc1234' } }), [card(3, 'Implementation'), card(4, 'Implementation')], NOW, { ...CFG, maxJobsPerDay: 10 });
-    expect(picks).toEqual([{ stage: 'implement', issue: 3 }, { stage: 'patch', issue: 4 }]);
+  it('starts one merge job with no issue for every Merging card, uncapped, after queued approvals', () => {
+    const cards = [card(5, 'Merging'), card(6, 'Merging'), card(7, 'Approval')];
+    const full = { jobStarts: [hoursAgo(1)] };
+    expect(chooseJobs(state({ ...full, pendingApprovals: { 7: 'Ann' } }), cards, NOW, { ...CFG, maxJobsPerDay: 1 })).toEqual([{ stage: 'approve', issue: 7 }]);
+    expect(chooseJobs(state(full), cards, NOW, { ...CFG, maxJobsPerDay: 1 })).toEqual([{ stage: 'merge', issue: null }]);
+  });
+
+  it('starts no merge job while every Merging card is stuck or held', () => {
+    const cards = [card(5, 'Merging', [STUCK_LABEL]), card(6, 'Merging')];
+    expect(chooseJobs(state({ held: { 6: { by: 'Ann', reason: 'r', at: 'a', stage: null } } }), cards, NOW, CFG)).toEqual([]);
   });
 
   it('hands a reply Hermes left unrouted past the limit to Hermes as an incident with no stuck label, and keeps a fresh one', async () => {
@@ -441,7 +446,7 @@ describe('tick', () => {
   });
 
   it('runs a checks job beside a verify agent, one per queue', () => {
-    const picks = chooseJobs(state({ testPhase: { 2: 'checks', 3: 'checks' } }), [card(1, 'Testing'), card(2, 'Testing'), card(3, 'Testing'), card(5, 'Testing')], NOW, { ...CFG, maxJobsPerDay: 10 });
+    const picks = chooseJobs(state({ postOnly: [2, 3] }), [card(1, 'Testing'), card(2, 'Testing'), card(3, 'Testing'), card(5, 'Testing')], NOW, { ...CFG, maxJobsPerDay: 10 });
     expect(picks).toEqual([{ stage: 'verify', issue: 1 }, { stage: 'checks', issue: 2 }]);
   });
 

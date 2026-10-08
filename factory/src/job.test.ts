@@ -133,8 +133,8 @@ describe('runJob', () => {
   it('writes a finished note with the stage time', () => {
     const ctx = { now: () => new Date('2026-01-10T12:00:00Z') } as unknown as Ctx;
     expect(progressNote(ctx, 'implement', '2026-01-10T11:15:00Z', 'finished')).toBe('Implementation finished after 45 min.');
-    expect(progressNote(ctx, 'verify', null, 'finished')).toBe('Verify finished.');
-    expect(progressNote(ctx, 'checks', null, 'failed')).toBe('Checks failed. Hermes is looking into it.');
+    expect(progressNote(ctx, 'verify', null, 'finished')).toBe('Testing finished.');
+    expect(progressNote(ctx, 'checks', null, 'failed')).toBe('Post failed. Hermes is looking into it.');
   });
 
   it('drops only the failed removal from the queue', async () => {

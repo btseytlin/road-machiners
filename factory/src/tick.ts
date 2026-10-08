@@ -25,7 +25,7 @@ type Due = Pick<FactoryConfig, 'releaseDays' | 'wasteReviewDays' | 'maxJobsPerDa
 const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
 // Committee-driven jobs, the factory's own review and the free checks never count against the daily cap or a card's budget.
-const UNCAPPED_STAGES: JobStage[] = ['approve', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev', 'waste', 'checks'];
+const UNCAPPED_STAGES: JobStage[] = ['approve', 'merge', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev', 'waste', 'checks'];
 const CARD_ORDER: Card['column'][] = ['Hardening', 'Testing', 'Implementation', 'Design', 'Triage'];
 
 function isDue(last: string | null, now: Date, everyMs: number): boolean {
@@ -62,10 +62,11 @@ function byProgress(state: FactoryState, cards: Card[]): JobPick[] {
 }
 
 // The card job of each column in CARD_ORDER.
+// A control move to Approval leaves a Testing card for a checks job that only builds and posts it.
 const COLUMN_STAGE: Partial<Record<Card['column'], (state: FactoryState, issue: number) => JobStage>> = {
-  Hardening: (state, issue) => (checksDue(state, issue) ? 'checks' : 'harden'),
-  Testing: (state, issue) => (checksDue(state, issue) ? 'checks' : 'verify'),
-  Implementation: (state, issue) => (String(issue) in state.patching ? 'patch' : 'implement'),
+  Hardening: () => 'harden',
+  Testing: (state, issue) => (state.postOnly.includes(issue) ? 'checks' : 'verify'),
+  Implementation: () => 'implement',
   Design: () => 'design',
 };
 
@@ -73,10 +74,9 @@ function cardStage(state: FactoryState, card: Card): JobStage {
   return COLUMN_STAGE[card.column]?.(state, card.issue) ?? 'triage';
 }
 
-// A Testing or Hardening card runs the factory checks once its agent stage or a patch set its phase, and the agent stage otherwise.
-function checksDue(state: FactoryState, issue: number): boolean {
-  const phase = state.testPhase[String(issue)];
-  return phase === 'checks' || phase === 'checks-after-fix' || phase === 'post';
+// One merge job takes every waiting card of a base, so it needs no issue.
+function mergeJob(state: FactoryState, cards: Card[]): JobPick | null {
+  return openCards(state, cards).some((card) => card.column === 'Merging') ? { stage: 'merge', issue: null } : null;
 }
 
 const has = (label: string) => (card: Card): boolean => card.labels.includes(label);
@@ -135,10 +135,10 @@ function devJob(state: FactoryState, devHead: string | null): JobPick | null {
   return { stage: 'dev', issue: null };
 }
 
-// Branch jobs in order: queued approvals, removals, ships and incident entries, then a stale /dev/, then a due release cut, then the
-// release playtest or the candidate. The playtest runs in the verify queue, but it takes its turn here, since it gates the candidate.
+// Branch jobs in order: queued approvals, removals, ships and incident entries, then the merge queue, then a stale /dev/, then a due release cut,
+// then the release playtest or the candidate. The playtest runs in the verify queue, but it takes its turn here, since it gates the candidate.
 function branchCandidates(state: FactoryState, cards: Card[], now: Date, cfg: Due, heads: Heads): Candidate[] {
-  const picks = [queued(state), devJob(state, heads.dev), releaseCut(state, now, cfg), releaseJob(state, cards, heads.release)];
+  const picks = [queued(state), mergeJob(state, cards), devJob(state, heads.dev), releaseCut(state, now, cfg), releaseJob(state, cards, heads.release)];
   return picks.filter((pick) => pick !== null).map((pick) => ({ ...pick, uncapped: !countsAgainstCap(pick.stage) }));
 }
 
