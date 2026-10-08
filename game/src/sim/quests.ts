@@ -3,7 +3,20 @@
 // which saves skip and load rebuilds from the checkpoint. See docs/architecture/quests.md.
 
 import { Story } from 'inkjs';
-import { CHECKPOINT_TAG, type CompiledQuest, type QuestBundle, type QuestValue, type QuestValueType, type QuestVarDecl } from '../data/quests';
+import {
+  CHECKPOINT_TAG,
+  COST_TAG,
+  MONEY_STAT,
+  QUEST_VIEWS,
+  type CompiledQuest,
+  type QuestBundle,
+  type QuestFact,
+  type QuestStat,
+  type QuestValue,
+  type QuestValueType,
+  type QuestVarDecl,
+  type QuestViewKind,
+} from '../data/quests';
 import BUNDLE from '../data/quests.json';
 import type { NoteId } from '../data/locals';
 import { REGION } from '../data/region';
@@ -14,7 +27,17 @@ import { storyStock } from './salvage';
 import type { QuestLine, QuestSession, QuestState, QuestVars, World } from './types';
 import { update } from './world';
 
-export type QuestView = { quest: string; lines: QuestLine[]; choices: string[]; ended: boolean };
+export type QuestView = {
+  quest: string;
+  view: QuestViewKind;
+  lines: QuestLine[];
+  choices: string[];
+  costs: (number | null)[];
+  locked: boolean[];
+  stats: { label: string; value: string }[];
+  facts: string[];
+  ended: boolean;
+};
 export type QuestQuery = (world: World, args: readonly unknown[]) => QuestValue;
 export type QuestEffect = (world: World, args: readonly unknown[]) => void;
 
@@ -88,7 +111,23 @@ export function parseBundle(value: unknown): QuestBundle {
 
 function parseQuest(id: string, value: unknown): CompiledQuest {
   if (!isRecord(value) || typeof value.story !== 'string' || !isRecord(value.vars) || !Array.isArray(value.checkpoints)) throw new Error(`Quest ${id} has no story, vars or checkpoints`);
-  return { story: value.story, vars: parseVars(id, value.vars), checkpoints: value.checkpoints.map(String) };
+  return { story: value.story, vars: parseVars(id, value.vars), checkpoints: value.checkpoints.map(String), ...parseHeader(id, value) };
+}
+
+function parseHeader(id: string, value: Record<string, unknown>): Pick<CompiledQuest, 'view' | 'stats' | 'facts'> {
+  if (!QUEST_VIEWS.includes(value.view as QuestViewKind) || !Array.isArray(value.stats) || !Array.isArray(value.facts)) throw new Error(`Quest ${id} has no view, stats or facts`);
+  return { view: value.view as QuestViewKind, stats: value.stats.map((s) => parseStat(id, s)), facts: value.facts.map((f) => parseFact(id, f)) };
+}
+
+function parseStat(id: string, value: unknown): QuestStat {
+  if (!isRecord(value) || typeof value.name !== 'string' || typeof value.label !== 'string') throw new Error(`Quest ${id} has a bad stat`);
+  const words = Array.isArray(value.words) ? value.words.map(String) : null;
+  return { name: value.name, label: value.label, words };
+}
+
+function parseFact(id: string, value: unknown): QuestFact {
+  if (!isRecord(value) || typeof value.name !== 'string' || typeof value.text !== 'string') throw new Error(`Quest ${id} has a bad fact`);
+  return { name: value.name, text: value.text };
 }
 
 function parseVars(owner: string, value: Record<string, unknown>): Record<string, QuestVarDecl> {
@@ -126,6 +165,7 @@ export function chooseQuestOption(world: World, bundle: QuestBundle, index: numb
     const live = w.player.quests.live;
     if (!live) throw new Error(`Quest ${session.quest} has no live state. Restore it first`);
     if (!Number.isInteger(index) || index < 0 || index >= live.choices.length) throw new Error(`No choice ${index} on offer`);
+    payCost(w, live.costs[index], live.choices[index]);
     runQuest(w, bundle, session.quest, (story) => {
       story.state.LoadJson(live.ink);
       story.ChooseChoiceIndex(index);
@@ -156,10 +196,46 @@ export function leaveQuest(world: World): World {
   });
 }
 
-export function questView(world: World): QuestView {
+function payCost(w: World, cost: number | null, choice: string): void {
+  if (cost === null) return;
+  if (w.player.money < cost * UNITS.centsPerM) throw new Error(`"${choice}" costs ${cost} M, more than the player holds`);
+  w.player.money -= cost * UNITS.centsPerM;
+}
+
+export function questView(world: World, bundle: QuestBundle): QuestView {
   const { live, session } = world.player.quests;
   if (!live) throw new Error('No quest is on view');
-  return { quest: live.quest, lines: live.lines, choices: live.choices, ended: session === null };
+  const quest = questOf(bundle, live.quest);
+  const money = QUEST_QUERIES.money(world, []) as number;
+  return {
+    quest: live.quest,
+    view: quest.view,
+    lines: live.lines,
+    choices: live.choices,
+    costs: live.costs,
+    locked: live.costs.map((cost) => cost !== null && cost > money),
+    stats: quest.stats.map((stat) => ({ label: stat.label, value: statText(world, bundle, live.quest, stat, money) })),
+    facts: quest.facts.filter((fact) => questVar(world, bundle, live.quest, fact.name) === true).map((fact) => fact.text),
+    ended: session === null,
+  };
+}
+
+function statText(world: World, bundle: QuestBundle, questId: string, stat: QuestStat, money: number): string {
+  if (stat.name === MONEY_STAT) return `${money} M`;
+  const value = questVar(world, bundle, questId, stat.name);
+  if (stat.words === null) return String(value);
+  const word = stat.words[Math.min(Number(value), stat.words.length - 1)];
+  if (word === undefined) throw new Error(`Stat ${stat.name} of ${questId} holds ${String(value)}, which names none of ${stat.words.join(', ')}`);
+  return word;
+}
+
+function questVar(world: World, bundle: QuestBundle, questId: string, name: string): QuestValue {
+  const { world: shared, local } = world.player.quests;
+  const own = questOf(bundle, questId).vars[name];
+  if (own) return local[questId]?.[name] ?? own.init;
+  const decl = bundle.world[name];
+  if (!decl) throw new Error(`Quest ${questId} reads no variable ${name}`);
+  return shared[name] ?? decl.init;
 }
 
 export function questProblems(state: QuestState, bundle: QuestBundle): string[] {
@@ -268,8 +344,19 @@ function settle(w: World, bundle: QuestBundle, questId: string, story: Story, li
   const local = storedVars(story, questOf(bundle, questId).vars, `quest ${questId}`);
   state.local = Object.keys(local).length > 0 ? { ...others, [questId]: local } : others;
   const choices = story.currentChoices.map((choice) => choice.text);
-  state.live = { quest: questId, ink: story.state.toJson(), lines, choices };
+  const costs = story.currentChoices.map((choice) => choiceCost(questId, choice.text, choice.tags ?? []));
+  state.live = { quest: questId, ink: story.state.toJson(), lines, choices, costs };
   if (choices.length === 0) state.session = null;
+}
+
+function choiceCost(questId: string, text: string, tags: readonly string[]): number | null {
+  const tag = tags.find((t) => t.startsWith(COST_TAG));
+  const other = tags.find((t) => !t.startsWith(COST_TAG));
+  if (other !== undefined) throw new Error(`Choice "${text}" of ${questId} carries # ${other}. A choice takes only # cost.`);
+  if (tag === undefined) return null;
+  const cost = Number(tag.slice(COST_TAG.length).trim());
+  if (!Number.isInteger(cost) || cost <= 0) throw new Error(`Choice "${text}" of ${questId} needs a whole positive cost, got # ${tag}`);
+  return cost;
 }
 
 function storedVars(story: Story, decls: Record<string, QuestVarDecl>, owner: string): QuestVars {

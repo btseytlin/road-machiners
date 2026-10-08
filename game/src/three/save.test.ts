@@ -249,7 +249,7 @@ describe('game save', () => {
     const loaded = loadWorld(slots, 'auto', TEST_MAP);
     expect(loaded?.player.quests.session).toEqual(mid.player.quests.session);
     expect(loaded?.player.notes).toEqual(mid.player.notes);
-    expect(loaded && questView(loaded).choices).toEqual(questView(mid).choices);
+    expect(loaded && questView(loaded, QUESTS).choices).toEqual(questView(mid, QUESTS).choices);
     expect(loaded?.player.money).toBe(mid.player.money);
     expect(loaded?.events).toEqual([]);
   });

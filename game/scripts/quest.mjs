@@ -72,7 +72,7 @@ function parsedValue(type, text, assignment) {
 
 function pick(w, number) {
   const index = Number(number) - 1;
-  const text = questView(w).choices[index];
+  const text = questView(w, bundle).choices[index];
   if (text === undefined) throw new Error(`No choice ${number}`);
   console.log(`> ${number}. ${text}\n`);
   const next = chooseQuestOption(w, bundle, index);
@@ -87,7 +87,7 @@ function scripted(w, picks) {
 async function typed(w) {
   const input = createInterface({ input: process.stdin, output: process.stdout });
   let at = w;
-  while (!questView(at).ended) {
+  while (!questView(at, bundle).ended) {
     const answer = (await input.question('Pick a number, or q to stop: ')).trim();
     if (answer === 'q') break;
     at = pick(at, answer);
@@ -97,9 +97,11 @@ async function typed(w) {
 }
 
 function show(w) {
-  const view = questView(w);
+  const view = questView(w, bundle);
   for (const line of view.lines) console.log(line.tags.length > 0 ? `${line.text}   # ${line.tags.join(' # ')}` : line.text);
-  view.choices.forEach((choice, index) => console.log(`  ${index + 1}. ${choice}`));
+  for (const stat of view.stats) console.log(`  [${stat.label}: ${stat.value}]`);
+  for (const fact of view.facts) console.log(`  [fact] ${fact}`);
+  view.choices.forEach((choice, index) => console.log(`  ${index + 1}. ${choice}${view.costs[index] === null ? '' : `   # cost: ${view.costs[index]}`}${view.locked[index] ? ' (locked)' : ''}`));
   if (view.ended) console.log('(the quest ended)');
   console.log('');
 }

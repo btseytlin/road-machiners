@@ -8,14 +8,15 @@ const OUT_OF_CHARACTER = /\b(turns?|quests?|xp|levels?|hp|markers?|waypoints?|ma
 const NUMBER = /\d|\b(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|twenty|thirty|forty|fifty|hundreds?|thousands?|dozens?)\b(?! (days?|o'clock))/i;
 const LOGIC = /^(INCLUDE|EXTERNAL|VAR|CONST|~|->|=|#|\{|\}|-\s)/;
 const CHOICE = /^[+*]+\s*(?:\{[^}]*\}\s*)?\[([^\]]*)\]/;
+const DOCUMENT = /#\s*(row|head)\s*$/;
 
 const SOURCES = Object.entries(readQuestSources('src/data/quests'));
 
 function spoken(line: string): string | null {
   const text = line.trim();
   const choice = CHOICE.exec(text);
-  if (choice) return choice[1];
-  if (text === '' || LOGIC.test(text)) return null;
+  if (choice) return choice[1].replace(/#.*$/, '');
+  if (text === '' || LOGIC.test(text) || DOCUMENT.test(text)) return null;
   const words = text.replace(/\{[^{}]*?:([^{}]*)\}/g, (_, options: string) => options.replace(/\|/g, ' ')).replace(/\{[^{}]*\}/g, '');
   return words.replace(/#.*$/, '').replace(/->.*$/, '').replace(/<[^>]*>/g, '').trim();
 }
@@ -26,13 +27,14 @@ function lines(): { where: string; text: string }[] {
       const text = spoken(line);
       return text ? [{ where: `${file}:${k + 1}`, text }] : [];
     })),
+    ...Object.entries(QUESTS.quests).flatMap(([id, q]) => [...q.facts.map((f) => f.text), ...q.stats.flatMap((s) => [s.label, ...(s.words ?? [])])].map((text) => ({ where: `${id} header`, text }))),
     ...Object.entries(NOTES).flatMap(([id, n]) => [n.title, n.from, n.text].map((text) => ({ where: `note ${id}`, text }))),
     ...Object.values(TOPICS.armyWagon.nodes).map((n) => ({ where: 'radio armyWagon', text: n.line })),
   ];
 }
 
 describe('settlement talk content', () => {
-  it('keeps every line in character, with no counts but days and hours', () => {
+  it('keeps every line in character, with no counts but days and hours outside written tables', () => {
     const found = lines();
     expect(found.length).toBeGreaterThan(50);
     for (const { where, text } of found) {

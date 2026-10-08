@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CONFIG } from '../config';
-import { lineStyle, markupProblems, parseMarkup, PLAIN_STYLE, revealUnits } from './quest-text';
+import { QUEST_ART } from '../data/quest-art';
+import { lineStyle, markupProblems, parseMarkup, PLAIN_STYLE, revealUnits, rowCells } from './quest-text';
 
 describe('parseMarkup', () => {
   it('splits a line into spans carrying their marks, nested ones included', () => {
@@ -26,8 +27,25 @@ describe('parseMarkup', () => {
 });
 
 describe('lineStyle', () => {
-  it('reads reveal, speed, speaker and flags from line tags', () => {
-    expect(lineStyle(['reveal:char', 'speed:slow', 'speaker:Hattie', 'work_offer'])).toEqual({ reveal: 'char', speed: 'slow', img: null, speaker: 'Hattie', flags: ['work_offer'] });
+  it('reads reveal, speed, speaker, place and flags from line tags', () => {
+    expect(lineStyle(['reveal:char', 'speed:slow', 'speaker:Hattie', 'place: Fuel shed', 'work_offer', 'page'])).toEqual({
+      reveal: 'char',
+      speed: 'slow',
+      img: null,
+      speaker: 'Hattie',
+      place: 'Fuel shed',
+      flags: ['work_offer', 'page'],
+    });
+  });
+
+  it('takes art only from the art list', () => {
+    QUEST_ART.test_gate = 'gate.png';
+    try {
+      expect(lineStyle(['img: test_gate']).img).toBe('test_gate');
+      expect(() => lineStyle(['img: test_wall'])).toThrow('Line tag # img: test_wall needs one of test_gate');
+    } finally {
+      delete QUEST_ART.test_gate;
+    }
   });
 
   it('gives an untagged line the plain style', () => {
@@ -38,6 +56,13 @@ describe('lineStyle', () => {
     expect(() => lineStyle(['glow'])).toThrow('Unknown line tag # glow');
     expect(() => lineStyle(['reveal:fade'])).toThrow('Line tag # reveal:fade needs one of all, word, char');
     expect(() => lineStyle(['img:wagon'])).toThrow('Line tag # img:wagon needs one of nothing yet');
+  });
+});
+
+describe('rowCells', () => {
+  it('splits a table row line at semicolons, keeping an empty first cell', () => {
+    expect(rowCells('; Sabine; Depot pump')).toEqual(['', 'Sabine', 'Depot pump']);
+    expect(rowCells('3rd;2 cans ;Pell')).toEqual(['3rd', '2 cans', 'Pell']);
   });
 });
 

@@ -882,7 +882,7 @@ describe('army wagon topic', () => {
     expect(next.player.call).toBeNull();
     expect(next.events).toContainEqual({ t: 'call', with: npc.id, outcome: 'ended' });
     expect(next.player.quests.session?.quest).toBe('radio_wagon_driver');
-    expect(questView(next).choices).toContain('Anyone still around the wreck?');
+    expect(questView(next, QUESTS).choices).toContain('Anyone still around the wreck?');
     expect(next.player.notes.map((n) => n.id)).toEqual(['wagonBowl', 'wagonRoad']);
     expect(next.player.talked[npc.id]?.armyWagon).toBe('done');
   });

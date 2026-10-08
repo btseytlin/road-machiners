@@ -1,5 +1,5 @@
 {
- "format": "2.36",
+ "format": "2.37",
  "shape": {
   "broken": [],
   "craters": [],
@@ -1523,14 +1523,16 @@
     "alarm": "number",
     "bunk_searched": "boolean",
     "envelope": "number",
-    "evidence": "number",
+    "found_seals": "boolean",
     "gate_checked": "boolean",
+    "knows_scar": "boolean",
     "ledger_read": "boolean",
-    "misled": "boolean",
     "pell_talked": "boolean",
     "reward": "number",
     "sabine_price": "number",
     "sabine_talked": "boolean",
+    "saw_handoff": "boolean",
+    "saw_swap": "boolean",
     "stakeout_done": "boolean",
     "watches": "number"
    },

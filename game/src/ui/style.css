@@ -2075,6 +2075,131 @@ canvas.view {
 .quest-screen .error:empty {
   display: none;
 }
+#ui .quest-screen .quest-choice:disabled {
+  color: var(--muted);
+  opacity: 0.6;
+  cursor: default;
+}
+.quest-screen .quest-held {
+  float: right;
+}
+.quest-screen .qt-table {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  margin: 2px 0 10px;
+}
+.quest-screen .qt-table th,
+.quest-screen .qt-table td {
+  padding: 2px 18px 2px 0;
+  text-align: left;
+  font-weight: 400;
+}
+.quest-screen .qt-table th {
+  color: var(--muted);
+  border-bottom: 1px solid var(--edge);
+}
+.quest-screen .qt-img {
+  display: block;
+  max-width: 260px;
+  margin: 4px 0 8px;
+  border: 1px solid var(--edge);
+}
+
+/* Page view: art, one page of text with its choices, and the quest's numbers and facts. */
+#ui .modal.quest-screen.quest-page {
+  top: 40px;
+  width: min(1160px, calc(100vw - 64px));
+  height: min(650px, calc(100dvh - 80px));
+  max-height: none;
+  display: grid;
+  grid-template-columns: minmax(0, 33%) minmax(0, 1fr) 230px;
+  gap: 0;
+  padding: 0;
+  border-left: 2px solid var(--edge);
+  box-shadow: 0 0 0 100vmax rgba(8, 10, 11, 0.7);
+}
+.quest-page .quest-art {
+  padding: 14px;
+  border-right: 1px solid var(--metal);
+}
+.quest-page .quest-frame {
+  height: 100%;
+  border: 1px solid var(--metal);
+  background: repeating-linear-gradient(135deg, #2b3133 0 10px, #272c2e 10px 20px);
+}
+.quest-page .quest-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.quest-page .quest-text {
+  padding: 24px 28px 20px;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.quest-page .quest-place {
+  margin: 0 0 12px;
+  font-size: 24px;
+  font-weight: 600;
+}
+.quest-page .qt-line {
+  margin-bottom: 10px;
+}
+.quest-page .quest-choices {
+  margin-top: auto;
+  padding-top: 12px;
+}
+#ui .quest-page .quest-choice {
+  padding: 6px 12px;
+}
+#ui .quest-page .quest-next {
+  margin-top: auto;
+  align-self: flex-start;
+  padding: 6px 22px;
+}
+.quest-page .quest-side {
+  padding: 20px 16px;
+  border-left: 1px solid var(--metal);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+#ui .quest-page .quest-side .close {
+  position: static;
+  align-self: flex-end;
+}
+.quest-page .quest-stat {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--metal);
+}
+.quest-page .quest-stat b {
+  font-weight: 400;
+  color: #d8c08a;
+}
+.quest-page .quest-fact {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 4px 0 4px 10px;
+  margin-bottom: 8px;
+  border-left: 2px solid var(--edge);
+}
+.quest-page .quest-fact .qt-line {
+  margin: 0;
+}
+.quest-page .quest-fact.new {
+  color: var(--ink);
+  border-left-color: #d8c08a;
+}
 
 /* Quest text: each word or letter fades in after its delay. Marks add a look or a motion. */
 .qt-unit {

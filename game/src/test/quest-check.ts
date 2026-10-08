@@ -113,22 +113,36 @@ function walkScene(start: World, bundle: QuestBundle, id: string, visited: Set<s
 }
 
 function step(walk: Walk, bundle: QuestBundle, id: string, seen: Map<string, Seen>, visited: Set<string>, problems: string[]): Walk[] {
-  const view = questView(walk.world);
-  const node: Seen = { picks: walk.picks, next: [], ended: view.ended || view.quest !== id };
+  const where = `${id}: after ${walk.picks.join(' > ') || 'the start'}`;
+  const view = viewOf(walk.world, bundle, where, problems);
+  const node: Seen = { picks: walk.picks, next: [], ended: view === null || view.ended || view.quest !== id };
   seen.set(walk.key, node);
-  if (view.quest !== id) return [];
+  if (view === null || view.quest !== id) return [];
   for (const path of Object.keys(inkOf(walk.world).visitCounts)) visited.add(path);
-  problems.push(...markupOf(view).map((problem) => `${id}: after ${walk.picks.join(' > ') || 'the start'}: ${problem}`));
-  if (!view.ended) attempt(problems, `${id}: after ${walk.picks.join(' > ') || 'the start'}: a load here fails`, () => reloaded(walk, bundle));
-  return view.choices.flatMap((text, index) => attempt(problems, `${id}: after ${[...walk.picks, text].join(' > ')}`, () => {
+  problems.push(...markupOf(view).map((problem) => `${where}: ${problem}`));
+  if (!view.ended) attempt(problems, `${where}: a load here fails`, () => reloaded(walk, bundle));
+  return view.choices.flatMap((text, index) => (view.locked[index] ? [] : attempt(problems, `${id}: after ${[...walk.picks, text].join(' > ')}`, () => {
     const next = walkOf(chooseQuestOption(walk.world, bundle, index), [...walk.picks, text]);
     node.next.push(next.key);
     return next;
-  }));
+  })));
+}
+
+function viewOf(world: World, bundle: QuestBundle, where: string, problems: string[]): QuestView | null {
+  try {
+    return questView(world, bundle);
+  } catch (err) {
+    problems.push(`${where}: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
 }
 
 function markupOf(view: QuestView): string[] {
-  return [...view.lines.flatMap((line) => markupProblems(line.text, line.tags)), ...view.choices.flatMap((choice) => markupProblems(choice, []))];
+  return [
+    ...view.lines.flatMap((line) => markupProblems(line.text, line.tags)),
+    ...view.choices.flatMap((choice) => markupProblems(choice, [])),
+    ...view.facts.flatMap((fact) => markupProblems(fact, [])),
+  ];
 }
 
 function attempt(problems: string[], where: string, run: () => Walk): Walk[] {

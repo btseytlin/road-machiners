@@ -1,15 +1,16 @@
 // The talk window. It shows whenever the world holds a live quest, so a start, a pick and a load all draw here.
-// The newest lines reveal by their markup and the choices follow. A click, Space or Enter shows everything at once.
+// A transcript quest keeps the exchanges of this talk. A page quest shows one page at a time beside its art and
+// numbers. The newest lines reveal by their markup. A click, Space or Enter shows everything at once.
 
-import { localOfQuest, townWork } from '../sim/dialogue-rules';
-import { chooseQuestOption, leaveQuest, QUESTS } from '../sim/quests';
+import { localOfQuest } from '../sim/dialogue-rules';
+import { chooseQuestOption, leaveQuest, QUESTS, questView, type QuestView } from '../sim/quests';
 import type { QuestLine, QuestLive, World } from '../sim/types';
 import { createIcon } from './cards';
 import { el, isBrowserChord, panel } from './dom';
-import { contractSummary, contractWindow } from './format';
+import { questArtUrl } from '../data/quest-art';
 import type { UiHost } from './host';
-import { lineStyle, renderLine } from './quest-text';
-import { moneyText } from './units';
+import { choiceButtons, drawLines, lastTagged, pagesOf } from './quest-lines';
+import { renderLine } from './quest-text';
 
 export type Exchange = { ask: string | null; lines: QuestLine[] };
 
@@ -27,6 +28,12 @@ export class QuestScreen {
   private transcript: Exchange[] = [];
   private asked: string | null = null;
   private error = '';
+  private page = 0;
+  private artBefore: string | null = null;
+  private placeBefore: string | null = null;
+  private factsBefore = new Set<string>();
+  private factsShown: string[] = [];
+  private revealEnd = 0;
 
   constructor(private host: UiHost) {
     this.root.classList.add('quest-screen');
@@ -43,10 +50,27 @@ export class QuestScreen {
     const live = this.host.world().player.quests.live;
     if (!live) return this.hide();
     if (live.quest === this.shown?.quest && live.ink === this.shown.ink) return;
+    this.carry(live);
     this.transcript = extendTranscript(this.transcript, this.shown, live, this.asked);
     this.shown = live;
     this.asked = null;
-    this.draw(this.host.world(), live);
+    this.page = 0;
+    this.draw();
+  }
+
+  private carry(live: QuestLive): void {
+    const shown = this.shown;
+    if (shown?.quest !== live.quest || this.asked === null) return this.forget();
+    const before = shown.lines;
+    this.artBefore = lastTagged(before, 'img') ?? this.artBefore;
+    this.placeBefore = lastTagged(before, 'place') ?? this.placeBefore;
+    this.factsBefore = new Set(this.factsShown);
+  }
+
+  private forget(): void {
+    this.artBefore = null;
+    this.placeBefore = null;
+    this.factsBefore = new Set();
   }
 
   private hide(): void {
@@ -57,46 +81,81 @@ export class QuestScreen {
     this.root.replaceChildren();
   }
 
-  private draw(w: World, live: QuestLive): void {
+  private draw(): void {
+    const w = this.host.world();
+    const view = questView(w, QUESTS);
     this.root.style.display = '';
     this.root.classList.remove('qt-done');
-    const older = this.transcript.slice(0, -1).map((x) => this.exchange(w, x, false).el);
+    this.root.classList.toggle('quest-page', view.view === 'page');
+    const endMs = view.view === 'page' ? this.drawPage(w, view) : this.drawTranscript(w, view);
+    this.revealEnd = performance.now() + endMs;
+  }
+
+  private drawTranscript(w: World, view: QuestView): number {
+    const older = this.transcript.slice(0, -1).flatMap((x) => this.exchange(w, x, false).nodes);
     const newest = this.exchange(w, this.transcript[this.transcript.length - 1], true);
-    const log = el('div', { class: 'quest-log' }, ...older, newest.el);
-    this.root.replaceChildren(this.head(live.quest), log, this.choices(w, live, newest.endMs), el('div', { class: 'error' }, this.error));
+    const log = el('div', { class: 'quest-log' }, ...older, ...newest.nodes);
+    this.root.replaceChildren(this.head(view.quest), log, this.choices(w, view, newest.endMs), this.errorLine());
     log.scrollTop = log.scrollHeight;
+    return newest.endMs;
+  }
+
+  private exchange(w: World, x: Exchange, newest: boolean): { nodes: HTMLElement[]; endMs: number } {
+    const drawn = drawLines(w, x.lines, 0, { inlineArt: true, offers: newest });
+    const box = el('div', { class: newest ? 'quest-exchange' : 'quest-exchange qt-done' }, x.ask === null ? null : el('div', { class: 'talk-ask' }, x.ask), ...drawn.nodes);
+    return { nodes: [box], endMs: drawn.endMs };
+  }
+
+  private drawPage(w: World, view: QuestView): number {
+    const pages = pagesOf(view.lines);
+    const shown = pages.slice(0, this.page + 1).flat();
+    const drawn = drawLines(w, pages[this.page], 0, { inlineArt: false, offers: true });
+    const last = this.page === pages.length - 1;
+    const next = el('button', { class: 'quest-next qt-unit', style: `animation-delay: ${drawn.endMs}ms`, onclick: () => this.nextPage() }, 'Next');
+    const place = lastTagged(shown, 'place') ?? this.placeBefore;
+    const text = el('div', { class: 'quest-text' }, place ? el('h2', { class: 'quest-place' }, place) : null, ...drawn.nodes, last ? this.choices(w, view, drawn.endMs) : next, this.errorLine());
+    this.root.replaceChildren(this.art(lastTagged(shown, 'img') ?? this.artBefore), text, this.side(view));
+    return drawn.endMs;
+  }
+
+  private art(key: string | null): HTMLElement {
+    return el('div', { class: 'quest-art' }, el('div', { class: 'quest-frame' }, key ? el('img', { src: questArtUrl(key), alt: '' }) : null));
+  }
+
+  private side(view: QuestView): HTMLElement {
+    const stats = view.stats.map((s) => el('div', { class: 'quest-stat' }, el('span', {}, s.label), el('b', {}, s.value)));
+    this.factsShown = view.facts;
+    const facts = view.facts.map((f) => el('div', { class: this.factsBefore.has(f) ? 'quest-fact' : 'quest-fact new' }, renderLine(f, ['reveal:all'], 0).el));
+    return el('div', { class: 'quest-side' }, this.leaveButton(), el('div', { class: 'quest-stats' }, ...stats), el('div', { class: 'quest-facts' }, ...facts));
   }
 
   private head(quest: string): HTMLElement {
     const local = localOfQuest(quest);
-    return el(
-      'div',
-      { class: 'talk-head' },
-      createIcon('driver'),
-      local ? el('b', {}, local.name) : null,
-      local ? el('span', { class: 'dim' }, local.role) : null,
-      el('button', { class: 'close', onclick: () => this.leave() }, 'Leave [Esc]'),
-    );
+    return el('div', { class: 'talk-head' }, createIcon('driver'), local ? el('b', {}, local.name) : null, local ? el('span', { class: 'dim' }, local.role) : null, this.leaveButton());
   }
 
-  private exchange(w: World, x: Exchange, newest: boolean): { el: HTMLElement; endMs: number } {
-    const box = el('div', { class: newest ? 'quest-exchange' : 'quest-exchange qt-done' });
-    if (x.ask !== null) box.append(el('div', { class: 'talk-ask' }, x.ask));
-    let at = 0;
-    for (const line of x.lines) at = drawLine(box, w, line, at, newest);
-    return { el: box, endMs: at };
+  private leaveButton(): HTMLElement {
+    return el('button', { class: 'close', onclick: () => this.leave() }, 'Leave [Esc]');
   }
 
-  private choices(w: World, live: QuestLive, atMs: number): HTMLElement {
-    const ended = w.player.quests.session === null;
-    const buttons = ended
-      ? [el('button', { class: 'quest-choice', onclick: () => this.leave() }, 'Leave')]
-      : live.choices.map((text, i) => el('button', { class: 'quest-choice', 'data-choice': String(i), onclick: () => this.choose(i, text) }, `${i + 1}. ${text}`));
+  private errorLine(): HTMLElement {
+    return el('div', { class: 'error' }, this.error);
+  }
+
+  private choices(w: World, view: QuestView, atMs: number): HTMLElement {
+    const buttons = view.ended ? [el('button', { class: 'quest-choice', onclick: () => this.leave() }, 'Leave')] : choiceButtons(w, view, (i) => this.choose(i));
     return el('div', { class: 'quest-choices qt-unit', style: `animation-delay: ${atMs}ms` }, ...buttons);
   }
 
-  private choose(index: number, text: string): void {
-    this.asked = text;
+  private nextPage(): void {
+    this.page += 1;
+    this.draw();
+  }
+
+  private choose(index: number): void {
+    const view = questView(this.host.world(), QUESTS);
+    if (view.locked[index]) return;
+    this.asked = view.choices[index];
     this.run((w) => chooseQuestOption(w, QUESTS, index));
   }
 
@@ -111,8 +170,7 @@ export class QuestScreen {
     } catch (e) {
       this.asked = null;
       this.error = (e as Error).message;
-      const live = this.host.world().player.quests.live;
-      if (live) this.draw(this.host.world(), live);
+      if (this.host.world().player.quests.live) this.draw();
     }
   }
 
@@ -130,30 +188,21 @@ export class QuestScreen {
     if (index >= 0) this.pickKey(index);
   }
 
+  private onLastPage(view: QuestView): boolean {
+    return view.view === 'transcript' || this.page === pagesOf(view.lines).length - 1;
+  }
+
   private pickKey(index: number): void {
-    const { live, session } = this.host.world().player.quests;
-    if (!live) return;
-    if (session === null) return this.leave();
-    if (index < live.choices.length) this.choose(index, live.choices[index]);
+    const view = questView(this.host.world(), QUESTS);
+    if (!this.onLastPage(view)) return;
+    if (view.ended) return this.leave();
+    if (index < view.choices.length) this.choose(index);
   }
 
   private skip(e: KeyboardEvent): void {
     e.preventDefault();
-    this.root.classList.add('qt-done');
+    const revealing = !this.root.classList.contains('qt-done') && performance.now() < this.revealEnd;
+    if (revealing) this.root.classList.add('qt-done');
+    else if (!this.onLastPage(questView(this.host.world(), QUESTS))) this.nextPage();
   }
-}
-
-function drawLine(box: HTMLElement, w: World, line: QuestLine, atMs: number, newest: boolean): number {
-  const style = lineStyle(line.tags);
-  const drawn = renderLine(line.text, line.tags, atMs);
-  if (style.speaker) drawn.el.prepend(el('b', { class: 'qt-speaker' }, `${style.speaker}: `));
-  box.append(drawn.el);
-  if (newest && style.flags.includes('work_offer')) box.append(offerCard(w, drawn.endMs));
-  return drawn.endMs;
-}
-
-function offerCard(w: World, atMs: number): HTMLElement {
-  const offer = townWork(w);
-  if (!offer) throw new Error('A work offer line showed with no work on the board');
-  return el('div', { class: 'talk-offer qt-unit', style: `animation-delay: ${atMs}ms` }, `${contractSummary(offer)}, pays ${moneyText(offer.reward)}, within ${contractWindow(offer)}.`);
 }

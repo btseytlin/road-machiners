@@ -48,6 +48,7 @@ import { packExplored } from './save';
 import { dropQuest, dropQuestVar, endQuestSession, MIGRATIONS, moveQuestCheckpoint, pooledSkills_9_10, renameQuestVar, type SavedJson } from './save-migrations';
 import FORMAT_2_34 from './save-fixtures/format-2-34.json';
 import FORMAT_2_35 from './save-fixtures/format-2-35.json';
+import FORMAT_2_36 from './save-fixtures/format-2-36.json';
 
 describe('save migrations', () => {
   it('0 to 1 gives the player townPatched false and keeps every other field', () => {
@@ -802,6 +803,17 @@ describe('save migration 35 to 36', () => {
     expect(next).toEqual({
       ...FORMAT_2_35,
       player: { ...FORMAT_2_35.player, quests: { world: { kept_flag: true }, local: { kept_quest: { n: 2 } }, session: null } },
+    });
+  });
+});
+
+describe('save migration 36 to 37', () => {
+  it('drops the depot quest counters that facts replaced and keeps the rest of the open quest', () => {
+    const next = MIGRATIONS[36](FORMAT_2_36);
+
+    expect(next).toEqual({
+      ...FORMAT_2_36,
+      player: { ...FORMAT_2_36.player, quests: { ...FORMAT_2_36.player.quests, local: { nose_depot_leak: { watches: 3, ledger_read: true } } } },
     });
   });
 });

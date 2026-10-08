@@ -296,7 +296,7 @@ export type Call = { with: string; topic: TopicId | null; node: string; vars: Ca
 export type QuestVars = Record<string, QuestValue>;
 export type QuestSession = { quest: string; checkpoint: string; seed: number };
 export type QuestLine = { text: string; tags: string[] };
-export type QuestLive = { quest: string; ink: string; lines: QuestLine[]; choices: string[] };
+export type QuestLive = { quest: string; ink: string; lines: QuestLine[]; choices: string[]; costs: (number | null)[] };
 export type QuestState = { world: QuestVars; local: Record<string, QuestVars>; session: QuestSession | null; live: QuestLive | null };
 export type TopicOutcome = "agreed" | "refused" | "done";
 

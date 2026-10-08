@@ -24,13 +24,13 @@ function talk(w: World, quest: string, picks: readonly string[]): World {
 }
 
 function pickIndex(w: World, text: string): number {
-  const index = questView(w).choices.indexOf(text);
-  if (index < 0) throw new Error(`No choice ${text} in ${questView(w).choices.join(', ')}`);
+  const index = questView(w, QUESTS).choices.indexOf(text);
+  if (index < 0) throw new Error(`No choice ${text} in ${questView(w, QUESTS).choices.join(', ')}`);
   return index;
 }
 
-const choices = (w: World, quest: string) => questView(startQuest(w, QUESTS, quest, 'start')).choices;
-const lastLine = (w: World) => questView(w).lines.at(-1)?.text;
+const choices = (w: World, quest: string) => questView(startQuest(w, QUESTS, quest, 'start'), QUESTS).choices;
+const lastLine = (w: World) => questView(w, QUESTS).lines.at(-1)?.text;
 
 function untouched(w: World): unknown {
   return { ...w, player: { ...w.player, notes: null, quests: null }, events: null };
@@ -122,7 +122,7 @@ describe('work by talk', () => {
 
     expect(townWork(w)?.id).toBe('ct-high');
     const offer = talk(w, 'bowl_dag', [WORK]);
-    expect(questView(offer).lines.at(-1)).toEqual({ text: 'Could be. Interested?', tags: ['work_offer'] });
+    expect(questView(offer, QUESTS).lines.at(-1)).toEqual({ text: 'Could be. Interested?', tags: ['work_offer'] });
   });
 
   it('passes over a haul the truck has no room for', () => {
@@ -166,64 +166,89 @@ describe('work by talk', () => {
 
 describe('the depot leak at Nose', () => {
   const OPEN = ['Anything off the books?', 'I will look into it.'];
-  const SOLID_CASE = [...OPEN, 'Read the depot ledgers.', 'Check the gate log against the ledgers.', 'Talk to Pell, the fuel clerk.', 'Watch the depot all night.'];
+  const LEDGER = 'Read the depot ledgers.';
+  const GATE = 'Check the gate log for the same nights.';
+  const SABINE = 'Talk to the trader by the gate.';
+  const PAY = 'Pay her 20 M to talk.';
+  const SOLID_CASE = [...OPEN, LEDGER, GATE, 'Talk to Pell, the fuel clerk.', 'Watch the depot all night.'];
   const vars = (w: World) => w.player.quests.local.nose_depot_leak ?? {};
+
+  it('shows the depot quest as pages with its numbers and the facts found so far', () => {
+    const w = parkedAt('nose');
+    const view = questView(talk(w, 'nose_kovac', [...OPEN, LEDGER]), QUESTS);
+
+    expect(view.view).toBe('page');
+    expect(view.stats).toEqual([
+      { label: 'Watches', value: '4' },
+      { label: 'Money', value: `${w.player.money / UNITS.centsPerM} M` },
+      { label: 'Talk', value: 'quiet' },
+    ]);
+    expect(view.facts).toEqual([expect.stringContaining('Ledger: cans went missing')]);
+    expect(view.lines.filter((l) => l.tags.includes('row')).map((l) => l.text)).toEqual(['3rd; 2 cans; Pell', '7th; 3 cans; Pell', '11th; 2 cans; Pell']);
+  });
 
   it('opens from Kovac and pays for naming the thief with proof, which changes what Nose says after', () => {
     const w = parkedAt('nose');
     const proof = talk(w, 'nose_kovac', SOLID_CASE);
-    expect(vars(proof)).toMatchObject({ evidence: 4, watches: 1 });
+    expect(vars(proof)).toMatchObject({ gate_checked: true, saw_swap: true, saw_handoff: true, watches: 1 });
 
     const done = talk(w, 'nose_kovac', [...SOLID_CASE, 'Go to Kovac with a name.', 'Corporal Vance.']);
 
     expect(done.player.money - w.player.money).toBe(150 * UNITS.centsPerM);
     expect(done.player.quests.world).toEqual({ depot_thief: 'vance' });
     expect(done.player.quests.session).toBeNull();
-    expect(questView(startQuest(done, QUESTS, 'nose_kovac', 'start')).lines[0].text).toContain('The depot is quiet these days.');
+    expect(questView(startQuest(done, QUESTS, 'nose_kovac', 'start'), QUESTS).lines[0].text).toContain('The depot is quiet these days.');
     expect(choices(done, 'nose_kovac')).not.toContain('Anything off the books?');
     expect(lastLine(talk(done, 'nose_ibo', ['Heard about the depot business?']))).toContain('He sat at my table');
   });
 
-  it('turns Kovac away from a name with no proof, and locks up the wrong man for nothing', () => {
+  it('turns Kovac away from a name with no proof, and locks up the wrong man on the ledger alone', () => {
     const w = parkedAt('nose');
     const early = talk(w, 'nose_kovac', [...OPEN, 'Go to Kovac with a name.', 'Corporal Vance.']);
     expect(vars(early)).toMatchObject({ alarm: 1 });
     expect(early.player.quests.world).toEqual({ depot_thief: 'open' });
+    expect(questView(talk(w, 'nose_kovac', [...OPEN, 'Go to Kovac with a name.', 'Pell, the clerk.']), QUESTS).ended).toBe(false);
 
-    const wrong = talk(w, 'nose_kovac', [...OPEN, 'Go to Kovac with a name.', 'Pell, the clerk.']);
+    const weak = talk(w, 'nose_kovac', [...OPEN, LEDGER, GATE, 'Go to Kovac with a name.', 'Corporal Vance.']);
+    expect(weak.player.quests.world).toEqual({ depot_thief: 'open' });
+
+    const wrong = talk(w, 'nose_kovac', [...OPEN, LEDGER, 'Go to Kovac with a name.', 'Pell, the clerk.']);
     expect(wrong.player.money).toBe(w.player.money);
     expect(wrong.player.quests.world).toEqual({ depot_thief: 'pell' });
   });
 
   it('sells out for the envelope, or loses the trail to too much noise', () => {
     const w = parkedAt('nose');
-    const two = [...OPEN, 'Read the depot ledgers.', 'Check the gate log against the ledgers.', 'Talk to Pell, the fuel clerk.'];
-    const sold = talk(w, 'nose_kovac', [...two, 'Talk to the trader by the gate.', 'Let her see what you know.', 'Take the envelope.']);
+    const sold = talk(w, 'nose_kovac', [...OPEN, LEDGER, GATE, SABINE, 'Let her see what you know.', 'Take the envelope.']);
     expect(sold.player.money - w.player.money).toBe(60 * UNITS.centsPerM);
     expect(sold.player.quests.world).toEqual({ depot_thief: 'bought' });
 
-    const loud = talk(w, 'nose_kovac', [...OPEN, 'Read the depot ledgers.', 'Check the gate log against the ledgers.', "Search Vance's bunk.", 'Talk to the trader by the gate.', 'Lean on her.']);
+    const loud = talk(w, 'nose_kovac', [...OPEN, LEDGER, GATE, "Search Vance's bunk.", SABINE, 'Lean on her.']);
     expect(loud.player.quests.world).toEqual({ depot_thief: 'lost' });
-    expect(questView(loud).ended).toBe(true);
+    expect(questView(loud, QUESTS).ended).toBe(true);
   });
 
-  it('pays the trader for a lead only with the money in hand', () => {
+  it('charges the cost of a paid lead, and locks it with less money in hand', () => {
     const w = parkedAt('nose');
-    const at = talk(w, 'nose_kovac', [...OPEN, 'Talk to the trader by the gate.']);
-    expect(questView(at).choices).toContain('Pay her 20 M to talk.');
-    const paid = chooseQuestOption(at, QUESTS, pickIndex(at, 'Pay her 20 M to talk.'));
+    const at = talk(w, 'nose_kovac', [...OPEN, SABINE]);
+    const index = pickIndex(at, PAY);
+    expect(questView(at, QUESTS)).toMatchObject({ costs: expect.arrayContaining([20]), locked: [false, false, false] });
+    const paid = chooseQuestOption(at, QUESTS, index);
     expect(w.player.money - paid.player.money).toBe(20 * UNITS.centsPerM);
+    expect(vars(paid)).toMatchObject({ knows_scar: true });
 
     const broke = cloneWorld(w);
-    broke.player.money = 0;
-    expect(questView(talk(broke, 'nose_kovac', [...OPEN, 'Talk to the trader by the gate.'])).choices).not.toContain('Pay her 20 M to talk.');
+    broke.player.money = 19 * UNITS.centsPerM;
+    const short = talk(broke, 'nose_kovac', [...OPEN, SABINE]);
+    expect(questView(short, QUESTS).locked[pickIndex(short, PAY)]).toBe(true);
+    expect(() => chooseQuestOption(short, QUESTS, pickIndex(short, PAY))).toThrow('costs 20 M, more than the player holds');
   });
 
   it('runs out of watches into a last call', () => {
     const w = parkedAt('nose');
-    const slow = talk(w, 'nose_kovac', [...OPEN, 'Talk to Pell, the fuel clerk.', 'Read the depot ledgers.', 'Watch the depot all night.', 'Check the gate log against the ledgers.']);
-    expect(vars(slow)).toMatchObject({ watches: 1, alarm: 1 });
-    expect(questView(slow).choices).toContain('Let it go.');
+    const slow = talk(w, 'nose_kovac', [...OPEN, 'Talk to Pell, the fuel clerk.', LEDGER, 'Watch the depot all night.', GATE, SABINE, 'Leave her be.']);
+    expect(vars(slow)).toMatchObject({ watches: 0, alarm: 1 });
+    expect(questView(slow, QUESTS).choices).toEqual(['Name Corporal Vance.', 'Name Pell, the clerk.', 'Let it go.']);
   });
 });
 

@@ -28,6 +28,37 @@ describe('the quest bundle', () => {
   });
 });
 
+describe('quest top tags', () => {
+  const headed = (header: string, quest: string): QuestSources => ({ 'world.ink': WORLD, 'q.ink': `${header}\nINCLUDE world.ink\n${quest}` });
+  const BODY = 'VAR watches = 3\nVAR alarm = 0\nVAR seen = false\n=== start ===\n# checkpoint: start\nHi.\n-> END\n';
+
+  it('reads the view, stats and facts from the top of the file', () => {
+    const { quest, errors } = compile(headed('# view: page\n# stat: watches Watches\n# stat: alarm Talk: quiet, loud\n# stat: money Money\n# fact: seen Seen: a <b>scar</b>.', BODY));
+    expect(errors).toEqual([]);
+    expect(quest).toMatchObject({
+      view: 'page',
+      stats: [
+        { name: 'watches', label: 'Watches', words: null },
+        { name: 'alarm', label: 'Talk', words: ['quiet', 'loud'] },
+        { name: 'money', label: 'Money', words: null },
+      ],
+      facts: [{ name: 'seen', text: 'Seen: a <b>scar</b>.' }],
+    });
+  });
+
+  it('gives a quest with no top tags the transcript view', () => {
+    expect(compile(sources(BODY)).quest).toMatchObject({ view: 'transcript', stats: [], facts: [] });
+  });
+
+  it('fails an unknown tag, a bad view, a stat on no number and a fact on no true or false variable', () => {
+    expect(compile(headed('# mood: grim', BODY)).errors).toEqual([expect.stringContaining('# mood: grim is unknown')]);
+    expect(compile(headed('# view: scroll', BODY)).errors).toEqual([expect.stringContaining('# view: scroll needs one of transcript, page')]);
+    expect(compile(headed('# stat: seen Seen', BODY)).errors).toEqual([expect.stringContaining('# stat: seen needs a number variable')]);
+    expect(compile(headed('# stat: nothing Nothing', BODY)).errors).toEqual([expect.stringContaining('# stat: nothing needs a number variable')]);
+    expect(compile(headed('# fact: watches Watches.', BODY)).errors).toEqual([expect.stringContaining('# fact: watches needs a true or false variable')]);
+  });
+});
+
 describe('compileQuest', () => {
   it('splits world variables from the quest own variables', () => {
     const { quest } = compile(sources('VAR trust = 2\nVAR name = "Hattie"\n=== start ===\n# checkpoint: start\nHi.\n-> END\n'));

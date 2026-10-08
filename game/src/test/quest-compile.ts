@@ -5,7 +5,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Compiler, CompilerOptions, type Story } from 'inkjs/full';
 import { ErrorType } from 'inkjs/compiler/Parser/ErrorType';
-import { CHECKPOINT_TAG, type CompiledQuest, type QuestBundle, type QuestValueType, type QuestVarDecl } from '../data/quests';
+import { CHECKPOINT_TAG, MONEY_STAT, QUEST_VIEWS, type CompiledQuest, type QuestBundle, type QuestFact, type QuestStat, type QuestValueType, type QuestVarDecl, type QuestViewKind } from '../data/quests';
 
 export type QuestSources = Record<string, string>;
 export type CompileResult = { quest: CompiledQuest | null; errors: string[]; warnings: string[]; sections: string[] };
@@ -63,11 +63,50 @@ export function compileQuest(id: string, sources: QuestSources, countAllVisits: 
   const worldVars = new Set(world.parsed.vars);
   const local = own.parsed.vars.filter((name) => !worldVars.has(name));
   const sections = sectionsOf(own.parsed.flows);
-  const ruleErrors = [...varErrors(own.parsed), ...checkpointErrors(own.parsed), ...countErrors(own.parsed)];
+  const header = headerOf(own.parsed.story);
+  const ruleErrors = [...varErrors(own.parsed), ...checkpointErrors(own.parsed), ...countErrors(own.parsed), ...header.errors];
   if (ruleErrors.length > 0) return { quest: null, errors: ruleErrors, warnings: own.warnings, sections };
   const story = own.parsed.story.ToJson();
   if (!story) throw new Error(`Quest ${id} compiled to no story`);
-  return { quest: { story, vars: declarations(own.parsed.story, local), checkpoints: checkpointsOf(own.parsed) }, errors: [], warnings: own.warnings, sections };
+  const quest = { story, vars: declarations(own.parsed.story, local), checkpoints: checkpointsOf(own.parsed), view: header.view, stats: header.stats, facts: header.facts };
+  return { quest, errors: [], warnings: own.warnings, sections };
+}
+
+type Header = { view: QuestViewKind; stats: QuestStat[]; facts: QuestFact[]; errors: string[] };
+
+function headerOf(story: Story): Header {
+  const header: Header = { view: 'transcript', stats: [], facts: [], errors: [] };
+  for (const tag of story.globalTags ?? []) readHeaderTag(header, story, tag);
+  return header;
+}
+
+function readHeaderTag(header: Header, story: Story, tag: string): void {
+  const [key, ...rest] = tag.split(':');
+  const value = rest.join(':').trim();
+  const [name, ...words] = value.split(/\s+/);
+  const text = words.join(' ');
+  if (key === 'view') return readView(header, value);
+  if (key === 'stat') return readStat(header, story, name, text);
+  if (key === 'fact') return readFact(header, story, name, text);
+  header.errors.push(`Quest tag # ${tag} is unknown. A quest's top tags are view, stat and fact.`);
+}
+
+function readView(header: Header, value: string): void {
+  if (QUEST_VIEWS.includes(value as QuestViewKind)) header.view = value as QuestViewKind;
+  else header.errors.push(`# view: ${value} needs one of ${QUEST_VIEWS.join(', ')}`);
+}
+
+function readStat(header: Header, story: Story, name: string, text: string): void {
+  const [label, words] = text.split(':').map((part) => part.trim());
+  const list = words === undefined ? null : words.split(',').map((w) => w.trim());
+  const value = name === MONEY_STAT ? 0 : story.variablesState.$(name);
+  if (typeof value !== 'number' || !label) header.errors.push(`# stat: ${name} needs a number variable or money, then a label`);
+  else header.stats.push({ name, label, words: list });
+}
+
+function readFact(header: Header, story: Story, name: string, text: string): void {
+  if (typeof story.variablesState.$(name) !== 'boolean' || !text) header.errors.push(`# fact: ${name} needs a true or false variable, then the fact`);
+  else header.facts.push({ name, text });
 }
 
 function parseInk(file: string, sources: QuestSources, countAllVisits: boolean): { parsed: Parsed | null; errors: string[]; warnings: string[] } {

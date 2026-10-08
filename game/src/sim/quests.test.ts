@@ -23,18 +23,23 @@ function play(w: World, quest: string, checkpoint: string, picks: readonly strin
 }
 
 function pickIndex(w: World, text: string): number {
-  const index = questView(w).choices.indexOf(text);
-  if (index < 0) throw new Error(`No choice ${text} in ${questView(w).choices.join(', ')}`);
+  const index = questView(w, QUESTS).choices.indexOf(text);
+  if (index < 0) throw new Error(`No choice ${text} in ${questView(w, QUESTS).choices.join(', ')}`);
   return index;
 }
 
 describe('startQuest', () => {
   it('plays the checkpoint lines and offers its choices', () => {
     const w = startQuest(world(), QUESTS, 'sample_bowl', 'start');
-    expect(questView(w)).toEqual({
+    expect(questView(w, QUESTS)).toEqual({
       quest: 'sample_bowl',
+      view: 'transcript',
       lines: [{ text: 'Hattie sets her bucket down by the well.', tags: [] }],
       choices: ['Heard any rumors?', 'Leave.'],
+      costs: [null, null],
+      locked: [false, false],
+      stats: [],
+      facts: [],
       ended: false,
     });
     expect(w.player.quests.session).toMatchObject({ quest: 'sample_bowl', checkpoint: 'start.talk' });
@@ -55,7 +60,7 @@ describe('chooseQuestOption', () => {
     const bowl = play(world(), 'sample_bowl', 'start', [RUMORS, LEAVE]);
     expect(bowl.player.quests.world).toEqual({ sample_wagon_heard: true });
     const nose = startQuest(bowl, QUESTS, 'sample_nose', 'start');
-    expect(questView(nose).choices).toContain('About that scavenger with the Army radio.');
+    expect(questView(nose, QUESTS).choices).toContain('About that scavenger with the Army radio.');
   });
 
   it('keeps a quest own variable apart from the world', () => {
@@ -72,7 +77,7 @@ describe('chooseQuestOption', () => {
   it('closes the session at the end and keeps the last lines on view', () => {
     const done = play(world(), 'sample_bowl', 'start', [RUMORS, LEAVE]);
     expect(done.player.quests.session).toBeNull();
-    expect(questView(done)).toEqual({ quest: 'sample_bowl', lines: [], choices: [], ended: true });
+    expect(questView(done, QUESTS)).toMatchObject({ quest: 'sample_bowl', lines: [], choices: [], ended: true });
   });
 
   it('leaves the world unchanged when a pick is out of range', () => {
@@ -118,7 +123,7 @@ describe('pay and begin', () => {
     });
     const next = chooseQuestOption(startQuest(world(), bundle, 'a', 'start'), bundle, 0);
     expect(next.player.quests.session).toMatchObject({ quest: 'b', checkpoint: 'start' });
-    expect(questView(next)).toMatchObject({ quest: 'b', lines: [{ text: 'The second part.', tags: [] }], choices: ['Done.'] });
+    expect(questView(next, bundle)).toMatchObject({ quest: 'b', lines: [{ text: 'The second part.', tags: [] }], choices: ['Done.'] });
   });
 
   it('refuses begin in a quest that goes on after it', () => {
@@ -134,7 +139,7 @@ describe('restoreQuest', () => {
   it('rebuilds a session without ink state at its last checkpoint with the variables kept', () => {
     const restored = withoutLive(play(world(), 'sample_bowl', 'start', [RUMORS]));
     restoreQuest(restored, QUESTS);
-    expect(questView(restored).choices).toEqual([COIN, LEAVE]);
+    expect(questView(restored, QUESTS).choices).toEqual([COIN, LEAVE]);
     expect(restored.player.quests.world).toEqual({ sample_wagon_heard: true });
   });
 
@@ -142,7 +147,7 @@ describe('restoreQuest', () => {
     const w = play(world(), 'sample_bowl', 'start', [RUMORS]);
     const restored = withoutLive(w);
     restoreQuest(restored, QUESTS);
-    expect(questView(restored).choices).toEqual(questView(w).choices);
+    expect(questView(restored, QUESTS).choices).toEqual(questView(w, QUESTS).choices);
     expect(restored.player.quests).toEqual({ ...w.player.quests, live: restored.player.quests.live });
   });
   it('refuses a checkpoint whose opening pays, since every load would pay again', () => {
