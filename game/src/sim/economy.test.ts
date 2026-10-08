@@ -759,7 +759,7 @@ describe("garage storage at a stall", () => {
     w.player.money = 0;
     const part = w.shops["pump-station"].stock[0];
     fillGrid(w, part.defId);
-    expect(() => buyStockPart(w, part.id)).toThrow(/money/);
+    expect(() => buyStockPart(w, part.id)).toThrow(/Not enough/);
   });
 
   it("buys a stored part into the stall stock", () => {
