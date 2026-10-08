@@ -257,7 +257,6 @@ export function defyClaims(world: World, npc: Vehicle): void {
   defendClaim(world, npc, me);
 }
 
-
 type PartItem = Extract<GridItem, { kind: 'part' }>;
 
 function fightsPlayer(world: World, npc: Vehicle): boolean {

@@ -541,7 +541,6 @@ export function finishTruckPickup(world: World, looter: Vehicle, pickup: TruckPi
   target.items = target.items.filter((it) => it.id !== item.id);
 }
 
-
 export function isLootTarget(world: World, targetId: string): boolean {
   const stock = world.salvage.find((s) => s.id === targetId);
   if (stock) return !isSiteStock(stock);

@@ -164,7 +164,6 @@ function placeOf(world: World, targetId: string): 'wreck' | 'pile' | 'spot' | 't
   return place;
 }
 
-
 export function pendingWarningTo(world: World, npc: Vehicle): NpcState | null {
   const s = stateOf(world, 'lootWarning', npc.id, world.player.vehicleId);
   return s && lootWarningData(s).answer === null ? s : null;
@@ -198,7 +197,6 @@ export function playerWarns(world: World, npc: Vehicle, answer: WarnAnswer): voi
   if (target === null) throw new Error(`${npc.id} loots nothing to warn it off`);
   warnTruck(world, playerVehicle(world), npc, target, 'roll', answer);
 }
-
 
 function lootTargetExists(world: World, targetId: string): boolean {
   return world.salvage.some((s) => s.id === targetId) || world.vehicles.some((v) => v.id === targetId && isKnockedOut(v));
