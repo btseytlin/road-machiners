@@ -1,19 +1,47 @@
-const stages = { triage: 'Triage', design: 'Design', implement: 'Implement', patch: 'Patch', verify: 'Verify', harden: 'Harden', checks: 'Test', approve: 'Approval', merge: 'Merge', playtest: 'Playtest', adhoc: 'Private task', change: 'Factory change', candidate: 'Candidate', release: 'Release', ship: 'Ship', remove: 'Removal', incident: 'Incident', dev: 'Dev build', waste: 'Review' };
-const actions = { starting: 'Starting', model: 'Waiting for model', reading: 'Reading code', editing: 'Editing code', command: 'Running command', tests: 'Running tests', typecheck: 'Typechecking', playtest: 'Running playtest', build: 'Building', publish: 'Publishing', install: 'Installing dependencies', git: 'Git operation', lock: 'Waiting for repository lock', review: 'Reviewing', design: 'Designing', investigate: 'Investigating', waiting: 'Waiting', finished: 'Finished' };
-const reasons = { 'queue-full': 'Queue occupied', 'issue-running': 'Already running', 'daily-cap': 'Daily job limit', 'card-budget': 'Card job limit','needs-info': 'Needs author reply', failed: 'Failed job needs attention', approval: 'Needs committee approval', held: 'Held until resumed' };
-const columns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Merging', 'Done'];
-const queueNames = { branch: 'Branch', triage: 'Triage', design: 'Design', implement: 'Implement', verify: 'Verify', test: 'Test' };
+// Labels arrive with each snapshot from src/dashboard/labels.ts. A key with no label, like a stage from an old ledger line, shows as itself.
+/** @param {Record<string, string>} labels @returns {Record<string, string>} */
+function showRawKeys(labels) { return new Proxy(labels, { get: (target, key) => (typeof key === 'string' && Object.hasOwn(target, key) ? target[key] : String(key)) }); }
+// Each reader returns null while its source is unavailable. A render function that takes null says so with | null.
+/** @typedef {NonNullable<ReturnType<typeof readSummary>>} Summary */
+/** @typedef {NonNullable<ReturnType<typeof readDelivery>>} Delivery */
+/** @typedef {NonNullable<ReturnType<typeof readOperations>>} Operations */
+/** @typedef {ReturnType<typeof getRelease>} Release */
+let stages = showRawKeys({});
+let actions = showRawKeys({});
+let reasons = showRawKeys({});
+let queueNames = showRawKeys({});
+let dwellNames = showRawKeys({});
+let loopNames = showRawKeys({});
+let gateNames = showRawKeys({});
+/** @type {Record<string, string>} */
+let columnNames = {};
+/** @param {import('../src/dashboard/labels').Labels} labels */
+function readLabels(labels) {
+  stages = showRawKeys(labels.stages);
+  actions = showRawKeys(labels.activities);
+  reasons = showRawKeys(labels.reasons);
+  queueNames = showRawKeys(labels.queues);
+  dwellNames = showRawKeys(labels.dwell);
+  loopNames = showRawKeys(labels.loops);
+  gateNames = showRawKeys(labels.gates);
+  columnNames = labels.columns;
+}
 const pages = new Map();
 const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
 const money = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
-let snapshot = null;
+/** The page reads the same Snapshot type the server sends, so a renamed or removed server field fails tsc here. @type {import('../src/dashboard/snapshot').Snapshot} */
+let snapshot = /** @type {any} */ (null);
 let selectedDays = 7;
 let metric = 'cost';
 let grouping = 'stage';
 let connected = false;
 let renderPending = false;
 let renderFailed = false;
+/** @type {HTMLElement | null} */
 let detailOwner = null;
+/** @param {string} selector @returns {HTMLElement[]} */
+function queryAll(selector) { return /** @type {HTMLElement[]} */ ([...document.querySelectorAll(selector)]); }
+/** @param {string} id @returns {any} The page's own ids exist, so a missing one throws at its first use. */
 function getElement(id) { return document.getElementById(id); }
 function createNode(tag, text = '', className = '') { const node = document.createElement(tag); node.textContent = text; node.className = className; return node; }
 function setText(id, value) { getElement(id).textContent = value; }
@@ -26,6 +54,7 @@ function formatDuration(ms) {
   return minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 // The average number of cards waiting at once, over the clock time the scheduler was measured.
+/** @param {Summary} summary */
 function formatAverageWaiting(summary) {
   if (summary.waitingMs === null || !summary.waitingSpanMs) return '—';
   return `${(summary.waitingMs / summary.waitingSpanMs).toFixed(1)} cards`;
@@ -50,7 +79,7 @@ function createLink(text, href) {
 function getIssueUrl(issue) { return `${snapshot.repoUrl}/issues/${issue}`; }
 function replaceContents(id, nodes) {
   const target = getElement(id);
-  const key = target.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+  const key = target.contains(document.activeElement) ? /** @type {HTMLElement} */ (document.activeElement).dataset.key : null;
   target.replaceChildren(...nodes);
   if (key) target.querySelector(`[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
 }
@@ -132,6 +161,7 @@ function readQueueWaits() {
   const decisions = readLive()?.scheduler?.decisions ?? [];
   return decisions.filter((item) => item.reasons.length > 0 && !item.reasons.includes('issue-running'));
 }
+/** @param {Operations | null} operations */
 function readWaitingStatus(operations) {
   if (!operations) return 'State unavailable';
   if (operations.status === 'paused') return 'Starts paused';
@@ -143,6 +173,7 @@ function readSchedulerAvailability(scheduler) {
   if (scheduler.status !== 'ready') return readSchedulerStatus(scheduler.status);
   return null;
 }
+/** @param {Operations | null} operations */
 function renderFreeSlots(operations) {
   if (!operations) {
     setText('free-count', '');
@@ -160,6 +191,7 @@ function createWaitingRow(item) {
   row.append(createNode('span', item.issue === null ? stages[item.stage] : `#${item.issue} ${stages[item.stage]}`), createNode('span', item.reasons.map((reason) => reasons[reason]).join(', ')));
   return row;
 }
+/** @param {Operations | null} operations */
 function renderCapacity(operations) {
   renderFreeSlots(operations);
   const status = readWaitingStatus(operations);
@@ -172,10 +204,10 @@ function renderCapacity(operations) {
 }
 function renderFunnel() {
   const cards = snapshot.github.status === 'ok' ? snapshot.github.value?.cards : null;
-  replaceContents('funnel', columns.map((column) => {
+  replaceContents('funnel', Object.keys(columnNames).map((column) => {
     const item = createNode('div');
     const value = cards ? cards.filter((card) => card.column === column).length : null;
-    item.append(createNode('span', column.replace('Implementation', 'Implement').replace('Testing', 'Test')), createNode('strong', formatNumber(value)));
+    item.append(createNode('span', columnNames[column]), createNode('strong', formatNumber(value)));
     item.lastChild.title = value === null ? 'Unavailable' : value.toLocaleString();
     return item;
   }));
@@ -205,6 +237,7 @@ function createReleaseItem(feature) {
   item.append(createLink(`#${feature.issue} ${feature.title}`, getIssueUrl(feature.issue)));
   return item;
 }
+/** @param {Release | null} release */
 function renderReleaseItems(release) {
   const features = release?.features ?? [];
   setText('release-count', release ? `${features.length} changes` : '');
@@ -218,6 +251,7 @@ function readDialogCapacity(id) {
   if (!Number.isFinite(row) || row <= 0) throw new Error('Invalid dialog row height');
   return Math.max(1, Math.floor(list.clientHeight / row));
 }
+/** @param {Release | null} release */
 function renderReleaseDialog(release) {
   const features = release?.features ?? [];
   setText('release-dialog-count', release ? `${features.length} changes` : '');
@@ -229,6 +263,7 @@ function renderReleaseDialogItems(features, available) {
   const empty = available ? 'No changes on dev' : 'Contents unavailable';
   replaceContents('release-dialog-rows', visible.length ? visible.map(createReleaseItem) : [createNode('li', empty, 'muted')]);
 }
+/** @param {Release | null} release */
 function renderReleaseLinks(release) {
   const operations = readOperations();
   const tracking = operations?.release;
@@ -319,6 +354,7 @@ function renderEvents() {
   replaceContents('event-log', visible.length ? visible.map(createEvent) : [createNode('span', events ? 'No recorded events' : 'Events unavailable', 'muted')]);
   if (getElement('event-dialog').open) renderEventDialog(events);
 }
+/** @param {Summary | null} summary */
 function renderCounters(summary) {
   if (!summary) return clearCounters();
   renderTokenCounters(summary.tokens);
@@ -340,6 +376,7 @@ function clearCounters() {
   setText('coverage', 'Measurements unavailable');
 }
 // The 24-hour range draws one bar per UTC hour, longer ranges one bar per UTC day. A slot with no runs has no bar rather than a zero.
+/** @param {Summary} summary */
 function readUsageSlots(summary) {
   const hourly = summary.days === 1;
   const end = new Date(snapshot.generatedAt);
@@ -362,7 +399,7 @@ function readSegmentKeys(slots) {
   return [...totals.keys()].filter((key) => totals.get(key) > 0).sort((a, b) => totals.get(b) - totals.get(a));
 }
 function readSegmentLabel(key) {
-  if (grouping === 'stage') return stages[key] ?? key;
+  if (grouping === 'stage') return stages[key];
   return key === 'unattributed' ? 'No model data' : key.replace(/^claude-/, '');
 }
 function formatUsageValue(value) { return metric === 'tokens' ? formatNumber(value) : formatCost(value); }
@@ -378,6 +415,7 @@ const usageTooltip = {
     footer: (items) => `Total: ${formatUsageValue(items.reduce((sum, item) => sum + item.raw, 0))}`,
   },
 };
+/** @type {any} */
 let usageChart = null;
 function createUsageChart() {
   Chart.defaults.color = '#a5aaa7';
@@ -390,6 +428,7 @@ function createUsageChart() {
     interaction: { mode: 'index', intersect: false },
   } });
 }
+/** @param {Summary | null} summary */
 function renderUsageChart(summary) {
   setText('usage-title', metric === 'cost' ? 'Spend' : 'Tokens');
   usageChart ??= createUsageChart();
@@ -404,6 +443,7 @@ function renderUsageChart(summary) {
   usageChart.update();
   getElement('usage-empty').hidden = keys.length > 0;
 }
+/** @param {Summary | null} summary */
 function readStageRows(summary) {
   if (!summary) return [];
   const names = new Set([...summary.stages.map((row) => row.stage), ...summary.waitingStages.map((row) => row.stage)]);
@@ -423,12 +463,13 @@ function createStageBar(row, maximum, waitingKnown) {
   node.dataset.detail = `${stages[row.stage]}: ${formatDuration(row.run)} running, ${wait} waiting`;
   return node;
 }
+/** @param {Summary | null} summary */
 function renderStageChart(summary) {
   const rows = readStageRows(summary);
   const maximum = Math.max(1, ...rows.map((row) => row.run + row.wait));
   const capacity = Math.max(1, Math.floor(getElement('stage-chart').clientHeight / 34));
   const visible = selectPage('stage', rows, capacity);
-  replaceContents('stage-chart', visible.length ? visible.map((row) => createStageBar(row, maximum, summary.waitingMs !== null)) : [createNode('p', 'No measured time', 'empty')]);
+  replaceContents('stage-chart', visible.length ? visible.map((row) => createStageBar(row, maximum, summary?.waitingMs !== null)) : [createNode('p', 'No measured time', 'empty')]);
 }
 function createRetryRow(item) { const row = createNode('tr'); row.append(createNode('td', item.outcome), createNode('td', String(item.runs), 'numeric'), createNode('td', formatDuration(item.workerMs), 'numeric'), createNode('td', formatCost(item.cost), 'numeric')); return row; }
 function readStageModelLabel(stage) { return stage === null ? 'Total' : stages[stage]; }
@@ -454,6 +495,7 @@ function readStageModelNames(rows) {
   for (const row of rows) totals.set(row.stage, (totals.get(row.stage) ?? 0) + countTokens(row));
   return [...totals.keys()].sort((a, b) => totals.get(b) - totals.get(a));
 }
+/** @param {Summary | null} summary */
 function renderStageModels(summary) {
   // Two model columns fit beside stage names at the narrowest desktop width.
   const models = summary ? [...summary.models].sort((a, b) => countTokens(b) - countTokens(a)).map((item) => item.model) : [];
@@ -465,7 +507,7 @@ function renderStageModels(summary) {
   replaceContents('stage-model-header', [stageHeader, ...modelHeaders]);
   const measureHeaders = visible.flatMap(() => ['Input + cache', 'Output'].map((name) => { const header = createNode('th', name); header.scope = 'col'; return header; }));
   replaceContents('stage-model-measures', measureHeaders);
-  const rows = models.length ? [null, ...readStageModelNames(summary.stageModels)] : [];
+  const rows = models.length ? [null, ...readStageModelNames(summary?.stageModels ?? [])] : [];
   renderTable('stage-model', rows, (stage) => createStageModelRow(stage, visible, summary), summary ? 'No measured model tokens' : 'Unavailable', visible.length * 2 + 1);
 }
 function renderAnalytics() {
@@ -476,9 +518,6 @@ function renderAnalytics() {
   renderTable('retry', summary?.retries ?? [], createRetryRow, summary ? 'No linked repeat attempts' : 'Unavailable', 4);
   renderStageModels(summary);
 }
-const dwellNames = { triage: 'Triage', design: 'Design', implementation: 'Implementation', preview: 'Testing', approval: 'Committee approval', harden: 'Hardening', merge: 'Merge queue' };
-const loopNames = { questions: 'Design asks the author', rebuild: 'Visual review: rebuild', 'plan-wrong': 'Testing finds the plan wrong', 'review-failed': 'Code review fails twice', patch: 'Committee patch', redesign: 'Committee redesign', 'patch-replan': 'Patch needs a new plan', conflict: 'Merge conflict', removed: 'Removed from release', unbundled: 'Bundle lead dropped' };
-const gateNames = { triage: 'Triage wont-do', design: 'Design wont-do', committee: 'Committee Deny' };
 function readDelivery() { return readSummary()?.delivery ?? null; }
 function formatRate(part, whole) { return whole ? `${Math.round(100 * part / whole)}%` : '—'; }
 function createDwellRow(row, maximum) {
@@ -493,14 +532,16 @@ function createDwellRow(row, maximum) {
   node.lastChild.dataset.exact = `${dwellNames[row.stage]}: ${row.open} open, mean age ${formatDuration(row.openMeanMs)}. Open stages are not in the means.`;
   return node;
 }
-function createLoopRow(row) { const node = createNode('tr'); node.append(createNode('td', loopNames[row.step] ?? row.step), createNode('td', String(row.events), 'numeric'), createNode('td', String(row.issues), 'numeric')); return node; }
+function createLoopRow(row) { const node = createNode('tr'); node.append(createNode('td', loopNames[row.step]), createNode('td', String(row.events), 'numeric'), createNode('td', String(row.issues), 'numeric')); return node; }
 function createStageRetryRow(row) { const node = createNode('tr'); node.append(createNode('td', stages[row.stage]), createNode('td', String(row.runs), 'numeric'), createNode('td', String(row.issues), 'numeric')); return node; }
+/** @param {Delivery | null} delivery */
 function readDeliveryCoverage(delivery) {
   if (snapshot.analytics.status === 'unavailable') return 'Card records unavailable';
   if (!delivery) return 'No card moves recorded yet';
   const prefix = snapshot.analytics.status === 'ok' ? '' : 'Last known: ';
   return `${prefix}${delivery.issues} cards, records since ${delivery.since.slice(0, 10)} UTC`;
 }
+/** @param {Delivery | null} delivery */
 function readDeliveryNotes(delivery) {
   if (!delivery) return '';
   return `${delivery.legacy} cards joined before records. ${delivery.excluded} hotfix, release or private cards left out. ${delivery.lead.missingStart} merges lack a start.`;
@@ -521,6 +562,7 @@ function renderIssueToDev() {
   setCounter('issue-mean', formatDuration(mean), `${mean} ms mean of ${ages.length} issues`);
   setCounter('issue-median', formatDuration(median), `${median} ms median of ${ages.length} issues`);
 }
+/** @param {Delivery | null} delivery */
 function renderDeliveryCounters(delivery) {
   if (!delivery) return clearDeliveryCounters();
   const { lead } = delivery;
@@ -560,6 +602,7 @@ function renderFreshness() {
   if (renderFailed) return setText('connection', 'Invalid data');
   // Stale sources are listed in source-status, so a healthy connection needs no ticking age.
   setText('connection', connected ? 'Live' : 'Reconnecting');
+  /** @type {[string, import('../src/dashboard/snapshot').Source<unknown>][]} */
   const sources = [['State', snapshot.operations], ['GitHub', snapshot.github], ['Usage', snapshot.analytics], ['Host', snapshot.host], ['Activity', snapshot.live]];
   const failures = sources.filter(([, source]) => source?.status !== 'ok').map(([name, source]) => `${name} ${source?.status ?? 'unavailable'}`);
   const pause = readPauseNotice();
@@ -578,7 +621,7 @@ function renderSnapshot() {
   updateOverflow();
 }
 function updateOverflow() {
-  for (const node of document.querySelectorAll('td,th,.event,.capacity-row span,.clamp,.clipped,.counter strong,.funnel strong,.server-totals strong,.source-status,.release-items li')) {
+  for (const node of queryAll('td,th,.event,.capacity-row span,.clamp,.clipped,.counter strong,.funnel strong,.server-totals strong,.source-status,.release-items li')) {
     if (!node.getClientRects().length) continue;
     if (node.dataset.exact) { node.dataset.detail = node.dataset.exact; node.tabIndex = 0; continue; }
     const truncated = node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight;
@@ -600,9 +643,9 @@ function showDetail(node) {
   node.setAttribute('aria-describedby', tooltip.id);
 }
 function hideDetail() { getElement('full-text').hidden = true; }
-const tabs = [...document.querySelectorAll('[role="tab"]')];
+const tabs = [...queryAll('[role="tab"]')];
 function selectTab(tab) {
-  for (const choice of tabs) { const selected = choice === tab; choice.setAttribute('aria-selected', String(selected)); choice.tabIndex = selected ? 0 : -1; getElement(choice.getAttribute('aria-controls')).hidden = !selected; }
+  for (const choice of tabs) { const selected = choice === tab; choice.setAttribute('aria-selected', String(selected)); choice.tabIndex = selected ? 0 : -1; getElement(String(choice.getAttribute('aria-controls'))).hidden = !selected; }
   hideDetail();
   requestRender();
 }
@@ -617,18 +660,18 @@ function navigateTabs(event, tab) {
   next.focus();
 }
 for (const tab of tabs) { tab.addEventListener('click', () => selectTab(tab)); tab.addEventListener('keydown', (event) => navigateTabs(event, tab)); }
-for (const button of document.querySelectorAll('[data-dialog]')) button.addEventListener('click', () => {
-  const dialog = getElement(button.dataset.dialog);
+for (const button of queryAll('[data-dialog]')) button.addEventListener('click', () => {
+  const dialog = getElement(String(button.dataset.dialog));
   dialog.showModal();
   if (dialog.id === 'release-dialog') renderReleaseDialog(getRelease());
   else renderEventDialog(readEvents());
 });
-for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => button.closest('dialog').close());
-function selectButtons(selector, chosen, attribute) { for (const button of document.querySelectorAll(selector)) button.setAttribute('aria-pressed', String(button.dataset[attribute] === chosen)); }
-for (const button of document.querySelectorAll('[data-days]')) button.addEventListener('click', () => { selectedDays = Number(button.dataset.days); selectButtons('[data-days]', button.dataset.days, 'days'); pages.clear(); requestRender(); });
-for (const button of document.querySelectorAll('[data-metric]')) button.addEventListener('click', () => { metric = button.dataset.metric; selectButtons('[data-metric]', metric, 'metric'); requestRender(); });
-for (const button of document.querySelectorAll('[data-grouping]')) button.addEventListener('click', () => { grouping = button.dataset.grouping; selectButtons('[data-grouping]', grouping, 'grouping'); requestRender(); });
-document.addEventListener('mouseover', (event) => showDetail(event.target.closest('[data-detail]')));
+for (const button of queryAll('[data-close]')) button.addEventListener('click', () => /** @type {HTMLDialogElement} */ (button.closest('dialog')).close());
+function selectButtons(selector, chosen, attribute) { for (const button of queryAll(selector)) button.setAttribute('aria-pressed', String(button.dataset[attribute] === chosen)); }
+for (const button of queryAll('[data-days]')) button.addEventListener('click', () => { selectedDays = Number(button.dataset.days); selectButtons('[data-days]', String(button.dataset.days), 'days'); pages.clear(); requestRender(); });
+for (const button of queryAll('[data-metric]')) button.addEventListener('click', () => { metric = String(button.dataset.metric); selectButtons('[data-metric]', metric, 'metric'); requestRender(); });
+for (const button of queryAll('[data-grouping]')) button.addEventListener('click', () => { grouping = String(button.dataset.grouping); selectButtons('[data-grouping]', grouping, 'grouping'); requestRender(); });
+document.addEventListener('mouseover', (event) => showDetail(/** @type {HTMLElement} */ (event.target).closest('[data-detail]')));
 document.addEventListener('focusin', (event) => showDetail(event.target));
 document.addEventListener('mouseout', (event) => { if (event.relatedTarget !== getElement('full-text')) hideDetail(); });
 document.addEventListener('focusout', (event) => { if (event.relatedTarget !== getElement('full-text')) hideDetail(); });
@@ -637,13 +680,14 @@ document.addEventListener('keydown', (event) => {
     if (document.querySelector('dialog[open]')) { hideDetail(); return; }
     detailOwner?.focus({ preventScroll: true }); hideDetail();
   }
-  if (event.key === 'Enter' && event.target.dataset.detail) { event.preventDefault(); showDetail(event.target); getElement('full-text').focus(); }
+  const target = /** @type {HTMLElement} */ (event.target);
+  if (event.key === 'Enter' && target.dataset.detail) { event.preventDefault(); showDetail(target); getElement('full-text').focus(); }
 });
 window.addEventListener('resize', () => { hideDetail(); requestRender(); });
 document.fonts.ready.then(requestRender);
 const stream = new EventSource('/factory/api/events');
 stream.addEventListener('snapshot', (event) => {
-  try { snapshot = JSON.parse(event.data); connected = true; requestRender(); }
+  try { snapshot = JSON.parse(event.data); readLabels(snapshot.labels); connected = true; requestRender(); }
   catch (error) { renderFailed = true; console.error('Invalid dashboard snapshot', error); setText('connection', 'Invalid data'); }
 });
 stream.addEventListener('error', () => { connected = false; setText('connection', 'Reconnecting'); });

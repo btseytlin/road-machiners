@@ -10,7 +10,7 @@ type JobLine = Extract<LedgerLine, { kind: 'job' }>;
 export type DeliveryStage = 'triage' | 'design' | 'implementation' | 'preview' | 'approval' | 'harden' | 'merge';
 type Visit = { stage: DeliveryStage; start: number; end: number | null };
 type Stat = { count: number; meanMs: number | null; medianMs: number | null };
-type Gate = 'triage' | 'design' | 'committee';
+export type Gate = 'triage' | 'design' | 'committee';
 
 export type DeliverySummary = {
   since: string; issues: number; excluded: number; legacy: number;

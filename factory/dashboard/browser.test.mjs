@@ -3,6 +3,7 @@ import { readFile, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
+import { LABELS } from '../src/dashboard/labels.ts';
 
 if (!process.argv[2] || !process.argv[3]) throw new Error('Usage: node browser.test.mjs <playwright-module> <evidence-directory>');
 const { chromium } = await import(pathToFileURL(resolve(process.argv[2])).href);
@@ -12,6 +13,9 @@ const now = new Date().toISOString();
 function createSource(value) { return { status: 'ok', at: now, value }; }
 const jobs = Array.from({ length: 45 }, (_, i) => ({ key: `job-${i}`, issue: i + 1, stage: ['design', 'implement', 'verify'][i % 3], startedAt: new Date(Date.now() - 900000).toISOString() }));
 const cardColumns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
+// The funnel shows one column per label, so these follow the factory's own board instead of a fixed number.
+const boardColumns = Object.keys(LABELS.columns);
+const fill = (value) => boardColumns.map(() => value);
 function createSummary(days) {
   const tokens = { input: 1000000, output: 300000, cacheRead: 200000, cacheWrite: 100000 };
   const yesterday = new Date(Date.parse(now) - 86400000).toISOString().slice(0, 10);
@@ -55,6 +59,7 @@ const fixture = {
   live: createSource({ workers: jobs.map((job) => ({ key: job.key, activity: 'tests', phase: 'running', status: 'ok', source: 'runner', progressAt: now })), manager: { activity: 'command', intent: 'investigate', phase: 'running', status: 'ok', at: now, since: now }, scheduler: { status: 'ready', freshness: 'ok', at: now, counts: { Triage: 12345678, Design: 200, Implementation: 31, Testing: 20, Approval: 10, Done: 99 }, decisions: [{ stage: 'design', queue: 'design', issue: 42, reasons: ['needs-info'] }], release: { reason: 'release-tasks', issues: [42] } } }),
   host: createSource({ cpu: createSource(85), ram: createSource({ used: 10000000000, total: 16000000000 }), gpu: createSource([{ utilization: 90 }]), ssd: createSource({ free: 20000000000 }), containers: createSource(jobs.map((job) => ({ jobId: job.key, service: 'worker', cpu: 2, memory: 1000000000 }))) }),
   analytics: createSource({ ranges: [1, 7, 30].map(createSummary) }),
+  labels: LABELS,
 };
 function readContentType(path) {
   const extension = path.split('.').at(-1);
@@ -89,7 +94,7 @@ async function checkLayout(page, size) {
     if (tab === 'overview') {
       // Every column of the board sits in one visible row. A grid with too few tracks wraps the last column out of sight.
       const tops = await page.locator('#funnel div').evaluateAll((items) => items.map((item) => item.getBoundingClientRect().top));
-      assert.equal(tops.length, 8);
+      assert.equal(tops.length, boardColumns.length);
       assert.equal(new Set(tops).size, 1);
     }
     console.log(size, tab, 'fits without scrolling');
@@ -254,6 +259,10 @@ async function checkDelivery(page) {
   assert.equal(await page.locator('#issue-median').textContent(), '50h 0m');
   assert.match(await page.locator('#delivery-coverage').textContent(), /^360 cards, /);
   await page.getByRole('button', { name: '7 days', exact: true }).click();
+  const unlabeled = structuredClone(fixture);
+  for (const range of unlabeled.analytics.value.ranges) range.delivery.loops.push({ step: 'brand-new-step', events: 1, issues: 1 });
+  await sendSnapshot(page, unlabeled);
+  assert.ok((await page.locator('#loop-rows td:first-child').allTextContents()).includes('brand-new-step'));
   const unrecorded = structuredClone(fixture);
   for (const range of unrecorded.analytics.value.ranges) range.delivery = null;
   await sendSnapshot(page, unrecorded);
@@ -294,7 +303,7 @@ async function checkPause(page) {
   paused.live.value.scheduler.status = 'paused';
   paused.live.value.scheduler.counts = {};
   await sendSnapshot(page, paused);
-  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['8', '8', '8', '7', '7', '0', '0', '7']);
+  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), boardColumns.map((column) => String(fixture.github.value.cards.filter((card) => card.column === column).length)));
   assert.match(await page.locator('#source-status').textContent(), /Paused.*Claude weekly usage limit/);
   assert.equal(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight), false);
   await page.screenshot({ path: `${evidence}/paused-${page.viewportSize().width}.png` });
@@ -366,15 +375,15 @@ async function checkUntrustedAndMissingData(page) {
   assert.equal(await page.locator('#committee-rate').textContent(), '—');
   await page.locator('#overview-tab').click();
   await waitForRender(page);
-  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['—', '—', '—', '—', '—', '—', '—', '—']);
+  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), fill('—'));
   const empty = structuredClone(fixture);
   empty.github.value.cards = [];
   await sendSnapshot(page, empty);
-  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['0', '0', '0', '0', '0', '0', '0', '0']);
+  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), fill('0'));
   const stale = structuredClone(fixture);
   stale.github.status = 'stale';
   await sendSnapshot(page, stale);
-  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['—', '—', '—', '—', '—', '—', '—', '—']);
+  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), fill('—'));
 }
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 await mkdir(evidence, { recursive: true });

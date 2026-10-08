@@ -59,6 +59,7 @@ it('retains the last good snapshot with stale markers when its sources fail', as
     await collector.refreshLocal();
     await collector.refreshGithub();
     const good = collector.getSnapshot();
+    expect(good.labels.columns.Merging).toBe('Merging');
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 120_000);
     expect(collector.getSnapshot().operations.status).toBe('stale');

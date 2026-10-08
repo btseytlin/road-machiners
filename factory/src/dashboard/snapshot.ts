@@ -7,6 +7,7 @@ import { must } from '../exec';
 import { readState } from '../state';
 import { featureMerges, type Feature } from '../stages/release-common';
 import { DashboardHistory } from './history';
+import { LABELS, type Labels } from './labels';
 import { createWorkerKey, readLiveOperations } from './live';
 import { ADHOC_LABEL, QUEUE_OF, RELEASE_CANDIDATE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from '../types';
 import type { Card, FactoryState, GitHub, Queue, Run, RunResult } from '../types';
@@ -26,6 +27,7 @@ export type Snapshot = {
   generatedAt: string; repoUrl: string; playUrl: string; channelUrl: string | null;
   operations: Source<Operations>; github: Source<GithubSnapshot>; analytics: Source<Analytics>; host: Source<HostLoad>;
   live: Source<ReturnType<typeof readLiveOperations>>;
+  labels: Labels;
 };
 export type Commit = { sha: string; parents: { sha: string }[]; commit: { message: string } };
 type ComparePage = { total_commits: number; commits: Commit[] };
@@ -216,6 +218,7 @@ export class SnapshotCollector {
       generatedAt: new Date().toISOString(), repoUrl: `https://github.com/${this.config.repo}`, playUrl: this.config.playUrl, channelUrl: this.config.channelUrl,
       live: expireSource(this.live, localBudget), operations: expireSource(this.operations, localBudget), analytics: expireSource(this.analytics, localBudget), host: expireSource(this.host, localBudget),
       github: expireSource(this.github, this.config.githubRefreshMs + this.config.commandTimeoutMs),
+      labels: LABELS,
     };
   }
 }
