@@ -1,5 +1,5 @@
 // Journal screen: the rumors and clues the player was told, newest first, as information rather than orders. The
-// notes are player.notes, written by src/sim/notes.ts, with their words in src/data/locals.ts.
+// notes are player.notes, written by src/sim/dialogue-rules.ts, with their words in src/data/locals.ts.
 
 import { NOTES, type NoteDef } from '../data/locals';
 import { clockOf } from '../sim/sun';

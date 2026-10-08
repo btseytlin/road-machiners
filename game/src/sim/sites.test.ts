@@ -4,7 +4,6 @@ import { clickOrder } from './steering';
 import { canUseSite, edgeCrossings, isInTerritory, isNearOutpost, nearestPad, OUTPOSTS, siteEdgeCrossings, siteGap, siteGates, sitePads, siteUnder } from './sites';
 import { dist } from './vec';
 
-// A territory is open ground: it has no gates or pads.
 const SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 const PAD = REGION.sites.pad;
 
@@ -31,7 +30,7 @@ describe('site gates and pads', () => {
 
   it('gives towns and large locations a gate per road, and small locations one gate', () => {
     const large = SITES.filter((l) => 'kind' in l && l.radius >= REGION.sites.multiGateRadius);
-    expect(large).toEqual([]); // the large locations are territories, which have no gates
+    expect(large).toEqual([]);
     for (const site of SITES) {
       const roads = REGION.roads.filter((road) => road.some((p) => dist(p, site.pos) <= site.radius)).length;
       if (large.includes(site as never) || REGION.towns.includes(site as never)) expect(siteGates(site).length, site.id).toBe(roads);
@@ -77,7 +76,6 @@ describe('site gates and pads', () => {
   it('refuses use from beside an open site, away from its gates', () => {
     const oasis = REGION.locations.find((l) => l.kind === 'oasis')!;
     const gateAngles = siteGates(oasis).map((g) => Math.atan2(g.y - oasis.pos.y, g.x - oasis.pos.x));
-    // The edge point farthest in angle from every gate.
     let best = 0;
     let bestGap = -1;
     for (let a = -Math.PI; a < Math.PI; a += 0.01) {
@@ -140,7 +138,6 @@ describe('territories', () => {
 });
 
 describe('site edges', () => {
-  // A site with no outline: its edge is its circle.
   const pump = REGION.locations.find((l) => l.id === 'pump-station')!;
   const orchard = REGION.locations.find((l) => l.id === 'orchard')!;
 
@@ -156,7 +153,6 @@ describe('site edges', () => {
     const corner = { x: orchard.pos.x + orchard.outline[0].x, y: orchard.pos.y + orchard.outline[0].y };
     expect(siteGap(orchard, orchard.pos)).toBeLessThan(0);
     expect(Math.abs(siteGap(orchard, corner))).toBeLessThan(1e-9);
-    // Straight across the orchard from far west to far east, the line crosses the outline twice, west first.
     const [a, b] = [{ x: orchard.pos.x - 80, y: orchard.pos.y }, { x: orchard.pos.x + 80, y: orchard.pos.y }];
     const crossings = siteEdgeCrossings(orchard, a, b);
     expect(crossings).toHaveLength(2);

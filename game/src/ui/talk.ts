@@ -3,7 +3,7 @@
 // who the player is talking to and the last thing they said.
 
 import { LOCAL_TOPICS, type LocalId, type LocalTopicId } from "../data/locals";
-import { askLocal, localDef, localsAt, localTopics, localWork, takeLocalWork, workLine } from "../sim/locals";
+import { askLocal, localDef, localsAt, localTopics, localWork, takeLocalWork, workLine } from "../sim/dialogue-rules";
 import type { Contract } from "../sim/market";
 import type { World } from "../sim/types";
 import { createIcon } from "./cards";

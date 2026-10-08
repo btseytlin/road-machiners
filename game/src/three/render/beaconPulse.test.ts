@@ -66,7 +66,7 @@ describe('BeaconPulseView', () => {
       const n = pos.count / 2;
       const inner = Math.hypot(pos.getX(0), pos.getY(0));
       const outer = Math.hypot(pos.getX(n), pos.getY(n));
-      expect(outer - inner).toBeCloseTo(0.18 * 4, 5); // tiles to meters
+      expect(outer - inner).toBeCloseTo(0.18 * 4, 5);
       expect(opacity(m)).toBeLessThanOrEqual(last);
       last = opacity(m);
     }

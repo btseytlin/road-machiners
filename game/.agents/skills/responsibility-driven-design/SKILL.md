@@ -47,7 +47,7 @@ For example, `ServerStatus.state` derives status from the object that owns the o
 
 - Follow the global configuration and fail-fast rules. Keep required inputs explicit and validate them at the boundary.
 - For persisted state, keep writes atomic and units restartable where the task requires them. Expose progress and failures at meaningful boundaries.
-- Keep related code together and unrelated concerns separate. Comments explain hidden constraints rather than compensate for unclear ownership.
+- Keep related code together and unrelated concerns separate. Code holds no comments except a module docstring of up to 3 lines. Put hidden constraints in names, tests or docs.
 
 ## TypeScript boundaries
 

@@ -3,11 +3,12 @@ import { CONTRACTS } from '../data/market';
 import { LOCAL_TOPICS } from '../data/locals';
 import { REGION } from '../data/region';
 import { WAGON_SEVEN } from '../data/salvage';
-import { askLocal, localsAt, localTopics, localWork, takeLocalWork, workLine } from './locals';
+import { askLocal, holdsNote, learnNote, localsAt, localTopics, localWork, takeLocalWork, workLine } from './dialogue-rules';
 import { acceptContract, type Contract } from './market';
 import { sitePads } from './sites';
 import { emptyWorld } from './testkit';
 import type { World } from './types';
+import type { NoteId } from '../data/locals';
 
 const site = (id: string) => [...REGION.towns, ...REGION.locations].find((s) => s.id === id)!;
 
@@ -138,5 +139,43 @@ describe('work by talk', () => {
 
     expect(takeLocalWork(w, 'dag', 'ct-high')).toEqual(acceptContract(w, 'ct-high'));
     expect(() => takeLocalWork(w, 'dag', 'ct-low')).toThrow(/does not offer/);
+  });
+});
+
+describe('journal notes', () => {
+  it('starts a new player with no notes', () => {
+    expect(emptyWorld().player.notes).toEqual([]);
+  });
+
+  it('keeps a learned note with the turn it was learned and tells the log once', () => {
+    const w = emptyWorld();
+    w.turn = 42;
+
+    learnNote(w, 'greenPit');
+
+    expect(w.player.notes).toEqual([{ id: 'greenPit', turn: 42 }]);
+    expect(w.events).toEqual([{ t: 'note', id: 'greenPit' }]);
+    expect(holdsNote(w, 'greenPit')).toBe(true);
+    expect(holdsNote(w, 'glassTank')).toBe(false);
+  });
+
+  it('learns a held note again without a change or an event', () => {
+    const w = emptyWorld();
+    w.turn = 5;
+    learnNote(w, 'greenPit');
+    w.events = [];
+    w.turn += 10;
+
+    learnNote(w, 'greenPit');
+
+    expect(w.player.notes).toEqual([{ id: 'greenPit', turn: 5 }]);
+    expect(w.events).toEqual([]);
+  });
+
+  it('refuses a note id it does not know', () => {
+    const w = emptyWorld();
+
+    expect(() => learnNote(w, 'nonsense' as NoteId)).toThrow(/nonsense/);
+    expect(w.player.notes).toEqual([]);
   });
 });

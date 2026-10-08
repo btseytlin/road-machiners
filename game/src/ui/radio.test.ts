@@ -15,7 +15,6 @@ import { fill, RadioStation, revealed, type Broadcast } from './radio';
 const first = () => 0;
 const site = (id: string) => [...REGION.towns, ...REGION.locations].find((s) => s.id === id)!;
 
-// A world at `turn` with its boards cleared and the given sites found.
 function world(turn: number, discovered: string[] = ['bowl', 'nose']): World {
   const w = emptyWorld();
   w.turn = turn;
@@ -25,7 +24,6 @@ function world(turn: number, discovered: string[] = ['bowl', 'nose']): World {
   return w;
 }
 
-// The same world some turns later, with these events.
 function later(w: World, turns: number, events: GameEvent[] = []): World {
   const next = cloneWorld(w);
   next.turn += turns;
@@ -33,7 +31,6 @@ function later(w: World, turns: number, events: GameEvent[] = []): World {
   return next;
 }
 
-// A station that already played its ident on `w`.
 function tuned(w: World): RadioStation {
   const s = new RadioStation(first);
   s.hear(w);
@@ -53,7 +50,6 @@ function storm(pos: { x: number; y: number }, vel = { x: 1, y: 0 }): GameEvent {
   return { t: 'weather', event: { id: 'wx2', kind: 'storm', pos, vel, radius: 20, turnsLeft: 50 }, outcome: 'started' } as GameEvent;
 }
 
-// Hears worlds until a broadcast comes out, minGapTurns apart.
 function drain(s: RadioStation, w: World): Broadcast | null {
   return s.next() ?? (s.hear(later(w, RADIO.minGapTurns)), s.next());
 }
@@ -188,7 +184,6 @@ describe('RadioStation', () => {
   });
 
   it('varies the gap and never dumps a backlog in one turn', () => {
-    // Ident picks a line, then the next random number schedules the gap.
     const values = [0, 0.99, 0, 0, 0, 0.99];
     const s = new RadioStation(() => values.shift() ?? 0);
     const w = world(1);
@@ -204,7 +199,7 @@ describe('RadioStation', () => {
     expect(s.next()?.rank).toBe('news');
     expect(s.next()).toBeNull();
     s.hear(later(queued, RADIO.gapJitterTurns + RADIO.minGapTurns));
-    expect(s.next()).toBeNull(); // the second report expired instead of dumping late
+    expect(s.next()).toBeNull();
     expect(s.queued).toBe(0);
   });
 
@@ -227,7 +222,6 @@ describe('RadioStation', () => {
   });
 
   it('fills a quiet stretch with road wisdom', () => {
-    // Skipped clock calls leave room for occasional banter.
     const w = world(1);
     const s = new RadioStation(() => 0.99);
     s.hear(w);
@@ -240,7 +234,6 @@ describe('RadioStation', () => {
 
   it('calls the dawn when the clock crosses sunrise', () => {
     const perHour = TIME.turnsPerDay / 24;
-    // Turn 1 is TIME.startHour, so this is half an hour before sunrise on day 2.
     const before = Math.round(1 + (24 - TIME.startHour + TIME.sunrise - 0.5) * perHour);
     const w = world(before);
     const s = tuned(w);
@@ -261,7 +254,7 @@ describe('RADIO_LINES', () => {
     to: longest(sites),
     good: longest(Object.values(GOODS).map((g) => g.name.toLowerCase())),
     part: longest(Object.values(PARTS).map((p) => p.name)),
-    target: 'Bartholomew Cartwright-Ash', // a long driver name
+    target: 'Bartholomew Cartwright-Ash',
   };
   const lines = Object.entries(RADIO_LINES).flatMap(([topic, list]) => list.map((t) => ({ topic: topic as RadioTopic, text: fill(t, vars) })));
 

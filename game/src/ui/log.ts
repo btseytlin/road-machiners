@@ -3,7 +3,6 @@ import { clockLabel, type LogLine } from "./format";
 
 export const LOG_HISTORY = 200;
 
-// The session's log lines, newest first, each led by the game day and time.
 export class LogBook {
   private history: LogLine[] = [];
 
@@ -33,7 +32,6 @@ function lineRow(l: LogLine): HTMLElement {
   );
 }
 
-// The log panel. New lines go on top, and a reader scrolled back in the history keeps their place.
 export class LogPanel {
   private book = new LogBook();
   private root = panel("log");
@@ -57,7 +55,6 @@ export class LogPanel {
     );
   }
 
-  // The session's log text, newest first.
   get texts(): string[] {
     return this.book.lines.map((line) => line.text);
   }

@@ -1,9 +1,8 @@
 // Traffic speed harness: plays a world of NPCs through the real turn pipeline and samples how fast each truck drives
 // on the road, in km/h of the path it drove that turn. Samples fall into classes (healthy ordinary cars, ordinary cars
 // on low fuel, worn ordinary cars, armed and heavy roles, towing rigs) so a before-and-after comparison reads per class.
-// The class lists below only sort samples. They decide no game rule. The game never imports this module.
-// The physics layer drives every NPC in Rapier once the caller widens PERF.liveMargin; see scripts/traffic.mjs.
 
+import { defaultSetup } from '../sim/settings';
 import { PHYSICS } from '../data/physics';
 import { START_KITS } from '../data/start';
 import { TERRAIN_TYPES } from '../data/terrain';
@@ -30,16 +29,14 @@ import { TEST_MAP } from './map';
 export type TrafficLayer = 'physics' | 'far';
 export const TRAFFIC_LAYERS: readonly TrafficLayer[] = ['physics', 'far'];
 
-// Plain road traffic: the roles the issue means by ordinary cars.
 export const ORDINARY_TEMPLATES: ReadonlySet<string> = new Set(['trader', 'buggy', 'courier', 'scavenger', 'roamer', 'vulture']);
-// Armed patrol and convoy roles, slow by their loadout.
 export const HEAVY_TEMPLATES: ReadonlySet<string> = new Set(['noseArmy', 'bowlFarmer', 'gunwagon', 'merc', 'convoy', 'convoyGuard']);
 export const HEAVY_CHASSIS: ReadonlySet<string> = new Set(['tractor', 'loader', 'wagon', 'carrier', 'longbed', 'bus']);
 
-export const KPH = (PHYSICS.metersPerTile / PHYSICS.turnSeconds) * 3.6; // km/h per tile a turn
+export const KPH = (PHYSICS.metersPerTile / PHYSICS.turnSeconds) * 3.6;
 const MOVING_KPH = 5;
-const ROAD_SPEED = 0.98; // terrain speed share that counts as open road
-const STEADY_SHARE = 0.1; // start and end speeds within this share of each other
+const ROAD_SPEED = 0.98;
+const STEADY_SHARE = 0.1;
 const HEALTHY_MOBILITY = 0.75;
 
 export type TrafficClass = 'healthyOrdinary' | 'lowFuelOrdinary' | 'wornOrdinary' | 'heavyRole' | 'towing' | 'other';
@@ -54,16 +51,16 @@ export type TrafficSample = {
   layer: TrafficLayer;
   startKph: number;
   endKph: number;
-  drivenKph: number; // length of the path driven this turn
-  maxKph: number; // vehicleStats top speed at the turn's start
+  drivenKph: number;
+  maxKph: number;
   fuelShare: number;
-  lowFuel: boolean; // under the share of the tank that halves top speed
+  lowFuel: boolean;
   mobility: number;
   brokenWheels: number;
   gunDrag: number;
   loadFactor: number;
   weatherSpeed: number;
-  onRoad: boolean; // open road at both ends of the turn
+  onRoad: boolean;
   stranded: boolean;
   towing: boolean;
   towed: boolean;
@@ -75,10 +72,10 @@ export type TrafficRun = {
   seed: number;
   layer: TrafficLayer;
   turns: number;
-  samples: TrafficSample[]; // only moving samples on the road
+  samples: TrafficSample[];
   npcTurns: number;
-  resupplyStarts: number; // times a driver's top goal turned to resupply
-  maxDry: number; // the most NPCs with an empty tank at once
+  resupplyStarts: number;
+  maxDry: number;
   collisions: number;
 };
 
@@ -91,15 +88,12 @@ export function classify(s: TrafficSample): TrafficClass {
   return 'healthyOrdinary';
 }
 
-// Moving on the road, the free cruise a player sees: not in a fight, not slowed by a storm and neither speeding up
-// nor slowing down much over the turn.
 export function isSteadyCruise(s: TrafficSample): boolean {
   if (!isCruising(s) || s.weatherSpeed < 1) return false;
   const top = Math.max(s.startKph, s.endKph);
   return top > 0 && Math.abs(s.startKph - s.endKph) <= STEADY_SHARE * top;
 }
 
-// Any moving sample on open road outside a fight. Stranded and towed trucks only crawl or ride a rope.
 export function isCruising(s: TrafficSample): boolean {
   return s.onRoad && s.drivenKph > MOVING_KPH && !s.inCombat && !s.stranded && !s.towed;
 }
@@ -107,8 +101,6 @@ export function isCruising(s: TrafficSample): boolean {
 export type SlowCause = 'storm' | 'topSpeed' | 'accelerating' | 'slowing' | 'other';
 export const SLOW_CAUSES: readonly SlowCause[] = ['storm', 'topSpeed', 'accelerating', 'slowing', 'other'];
 
-// Why a moving truck drove under the line this turn: weather, a top speed under it (guns, load, chassis), a start or
-// a corner it is still speeding up from, or a stop or a truck ahead it is braking for.
 export function slowCause(s: TrafficSample): SlowCause {
   if (s.weatherSpeed < 1) return 'storm';
   if (s.maxKph < SLOW_KPH) return 'topSpeed';
@@ -138,7 +130,6 @@ export function spread(values: number[]): Spread {
   };
 }
 
-// The nearest-rank quantile of an ascending list.
 export function quantile(sorted: number[], p: number): number {
   if (!sorted.length) return NaN;
   return sorted[Math.min(sorted.length - 1, Math.round(p * (sorted.length - 1)))];
@@ -148,11 +139,11 @@ export type TrafficSummary = {
   layer: TrafficLayer;
   seeds: number[];
   turns: number;
-  steady: Record<TrafficClass, Spread>; // steady cruise km/h per class
-  cruising: Record<TrafficClass, Spread>; // every moving road sample per class
-  healthyByChassis: [string, Spread][]; // steady cruise of healthy ordinary cars, busiest chassis first
-  healthySlowCauses: Record<SlowCause, number>; // share of healthy ordinary cruising samples under 45 km/h by cause
-  lowFuelShare: number; // share of ordinary cruising samples under the low-fuel line
+  steady: Record<TrafficClass, Spread>;
+  cruising: Record<TrafficClass, Spread>;
+  healthyByChassis: [string, Spread][];
+  healthySlowCauses: Record<SlowCause, number>;
+  lowFuelShare: number;
   resupplyStarts: number;
   maxDry: number;
   collisionsPer100NpcTurns: number;
@@ -227,10 +218,9 @@ function formatOne(s: TrafficSummary): string {
   ].join('\n');
 }
 
-// Plays one seed with the player parked at its start town in god mode, like the stuck soak.
 export async function recordTraffic(seed: number, turns: number, layer: TrafficLayer): Promise<TrafficRun> {
   if (!TRAFFIC_LAYERS.includes(layer)) throw new Error(`unknown traffic layer "${layer}"`);
-  let w = newWorld(seed, START_KITS.standard, TEST_MAP);
+  let w = newWorld(seed, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
   w.player.god = true;
   const run: TrafficRun = { seed, layer, turns, samples: [], npcTurns: 0, resupplyStarts: 0, maxDry: 0, collisions: 0 };
   const play = layer === 'physics' ? await physicsPlayer(w) : farPlayer();
@@ -266,7 +256,6 @@ async function physicsPlayer(w: World): Promise<Player> {
   };
 }
 
-// What a sample needs from the turn's start.
 function startOf(w: World, v: Vehicle, seed: number, layer: TrafficLayer): TrafficSample {
   const engine = mountedParts(v, 'engine')[0];
   const fuel = getResources(w, v).fuel;

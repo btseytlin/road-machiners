@@ -43,7 +43,6 @@ it('reads the flow of a card from its labels', () => {
   expect(cardFlow(['adhoc'])).toBe('adhoc');
 });
 
-// A move that skips the helper leaves a hole in every card's stage times, so no other source file may call the board directly.
 it('leaves every board move to the helper', () => {
   const files = (dir: string): string[] => readdirSync(dir).flatMap((name) => {
     const path = join(dir, name);

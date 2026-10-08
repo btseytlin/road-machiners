@@ -469,7 +469,6 @@ describe("weapon panel keys and the turn button", () => {
 });
 
 describe("the utility row", () => {
-  // The player's truck with a Sprout and a Smoke mortar on deck, and a host that applies commands to its world.
   function build() {
     const world = { w: emptyWorld() };
     const me = world.w.vehicles[0];
@@ -567,7 +566,6 @@ describe("the utility row", () => {
   });
 });
 
-// The player facing east with a harpoon on its deck and a trader hauler `gap` tiles east of it, in sight.
 function harpoonDuel(gap = 5) {
   const w = emptyWorld();
   const me = w.vehicles[0];
@@ -636,7 +634,6 @@ describe("the harpoon on the weapon panel", () => {
 describe("a utility slot's look", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  // Renders the row of a truck with a Sprout and a Smoke mortar, with the mortar selected.
   function renderRow(edit: (w: World, parts: { sprout: string; mortar: string }) => void) {
     vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t) });
     const w = emptyWorld();

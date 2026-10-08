@@ -1,22 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import { RANK_COSTS, SKILL_IDS, XP_SOURCES } from '../../data/skills';
+import { START_KITS } from '../../data/start';
 import { TIME } from '../../data/time';
 import type { World, XpSource } from '../types';
+import { cumulativeCost } from '../progress';
+import { playerVehicle } from '../damage';
 import { emptyWorld } from '../testkit';
 import { record, recordFrom, recordTurns, StallWatch, stepsFrom, type TraceLine } from './record';
 import { replay } from './replay';
 
 const SHORT_RUN = 60;
-// A nondeterminism bug (stray Math.random, object-identity leaks, iteration-order drift) shows up within a
-// handful of turns; it does not need thousands to surface. Short enough to keep this check cheap, long enough
-// to have run through several bot decisions.
 const DETERMINISM_RUN = 15;
-const RUN_TIMEOUT = 360_000; // one world turn takes about 40 ms and a new world about 400 ms; a loaded machine running the whole suite made the 60-turn run take over 120 s
+const RUN_TIMEOUT = 360_000;
 
 describe('record', () => {
   it('gives the same trace for the same seed and archetype', async () => {
     const first = record(1337, 'trader', DETERMINISM_RUN);
-    // Each run takes about half a minute on a loaded machine, so the worker's status messages get a turn between them.
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     const second = record(1337, 'trader', DETERMINISM_RUN);
 
@@ -25,13 +24,24 @@ describe('record', () => {
     expect(second).toEqual(first);
   }, RUN_TIMEOUT);
 
+  it('starts in a Roaming world with the given settings, the missing ones at their defaults', () => {
+    const first = recordTurns(1337, 'trader', 1, { settings: { damage: 2, fuelUse: 1.5 } }).next();
+
+    expect(first.done).toBe(false);
+    expect(first.value?.world.setup).toEqual({ mode: 'roaming', settings: { damage: 2, fuelUse: 1.5, supplyUse: 1 } });
+  }, RUN_TIMEOUT);
+
+  it('fails a run with a bad setting before it plays', () => {
+    expect(() => recordTurns(1337, 'trader', 1, { settings: { damage: 9 } }).next()).toThrow(/damage/);
+    expect(() => recordTurns(1337, 'trader', 1, { settings: { speed: 1 } }).next()).toThrow(/speed/);
+  }, RUN_TIMEOUT);
+
   it('replays to the XP the world gave through practice', async () => {
     const lines: TraceLine[] = [];
     let last: World | null = null;
     for (const step of recordTurns(1337, 'scavenger', SHORT_RUN)) {
       lines.push(...step.lines);
       last = step.world;
-      // A minute of turns without a yield would starve the worker's status messages to the runner.
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     if (!last) throw new Error('The recording ran no turns');
@@ -43,10 +53,20 @@ describe('record', () => {
       const bySource = (Object.keys(XP_SOURCES) as XpSource[]).filter((s) => XP_SOURCES[s].skill === skill).reduce((sum, s) => sum + world.player.xpBySource[s], 0);
       expect(curve[skill].total, skill).toBeCloseTo(bySource, 6);
     }
-    // The recorder buys ranks from the pool as it fills, so the XP earned is what is left plus what ranks cost.
     const pool = SKILL_IDS.reduce((sum, skill) => sum + curve[skill].total, 0);
-    const spent = SKILL_IDS.reduce((sum, skill) => sum + RANK_COSTS.slice(0, world.player.ranks[skill]).reduce((a, b) => a + b, 0), 0);
+    const spent = SKILL_IDS.reduce((sum, skill) => sum + cumulativeCost(world.player.ranks[skill]), 0);
     expect(pool).toBeCloseTo(world.player.xp + spent, 6);
+  }, RUN_TIMEOUT);
+
+  it('starts the hunter on the snowball kit and the others on the standard kit unless a kit is named', () => {
+    const chassisOf = (archetype: 'hunter' | 'trader', kit?: string): string => {
+      const [step] = recordTurns(1337, archetype, 1, kit === undefined ? {} : { kit });
+      return playerVehicle(step.world).chassisId;
+    };
+
+    expect(chassisOf('hunter')).toBe(START_KITS.snowball.chassis);
+    expect(chassisOf('trader')).toBe(START_KITS.standard.chassis);
+    expect(chassisOf('hunter', 'standard')).toBe(START_KITS.standard.chassis);
   }, RUN_TIMEOUT);
 });
 

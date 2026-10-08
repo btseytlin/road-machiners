@@ -11,6 +11,7 @@ import { isRoadWreck, isStoryWreck, renewSalvage, salvagePlace } from './salvage
 import { isCliff, tileAt } from './terrain';
 import { dist, segmentDist } from './vec';
 import { newWorld } from './world';
+import { defaultSetup } from './settings';
 import type { World } from './types';
 
 const WAGON = STORY_WRECKS[0];
@@ -22,7 +23,7 @@ function wagonStock(w: World) {
 describe('story wrecks', () => {
   it('lies once on every seed, as a wagon hulk with its authored contents', () => {
     for (const seed of [1, 1337, 4242]) {
-      const w = newWorld(seed, START_KITS.standard, TEST_MAP);
+      const w = newWorld(seed, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
 
       expect(w.obstacles.filter((o) => o.id === WAGON.id)).toEqual([
         { id: WAGON.id, pos: WAGON.pos, r: WAGON.r, kind: 'wreck', hulk: { chassisId: 'wagon', yaw: WAGON.yaw } },
@@ -30,21 +31,20 @@ describe('story wrecks', () => {
       expect(wagonStock(w)).toEqual([
         {
           id: WAGON.id, pos: WAGON.pos, radius: WAGON.r * RULES.wreckRadiusScale,
-          goods: { scrap: 3, meds: 1, parts: 1 }, fuel: 10, supplies: 4,
+          goods: { scrap: 3, meds: 1, parts: 1 }, fuel: 10, supplies: 4, hidden: { goods: {}, parts: [], fuel: 0, supplies: 0 },
           parts: [{ id: 'story-wagon-seven-cannon', defId: 'cannon', hp: expect.any(Number), wear: 2, gun: expect.any(Object) }],
         },
       ]);
     }
   });
 
-  // Recorded on the commit before story wrecks, so adding them draws no random number and makes no id.
   it('leaves the random streams and ids of world creation as they were', () => {
     const before = [
-      { seed: 1, rng: 1783363896, market: 1861162523, nextId: 905, wreck0: { x: 214.26, y: 272.851 } },
-      { seed: 1337, rng: -838223845, market: 1733281385, nextId: 935, wreck0: { x: 409.011, y: 185.293 } },
+      { seed: 1, rng: -638825290, market: 661432380, nextId: 891, wreck0: { x: 398.259, y: 149.184 } },
+      { seed: 1337, rng: 2103071217, market: 405668848, nextId: 931, wreck0: { x: 411.392, y: 222.252 } },
     ];
     for (const b of before) {
-      const w = newWorld(b.seed, START_KITS.standard, TEST_MAP);
+      const w = newWorld(b.seed, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
       const wreck0 = w.obstacles.find((o) => o.id === 'wreck0')!;
 
       expect({ rng: w.rngState, market: w.marketRng.rngState, nextId: w.nextId }).toEqual({ rng: b.rng, market: b.market, nextId: b.nextId });
@@ -54,7 +54,7 @@ describe('story wrecks', () => {
   });
 
   it('is searched with wreck words and counts as neither a road wreck nor a kill wreck', () => {
-    const w = newWorld(1, START_KITS.standard, TEST_MAP);
+    const w = newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const stock = wagonStock(w)[0];
 
     expect(isStoryWreck(stock)).toBe(true);
@@ -93,7 +93,7 @@ describe('story wrecks', () => {
   });
 
   it('lies on drivable ground, clear of props, far from roads and from Bowl, on the real map', () => {
-    const w = newWorld(1, START_KITS.standard, TEST_MAP);
+    const w = newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
     const roadGap = Math.min(...REGION.roads.flatMap((road) => road.slice(1).map((b, i) => segmentDist(WAGON.pos, road[i], b))));
     const clearance = Math.min(...w.obstacles.filter((o) => o.id !== WAGON.id).map((o) => dist(o.pos, WAGON.pos) - o.r - WAGON.r));

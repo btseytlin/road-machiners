@@ -18,7 +18,6 @@ export class PickRing {
     this.mesh.renderOrder = 5;
   }
 
-  // Shows the ring around a truck of the given radius in tiles, or hides it when there is none.
   place(terrain: Terrain, frame: VehicleFrame | undefined, radius: number): void {
     this.mesh.visible = !!frame;
     if (!frame) return;

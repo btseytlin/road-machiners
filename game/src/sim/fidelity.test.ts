@@ -9,14 +9,12 @@ import type { World } from './types';
 
 afterEach(() => setHeadless(false));
 
-// A raider and a rock between it and a spot 8 tiles east, all around `at`.
 function rockBetween(w: World, at: Vec) {
   const watcher = addVehicle(w, 'raiders', 'buggy', [], at);
   w.obstacles = [{ id: 'rock', pos: { x: at.x + 4, y: at.y }, r: 1.2, kind: 'rock' }];
   return { watcher, spot: { x: at.x + 8, y: at.y } };
 }
 
-// The turn of the day with the lowest sun above the horizon, when a rock casts shade.
 function lowSunTurn(): number {
   let best = 0;
   let low = Infinity;

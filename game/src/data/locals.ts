@@ -1,5 +1,5 @@
 // The people of Bowl and Nose the player can talk to, what they talk about, and the notes their rumors leave in
-// the journal. src/sim/locals.ts runs the talk and src/sim/notes.ts keeps the notes.
+// the journal. src/sim/dialogue-rules.ts runs the talk and src/sim/dialogue-rules.ts keeps the notes.
 // Lines are in character: no numbers but day counts and clock hours, and no words from outside the world
 // (src/data/locals.test.ts checks every line). docs/lore.md keeps the voices.
 
@@ -47,7 +47,6 @@ export const NOTES: Record<NoteId, NoteDef> = {
   },
 };
 
-// Facts that open a topic. Their logic lives in LOCAL_CONDITIONS in src/sim/locals.ts.
 export type LocalConditionId = 'foundBurntConvoy' | 'foundFallenSun' | 'heardWagonBowl' | 'searchedWagon';
 
 // What a local says to "Any work?". offer holds `{terms}`, which the town screen fills with the board contract the

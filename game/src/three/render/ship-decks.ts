@@ -1,7 +1,6 @@
 // The Fallen Sun's wing and flaps: a plate of each deck's look on each of its straight pieces, posed on the deck line
 // like Broken Wing's deck, and a skirt strip under its rails and lips down into the ground, mirroring the physics skirt
 // (addDeck() in src/phys/drive.ts). src/sim/bridge.ts owns the decks; this view only draws them. The strips stand a
-// little inside the deck edge, behind the models' own torn skirt plates and lip beams, so the two never share a face.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
@@ -16,25 +15,21 @@ import { model } from './models';
 import type { RenderScope } from './scope';
 
 const S = PHYSICS.metersPerTile;
-// The models' reference sizes in meters (tools/blender/ship_wing_deck.py and ship_flap.py): length along the deck,
-// width across it between the rail lines, and the flap's rise at its lip.
 const WING = { length: 88, width: 32 };
 const FLAP = { length: 20, width: 12, rise: 1.4 };
-const RAIL_INSET = 0.5; // meters a rail's strip stands inside the rail line, behind the wing's hanging skirt plates
-const LIP_INSET = 0.6; // meters a lip's strip stands inside the deck end, behind the flap's lip beam
-const TOP_DROP = 0.1; // meters the strip's top lies under the deck line, inside the model's plate
+const RAIL_INSET = 0.5;
+const LIP_INSET = 0.6;
+const TOP_DROP = 0.1;
 const SKIRT_COLORS = [PAL.hull.grey, PAL.hull.dark, PAL.hull.dark, PAL.hull.rust];
 
 type ShipDeck = { deck: Deck; look: (typeof FALLEN_SUN_DECKS)[number]['look'] };
 
-// Every Fallen Sun deck's models and skirt, one group per deck, for inspection.
 export function buildShipDecks(t: Terrain): THREE.Group {
   const root = new THREE.Group();
   for (const ship of shipDecks()) root.add(buildShipDeck(t, ship));
   return root;
 }
 
-// Registers each Fallen Sun deck's models and skirt with the scope at the deck's middle.
 export function addShipDecks(t: Terrain, scope: RenderScope): void {
   for (const ship of shipDecks()) {
     const { deck } = ship;
@@ -65,14 +60,12 @@ function buildShipDeck(t: Terrain, ship: ShipDeck): THREE.Group {
   return root;
 }
 
-// The deck's look stretched over one straight piece length tiles long: a wing plate, or a flap.
 function deckModel({ deck, look }: ShipDeck, length: number): THREE.Object3D {
   if (look === 'ship_wing_deck') {
     const obj = model('ship_wing_deck');
     obj.scale.set((length * S) / WING.length, 1, (deck.width * S) / WING.width);
     return obj;
   }
-  // The flap model has its hinge on the ground at -x and its lip at +x, which poseOnDeck puts at the to end.
   const rises = deck.stations.map((s) => s.rise);
   if (rises.length !== 2 || rises[0] !== 0 || rises[1] <= 0) throw new Error(`Flap ${deck.id} must rise from 0 at its from end to its lip, not [${rises.join(', ')}]`);
   const obj = model('ship_flap');
@@ -80,8 +73,6 @@ function deckModel({ deck, look }: ShipDeck, length: number): THREE.Object3D {
   return obj;
 }
 
-// A strip from just under the deck line down past the ground, sampled every tile, along each rail of a skirted deck
-// and across each lip. It reaches PHYSICS.rockSink under the ground, as the physics skirt does.
 function skirt(t: Terrain, deck: Deck): THREE.Mesh {
   const positions: number[] = [];
   const colors: number[] = [];
@@ -107,8 +98,6 @@ function skirt(t: Terrain, deck: Deck): THREE.Mesh {
   return mesh;
 }
 
-// A strip column at a map point, in meters: its top under the deck line and its bottom under the ground. Where the
-// deck line dips under the ground the column is empty, its bottom at its top.
 function column(t: Terrain, deck: Deck, p: Vec): { top: [number, number, number]; bottom: [number, number, number] } {
   const along = Math.min(deck.length, Math.max(0, alongOf(deck, p.x, p.y)));
   const top = deckHeight(t, deck, along) * S - TOP_DROP;
@@ -116,8 +105,6 @@ function column(t: Terrain, deck: Deck, p: Vec): { top: [number, number, number]
   return { top: [p.x * S, top, p.y * S], bottom: [p.x * S, bottom, p.y * S] };
 }
 
-// Each rail cut at the deck's stations, so its strip's top follows each change of grade, with the unit vector back
-// across the deck.
 function railPieces(deck: Deck): { line: [Vec, Vec]; inward: Vec; inset: number }[] {
   return [-1, 1].flatMap((side) => {
     const off = railOffset(deck.axis, deck.width, side);
@@ -129,7 +116,6 @@ function railPieces(deck: Deck): { line: [Vec, Vec]; inward: Vec; inset: number 
   });
 }
 
-// The unit vector from a lip back along the deck toward its middle.
 function lipInward(deck: Deck, [a, b]: [Vec, Vec]): Vec {
   const atTo = alongOf(deck, (a.x + b.x) / 2, (a.y + b.y) / 2) > deck.length / 2;
   return atTo ? { x: -deck.axis.x, y: -deck.axis.y } : deck.axis;

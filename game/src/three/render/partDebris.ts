@@ -18,18 +18,16 @@ import type { RenderScope } from './scope';
 import type { VehicleView } from './vehicle';
 
 const S = PHYSICS.metersPerTile;
-const PART_DEBRIS_SCALE = 0.35; // share of the good_scrap model's size
-const PART_LIFT = 0.4; // meters above the part's point where pieces start, clear of the truck's own box
-const PART_FLING = 4; // m/s outward from the truck center
-const PART_KICK_UP = 3; // m/s upward
-const PART_DEBRIS_LINGER = 20; // seconds from the break until the pieces start to shrink
-const PART_DEBRIS_FADE = 1.5; // seconds the pieces take to shrink away
-export const PART_DEBRIS_MAX = 60; // live pieces over all bursts
+const PART_DEBRIS_SCALE = 0.35;
+const PART_LIFT = 0.4;
+const PART_FLING = 4;
+const PART_KICK_UP = 3;
+const PART_DEBRIS_LINGER = 20;
+const PART_DEBRIS_FADE = 1.5;
+export const PART_DEBRIS_MAX = 60;
 
 type Live = { group: THREE.Group; age: number };
 
-// How many of the oldest bursts to free so the live pieces plus the new ones fit under max. sizes: pieces per live
-// burst, oldest first.
 export function overCap(sizes: readonly number[], adding: number, max: number): number {
   let live = sizes.reduce((sum, n) => sum + n, 0);
   let freed = 0;
@@ -45,7 +43,6 @@ export class PartDebris {
     this.flying = new DebrisSim(terrain);
   }
 
-  // Throws a burst from the world point at, away from the truck's center. key seeds the pieces' flight.
   burst(key: string, at: V3, center: V3, near: readonly Obstacle[]): void {
     const srcs = piecesOf('good_scrap');
     this.freeOldest(overCap(this.bursts.map((b) => b.group.children.length), srcs.length, PART_DEBRIS_MAX));
@@ -61,7 +58,6 @@ export class PartDebris {
     this.bursts.push({ group, age: 0 });
   }
 
-  // Moves the truck boxes, steps the pieces and ages the bursts. dt: seconds since the last drawn frame.
   play(trucks: readonly TruckBox[], dt: number): void {
     this.flying.moveTrucks(trucks);
     this.flying.step(dt);
@@ -77,7 +73,6 @@ export class PartDebris {
     this.flying.free();
   }
 
-  // Frees the first n bursts. Bursts age in order, so the expired ones are always the first.
   private freeOldest(n: number): void {
     for (const b of this.bursts.splice(0, n)) {
       this.flying.drop(b.group);
@@ -100,8 +95,6 @@ const SIGNATURE_FX: Record<BreakSignature, (fx: Fx3D, at: V3) => void> = {
   fire: (fx, at) => fx.fireBurst(at),
 };
 
-// A part a hit broke throws scrap where it is drawn, and a weapon, wheel or fuel part adds its own effect. Call it once
-// per break, as the round that broke the part lands. Returns the point the part was drawn at, or null with no view.
 export function playBreak(world: World, debris: PartDebris, fx: Fx3D, view: VehicleView | undefined, brk: PartBreak): V3 | null {
   if (!view) return null;
   const at = view.partPoint(brk.part);

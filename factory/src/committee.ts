@@ -1,14 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-// The committee is a whitelist file that the Hermes plugin edits from Telegram. The host only reads it.
 export type Member = { telegram: string; github: string | null; name: string | null };
 
 export function committeePath(home: string): string {
   return join(home, 'committee', 'committee.json');
 }
 
-// Reads the file fresh on every call. A missing file means the bootstrap member alone. A malformed file throws.
 export function readCommittee(home: string, bootstrap: { telegram: string; github: string }): Member[] {
   const path = committeePath(home);
   if (!existsSync(path)) return [{ telegram: bootstrap.telegram, github: bootstrap.github, name: null }];

@@ -16,8 +16,6 @@ function loadSheets(): void {
   document.body.insertAdjacentHTML("beforeend", PLANS + TINTS);
 }
 
-// The chassis outline over its grid with cell-pixel cells: the inner columns and every chassis row, with PLAN_PAD
-// cells around them.
 export function truckOutline(chassisId: string, cell: number): HTMLElement {
   const grid = baseGrid(chassisId);
   const box = el("div", { class: "truck-outline", "aria-hidden": "true" }, useSvg(`plan-${chassisId}`, true));
@@ -26,12 +24,10 @@ export function truckOutline(chassisId: string, cell: number): HTMLElement {
   return box;
 }
 
-// A part's tinted icon, fit inside its box.
 export function tintedIcon(defId: string): SVGSVGElement {
   return useSvg(`tint-${defId}`, false);
 }
 
-// A symbol filling its box: stretched for an outline, which matches the grid, or fit inside for a part.
 function useSvg(id: string, stretch: boolean): SVGSVGElement {
   loadSheets();
   const svg = document.createElementNS(SVG_NS, "svg");

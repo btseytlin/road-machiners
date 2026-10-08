@@ -1,9 +1,6 @@
 // Tracks: the trucks a driver senses, and where and when it last saw or heard each. A driver knows a truck it saw
 // and now only hears as the same truck. A track also holds the driver's choice on a hostile truck, so it decides on
 // a hostile once, whichever sense picks it up.
-// Every truck the driver sees or detects gets a track, refreshed each turn it does. A track is forgotten
-// NPC_BEHAVIOR.noticeMemory turns after the driver last sensed its truck, or NPC_BEHAVIOR.fleeMemory turns for a
-// truck it ran from. A goal on the truck keeps it.
 
 import { NPC_BEHAVIOR } from '../data/npcs';
 import type { Contact, Track, TrackChoice, Vehicle, World } from './types';
@@ -14,27 +11,22 @@ export function trackOf(vehicle: Vehicle, id: string): Track | undefined {
   return tracksOf(vehicle)[id];
 }
 
-// Records the driver's choice on a truck at `at`, as sensed now. `inSight` tells whether it chose with the truck in
-// sight. A choice made on a sound alone leaves the sighting roll for when the truck comes in sight.
 export function chooseOn(world: World, vehicle: Vehicle, id: string, at: Vec, choice: TrackChoice, inSight: boolean): void {
   const known = trackOf(vehicle, id);
   const seenSince = known ? known.seenSince : inSight ? world.turn : null;
   tracksOf(vehicle)[id] = { at: { ...at }, turn: world.turn, sighted: inSight || known?.sighted === true, seenSince, choice, chosenInSight: inSight };
 }
 
-// Whether the truck came in sight this turn, after a time out of sight or untracked.
 export function comesInSight(world: World, track: Track): boolean {
   return track.seenSince === world.turn;
 }
 
-// Where the driver senses a truck now: in sight, else at the center of its contact. Undefined when it senses neither.
 export function sensedAt(world: World, vehicle: Vehicle, id: string, contacts: Contact[]): Vec | undefined {
   const other = world.vehicles.find((v) => v.id === id);
   if (other && canVehicleSee(world, vehicle, other.pos)) return other.pos;
   return contacts.find((c) => c.vehicleId === id)?.center;
 }
 
-// Tracks every truck the driver sees or detects now, and forgets the ones it has not sensed for their memory.
 export function senseTracks(world: World, vehicle: Vehicle, seen: Vehicle[], contacts: Contact[]): void {
   const tracks = tracksOf(vehicle);
   loseSight(tracks, seen);
@@ -45,7 +37,6 @@ export function senseTracks(world: World, vehicle: Vehicle, seen: Vehicle[], con
   }
 }
 
-// A tracked truck out of sight now has no turn it came in sight.
 function loseSight(tracks: Record<string, Track>, seen: Vehicle[]): void {
   const inSight = new Set(seen.map((v) => v.id));
   for (const [id, track] of Object.entries(tracks)) {

@@ -1,11 +1,21 @@
 {
-  "turn": 900,
-  "player": { "vehicleId": "player", "rumored": ["wreck4"], "scavenged": ["wreck2"] },
-  "obstacles": [
-    { "id": "wreck4", "pos": { "x": 210.5, "y": 120.25 }, "r": 0.6, "kind": "wreck" },
-    { "id": "wreck-npc-7", "pos": { "x": 300, "y": 200 }, "r": 0.9, "kind": "wreck", "hulk": { "chassisId": "buggy", "yaw": 1.5 } }
-  ],
-  "salvage": [
-    { "id": "wreck4", "pos": { "x": 210.5, "y": 120.25 }, "radius": 0.6, "goods": { "scrap": 1, "parts": 0 }, "parts": [], "fuel": 2, "supplies": 0 }
-  ]
+  "turn": 120,
+  "player": {
+    "vehicleId": "player",
+    "money": 250,
+    "contracts": [
+      { "id": "ct-1", "shop": "bowl", "kind": "bounty", "template": "buggy", "targetName": "Raider outrider", "reward": 400, "deadline": 600, "window": 500, "tier": 2 },
+      { "id": "ct-2", "shop": "bowl", "kind": "haul", "good": "salt", "units": 3, "to": "nose", "reward": 300, "deadline": 500, "window": 400, "rush": false, "tier": 1 }
+    ]
+  },
+  "shops": {
+    "bowl": {
+      "stock": [],
+      "contracts": [
+        { "id": "ct-3", "shop": "bowl", "kind": "bounty", "template": "warband", "targetName": "Warband rig", "reward": 900, "deadline": 300, "window": 700, "tier": 3 },
+        { "id": "ct-4", "shop": "bowl", "kind": "fetch", "defId": "mg", "reward": 200, "deadline": 400, "window": 300, "tier": 1 }
+      ]
+    },
+    "nose": { "stock": [], "contracts": [] }
+  }
 }
