@@ -62,6 +62,7 @@ import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
 import { addShipDecks } from "./render/ship-decks";
 import { terrainMesh } from "./render/terrain";
+import { type WebGLSurface } from "./webgl";
 import { RadioLights, VehicleView } from "./render/vehicle";
 import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
 import { stormTintStyle, WeatherView } from "./render/weather";
@@ -105,7 +106,7 @@ const GUN_HEIGHT = 1.6; // meters above the body center where shots start and la
 export class Game {
   private world: World;
   private drive: Drive;
-  private readonly renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true });
+  private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly sun = sunLight();
   private readonly sky = new THREE.HemisphereLight();
@@ -199,7 +200,9 @@ export class Game {
     player: SoundPlayer,
     private toggleMute: () => void,
     radio: RadioPanel,
+    surface: WebGLSurface,
   ) {
+    this.renderer = new THREE.WebGLRenderer({ canvas: surface.canvas, context: surface.context, antialias: true, stencil: true });
     this.world = world;
     this.drive = buildDrive(this.world);
     setTimeout(() => this.travel.warm(this.world, this.drive));
