@@ -186,7 +186,7 @@ describe('skids', () => {
   });
 
   it('the rear tires keep a share of the side grip', () => {
-    const share = (PHYSICS.truck as { rearSideGrip?: number }).rearSideGrip;
+    const share = PHYSICS.truck.rearSideGrip;
     expect(share).toBeGreaterThan(0);
     expect(share).toBeLessThanOrEqual(1);
   });
