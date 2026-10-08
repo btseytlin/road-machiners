@@ -243,6 +243,14 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
       if (conflicts.length === 0) throw new Error(`merge of ${base} into ${dir} failed without a conflict: ${(result.stderr || result.stdout).trim()}`);
       return { commit, conflicts };
     },
+    async fastForwardWork(dir, base) {
+      await gitIn(dir, ['fetch', 'origin']);
+      const [head, tip] = await Promise.all([gitIn(dir, ['rev-parse', 'HEAD']), gitIn(dir, ['rev-parse', `origin/${base}`])]);
+      if (head.trim() === tip.trim()) return null;
+      if ((await run('git', [...NO_HOOKS, 'merge-base', '--is-ancestor', 'HEAD', tip.trim()], { cwd: dir })).code !== 0) return null;
+      await gitIn(dir, ['merge', '--ff-only', '--quiet', tip.trim()]);
+      return tip.trim();
+    },
     async mergeBranchIntoWork(dir, branch, message) {
       await gitIn(dir, ['fetch', 'origin']);
       if (!(await hasRef(dir, `refs/remotes/origin/${branch}`))) return { commit: null, conflicts: [] };

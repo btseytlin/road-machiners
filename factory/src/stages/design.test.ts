@@ -39,7 +39,8 @@ function fakeCtx(agent: (run: AgentRun) => void): Ctx {
     container: { agent: async (run: AgentRun) => { calls.push('agent'); agent(run); } },
     repo: {
       fetch: record('fetch'), push: record('push'), fetchFromWork: async () => 'w1', untrackFactoryFiles: async () => [],
-      mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
+      mergeBranchIntoWork: async () => { calls.push('catch up branch'); return { commit: null, conflicts: [] }; },
+      fastForwardWork: async (_dir: string, base: string) => { calls.push(`fast-forward ${base}`); return null; },
       prepareWorkClone: async (_b: string, base: string, dir: string) => { bases.push(`prepare ${base}`); mkdirSync(dir, { recursive: true }); },
       diff: async (base: string) => { bases.push(`diff ${base}`); return diff; },
     },
@@ -168,6 +169,12 @@ describe('design stage', () => {
 
   it('throws on an empty questions file', async () => {
     await expect(runStage(fakeCtx((run) => writeFileSync(`${run.clone}/${run.dir}/.factory/questions.md`, '\n')), 7)).rejects.toThrow('empty questions.md');
+  });
+
+  it('brings the work clone up to the branch on GitHub and the base before the agent starts', async () => {
+    await runStage(fakeCtx(() => undefined), 7).catch(() => undefined);
+    expect(calls.slice(0, calls.indexOf('agent'))).toEqual(expect.arrayContaining(['catch up branch', 'fast-forward dev']));
+    expect(calls.indexOf('catch up branch')).toBeLessThan(calls.indexOf('fast-forward dev'));
   });
 
   it('pushes and moves to Implementation on a plan', async () => {

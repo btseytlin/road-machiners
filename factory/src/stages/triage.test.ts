@@ -51,6 +51,8 @@ function fakeCtx(verdict: string | null, labels: string[] = [], earlier: string[
       fetch: record('fetch'), push: record('push'), fetchFromWork: record('fetchFromWork'),
       mergeLog: async () => ['Merge issue #5: Night driving', 'Merge main into dev'],
       prepareWorkClone: async (_b: string, _base: string, dir: string) => { mkdirSync(dir, { recursive: true }); },
+      mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
+      fastForwardWork: async (_dir: string, base: string) => { calls.push(`fast-forward ${base}`); return 'n1'; },
     },
   };
   return fake as unknown as Ctx;
@@ -60,6 +62,12 @@ const verdict = (over: Record<string, unknown>): string => JSON.stringify({ verd
 const card = (issue: number, column: Card['column'], labels: string[] = []): Card => ({ itemId: `i${issue}`, issue, column, labels });
 
 describe('triage stage', () => {
+  it('fast-forwards a stale work clone to dev before the agent starts', async () => {
+    await runStage(fakeCtx(verdict({})), 7);
+    expect(calls.indexOf('fast-forward dev')).toBeGreaterThanOrEqual(0);
+    expect(calls.indexOf('fast-forward dev')).toBeLessThan(calls.findIndex((call) => call.startsWith('agent')));
+  });
+
   it('comments and moves to Design when ready', async () => {
     await runStage(fakeCtx(verdict({})), 7);
     expect(calls).toContain('agent haiku');

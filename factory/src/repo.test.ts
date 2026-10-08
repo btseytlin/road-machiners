@@ -271,6 +271,25 @@ describe('work clones', () => {
     expect((await git(work, 'log', '-1', '--format=%s')).trim()).toBe('Merge issue #12: Horn');
   });
 
+  it('fast-forwards a stale work clone to the moved base, and leaves a clone with its own commits as it is', async () => {
+    const { home, repo, commit, head } = await setup();
+    const stale = join(home, 'work', 'issue-13');
+    const own = join(home, 'work', 'issue-14');
+    await repo.prepareWorkClone('factory/issue-13', 'dev', stale);
+    await repo.prepareWorkClone('factory/issue-14', 'dev', own);
+    writeFileSync(join(own, 'g.txt'), 'fourteen\n');
+    await git(own, 'commit', '-am', 'work on 14');
+    const ownHead = (await git(own, 'rev-parse', 'HEAD')).trim();
+    await commit('dev', 'f.txt', 'prerequisite\n');
+    await repo.fetch();
+    expect(await repo.fastForwardWork(stale, 'dev')).toBe(await head('dev'));
+    expect((await git(stale, 'rev-parse', 'HEAD')).trim()).toBe(await head('dev'));
+    expect(readFileSync(join(stale, 'f.txt'), 'utf8')).toBe('prerequisite\n');
+    expect(await repo.fastForwardWork(stale, 'dev')).toBeNull();
+    expect(await repo.fastForwardWork(own, 'dev')).toBeNull();
+    expect((await git(own, 'rev-parse', 'HEAD')).trim()).toBe(ownHead);
+  });
+
   it('gives a new and an existing work clone the guard as an executable pre-commit hook that passes on the host', async () => {
     const { home, repo } = await setup();
     const work = join(home, 'work', 'issue-9');

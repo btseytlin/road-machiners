@@ -231,6 +231,12 @@ export async function catchUpBranch(ctx: Ctx, issue: number, stage: CardStage): 
   return true;
 }
 
+export async function refreshClone(ctx: Ctx, issue: number, base: string, stage: CardStage): Promise<void> {
+  await catchUpBranch(ctx, issue, stage);
+  const moved = await ctx.repo.fastForwardWork(workDir(ctx, issue), base);
+  ctx.log(stage, issue, moved === null ? `the work clone is at ${base} or holds its own commits, so it stays` : `fast-forwarded the work clone to ${base} at ${moved.slice(0, 7)}`);
+}
+
 export async function mergeBase(ctx: Ctx, issue: number, base: string, home: string, stage: CardStage): Promise<string> {
   await catchUpBranch(ctx, issue, stage);
   const { commit, conflicts } = await ctx.repo.mergeBaseIntoWork(workDir(ctx, issue), base);
