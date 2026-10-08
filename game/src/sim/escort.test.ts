@@ -31,14 +31,12 @@ const guardAt = (w: World, pos: Vec) => createNpc(w, 'convoyGuard', ['guard'], '
 const find = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
 const escortOf = (w: World, escort: Vehicle, leader: Vehicle) => stateOf(w, 'escort', escort.id, leader.id);
 
-// A point `d` tiles out from the site's first gate, away from the site.
 function outFrom(site: Site, d: number): Vec {
   const gate = siteGates(site)[0];
   const len = dist(gate, site.pos);
   return { x: gate.x + ((gate.x - site.pos.x) / len) * d, y: gate.y + ((gate.y - site.pos.y) / len) * d };
 }
 
-// The escort state waits for the next turn, as if it were added a turn ago.
 function aged(s: NpcState | null): NpcState {
   if (!s) throw new Error('No escort state');
   s.born = -1;
@@ -166,8 +164,6 @@ describe('escort protection', () => {
 });
 
 describe('escort tows', () => {
-  // A convoy with an empty tank 30 tiles out from the Bowl, and its guard behind it. The player watches from 10
-  // tiles closer in. Nobody spawns, and idle drivers wait.
   function strandedConvoy(): { w: World; convoy: Vehicle; guard: Vehicle } {
     const w = emptyWorld(outFrom(BOWL, 20));
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -191,7 +187,6 @@ describe('escort tows', () => {
 
   it('tows its stranded leader to town, keeps the escort, and follows again after', () => {
     const s = strandedConvoy();
-    // Rob stays available at the minimum chance when the guard first sees its convoy. This state keeps that roll off.
     s.w.rngState = 7;
     const hitch = runUntil(s.w, 40, (w) => isOnRope(w, s.convoy.id));
     expect(towOf(hitch.w, s.convoy.id)?.holder).toBe(s.guard.id);
@@ -376,7 +371,6 @@ describe('convoy guards', () => {
 describe('hiring a merc', () => {
   const NOSE = REGION.towns.find((t) => t.id === 'nose')!;
 
-  // A trader on its way to Nose with a free merc in sight beside it.
   function onTrip(money: number): { w: World; trader: Vehicle; merc: Vehicle } {
     const w = emptyWorld({ x: 200, y: 200 });
     const trader = createNpc(w, 'trader', ['trader'], 'hauler', ['mg', 'workhorseDiesel', 'trailerBox'], { x: 60, y: 60 });

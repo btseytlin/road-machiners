@@ -15,7 +15,6 @@ import { startEscort } from "./tow";
 import type { Obstacle, Vehicle, World } from "./types";
 import { dist, type Vec } from "./vec";
 
-// Escort templates never spawn on their own timer. They come with their leader.
 export function spawnNpcs(world: World): void {
   for (const tpl of Object.values(NPCS)) {
     if (tpl.spawn.kind === "escort") continue;
@@ -27,9 +26,6 @@ export function spawnNpcs(world: World): void {
   }
 }
 
-// The first drivers, plus start traffic at the gate nearest the player of the town the player's road leaves, so
-// drivers soon pass the player. Drivers deal their sites from shuffled decks, so every seed spreads them evenly over their sites.
-// Each world must start with the whole roster, so a driver with no free spot stops the new game.
 export function spawnInitial(world: World): void {
   const decks = new Map<string, Site[]>();
   for (const id of SPAWN.initial) {
@@ -45,7 +41,6 @@ function nearestGate(site: Site, from: Vec): Vec {
   return siteGates(site).reduce((a, b) => (dist(from, a) <= dist(from, b) ? a : b));
 }
 
-// The next site from the deck of these sites, reshuffled once every site is dealt.
 function dealSite(world: World, decks: Map<string, Site[]>, sites: readonly Site[]): Site {
   const key = sites.map((s) => s.id).join();
   let deck = decks.get(key) ?? [];
@@ -65,14 +60,11 @@ function aliveOf(world: World, tpl: NpcTemplate): number {
   return world.vehicles.filter((v) => v.brain?.templateId === tpl.id).length;
 }
 
-// Spawns a driver, then its escorts.
 function spawnWithEscorts(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boolean): void {
   const leader = spawnOne(world, tpl, pick, respawn, null);
   if (leader) spawnEscorts(world, tpl, leader);
 }
 
-// Like spawnWithEscorts at a fixed site and gate, or a random gate when null, but a driver or escort with no free
-// spot throws.
 function spawnRequired(world: World, tpl: NpcTemplate, site: Site, gate: Vec | null): void {
   const leader = spawnOne(world, tpl, () => site, false, gate);
   if (!leader) throw new Error(`No free spot to spawn ${tpl.name} at ${site.id} in the new world`);
@@ -80,8 +72,6 @@ function spawnRequired(world: World, tpl: NpcTemplate, site: Site, gate: Vec | n
   if (missed.length > 0) throw new Error(`No free spot to spawn ${missed[0].name} beside ${tpl.name} in the new world`);
 }
 
-// One of each escort template that follows the leader's template, while the escort is under its cap. Each escort
-// guards its leader for no fee and no destination. Returns the escorts that found no free spot.
 function spawnEscorts(world: World, tpl: NpcTemplate, leader: Vehicle): NpcTemplate[] {
   const missed: NpcTemplate[] = [];
   for (const escort of escortsOf(tpl).filter((e) => aliveOf(world, e) < e.cap)) {
@@ -96,7 +86,6 @@ function escortsOf(tpl: NpcTemplate): NpcTemplate[] {
   return Object.values(NPCS).filter((e) => e.spawn.kind === "escort" && e.spawn.of === tpl.id);
 }
 
-// An escort spawns SPAWN.escortGap tiles from its leader's side, at a random free angle. Null when no spot is free.
 function spawnBeside(world: World, tpl: NpcTemplate, leader: Vehicle): Vehicle | null {
   const loadout = generateNpcLoadout(world, tpl);
   const radius = chassisDef(loadout.chassisId).radius;
@@ -111,8 +100,6 @@ function spawnBeside(world: World, tpl: NpcTemplate, leader: Vehicle): Vehicle |
   return null;
 }
 
-// The template's base traits plus each extra that wins its roll and opposes no trait held already. Every extra
-// rolls, so the RNG draws stay the same whatever wins.
 export function rollTraits(world: Rng, tpl: NpcTemplate): TraitId[] {
   const won = tpl.extraTraits.filter((extra) => chance(world, extra.chance)).map((extra) => extra.trait);
   return won.reduce((held, trait) => (opposesAny(trait, held) ? held : [...held, trait]), [...tpl.traits]);
@@ -122,9 +109,6 @@ function opposesAny(trait: TraitId, held: TraitId[]): boolean {
   return OPPOSED_TRAITS.some(([a, b]) => (a === trait && held.includes(b)) || (b === trait && held.includes(a)));
 }
 
-// pick chooses the site for each try, and gate its gate, or a random gate when null. A respawn keeps
-// SPAWN.minPlayerDist from the player. Initial spawns do not. Returns null when no free spot was found this time.
-// The next interval tries again.
 function spawnOne(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boolean, gate: Vec | null): Vehicle | null {
   const loadout = generateNpcLoadout(world, tpl);
   const radius = chassisDef(loadout.chassisId).radius;
@@ -138,8 +122,6 @@ function spawnOne(world: World, tpl: NpcTemplate, pick: () => Site, respawn: boo
   return null;
 }
 
-// Adds a template's vehicle with a sampled loadout and its template's wallet at pos. The caller checks that pos is
-// free.
 export function spawnAt(world: World, tpl: NpcTemplate, loadout: NpcLoadout, pos: Vec): Vehicle {
   const v = makeVehicle(world, {
     name: tpl.name,
@@ -175,14 +157,12 @@ export function nameStream(seed: number): Rng {
   return { rngState: seed ^ NAME_SALT };
 }
 
-// A first name and a surname from the pools in src/data/npcs.ts.
 function driverName(names: Rng): string {
   const first = FIRST_NAMES[randInt(names, 0, FIRST_NAMES.length - 1)];
   const last = SURNAMES[randInt(names, 0, SURNAMES.length - 1)];
   return `${first} ${last}`;
 }
 
-// The name texts give an NPC truck: its template's profession and its driver's name, like "Roamer Silas Kane".
 export function npcName(v: Vehicle): string {
   if (!v.brain) return v.name;
   const template = NPCS[v.brain.templateId];
@@ -190,16 +170,13 @@ export function npcName(v: Vehicle): string {
   return `${template.profession} ${v.brain.driver}`;
 }
 
-// Territories have no gates to spawn at.
 const NEUTRAL_SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== "camp" && l.kind !== "territory")];
 
-// A random site among the template's spawn sites.
 function siteFor(world: World, tpl: NpcTemplate): Site {
   const sites = sitesFor(tpl);
   return sites[randInt(world, 0, sites.length - 1)];
 }
 
-// Raiders spawn at their camps, neutrals at any town or other location, and others at their listed sites.
 function sitesFor(tpl: NpcTemplate): readonly Site[] {
   const place = tpl.spawn;
   if (place.kind === "camp") return campsOf(tpl);
@@ -218,7 +195,6 @@ function campsOf(tpl: NpcTemplate): Site[] {
   });
 }
 
-// A point on the track just outside the given gate of the site, or a random one when null.
 function gateSpot(world: World, site: Site, given: Vec | null, radius: number): Vec {
   const gates = siteGates(site);
   const gate = given ?? gates[randInt(world, 0, gates.length - 1)];
@@ -227,14 +203,11 @@ function gateSpot(world: World, site: Site, given: Vec | null, radius: number): 
   return { x: gate.x + Math.cos(a) * d, y: gate.y + Math.sin(a) * d };
 }
 
-// Whether a circle at pos touches the obstacle: a site's edge circle, or a prop's boxes that start below truck roofs.
 function hitsObstacle(world: World, o: Obstacle, pos: Vec, radius: number): boolean {
   if (o.kind === "site" || o.kind === "water") return true;
   return blockingBoxes(o, world.terrain).some((b) => boxDistance(b, pos) < radius);
 }
 
-// Whether a vehicle of radius fits at pos, on the map and clear of obstacles and other vehicles.
-// ignoreId names a vehicle left out of the check, like the one being moved.
 export function isFree(world: World, pos: Vec, radius: number, ignoreId: string | null): boolean {
   if (
     pos.x < radius ||

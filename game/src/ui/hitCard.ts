@@ -9,7 +9,6 @@ import { DEG } from '../sim/vec';
 import { el } from './dom';
 import { ammoText, blockText } from './weapons';
 
-// `cause` names the biggest reasons in plain words. `detail` holds every number, for a tooltip.
 export type HitRow = { label: string; odds: HitOdds | null; text: string; cause: string | null; detail: string | null };
 export type HitCardData = { name: string; mine: HitRow[]; theirs: HitRow[] };
 
@@ -17,8 +16,6 @@ function deg(r: number): string {
   return (Math.abs(r) / DEG).toFixed(1);
 }
 
-// "18 m, shows 4.1 m wide, scatter 2.0° weapon +1.1° crossing +0.4° own speed −0.3° gunnery".
-// Extra causes that round to zero are left out.
 function detailLine(o: HitOdds): string {
   const extra = ([[o.causes.range, 'range'], [o.causes.crossing, 'crossing'], [o.causes.own, 'own speed'], [o.causes.recoil, 'recoil'], [o.causes.skill, 'perception'], [o.causes.weather, 'weather'], [o.causes.still, 'still target']] as const)
     .filter(([r]) => deg(r) !== '0.0')
@@ -27,12 +24,9 @@ function detailLine(o: HitOdds): string {
   return `${Math.round(o.chance * 100)}% land on aim, ${Math.round(o.distance)} m, shows ${o.width.toFixed(1)} m wide, scatter ${deg(o.causes.weapon)}° weapon${extra}`;
 }
 
-// A cause is a main reason when it makes up at least this share of the scatter. Smaller ones are noise to a player.
 const MAIN_SHARE = 0.25;
 const MAX_REASONS = 2;
 
-// The biggest reasons the chance is low, in plain words: "far, you are moving". A parked target reads as easy.
-// An aimed part that other parts shield from this side leads.
 function reasonLine(o: HitOdds, aim: Aim): string {
   const c = o.causes;
   const covered = aim !== 'body' && Math.round(o.damageChance * 100) < Math.round(o.chance * 100);
@@ -54,13 +48,11 @@ function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle,
   return { label, odds, text: `${Math.round(odds.damageChance * 100)}%`, cause: reasonLine(odds, aim), detail: detailLine(odds) };
 }
 
-// A weapon's aim at a target: its order's aim when the order is at that target, else a body shot.
 function aimAt(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): Aim {
   const order = shooter.weaponOrders[mw.part.id];
   return order && order.targetId === target.id ? order.aim : 'body';
 }
 
-// The card for the hovered truck, or null for my own truck.
 export function hitCardRows(world: World, hoveredId: string): HitCardData | null {
   const me = playerVehicle(world);
   if (hoveredId === me.id) return null;
@@ -81,7 +73,6 @@ export class HitCard {
     container.append(this.root);
   }
 
-  // Combat details share the fixed vehicle inspection panel.
   render(world: World, hoveredId: string | null): void {
     const card = hoveredId === null ? null : hitCardRows(world, hoveredId);
     if (!card) {

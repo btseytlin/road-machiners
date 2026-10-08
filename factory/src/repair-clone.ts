@@ -4,19 +4,12 @@ import { pausedReason } from './pause';
 import { readState } from './state';
 import { BRANCH, MEDIA_DIR, OUT_DIR, TASK_DIR, WORK_DIR, type Ctx } from './types';
 
-// `factory repair-clone N` replaces a card's broken work clone, like one a failed merge left dirty, with a fresh clone of its GitHub branch.
-// The old clone moves whole into a backup outside `work/`, so the tick's sweep never deletes it, and nothing here ever deletes it either.
-
 export type RepairOrder = { issue: number; by: string; reason: string; backupMerge: boolean };
-// The file moves, injectable so a test can fail one.
 export type RepairFs = { move: (from: string, to: string) => void; copy: (from: string, to: string) => void };
 const REAL_FS: RepairFs = { move: renameSync, copy: (from, to) => cpSync(from, to, { recursive: true }) };
 
-// The factory's own ignored folders, the only files that cross into the new clone.
 const FACTORY_DIRS = new Set([OUT_DIR, TASK_DIR, MEDIA_DIR]);
-// Folders with no factory files, skipped by the walk, since they hold thousands of entries.
 const SKIP_DIRS = new Set(['.git', 'node_modules']);
-// Files in .git that mark an operation the old clone left open.
 const OPEN_MARKS = ['MERGE_HEAD', 'REVERT_HEAD', 'CHERRY_PICK_HEAD', 'rebase-merge', 'rebase-apply'];
 const NO_HOOKS = ['-c', 'core.hooksPath=/dev/null'];
 
@@ -27,7 +20,6 @@ type Manifest = OldClone & { issue: number; by: string; reason: string; at: stri
 
 const lines = (text: string): string[] => text.split('\n').filter(Boolean);
 
-// Repairs the clone and returns the lines to print. A refusal throws and changes nothing in `work/`.
 export async function repairClone(ctx: Ctx, order: RepairOrder, fs: RepairFs = REAL_FS): Promise<string[]> {
   const dir = WORK_DIR(ctx.cfg.home, order.issue);
   requireQuiet(ctx, order.issue);
@@ -45,7 +37,6 @@ export async function repairClone(ctx: Ctx, order: RepairOrder, fs: RepairFs = R
     remoteHead = await ctx.repo.cloneBranch(remoteBranch, fresh);
     requireQuiet(ctx, order.issue);
   } catch (error) {
-    // The old clone has not moved, so the staging folder holds nothing of value.
     rmSync(backup, { recursive: true, force: true });
     throw new Error(`Refused, ${dir} is unchanged: ${message(error)}`);
   }
@@ -86,7 +77,6 @@ async function replace(steps: Steps, git: Git, fs: RepairFs): Promise<string[]> 
   ];
 }
 
-// Moves a half-made new clone out of `work/`, so the restore command finds the path free. Returns what happened, for the message.
 function setAside(dir: string, to: string, fs: RepairFs): string {
   if (!existsSync(dir)) return `${dir} is empty.`;
   try {
@@ -109,7 +99,6 @@ async function must(git: Git, dir: string, args: string[]): Promise<string> {
   return result.stdout;
 }
 
-// A job writes its clone, and a paused tick starts none. So the repair needs both, and checks again just before the move.
 function requireQuiet(ctx: Ctx, issue: number): void {
   if (pausedReason(ctx.cfg.home) === null) throw new Error('repair-clone needs a paused factory. Run factory pause <reason> first.');
   const state = readState(ctx.statePath);
@@ -138,7 +127,6 @@ function describeOpen(old: OldClone): string {
   return parts.join(' and ');
 }
 
-// A new folder per repair. mkdir without `recursive` fails on an existing name, so two repairs never share one.
 function newBackupDir(home: string, issue: number, now: Date): string {
   const root = backupRoot(home);
   mkdirSync(root, { recursive: true });
@@ -158,7 +146,6 @@ function record(backup: string, manifest: Manifest): void {
   writeFileSync(join(backup, 'repair.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
-// Copies each factory folder of the old clone to the same place in the new one, and returns their paths.
 function copyFactoryDirs(from: string, to: string, fs: RepairFs): string[] {
   const found: string[] = [];
   const walk = (dir: string): void => {
@@ -174,7 +161,6 @@ function copyFactoryDirs(from: string, to: string, fs: RepairFs): string[] {
   return found;
 }
 
-// The new clone must hold no change, and stand on the branch head the host clone fetched.
 async function verify(git: Git, dir: string, remoteHead: string): Promise<void> {
   const status = await must(git, dir, ['status', '--porcelain', '--untracked-files=all']);
   if (status.trim() !== '') throw new Error(`the new clone is not clean:\n${status}`);

@@ -17,7 +17,6 @@ beforeAll(async () => {
   await initPhysics();
 });
 
-// minDeckRise: the lowest chassis center over the Canyon Bridge deck surface, in meters.
 function driveRoute(start: Vec, target: Vec): { maxTilt: number; remaining: number; minDeckRise: number } {
   let w = newWorld(1337, START_KITS.standard, TEST_MAP);
   w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
@@ -66,7 +65,6 @@ it('the Bowl crater exit leans the truck without rolling it onto its side', () =
   const start = newWorld(1337, START_KITS.standard, TEST_MAP).vehicles[0].pos;
   const result = driveRoute(start, { x: 101, y: 432 });
   expect(result.remaining).toBeLessThan(3);
-  // 45 degrees is halfway to a sideways rollover; the crater is rougher than a road crossing.
   expect(result.maxTilt).toBeLessThan(45);
 }, budget(60_000));
 
@@ -92,7 +90,6 @@ it('the terrain collider is a heightfield whose surface matches the corner grid'
     const fx = x - i;
     const fy = y - j;
     const [a, b, c, d] = [corner(i, j), corner(i + 1, j), corner(i, j + 1), corner(i + 1, j + 1)];
-    // Both triangles share the b-c diagonal: a, b, c below it and b, c, d above it.
     const split = fx + fy <= 1 ? a + (b - a) * fx + (c - a) * fy : d + (c - d) * (1 - fx) + (b - d) * (1 - fy);
     expect(Math.abs(hit - split)).toBeLessThan(0.05);
     expect(hit).toBeGreaterThanOrEqual(Math.min(a, b, c, d) - 0.05);

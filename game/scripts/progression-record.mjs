@@ -1,16 +1,6 @@
 // Records progression traces: a bot plays each archetype on each seed, and every practice event goes to
-// tmp/progression/<archetype>-<seed>.jsonl. The first line holds the run, then one trace line per event and one
-// economy row per in-game day. A run the player did not survive ends early with a {"end":"death","turn":N} line.
-// Beside each trace, <archetype>-<seed>.turns.jsonl holds one line per turn from src/sim/progression/turn-log.ts: the
-// truck's state, the hostiles in sight, the money moved and the events that touch the player. <archetype>-<seed>.world.jsonl
-// holds every event of every turn raw, and a snapshot of every truck every ten turns.
-// Each run is a child process. A run an error stops ends with {"end":"error","turn":N,"message":...}.
-// Usage: npm run progression:record -- --archetypes trader,hunter --seeds 1,2,3 --turns 2000
-// The markov archetype also needs --markov-turns <k>, the turns it keeps one goal.
-// --out <dir> writes the traces to another directory. --patch <file> imports a module before any sim code loads. The
-// module changes data numbers in place, such as DISTANCE_PREMIUM.perTile, so a run with the patch is the B side of an
-// A/B test. A value a data file derives from another at load time does not follow the patch, so patch it as well. The
-// header line records the patch file.
+// tmp/progression/<archetype>-<seed>.jsonl. The first line holds the run, then one trace line per event. A run the
+// player did not survive ends early with a {"end":"death","turn":N} line.
 import { spawn } from 'node:child_process';
 import { closeSync, mkdirSync, openSync, renameSync, writeSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -41,12 +31,10 @@ function parseArgs(argv) {
   return { ...runs, turns, place, options: requireMarkov(runs.archetypes, options) };
 }
 
-// The markov bot keeps a goal for --markov-turns turns. Every other bot ignores it.
 function parseOptions(flags) {
   return { ...parseMarkov(flags), ...parseTolerance(flags), ...parseKit(flags) };
 }
 
-// --kit <id> starts every run from that start kit, such as combat, instead of standard.
 function parseKit(flags) {
   return flags.kit === undefined ? {} : { kit: flags.kit };
 }
@@ -58,7 +46,6 @@ function parseMarkov(flags) {
   return { markovTurns };
 }
 
-// --tolerate-stalls true counts NPC stalls in the economy rows instead of failing the run.
 function parseTolerance(flags) {
   if (flags['tolerate-stalls'] === undefined) return {};
   if (flags['tolerate-stalls'] !== 'true') throw new Error(`--tolerate-stalls takes the value true. ${USAGE}`);
@@ -94,14 +81,12 @@ function parseSeed(text) {
   return seed;
 }
 
-// A job is one run, written as <archetype>:<seed>.
 function parseJob(text) {
   const [archetype, seedText] = text.split(':');
   if (!isArchetype(archetype)) throw new Error(`Unknown archetype in job ${text}`);
   return { archetype, seed: parseSeed(seedText) };
 }
 
-// Runs go one at a time, so a batch never loads more than one core.
 async function recordAll({ archetypes, seeds, turns, options, place }) {
   const jobs = archetypes.flatMap((archetype) => seeds.map((seed) => ({ archetype, seed })));
   console.log(`Recording ${jobs.length} runs of ${turns} turns, one at a time`);
@@ -128,7 +113,6 @@ function runChild({ archetype, seed }, turns, options, place) {
   });
 }
 
-// Writes one trace, turn by turn, into a part file that becomes the trace only when the run finishes.
 function recordOne({ archetype, seed }, turns, options, place) {
   const name = `${archetype}-${seed}`;
   const path = `${place.out}/${name}.jsonl`;
@@ -144,13 +128,11 @@ function recordOne({ archetype, seed }, turns, options, place) {
   try {
     writeSteps({ fd, turnsFd, worldFd }, name, recordTurns(seed, archetype, turns, options), progress);
   } catch (error) {
-    // A bot or rule error ends this run with an error marker, so the batch and the report go on without it.
     console.error(error);
     progress.end = { end: 'error', turn: progress.lastTurn, message: error instanceof Error ? error.message : String(error) };
     process.exitCode = 1;
   }
   const { count, end } = progress;
-  // A run the player did not survive ends with the death marker.
   if (end) writeSync(fd, `${JSON.stringify(end)}\n`);
   closeSync(fd);
   closeSync(turnsFd);
@@ -162,8 +144,6 @@ function recordOne({ archetype, seed }, turns, options, place) {
   console.log(`${name}: ${ending}, ${count} events in ${((Date.now() - started) / 1000).toFixed(0)} s`);
 }
 
-// Writes each step's trace lines and rows as it comes, and keeps the count, the death marker and the last turn in
-// progress, so an error part way still leaves them.
 function writeSteps({ fd, turnsFd, worldFd }, name, steps, progress) {
   for (const step of steps) {
     const { world, lines, rows } = step;

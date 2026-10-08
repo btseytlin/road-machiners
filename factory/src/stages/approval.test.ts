@@ -44,7 +44,6 @@ function fakeCtx(): Ctx {
     container: { shell: record('shell') },
     repo: {
       fetch: record('fetch'), headHash: async () => 'abc1234',
-      // A clone's build output, as the game's build leaves it, maps included.
       prepareWorkClone: async (...args: unknown[]) => {
         calls.push(`prepare ${args.join(' ')}`);
         mkdirSync(`${String(args[2])}/game/dist`, { recursive: true });
@@ -57,73 +56,16 @@ function fakeCtx(): Ctx {
 }
 
 describe('approve', () => {
-  // The queued merge of a hardened card. The committee approved its preview, and the hardening round and its checks passed.
-  beforeEach(() => writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: { 7: 'bob' } }));
-
-  it('moves an approved preview to Hardening with its played build kept, with no merge and no chat post', async () => {
-    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: {} });
+  it('moves an approved preview to Hardening under the approver, with no merge and no chat post', async () => {
     await approve(fakeCtx(), 7, 'bob');
     expect(calls).toEqual([
-      'comment 7 Approved by bob in the committee chat. Hardening, the review and the full checks run now. Then the factory merges it into dev by itself, with no new post.',
+      'comment 7 Approved by bob in the committee chat. Hardening runs now. Then the factory checks it merged with dev and merges it by itself, with no new post.',
       'move 7 Hardening',
     ]);
     const state = readState(`${home}/state.json`);
     expect(state.approvedResolving).toEqual({ 7: 'bob' });
-    expect(state.builds).toEqual({ 7: 'aaa1111', 8: 'bbb2222' });
     expect(state.approvalPosts).toEqual({ 200: 8 });
     expect(state.pendingApprovals).toEqual({});
-  });
-
-  it('refuses to approve a preview with no recorded build, since Hardening compares against it', async () => {
-    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), approvedResolving: {}, builds: {} });
-    await expect(approve(fakeCtx(), 7, 'bob')).rejects.toThrow('approved with no recorded build');
-    expect(calls).toEqual([]);
-  });
-
-  it('merges, pushes, labels a release candidate without closing, moves to Done and clears state', async () => {
-    await approve(fakeCtx(), 7, 'bob');
-    expect(calls).toEqual([
-      'fetch ',
-      'merge factory/issue-7 dev Merge issue #7: Big horn',
-      'push dev',
-      'comment 7 Approved by bob in the committee chat and merged into dev. It closes when its release ships.',
-      'addLabel 7 release-candidate',
-      'move 7 Done',
-      'message chat Issue #7 Big horn is merged into dev.\nPlay it: https://play.test/dev',
-    ]);
-    const state = readState(`${home}/state.json`);
-    expect(state.approvalPosts).toEqual({ 200: 8 });
-    expect(state.pendingApprovals).toEqual({});
-    expect(state.builds).toEqual({ 8: 'bbb2222' });
-  });
-
-  it('merges a release task into the release branch, skips the dev deploy and keeps dev as it is', async () => {
-    labels = ['release-task'];
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [7, 9], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } }, pendingShip: 'ann', builds: { 7: 'aaa1111' }, approvedResolving: { 7: 'bob' } });
-    await approve(fakeCtx(), 7, 'bob');
-    expect(calls).toEqual([
-      'fetch ',
-      'merge factory/issue-7 release/2026-09-29 Merge issue #7: Big horn',
-      'push release/2026-09-29',
-      'comment 7 Approved by bob and merged into the release branch release/2026-09-29. It closes when the release ships.',
-      'addLabel 7 release-candidate',
-      'move 7 Done',
-      'message chat Issue #7 Big horn is merged into the release release/2026-09-29.',
-    ]);
-    const state = readState(`${home}/state.json`);
-    expect(state.release?.removed).toEqual([9]);
-    // The played candidate lacks the task, so its post can no longer ship and a new candidate follows.
-    expect(state.release?.postId).toBeNull();
-    expect(state.pendingShip).toBeNull();
-  });
-
-  it('merges a hardened cleanup task at once, since it reaches Approval only after Hardening and its checks', async () => {
-    labels = ['release-task', 'maintenance'];
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } }, builds: { 7: 'aaa1111' } });
-    await approve(fakeCtx(), 7, 'the factory');
-    expect(calls).toContain('merge factory/issue-7 release/2026-09-29 Merge issue #7: Big horn');
-    expect(calls).toContain('move 7 Done');
-    expect(calls).not.toContain('move 7 Hardening');
   });
 
   it('ships a hotfix from main to itch.io, brings main into dev and the open release, and closes the issue', async () => {
@@ -153,27 +95,16 @@ describe('approve', () => {
     expect(state.pendingIncidents).toEqual([7]);
   });
 
-  it('sends the card back to Hardening on a conflict with dev, keeping the approver, with no chat post', async () => {
+  it('sends a hotfix that conflicts with main back to Testing, which merges main and posts again', async () => {
+    labels = ['bug', 'hotfix'];
     const ctx = fakeCtx();
     ctx.repo.merge = async ([step]: MergeStep[]) => { throw new MergeConflictError(step, ['game/src/a.ts'], 'boom', 'b1', 's1'); };
     await approve(ctx, 7, 'bob');
-    expect(calls).toEqual([
-      'fetch ',
-      'comment 7 dev moved on since testing, and the branch conflicts with it in game/src/a.ts. Hardening merges dev again, resolves the conflict and runs the checks, with no new hardening round or review. Then the approval by bob merges it, with no new post.',
-      'move 7 Hardening',
+    expect(calls.filter((call) => call.startsWith('comment') || call.startsWith('move'))).toEqual([
+      'comment 7 Approved by bob, but main moved on and the branch conflicts with it in game/src/a.ts. Testing merges main again and posts the build again.',
+      'move 7 Testing',
     ]);
-    const state = readState(`${home}/state.json`);
-    expect(state.approvedResolving).toEqual({ 7: 'bob' });
-    expect(state.testPhase).toEqual({ 7: 'resolve' });
-    expect(state.approvalPosts).toEqual({ 200: 8 });
-    expect(state.pendingApprovals).toEqual({});
-  });
-
-  it('clears a kept approver and a leftover test phase once the merge lands', async () => {
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, approvedResolving: { 7: 'bob', 8: 'ann' }, testPhase: { 7: 'checks', 8: 'fix' } });
-    await approve(fakeCtx(), 7, 'bob');
-    expect(readState(`${home}/state.json`).approvedResolving).toEqual({ 8: 'ann' });
-    expect(readState(`${home}/state.json`).testPhase).toEqual({ 8: 'fix' });
+    expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 200: 8 });
   });
 
   it('refuses a hotfix without itch.io keys before any git call', async () => {
@@ -205,15 +136,12 @@ describe('routeFeedback', () => {
     expect(state.approvalPosts).toEqual({ 200: 8 });
     expect(state.builds).toEqual({ 8: 'bbb2222' });
     expect(state.pendingApprovals).toEqual({});
-    expect(state.patching).toEqual({});
   });
 
-  it('patch keeps the played build for the patch, moves to Implementation and drops the posts', async () => {
+  it('patch moves the card to Testing, whose session reads the reply, and drops the posts', async () => {
     await routeFeedback(fakeCtx(), 7, 'bob', 'Louder horn', 'patch', 100);
-    expect(calls).toEqual(['comment 7 ## Committee feedback\n\nFrom bob, routed as patch:\n\nLouder horn', 'move 7 Implementation']);
-    const state = readState(`${home}/state.json`);
-    expect(state.patching).toEqual({ 7: 'aaa1111' });
-    expect(state.approvalPosts).toEqual({ 200: 8 });
+    expect(calls).toEqual(['comment 7 ## Committee feedback\n\nFrom bob, routed as patch:\n\nLouder horn', 'move 7 Testing']);
+    expect(readState(`${home}/state.json`).approvalPosts).toEqual({ 200: 8 });
   });
 
   it('answer only comments, and keeps the card, its posts and its queued approval', async () => {
@@ -230,15 +158,8 @@ describe('routeFeedback', () => {
     expect(readLedger(home, new Date(0))).toEqual([
       { kind: 'route', issue: 7, route: 'answer', by: 'bob', at: '2026-09-30T10:00:00.000Z' },
       { kind: 'route', issue: 7, route: 'patch', by: 'bob', at: '2026-09-30T10:00:00.000Z' },
-      { kind: 'card', issue: 7, step: 'patch', to: 'Implementation', at: '2026-09-30T10:00:00.000Z' },
+      { kind: 'card', issue: 7, step: 'patch', to: 'Testing', at: '2026-09-30T10:00:00.000Z' },
     ]);
-  });
-
-  it('refuses a patch for a card with no recorded build before it comments or records anything', async () => {
-    writeState(`${home}/state.json`, { ...EMPTY_STATE, approvalPosts: { 100: 7 } });
-    await expect(routeFeedback(fakeCtx(), 7, 'bob', 'p', 'patch', 100)).rejects.toThrow('no recorded build');
-    expect(calls).toEqual([]);
-    expect(readLedger(home, new Date(0))).toEqual([]);
   });
 
   it('drops a reply still waiting for Hermes once the card leaves Approval', async () => {

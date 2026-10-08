@@ -10,12 +10,8 @@ import { hashStr } from './noise';
 import type { PartInstance } from '../sim/types';
 import { maxHp } from '../sim/wear';
 
-// A chassis plan is its outline from straight above, nose up, behind the truck condition panel and over the inventory
-// grid. It covers the inner grid columns and every row, and reaches PLAN_PAD grid cells past them on every side, so
-// wheels that stick out still draw.
 export const PLAN_PAD = 0.5;
 
-// The base model each chassis is drawn from. Kit parts stand on its row surfaces.
 const BASE_MODELS: Record<string, ModelName> = {
   scout: 'base_scout',
   hauler: 'base_hauler',
@@ -41,13 +37,10 @@ export function baseModel(chassisId: string): ModelName {
   return base;
 }
 
-// Parts with no model of their own. The base model draws them: every cab.
 export const BODY_PARTS: ReadonlySet<string> = new Set(
   Object.values(PARTS).flatMap((p) => (p.kind === 'core' && p.role === 'cab' ? [p.id] : [])),
 );
 
-// An item's category tone: the background its icon sits on in the grid, chips, cards and atlases. itemTone() is the one
-// owner, and ITEM_TONES in palette.ts holds the colors.
 export type ItemTone = 'weapon' | 'armor' | 'cargo' | 'other';
 
 const KIND_TONES: Record<PartKind, ItemTone> = {
@@ -60,7 +53,6 @@ const KIND_TONES: Record<PartKind, ItemTone> = {
   store: 'other',
 };
 
-// A part takes its kind's tone, and every good is cargo.
 export function itemTone(id: string): ItemTone {
   const part = PARTS[id];
   if (part) return KIND_TONES[part.kind];
@@ -128,7 +120,6 @@ export const PART_MODELS: Record<string, ModelName> = {
 
 export type WeaponPool = { mount: ModelName[]; receiver: ModelName[]; barrel: ModelName[]; extra: ModelName[] };
 
-// An empty extra pool means the weapon has no extra.
 export const WEAPON_POOLS: Record<string, WeaponPool> = {
   mg: {
     mount: ['wmount_ring_small', 'wmount_pintle'],
@@ -252,7 +243,6 @@ export function partModel(defId: string): ModelName {
 export function weaponLook(partId: string, defId: string): WeaponLook {
   const pool = WEAPON_POOLS[defId];
   if (!pool) throw new Error(`No weapon pool for ${defId}. Add it to WEAPON_POOLS.`);
-  // Each slot hashes with its own suffix, so slot picks do not move together.
   const pick = (slot: keyof WeaponPool): ModelName => {
     const options = pool[slot];
     return options[Math.floor(hashStr(`${partId}:${slot}`) * options.length)];
@@ -265,28 +255,17 @@ export function weaponLook(partId: string, defId: string): WeaponLook {
   };
 }
 
-// How worn a part looks, and what its break throws. A part's look moves in steps so a truck only rebuilds when a part
-// crosses one. These are render constants, not balance.
-
 export const WEAR_LOOK_STEPS = 4;
-// The dusty gray worn colors fade toward.
 export const WORN_GRAY = 0x8c8a84;
-// Share of the fade toward WORN_GRAY at the last step.
 export const GRAY_MAX = 0.7;
-// Meters a model-space vertex moves at the last step.
 export const JAG_MAX = 0.14;
-// Share of a model's smallest extent its jag may reach, so thin parts bend but stay whole.
 export const JAG_THIN = 0.25;
-// A hulk, the chassis a dead truck leaves, is fully gray, then darkened by this factor so it reads burnt, not worn.
 export const HULK_TONE = 0.45;
-// Radians a hulk may lean in roll or pitch, seeded by its id, so it lies slumped. Its collision boxes stay level.
 export const HULK_TILT = 0.06;
-// Same weld as debris.ts: corners within a millimeter move together.
 const WELD = 1000;
 
 export type BreakSignature = 'ammo' | 'air' | 'fire';
 
-// 0 at full HP, WEAR_LOOK_STEPS only at 0 HP. Lower HP never gives a lower step.
 export function wearLookStep(part: PartInstance): number {
   const max = maxHp(part);
   if (max <= 0) throw new Error(`Part ${part.id} has max HP ${max}`);
@@ -299,7 +278,6 @@ export function grayShare(step: number): number {
   return (GRAY_MAX * step) / WEAR_LOOK_STEPS;
 }
 
-// The color faded toward WORN_GRAY by share.
 export function grayed(hex: number, share: number): number {
   const mix = (shift: number): number => {
     const c = (hex >> shift) & 255;
@@ -309,7 +287,6 @@ export function grayed(hex: number, share: number): number {
   return (mix(16) << 16) | (mix(8) << 8) | mix(0);
 }
 
-// thinnest is the model's smallest model-space extent.
 export function jagOffset(
   partId: string, x: number, y: number, z: number, step: number, thinnest: number,
 ): { x: number; y: number; z: number } {
@@ -328,17 +305,10 @@ export function breakSignature(def: PartDef): BreakSignature | null {
   return def.kind === 'store' && def.holds === 'fuel' ? 'fire' : null;
 }
 
-// Item and chassis icons: what gets one and what each draws. The icons own only the one weapon look per def and the rank
-// that tells apart defs drawn by the same models. Everything else comes from the mappings above.
-
 export type IconSection = 'weapon' | 'engine' | 'armor' | 'cargo' | 'store' | 'core' | 'good' | 'chassis';
 
-// The order the comparison atlases show the sections in.
 export const ICON_SECTIONS: readonly IconSection[] = ['weapon', 'engine', 'armor', 'cargo', 'store', 'core', 'good', 'chassis'];
 
-// models: every model the icon draws. A weapon lists mount, receiver, barrel and extra, see weapon.
-// footprint: inventory cells before rotation. rank: 1..n among entries drawn by the same models, 0 when none share them.
-// The renderer draws rank 1 plain and one more thick 45° stripe across the silhouette for each rank above it.
 export type IconEntry = {
   id: string;
   section: IconSection;
@@ -349,9 +319,6 @@ export type IconEntry = {
   weapon: WeaponLook | null;
 };
 
-// One look per weapon def, each from that def's WEAPON_POOLS. Defs that would read alike take a different mount,
-// receiver, barrel or extra. Defs whose pools allow one look only, such as sniperCannon and amRifle, get ranks and
-// differ by footprint, which the icon's stretched mount draws.
 export const ICON_WEAPON_PICKS: Record<string, WeaponLook> = {
   mg: { mount: 'wmount_ring_small', receiver: 'wrec_mg_a', barrel: 'wbar_mg_short', extra: 'wext_drum' },
   shotgun: { mount: 'wmount_pintle', receiver: 'wrec_shotgun', barrel: 'wbar_shotgun', extra: 'wext_shield' },
@@ -383,7 +350,6 @@ const PART_SECTION: Record<PartDef['kind'], IconSection> = {
   core: 'core',
 };
 
-// picks: the weapon looks to draw. A weapon def missing from it is drawn from its pool, seeded by its id.
 export function iconCatalog(
   parts: Record<string, PartDef>,
   goods: Record<string, GoodDef>,
@@ -399,10 +365,8 @@ export function iconCatalog(
   return withRanks(drafts);
 }
 
-// An entry before its rank, with the HP that ranks it among entries drawn alike.
 type IconDraft = { entry: Omit<IconEntry, 'rank'>; hp: number };
 
-// Cabs have no model on the truck, where the base draws them. These models stand in for them in icons only.
 const CAB_ICON_MODELS: Record<string, ModelName> = { cab: 'cab_seat', cabPickup: 'cab_pickup', cabHardtop: 'cab_hardtop' };
 
 function iconModel(defId: string): ModelName {
@@ -423,10 +387,8 @@ function goodDraft(def: GoodDef): IconDraft {
   return { entry: { id: def.id, section: 'good', label: def.name, models: [partModel(def.id)], footprint: { w: 1, h: 1 }, weapon: null }, hp: 0 };
 }
 
-// The models a garage portrait draws besides the base: the game's bare truck with its suspension and loose parts.
 const PORTRAIT_MODELS: readonly ModelName[] = ['coilover', 'axle', 'antenna', 'tow_chain'];
 
-// A chassis portrait draws the bare truck, so its models are the base, the built-in parts' and PORTRAIT_MODELS.
 function chassisDraft(def: ChassisDef): IconDraft {
   const footprint = { w: def.layout[0].length, h: def.layout.length };
   const cores = def.core.filter((c) => !BODY_PARTS.has(c.defId)).map((c) => partModel(c.defId));
@@ -446,8 +408,6 @@ function weaponModels(look: WeaponLook): ModelName[] {
   return look.extra ? [look.mount, look.receiver, look.barrel, look.extra] : [look.mount, look.receiver, look.barrel];
 }
 
-// Entries drawn by the same models rank 1..n by HP, then id. A weapon's stretched mount shows its footprint too, but
-// seen from the side a wider mount barely shows, so same-model weapons get ranks as well.
 function withRanks(drafts: readonly IconDraft[]): IconEntry[] {
   const groups = new Map<string, IconDraft[]>();
   for (const d of drafts) {
@@ -462,8 +422,6 @@ function withRanks(drafts: readonly IconDraft[]): IconEntry[] {
   return drafts.map((d) => ({ ...d.entry, rank: ranks.get(d.entry.id) ?? 0 }));
 }
 
-// What an icon looks like: its models, its rank and, for a weapon, its footprint, since the weapon mount stretches to
-// fill it. Other parts draw at their authored size.
 export function renderKey(e: IconEntry): string {
   const footprint = e.weapon ? `@${e.footprint.w}x${e.footprint.h}` : '';
   return `${e.models.join('+')}${footprint}#${e.rank}`;

@@ -1,7 +1,6 @@
-// Road look for the ground shader. The mask marks where region roads (red) and territory dirt roads (green) lie on
-// the map. The detail is a small tiling image of packed dirt with gravel, cracked patches and potholes, drawn in
-// pixels a third the size of the ground paint pixels. The tone is slow noise that varies the road and wanders its
-// edge, with a period far from the detail's, so the detail never repeats in the same light.
+// Road look for the ground shader. The mask marks where roads lie on the map. The detail is a small
+// tiling image of packed dirt with gravel, cracked patches and potholes, drawn in pixels a third the size
+// of the ground paint pixels. The tone is slow noise that varies the road and wanders its edge, with a
 
 import { REGION, type TerritoryDef } from "../data/region";
 import { TERRITORIES, type FarmRoad, type WreckRules } from "../data/territory";
@@ -13,36 +12,28 @@ import type { PaintCanvas } from "./groundPaint";
 import { hash2 } from "./noise";
 import { PAL, mix, shade } from "./palette";
 
-export const ROAD_DETAIL_SIDE = 256; // detail pixels per side of the tiling image
-export const ROAD_TONE_SIDE = 64; // tone pixels per side of its tiling image
-export const ROAD_TONE_PIXELS = 12; // detail pixels per tone pixel
+export const ROAD_DETAIL_SIDE = 256;
+export const ROAD_TONE_SIDE = 64;
+export const ROAD_TONE_PIXELS = 12;
 const SITES = [...REGION.towns, ...REGION.locations];
-// Each territory with a wreck, paired with its wreck's rules.
 const WRECKS: { territory: TerritoryDef; wreck: WreckRules }[] = REGION.locations.filter(isTerritory).flatMap((territory) => {
   const wreck = TERRITORIES[territory.id].wreck;
   return wreck === null ? [] : [{ territory, wreck }];
 });
-const WIDTH = REGION.roadWidth * 0.9; // tiles across the painted road, before its edge wanders
-const BLUR = 2.4; // tiles of mask blur, so the tone can move the edge
-// Tiles of blur on each dirt road stroke. Dirt roads are narrower than BLUR, which would spread one into a wide soft
-// band that never reaches half strength, so their strokes take their own blur after the region roads' one.
+const WIDTH = REGION.roadWidth * 0.9;
+const BLUR = 2.4;
 const DIRT_BLUR = 0.8;
-const STEP = 0.5; // tiles between points of a road line
-const CRACK_MIX = 0.3; // mix toward the crack color on crack lines, faint since packed dirt barely cracks
-const CRACK_CELL = 16; // detail pixels between crack polygon centers
-const POTHOLES = 4; // potholes in one detail image
-const STONE_SHARE = 0.012; // share of detail pixels that are loose stones
+const STEP = 0.5;
+const CRACK_MIX = 0.3;
+const CRACK_CELL = 16;
+const POTHOLES = 4;
+const STONE_SHARE = 0.012;
 
 export type RoadImage = { side: number; pixels: Uint8ClampedArray };
 
-// The mask's channels: red for region roads, green for the dirt roads of every wreck territory. Each channel is the
-// stroked road on black, so the shader can tell a region road from a dirt road where they meet.
 export const REGION_ROAD_STYLE = "#f00";
 export const DIRT_ROAD_STYLE = "#0f0";
 
-// Strokes every road on black and blurs it. Region roads stop at site edges, where pads take over, and at Canyon
-// Bridge, whose deck is its own model. Dirt roads run inside their territory and stop at decks too. The lighten mode
-// keeps the larger value of each channel, so the two channels never paint over each other.
 export function paintRoadMask(c: PaintCanvas): void {
   const ctx = c.ctx;
   ctx.fillStyle = "#000";
@@ -50,11 +41,9 @@ export function paintRoadMask(c: PaintCanvas): void {
   ctx.lineJoin = "round";
   ctx.strokeStyle = REGION_ROAD_STYLE;
   strokeRuns(c, REGION.roads.flatMap((road) => runsWhere(evenPoints(road), drawn)), WIDTH);
-  // One blur over the region roads. The copy mode replaces the canvas with its own blurred image.
   ctx.filter = `blur(${BLUR * c.res}px)`;
   ctx.globalCompositeOperation = "copy";
   ctx.drawImage(ctx.canvas, 0, 0);
-  // The dirt roads, each stroke blurred as it is drawn.
   ctx.filter = `blur(${DIRT_BLUR * c.res}px)`;
   ctx.globalCompositeOperation = "lighten";
   ctx.strokeStyle = DIRT_ROAD_STYLE;
@@ -68,7 +57,6 @@ export function paintRoadMask(c: PaintCanvas): void {
   ctx.globalCompositeOperation = "source-over";
 }
 
-// Strokes the runs as one path at full strength, `width` tiles across.
 function strokeRuns(c: PaintCanvas, runs: Vec[][], width: number): void {
   const ctx = c.ctx;
   ctx.globalAlpha = 1;
@@ -79,8 +67,6 @@ function strokeRuns(c: PaintCanvas, runs: Vec[][], width: number): void {
   ctx.stroke();
 }
 
-// A spur at full strength up to its last `fade` tiles, then step by step narrower and fainter, to nothing at its end.
-// Each fading step takes the width and strength at its far end, so the last step lays no paint.
 function strokeSpur(c: PaintCanvas, spur: FarmRoad, fade: number): void {
   const points = evenPoints(spur.points);
   const left = tilesToEnd(points);
@@ -101,14 +87,12 @@ function strokeSpur(c: PaintCanvas, spur: FarmRoad, fade: number): void {
   ctx.globalAlpha = 1;
 }
 
-// Tiles along the line from each point to its last point.
 function tilesToEnd(points: readonly Vec[]): number[] {
   const out = new Array<number>(points.length).fill(0);
   for (let i = points.length - 2; i >= 0; i--) out[i] = out[i + 1] + dist(points[i], points[i + 1]);
   return out;
 }
 
-// Stretches of points that pass `keep`.
 function runsWhere(points: Vec[], keep: (p: Vec) => boolean): Vec[][] {
   const runs: Vec[][] = [[]];
   for (const p of points) {
@@ -122,13 +106,11 @@ function offDeck(p: Vec): boolean {
   return deckAt(p.x, p.y) === null;
 }
 
-// Region roads show off sites and off the decks.
 function drawn(p: Vec): boolean {
   if (!offDeck(p) || bridgeCut(p.x, p.y) > 0) return false;
   return !SITES.some((site) => siteGap(site, p) < 0);
 }
 
-// Points every STEP tiles along a road from its start, and its end.
 function evenPoints(road: readonly Vec[]): Vec[] {
   const out: Vec[] = [road[0]];
   let carry = 0;
@@ -143,7 +125,6 @@ function evenPoints(road: readonly Vec[]): Vec[] {
   return out;
 }
 
-// RGB is the road color in sRGB. Alpha is a per-pixel dither the shader uses to fray edges.
 export function paintRoadDetail(): RoadImage {
   const side = ROAD_DETAIL_SIDE;
   const pixels = new Uint8ClampedArray(side * side * 4);
@@ -172,7 +153,6 @@ function detailColor(x: number, y: number, cracks: Vec[], holes: Pothole[]): num
   return stoneColor(x, y) ?? color;
 }
 
-// Crack lines run where two crack polygons meet, only in cracked patches of the road.
 function cracked(x: number, y: number, centers: Vec[]): boolean {
   if (loopNoise(x / 32 + 3, y / 32 + 5, ROAD_DETAIL_SIDE / 32) < 0.62 || hash2(x + 61, y + 67) < 0.25) return false;
   const cells = ROAD_DETAIL_SIDE / CRACK_CELL;
@@ -200,7 +180,6 @@ function potholes(): Pothole[] {
   return Array.from({ length: POTHOLES }, (_, k) => ({ x: hash2(k, 401) * ROAD_DETAIL_SIDE, y: hash2(k, 402) * ROAD_DETAIL_SIDE, r: 2 + 2 * hash2(k, 403) }));
 }
 
-// A dark hollow with a pale lip on its far side, where the low sun catches the broken edge.
 function potholeColor(x: number, y: number, holes: Pothole[]): number | null {
   for (const h of holes) {
     const d = wrappedDist(x + 0.5, y + 0.5, h.x, h.y);
@@ -215,7 +194,6 @@ function stoneColor(x: number, y: number): number | null {
   return mix(PAL.road, hash2(x + 5, y + 3) < 0.5 ? PAL.sand[3] : PAL.rock.side, 0.5);
 }
 
-// Slow noise in R for tone and edge wander. It tiles, so the shader repeats it far apart.
 export function paintRoadTone(): RoadImage {
   const side = ROAD_TONE_SIDE;
   const pixels = new Uint8ClampedArray(side * side * 4);
@@ -228,7 +206,6 @@ export function paintRoadTone(): RoadImage {
   return { side, pixels };
 }
 
-// Smooth value noise in [0, 1] that repeats every `period` lattice cells.
 function loopNoise(x: number, y: number, period: number): number {
   const x0 = Math.floor(x);
   const y0 = Math.floor(y);

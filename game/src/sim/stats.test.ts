@@ -115,8 +115,6 @@ describe('a stalled engine', () => {
     expect(vehicleStats(w, v).maxSpeed).toBe(fresh);
   });
 
-  // A ram stalls through world.turn + stallTurns. The pipeline counts the turn up before it moves, so that is the
-  // next turn's drive, and the one after runs free.
   it('stalls the drive of exactly the turn after the ram', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'scout', ['stockEngine'], { x: 40, y: 40 });
@@ -329,7 +327,6 @@ describe('max speed steps', () => {
     },
   };
 
-  // Values measured before maxSpeed moved into maxSpeedSteps. The storm one is the stock speed times the full storm share.
   const FROZEN: Record<string, number> = {
     bare: 1.04, stock: 9.875716226804332, manyGuns: 5.641376805946041, brokenGun: 8.901316579936632, overload: 2.877966295841562,
     heavy: 1, worn: 9.217335145017376, wheels: 7.135204973866129, overdrive: 13.134702581649762, transmission: 1.04,
@@ -349,7 +346,6 @@ describe('max speed steps', () => {
     for (const [name, sc] of Object.entries(SCENARIOS)) {
       const { w, v } = sc.build();
       const kinds = maxSpeedSteps(w, v).map((s) => s.kind);
-      // The transmission cap only shows when it lowers the speed, and the weather and tow steps append.
       expect(kinds, name).toEqual(sc.kinds);
     }
   });

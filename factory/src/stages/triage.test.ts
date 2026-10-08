@@ -10,7 +10,6 @@ let prompt = '';
 let effort: string | undefined;
 let related = '';
 let releaseInput = '';
-// The board the stage sees. Issue 7 is the card under triage.
 let cards: Card[] = [];
 
 beforeEach(() => {
@@ -27,7 +26,7 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 function fakeCtx(verdict: string | null, labels: string[] = [], earlier: string[] = []): Ctx {
   const record = (name: string) => async (...args: unknown[]) => { calls.push(`${name} ${args.join(' ')}`); };
   const fake = {
-    cfg: { home, designModel: 'opus', buildModel: 'sonnet', triageEffort: 'low', repo: 'o/r', committeeChat: 'chat' },
+    cfg: { home, designModel: 'opus', buildModel: 'sonnet', triageModel: 'haiku', triageEffort: 'low', repo: 'o/r', committeeChat: 'chat' },
     statePath: `${home}/state.json`,
     now: () => new Date('2026-09-30T10:00:00Z'),
     telegram: { sendMessage: record('message') },
@@ -63,7 +62,7 @@ const card = (issue: number, column: Card['column'], labels: string[] = []): Car
 describe('triage stage', () => {
   it('comments and moves to Design when ready', async () => {
     await runStage(fakeCtx(verdict({})), 7);
-    expect(calls).toContain('agent sonnet');
+    expect(calls).toContain('agent haiku');
     expect(effort).toBe('low');
     expect(calls.find((call) => call.startsWith('comment 7 Triage passed: Clear goal'))).toContain('Model routing from triage: intermediate, default models');
     expect(calls.at(-1)).toBe('move 7 Design');
@@ -104,7 +103,7 @@ describe('triage stage', () => {
   it('adds no label for an intermediate task, and triage itself runs on the build model', async () => {
     await runStage(fakeCtx(verdict({})), 7);
     expect(calls.filter((call) => call.startsWith('addLabel'))).toEqual([]);
-    expect(calls).toContain('agent sonnet');
+    expect(calls).toContain('agent haiku');
   });
 
   it('leaves labels a member set, even against its own rating', async () => {
@@ -279,7 +278,6 @@ describe('triage bundles', () => {
     expect(calls).toContain('addLabel 9 bundled');
     expect(calls).toContain('move 9 Done');
     expect(calls).toContain('move 10 Done');
-    // The routing note follows the reason and the bundle line.
     expect(calls.find((call) => call.startsWith('comment 7 Triage passed:'))).toMatch(/^comment 7 Triage passed: Both ask for a horn\.\n\nThis card also carries #9, #10\.\n\n/);
     expect(calls.at(-1)).toBe('move 7 Design');
     expect(readState(`${home}/state.json`).bundles).toEqual({ '7': [9, 10] });

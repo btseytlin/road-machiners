@@ -1,7 +1,5 @@
 // Replay runs a recorded trace through the XP rules. It takes milliseconds, so XP numbers can be tuned without a new
-// recording. Perks and the feedback of skills into behavior are ignored. Each activity family keeps its own running
-// total of earned XP, and its curve marks the turn that total covers the cumulative cost of each rank: the pace of a
-// player who spends a family's XP on its own skill.
+// recording. Perks and the feedback of skills into behavior are ignored.
 
 import { TIME } from '../../data/time';
 import { MAIN_SKILL, MAX_RANK, SKILL_IDS, TARGET_DAYS, TARGET_TOLERANCE, XP_SOURCES } from '../../data/skills';
@@ -11,13 +9,9 @@ import { isArchetype, type Archetype } from './bot';
 import { LEDGER_KEYS } from './orders';
 import type { DayRow, RunEnd, RunFailure, TraceLine } from './record';
 
-// levels[i] is the first turn the family's earned XP covers rank i + 1, or null if it never does. total is the
-// family's earned XP.
 export type SkillCurve = { levels: (number | null)[]; total: number; perDay: number };
 export type Curve = Record<SkillId, SkillCurve>;
 
-// `turns` is the number of turns the recording played, for the XP per day. A run of N turns ends on world turn N + 1.
-// For a run the player did not survive, pass the death turn.
 export function replay(trace: readonly TraceLine[], turns: number): Curve {
   requireTurnOrder(trace, turns);
   const progress = freshProgress();
@@ -51,7 +45,6 @@ function freshProgress(): SkillProgress {
   return { xp: 0, xpToday: zeroBySkill(), xpDay: 1, repeats: {} };
 }
 
-// A trace line read from a trace file. Throws on anything that is not a valid line.
 export function parseTraceLine(value: unknown): TraceLine {
   const { turn, source, amount, difficulty, target } = asRecord(value);
   if (!Number.isInteger(turn) || !isXpSource(source) || typeof amount !== 'number' || !isDifficulty(difficulty) || typeof target !== 'string') {
@@ -73,7 +66,6 @@ function isDifficulty(value: unknown): value is number | null {
   return value === null || typeof value === 'number';
 }
 
-// The death or error marker that ends a trace file, or null for any other entry. Throws on a malformed marker.
 export function parseRunEnd(value: unknown): RunEnd | RunFailure | null {
   const entry = asRecord(value);
   if (!('end' in entry)) return null;
@@ -84,8 +76,6 @@ export function parseRunEnd(value: unknown): RunEnd | RunFailure | null {
   throw new Error(`Bad run end ${JSON.stringify(value)}`);
 }
 
-// Each way a curve misses its targets in TARGET_DAYS, as one readable line. `turns` is the run length: a level whose
-// target window starts after the run ends only needs to stay unreached.
 export function targetMisses(curve: Curve, archetype: Archetype, turns: number): string[] {
   return SKILL_IDS.flatMap((skill) => {
     const table: Partial<Record<number, number>> = MAIN_SKILL[archetype] === skill ? TARGET_DAYS.main : TARGET_DAYS.off;
@@ -99,8 +89,6 @@ function levelMiss(skill: SkillId, level: number, day: number, reached: number |
   return verdict ? [`${skill} rank ${level}: ${at}, target day ${day}, ${verdict}`] : [];
 }
 
-// A level reached before its window is too early. One reached after it, or unreached once the window closed within
-// the run, is too late.
 function missVerdict(target: number, reached: number | null, turns: number): 'too early' | 'too late' | null {
   const late = target * (1 + TARGET_TOLERANCE);
   if (reached === null) return late <= turns ? 'too late' : null;
@@ -108,8 +96,6 @@ function missVerdict(target: number, reached: number | null, turns: number): 'to
   return reached > late ? 'too late' : null;
 }
 
-// A recorded run read back from a trace file's parsed lines: a header, the trace lines, and a death or error marker
-// last if the run ended early. `turns` is then the turn it ended on.
 export type Run = { archetype: Archetype; seed: number; turns: number; death: number | null; error: RunFailure | null; trace: TraceLine[]; rows: DayRow[] };
 
 export function parseRun(values: readonly unknown[], label: string): Run {
@@ -135,7 +121,6 @@ function isDayRow(value: unknown): boolean {
 
 const ROW_NUMBERS = ['day', 'turns', 'money', 'netWorth', 'tier', 'fightsWon', 'knockouts', 'gearLost', 'deaths', 'stalls'] as const;
 
-// An economy row read from a trace file. Throws on anything that is not a valid row.
 export function parseDayRow(value: unknown): DayRow {
   const row = asRecord(value);
   for (const key of ROW_NUMBERS) if (typeof row[key] !== 'number') throw new Error(`Bad economy row ${JSON.stringify(value)}: ${key} is not a number`);

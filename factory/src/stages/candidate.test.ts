@@ -7,6 +7,7 @@ import type { ReleaseState } from '../types';
 import { changeLines } from './release-common';
 import { ROOT, fake, reset } from './test-fakes';
 
+const SHOT = pngBytes(0).toString('latin1');
 const deployed: string[] = [];
 vi.mock('../deploy', () => ({
   buildAndDeploy: async (_ctx: unknown, _clone: string, scope: string, _log: string, reports: string | null) => { deployed.push(`${scope} reports ${reports}`); return `https://play.test/${scope}/`; },
@@ -28,7 +29,7 @@ describe('candidate', () => {
     const f = fake();
     f.ctx.cfg = { ...f.ctx.cfg, designModel: 'opus', buildModel: 'sonnet' };
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
-    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': 'png' };
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': SHOT };
     const original = f.ctx.container.agent;
     const models: string[] = [];
     f.ctx.container.agent = async (run) => { models.push(run.model); return original(run); };
@@ -40,7 +41,7 @@ describe('candidate', () => {
     const f = fake();
     f.ctx.cfg = { ...f.ctx.cfg, gpu: true };
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
-    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': 'png' };
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': SHOT };
     const scripts: string[] = [];
     f.ctx.container.shell = async (_dir, script) => { scripts.push(script); };
     await candidate(f.ctx, 11);
@@ -52,7 +53,7 @@ describe('candidate', () => {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn', 'Merge issue #6: gone'];
     writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, removed: [6] } });
-    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': 'png' };
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': SHOT };
     await candidate(f.ctx, 11);
     expect(f.calls.filter((call) => !call.startsWith('comment'))).toEqual(['fetch', 'prepare release/2026-09-29', 'shell', 'agent', 'pr release/2026-09-29 main Release 2026-09-29', 'fetch', 'photo committee', 'message committee 42 - [#3] Trucks are faster.\n- [#5] The horn is louder.']);
     expect(deployed).toEqual(['rc reports candidate', 'record 11 rc']);
@@ -78,7 +79,7 @@ describe('candidate', () => {
   it('does not post when the release moved during the build, so the tick plays the new head first', async () => {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks'];
-    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': 'png' };
+    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': SHOT };
     const heads = ['abc1234', 'def5678'];
     f.ctx.repo.headHash = async () => heads.shift() ?? 'def5678';
     await candidate(f.ctx, 11);
@@ -90,7 +91,7 @@ describe('candidate', () => {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
     writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: RELEASE, bundles: { '3': [8, 9] } });
-    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': 'png' };
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': SHOT };
     await candidate(f.ctx, 11);
     const input = readFileSync(join(ROOT, 'work', 'release-candidate', 'game', '.factory', 'changelog.md'), 'utf8');
     expect(input).toBe('#3 faster trucks\n  bundled: #8 T\n  bundled: #9 T\n#5 louder horn\n');
@@ -99,7 +100,7 @@ describe('candidate', () => {
   it('opens the pull request to main when none is open', async () => {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks'];
-    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': 'png' };
+    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': SHOT };
     await candidate(f.ctx, 11);
     expect(f.calls).toContain('pr release/2026-09-29 main Release 2026-09-29');
     expect(f.photos[0].caption).toContain('PR: http://pr');
@@ -119,7 +120,7 @@ describe('candidate', () => {
 
   it('throws when the agent wrote no notes, before it builds anything', async () => {
     const f = fake();
-    f.agentWrites = { 'screenshot.png': 'png' };
+    f.agentWrites = { 'screenshot.png': SHOT };
     await expect(candidate(f.ctx, 11)).rejects.toThrow('no .factory/release.md');
     expect(deployed).toEqual([]);
   });
@@ -127,7 +128,7 @@ describe('candidate', () => {
   it('does not post a build when a release task opened during it, so the old post stays dead', async () => {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks'];
-    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': 'png' };
+    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': SHOT };
     f.cards = [{ itemId: 'i74', issue: 74, column: 'Design', labels: ['release-task'] }];
     await candidate(f.ctx, 11);
     expect(f.photos).toEqual([]);
@@ -138,7 +139,7 @@ describe('candidate', () => {
   it('throws when the changelog misses a change, before it builds or posts anything', async () => {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
-    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': 'png' };
+    f.agentWrites = { 'release.md': '- [#3] Trucks are faster.', 'screenshot.png': SHOT };
     await expect(candidate(f.ctx, 11)).rejects.toThrow('release.md names #3, but the release holds #3, #5');
     expect(deployed).toEqual([]);
     expect(f.photos).toEqual([]);
@@ -146,11 +147,10 @@ describe('candidate', () => {
 });
 
 describe('candidate evidence', () => {
-  // The fake agent writes into the clone's .factory, and the fake shell leaves the screenshot there.
-  function setup(commit = 'abc1234'): ReturnType<typeof fake> {
+  function setup(manifest = JSON.stringify({ images: [{ file: 'screenshot.png', description: 'Faster trucks' }, { file: 'view1.png', description: 'Louder horn' }] })): ReturnType<typeof fake> {
     const f = fake();
     f.changelog = ['Merge issue #3: faster trucks', 'Merge issue #5: louder horn'];
-    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': pngBytes(0).toString('latin1'), 'view1.png': pngBytes(1).toString('latin1'), 'evidence.json': JSON.stringify({ commit, features: [{ name: '#3', kind: 'other' }, { name: '#5', kind: 'other' }], images: [{ file: 'screenshot.png', description: 'Faster trucks', covers: ['#3'] }, { file: 'view1.png', description: 'Louder horn', covers: ['#5'] }] }) };
+    f.agentWrites = { 'release.md': CHANGES, 'screenshot.png': SHOT, 'view1.png': pngBytes(1).toString('latin1'), 'evidence.json': manifest };
     return f;
   }
 
@@ -165,8 +165,8 @@ describe('candidate evidence', () => {
     expect(readState(f.ctx.statePath).release?.postId).toBe(42);
   });
 
-  it('falls back to the one screenshot when the manifest is for another commit', async () => {
-    const f = setup('ffffff0');
+  it('posts the one screenshot when the manifest cannot be read', async () => {
+    const f = setup('{');
     await candidate(f.ctx, 11);
     expect(f.albums).toEqual([]);
     expect(f.photos).toHaveLength(1);

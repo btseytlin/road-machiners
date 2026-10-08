@@ -144,14 +144,10 @@ describe('timed scavenging search', () => {
     const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
     npc.pos = { x: convoy.pos.x + convoy.radius + 1, y: convoy.pos.y };
     npc.heading = Math.PI;
-    // Spawns with a part-full tank so the convoy's own leftover fuel can pour into it right away.
-    // A spawn at a full tank cannot accept that fuel, so the stock never empties and the NPC restarts
-    // a one-turn search forever until its own supplies happen to run out hundreds of turns later.
     npc.resources!.fuel = 20;
     let cur = w;
     let sawJob = false;
     let finished = false;
-    // Observed completion is well under 500 turns; keep a generous cap so a stalled NPC fails fast.
     for (let t = 0; t < 800; t++) {
       cur = endTurn(cur, testDrive);
       const actor = cur.vehicles.find((v) => v.id === npc.id)!;
@@ -218,7 +214,6 @@ describe('machining on searches', () => {
 });
 
 describe('one looter per wreck, for the player', () => {
-  // The parked player at 30,30 beside a road wreck, and a scavenger parked on its other side.
   function sharedWreck() {
     const w = emptyWorld({ x: 30, y: 30 });
     const wreck = { id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: SALVAGE.unitsPerTurn * 3 }, parts: [], fuel: 2 };
@@ -258,7 +253,6 @@ describe('one looter per wreck, for the player', () => {
     const me = w.vehicles[0];
     const pile = dumpOnPile(w, me, me.items.find((item) => item.kind === 'good') ?? me.items[0]);
     expect(salvageListNear(w).map((s) => s.id)).toEqual(expect.arrayContaining([wreck.id, pile.id]));
-    // A player pile counts as searched, so only the wreck needs a search.
     expect(canScavenge(w, pile.id)).toBe(false);
     expect(canLoot(w, pile.id)).toBe(true);
     expect(canLoot(w, wreck.id)).toBe(false);

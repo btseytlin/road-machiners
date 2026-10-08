@@ -1,6 +1,5 @@
 import { lstatSync, readFileSync } from 'node:fs';
 
-// Telegram refuses a photo over 10 MB, or one whose sides add up to more than 10000 pixels.
 export const PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 const PHOTO_MAX_SIDES = 10000;
 
@@ -8,7 +7,6 @@ export type PhotoFile = { bytes: Buffer; mime: string; name: string };
 
 const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-// Reads a photo from disk and checks it is a real PNG, JPEG or WebP of a size Telegram takes. Throws with the path in the message.
 export function readPhoto(path: string): PhotoFile {
   requireRegularFile(path);
   const bytes = readFileSync(path);

@@ -20,7 +20,6 @@ function part(defId: string, over: Partial<Extract<CarriedItem, { kind: 'part' }
   return { defId, wear: 0, hp: 1000, rebuilt: false, ...over };
 }
 
-// The kit truck as the reader would hand it over.
 function kitItems(): CarriedItem[] {
   const w = newWorld(1, KIT, TEST_MAP, false);
   return playerVehicle(w).items.map((it): CarriedItem =>

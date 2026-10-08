@@ -70,7 +70,6 @@ describe('salvage interaction', () => {
   });
 });
 
-// A real world with the player parked beside the first prop of this look in this territory, or the first road wreck.
 function parkedAt(find: (o: Obstacle) => boolean): { w: World; id: string } {
   const w = newWorld(1337, startKit('standard'), TEST_MAP);
   const o = w.obstacles.find(find);
@@ -304,7 +303,6 @@ describe("rescue readout", () => {
     const me = playerVehicle(w);
     const engine = me.items.find((it) => it.kind === "part" && partDef(it.part.defId).kind === "engine");
     if (!engine || engine.kind !== "part") throw new Error("Expected an engine");
-    // The hauler keeps only its built-in parts, so its deck has room to stow the engine.
     me.items = me.items.filter((it) => it.kind === "part" && partDef(it.part.defId).kind === "core");
     expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine." });
     expect(stowPart(w, me, engine.part)).toBe(true);
@@ -330,7 +328,6 @@ describe("rescue readout", () => {
 });
 
 describe('trade interaction', () => {
-  // The player parked on a town pad, with a trader beside it that agreed to trade.
   function atTownWithTrader(npcSpeed: number) {
     const town = REGION.towns[0];
     const w = emptyWorld({ ...sitePads(town)[0] });

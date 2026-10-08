@@ -116,7 +116,6 @@ describe('Canyon Bridge', () => {
   it('cuts the causeway, so the canyon floor lies far below the deck', () => {
     const mid = at(B.length / 2, 0);
     expect(groundAt(t, mid.x, mid.y)).toBeLessThan(heightAt(t, mid.x, mid.y) - 3);
-    // Beside the deck the cut ground is low too, while the abutments stay at deck level.
     const beside = at(B.length / 2, B.width + 4);
     expect(groundAt(t, beside.x, beside.y)).toBeLessThan(heightAt(t, mid.x, mid.y) - 3);
     for (const along of [0, B.length]) {
@@ -131,7 +130,6 @@ describe('Canyon Bridge', () => {
     const deck = heightAt(t, onDeck.x, onDeck.y);
     expect(markHeightAt(t, onDeck, floor.x, floor.y)).toBe(deck);
     expect(markHeightAt(t, floor, floor.x, floor.y)).toBe(groundAt(t, floor.x, floor.y));
-    // Past the deck ends a mark lies on the ground.
     const past = at(-3, 0);
     expect(markHeightAt(t, onDeck, past.x, past.y)).toBe(heightAt(t, past.x, past.y));
   });
@@ -189,7 +187,6 @@ describe('Canyon Bridge', () => {
   });
 });
 
-// A test deck along +x at y 50, 4 tiles wide, through stations given as [x, rise].
 const spec = (id: string, stations: [number, number][], skirt = true): DeckSpec => ({ id, line: stations.map(([x, rise]) => ({ at: { x, y: 50 }, rise })), width: 4, cut: null, skirt });
 
 describe('raised deck ends', () => {
@@ -240,7 +237,6 @@ describe('raised deck ends', () => {
     const before = { x: mid.x - flap.axis.x * 2, y: mid.y - flap.axis.y * 2 };
     const beyond = { x: mid.x + flap.axis.x * 4, y: mid.y + flap.axis.y * 4 };
 
-    // Half a tile past the lip's middle lies 1.5 tiles from either rail, but within reach of the lip.
     expect(flap.rails.every(([c, d]) => segmentDist(past, c, d) > 1)).toBe(true);
     expect(nearRail(past.x, past.y, 1)).toBe(true);
     expect(crossesRail(before, beyond, 0)).toBe(true);
@@ -263,8 +259,6 @@ describe('the height a prop stands on', () => {
   const pier: Obstacle = { id: 'hullDrum-7', kind: 'landmark', look: 'hullDrum', pos: piece.pos, r: piece.r, yaw: piece.yaw };
   const top = Math.max(...propBoxes(pier).map((b) => b.z1)) / PHYSICS.metersPerTile;
 
-  // The baked map with the ground under the pier sunk into a pit, as its seat in the furrow's gouge levels it, so the
-  // pier's top lies a little under the deck line.
   function withPit(): Terrain {
     const on = deckAt(pier.pos.x, pier.pos.y)!;
     const floor = deckHeight(t, on.deck, on.along) - top - 0.1;
@@ -339,8 +333,6 @@ describe('marks beside a deck that climbs, runs level and comes down', () => {
     }
   });
 
-  // Every mark beside the truck's deck follows that deck's rule: on the deck line where the truck is nearer it than the
-  // ground, else on the ground. Marks on the deck line step no more than the deck does, so no mark tears from the deck.
   it('follow the one deck beside every Fallen Sun deck for a truck on it, and step with the deck line (IV4)', () => {
     let lifted = 0;
     for (const spec of FALLEN_SUN_DECKS) {
@@ -354,7 +346,6 @@ describe('marks beside a deck that climbs, runs level and comes down', () => {
         for (const side of [-1, 1])
           for (let across = deck.width / 2 + 0.25; across <= deck.width / 2 + 8; across += 0.5) {
             let last: number | null = null;
-            // From an eighth of a tile in, so no mark lies on an end, where rounding may put it off the deck.
             for (let a = 0.125; a < deck.length; a += 0.25) {
               const p = on(deck, a, side * across);
               if (dist(p, truck) > TERRAIN.vision.radius) {

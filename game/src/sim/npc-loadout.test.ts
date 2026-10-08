@@ -25,7 +25,6 @@ import { TEST_MAP } from '../test/map';
 import TRUCK_SHAPES from '../data/truck-shapes.json';
 import { budget } from '../test/budget';
 
-// A scout with one deck cell, where a cannon or a heavy frame cannot mount. It borrows the scout's collision boxes.
 const TINY = {
   ...CHASSIS.scout,
   id: 'tiny',
@@ -57,7 +56,7 @@ describe('NPC equipment generation', () => {
       }
     }
     for (const [role, variants] of Object.entries(seen)) expect(variants.size, role).toBeGreaterThanOrEqual(5);
-  }, budget(180_000)); // 40 full spawns, each trying every engine and gun pair of every template
+  }, budget(180_000));
 
   it.each(Object.values(NPCS))('fits $id equipment and cargo within its budget and rated mass', (template) => {
     for (let seed = 1; seed <= 32; seed++) {
@@ -74,12 +73,11 @@ describe('NPC equipment generation', () => {
       expect(goodsCount(v)).toEqual(loadout.cargo);
       expect(vehicleMass(v)).toBeLessThanOrEqual(CHASSIS[v.chassisId].ratedMass);
       const cost = CHASSIS[v.chassisId].value + loadout.parts.reduce((sum, p) => sum + PARTS[p.defId].value, 0);
-      expect(cost).toBeLessThanOrEqual(template.loadout.budget * Math.max(1, GEAR_LEVELS[loadout.level].budget)); // a poor level still buys the base build
+      expect(cost).toBeLessThanOrEqual(template.loadout.budget * Math.max(1, GEAR_LEVELS[loadout.level].budget));
       expect(v.resources?.money).toBe(fixture.player.money);
     }
   });
 
-  // A copy of a template with some of its priorities changed.
   const withPriorities = (template: NpcTemplate, change: Partial<LoadoutPriorities>): NpcTemplate => ({ ...template, loadout: { ...template.loadout, priorities: { ...template.loadout.priorities, ...change } } });
   const rolled = (template: NpcTemplate, level: GearLevel | null, seed: number): Vehicle => {
     const world = { ...fixture, rngState: seed, marketRng: { rngState: seed * 104729 + 1 } };
@@ -94,19 +92,16 @@ describe('NPC equipment generation', () => {
   const guns = (v: Vehicle) => mountedItems(v, 'weapon').length;
 
   describe('loadout priorities', () => {
-    // A gun still shields the parts behind it, so a driver with no firepower priority rarely adds one.
     it('gives a template with no firepower priority few guns past its main one', () => {
       const template = withPriorities(NPCS.gunwagon, { firepower: 0 });
       for (const level of GEAR_LEVEL_IDS) expect(average(template, level, guns)).toBeLessThanOrEqual(1.25);
     }, budget(120_000));
 
-    // A driver who can only shoot forward is beaten by anyone who drives behind it.
     it.each(['gunwagon', 'trader', 'buggy', 'courier'])('gives most %s trucks a gun that fires at the rear', (id) => {
       const rearGun = (v: Vehicle) => (mountedItems(v, 'weapon').some((g) => reachedSides(partDef(g.part.defId) as WeaponDef).includes('rear') && openSides(v, g).includes('rear')) ? 1 : 0);
       expect(average(NPCS[id], 'standard', rearGun)).toBeGreaterThanOrEqual(0.75);
     }, budget(120_000));
 
-    // The gear money is the level's share of what the template budget leaves past the base build.
     it('lets a poor driver buy some armor', () => {
       const armor = (v: Vehicle) => (mountedItems(v, 'armor').length > 0 ? 1 : 0);
       expect(average(NPCS.courier, 'poor', armor)).toBeGreaterThanOrEqual(0.75);
@@ -137,13 +132,11 @@ describe('NPC equipment generation', () => {
     }, budget(120_000));
   });
 
-  // The top speed on the truck's worn engine with its gear, in calm weather.
   function topSpeed(v: Vehicle): number {
     const engine = wornDef<EngineDef>(mountedParts(v, 'engine')[0]);
     return (CHASSIS[v.chassisId].maxSpeed + engine.speedBonus) * loadFactor(v) * gunDrag(v, engine.capacity);
   }
 
-  // Wagons on worn heavy diesels spawned barely faster than a crawl and could not patrol or reach a stranded truck.
   it.each(Object.values(NPCS))('keeps $id at MIN_NPC_SPEED on its worn engine at every gear level', (template) => {
     for (const level of GEAR_LEVEL_IDS) {
       for (let seed = 1; seed <= 12; seed++) {
@@ -153,7 +146,6 @@ describe('NPC equipment generation', () => {
     }
   }, budget(120_000));
 
-  // A floor met by handing out fresh engines would make every NPC engine worth stripping.
   it('rolls engine wear by the same odds as other parts', () => {
     const wears = Object.values(NPCS).flatMap((template) => Array.from({ length: 12 }, (_, i) => mountedParts(rolled(template, 'standard', i + 1), 'engine')[0].wear));
     const worn = wears.filter((wear) => wear >= 3).length / wears.length;
@@ -162,7 +154,6 @@ describe('NPC equipment generation', () => {
   }, budget(120_000));
 
   it('gives an NPC no cargo past its speed floor, and the player any', () => {
-    // The first roll whose speed floor holds fewer tools than its free cells, so the floor is what stops the load.
     const rolls = Array.from({ length: 20 }, (_, i) => {
       const world = { ...structuredClone(fixture), rngState: i + 1 };
       const npc = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 50, y: 50 });
@@ -203,7 +194,7 @@ describe('NPC equipment generation', () => {
     template.loadout.chassis = [{ value: 'hauler', weight: 1 }];
     template.loadout.engine = [{ value: 'turbine', weight: 1000 }, { value: 'stockEngine', weight: 1 }];
     template.loadout.weapon = [{ value: 'mg', weight: 1 }];
-    const loadout = generateNpcLoadout({ ...fixture }, template, null, 'poor'); // a poor roll adds nothing past the required build
+    const loadout = generateNpcLoadout({ ...fixture }, template, null, 'poor');
     expect(loadout.parts.map((p) => p.defId)).toEqual(['stockEngine', 'mg']);
   });
 
@@ -243,7 +234,6 @@ describe('NPC equipment generation', () => {
     for (let attempt = 0; attempt < Math.max(...Object.values(NPCS).map((t) => t.cap)) + 2; attempt++) {
       for (const template of Object.values(NPCS)) world.spawnTimer[template.id] = 1;
       spawnNpcs(world);
-      // Spawned drivers leave the gates before the next round, as they drive off in play.
       world.vehicles.filter((v) => v.brain).forEach((v, i) => { v.pos = { x: 5 + (i % 40) * 4, y: world.size - 5 - Math.floor(i / 40) * 4 }; });
     }
     for (const template of Object.values(NPCS)) {
@@ -316,7 +306,6 @@ describe('trader spare parts', () => {
     template.loadout.cargoPart = [{ value: null, weight: 1 }];
     template.loadout.goods = [{ value: null, weight: 1 }];
     template.loadout.spares = { pool: [{ value: 'mg', weight: 1 }], count: [{ value: 2, weight: 1 }] };
-    // A poor truck carries the least armor, which leaves rated mass for spares.
     const loadout = generateNpcLoadout({ ...fixture, rngState: 3 }, template, null, 'poor');
     expect(loadout.spares.length).toBeGreaterThan(0);
     for (const spare of loadout.spares) {
@@ -331,8 +320,6 @@ describe('trader spare parts', () => {
     template.loadout.chassis = [{ value: 'buggy', weight: 1 }];
     template.loadout.cargoPart = [{ value: null, weight: 1 }];
     template.loadout.spares = { pool: [{ value: 'mg', weight: 1 }], count: [{ value: 3, weight: 1 }] };
-    // The gear picker keeps room for the biggest load, so the goods count that fills the grid is found by rolling
-    // again until the room left after gear and repair parts matches it.
     let free = 1;
     for (let i = 0; i < 10; i++) {
       template.loadout.goods = [{ value: { good: 'textiles', count: free }, weight: 1 }];
@@ -413,8 +400,6 @@ describe('NPC loadout tables', () => {
     }
   });
 
-  // A refit keeps the driver's chassis. A chassis with no build that holds MIN_NPC_SPEED on its most worn engine
-  // would throw in play. The poor level wears most and has the smallest budget, and eight rolls hit the last wear step.
   it('every chassis in every table holds the speed floor on its most worn engine', () => {
     for (const tpl of Object.values(NPCS)) {
       for (const { value } of tpl.loadout.chassis) {
@@ -480,7 +465,6 @@ describe('armed choice cache', () => {
 describe('loadout fingerprint', () => {
   const sha = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 16);
 
-  // Recorded on the code before the gear pick was sped up. A change here is a change of behavior, never re-record it.
   it('rolls the same loadouts and RNG streams for every template', () => {
     const w = emptyWorld();
     const loadouts = Object.values(NPCS).flatMap((template) => Array.from({ length: 5 }, () => generateNpcLoadout(w, template)));

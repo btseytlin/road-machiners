@@ -24,7 +24,6 @@ function coreCells(c: ChassisDef, role: string): Cell[] {
   });
 }
 
-// The armor letters of the cells next to the given cells.
 function armorTouched(c: ChassisDef, cells: Cell[]): Set<string> {
   const touched = new Set<string>();
   for (const { x, y } of cells) {
@@ -36,32 +35,27 @@ function armorTouched(c: ChassisDef, cells: Cell[]): Set<string> {
   return touched;
 }
 
-// The hood hole of these engines lies on the row behind the front armor row, so the front gap cannot exist.
 const FRONT_ENGINE: readonly string[] = ['longbed', 'tractor'];
 
-// Chassis whose tank shares a column with a wheel, with the reason. A stale entry fails the test.
 const TANK_BESIDE_WHEELS: Record<string, string> = {
   buggy: 'With the cab and transmission off the wheel columns and the 2x2 deck block kept, a wheel column is the only place left for the tank.',
   courier: 'With the cab and transmission off the wheel columns and the 2x2 deck block kept, a wheel column is the only place left for the tank.',
 };
 
-// Chassis with an open 1x2 seat that are not four columns wide, with the reason. A stale entry fails the test.
 const SEAT_CAB: Record<string, string> = {
   wagon: 'An open gun platform. On its 6x5 grid a six-cell cab leaves no deck block, which tier 2 requires, and cuts the deck from 11 cells to 6.',
 };
 
-// Chassis values before the layout rules. The rules move deck cells, and base makes up the price.
 const VALUES = {
   scout: 2444, hauler: 3676, buggy: 1928, wagon: 3022, courier: 2320, van: 3080, longbed: 5384,
   carrier: 4876, tractor: 4382, jeep: 2186, convertible: 2992, bus: 3800, loader: 5088, niva: 3148, bukhanka: 3450, lincoln: 4288,
 };
 
-// Chassis with no free 2 by 2 block of deck cells, with the reason. A stale entry fails the test.
 const NO_DECK_BLOCK: Record<string, string> = {
   scout: 'A cab clear of the wheels on 5 columns leaves only single deck columns.',
 };
 
-const RATED_MASS = 3840; // the scout's rated mass before its cab moved
+const RATED_MASS = 3840;
 
 const columns = (cells: Cell[]) => new Set(cells.map((cell) => cell.x));
 
@@ -105,7 +99,6 @@ describe('chassis grids', () => {
   });
 
   it('keeps the scout worth what it was before its cab moved', () => {
-    // 800 base plus the modifier of 6 deck cells and 10 armor cells.
     expect(CHASSIS.scout.value).toBe(2444);
     expect(CHASSIS.scout.ratedMass).toBe(RATED_MASS);
   });
@@ -168,7 +161,6 @@ describe('chassis grids', () => {
   });
 });
 
-// True when the layout has a w by h block of cells that carry only the letter D, w across and h along the truck.
 function hasDeckBlock(c: ChassisDef, w: number, h: number): boolean {
   for (let y = 0; y + h <= c.layout.length; y++) {
     for (let x = 0; x + w <= c.layout[0].length; x++) {
@@ -239,7 +231,6 @@ describe('chassis tradeoffs', () => {
   const coreHp = (c: ChassisDef): number => c.core.reduce((n, core) => n + partDef(core.defId).hp, 0);
   const axes = (c: ChassisDef): number[] => [c.maxSpeed, c.accel, c.brake, c.turnSlow, c.turnFast, count(c, 'D'), armorCells(c), c.ratedMass, coreHp(c), c.fuelCap / c.fuelPerTile];
 
-  // True when a is at least as good as b on every stat and better on one.
   function chassisDominates(a: ChassisDef, b: ChassisDef): boolean {
     const x = axes(a);
     const y = axes(b);

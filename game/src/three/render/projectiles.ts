@@ -10,37 +10,31 @@ import { PAL } from '../../render/palette';
 import type { Terrain } from '../../sim/terrain';
 import type { ShotRound } from '../../sim/types';
 
-// Where a round leaves the gun and the unit direction it leaves in, read when the round fires.
 export type Muzzle = { pos: V3; dir: V3 };
 
-// What a round tells the sound when it leaves the muzzle and when it lands.
 export type ShotCues = { fired: (m: Muzzle) => void; landed: () => void };
 
 type Look = 'tracer' | 'shell' | 'missile' | 'grenade';
 
 export type ProjectileSpec = {
   look: Look;
-  speed: number; // m/s; a flight longer than the rest of the shot band is cut to fit it
-  gapMs: number; // ms between the rounds of one burst; a burst is squeezed to fit CONFIG.combatBurstMaxMs
-  length: number; // meters, of the drawn round or streak
-  width: number; // meters
+  speed: number;
+  gapMs: number;
+  length: number;
+  width: number;
   color: number;
-  flash: number; // muzzle flash length, meters
-  wobble: number; // meters of side swing at mid flight
-  casing: CasingSize | null; // the spent casing the gun throws per round, in CASING; null for caseless rounds
-  pellets?: true; // the rounds of one volley are pellets of one shell, so the volley throws one casing
+  flash: number;
+  wobble: number;
+  casing: CasingSize | null;
+  pellets?: true;
 };
 
-// The look of round k of a volley. Only the first pellet of a shell throws its casing.
 export function roundSpec(spec: ProjectileSpec, k: number): ProjectileSpec {
   return spec.pellets && k > 0 ? { ...spec, casing: null } : spec;
 }
 
-// The shot band is CONFIG.combatShotMs, so slow rounds mostly fly the rest of the band and fast ones a part of it.
-// Keys are weapon part def ids.
 export const PROJECTILES: Record<string, ProjectileSpec> = {
   mg: { look: 'tracer', speed: 220, gapMs: 80, length: 1.4, width: 0.05, color: PAL.flash, flash: 0.6, wobble: 0, casing: 'small' },
-  // Buckshot leaves almost at once, as a cloud of short streaks.
   shotgun: { look: 'tracer', speed: 160, gapMs: 8, length: 0.6, width: 0.04, color: PAL.flash, flash: 0.8, wobble: 0, casing: 'small', pellets: true },
   autocannon: { look: 'tracer', speed: 140, gapMs: 140, length: 1.2, width: 0.1, color: 0xffad50, flash: 0.9, wobble: 0, casing: 'small' },
   cannon: { look: 'shell', speed: 60, gapMs: 0, length: 0.6, width: 0.22, color: 0xffad50, flash: 1.4, wobble: 0, casing: 'large' },
@@ -48,12 +42,10 @@ export const PROJECTILES: Record<string, ProjectileSpec> = {
   sniperCannon: { look: 'shell', speed: 110, gapMs: 0, length: 0.7, width: 0.16, color: 0xffd080, flash: 1.2, wobble: 0, casing: 'large' },
   heavyMg: { look: 'tracer', speed: 200, gapMs: 90, length: 1.4, width: 0.07, color: PAL.flash, flash: 0.7, wobble: 0, casing: 'small' },
   gatling: { look: 'tracer', speed: 220, gapMs: 38, length: 1.2, width: 0.05, color: PAL.flash, flash: 0.7, wobble: 0, casing: 'small' },
-  // Rifle rounds are one fast bright streak.
   longRifle: { look: 'tracer', speed: 260, gapMs: 0, length: 2, width: 0.05, color: 0xffd080, flash: 0.8, wobble: 0, casing: 'small' },
   amRifle: { look: 'tracer', speed: 260, gapMs: 0, length: 2.2, width: 0.08, color: 0xffd080, flash: 1.1, wobble: 0, casing: 'small' },
   battleRifle: { look: 'tracer', speed: 240, gapMs: 110, length: 1.6, width: 0.06, color: 0xffd080, flash: 0.8, wobble: 0, casing: 'small' },
   flechette: { look: 'tracer', speed: 280, gapMs: 70, length: 1.8, width: 0.04, color: 0xd8e0e8, flash: 0.8, wobble: 0, casing: null },
-  // Burning fuel crawls out in short fat orange gouts.
   flamer: { look: 'tracer', speed: 30, gapMs: 50, length: 0.8, width: 0.3, color: 0xff7a20, flash: 1, wobble: 0.3, casing: null },
   pneumobolter: { look: 'shell', speed: 90, gapMs: 0, length: 0.9, width: 0.08, color: 0xb8b0a0, flash: 0.4, wobble: 0, casing: null },
   slugCannon: { look: 'shell', speed: 100, gapMs: 150, length: 0.4, width: 0.14, color: 0xffad50, flash: 1, wobble: 0, casing: 'large' },
@@ -62,7 +54,6 @@ export const PROJECTILES: Record<string, ProjectileSpec> = {
   rocketRack: { look: 'missile', speed: 40, gapMs: 110, length: 0.9, width: 0.16, color: 0x6a6a64, flash: 0.9, wobble: 0.5, casing: null },
 };
 
-// The blast radius in meters of a weapon's rounds, or 0 for rounds that do not explode.
 export function blastRadiusOf(key: string): number {
   const def = PARTS[key];
   if (def?.kind !== 'weapon') throw new Error(`${key} is not a weapon`);
@@ -75,28 +66,21 @@ export function projectileOf(key: string): ProjectileSpec {
   return spec;
 }
 
-// Hits land below the gun point on the truck body, scattered over a band of its height.
-const HIT = { drop: 0.8, band: 0.7 }; // meters
-const MISS_DEPTH = 1; // meters a non-exploding ground miss may land short or long of the sim point
-const GRENADE_ARC = 3; // meters a grenade climbs above the straight line at mid flight
-const SHELL_TAIL = 3; // a shell's glowing trail, as a multiple of its length
+const HIT = { drop: 0.8, band: 0.7 };
+const MISS_DEPTH = 1;
+const GRENADE_ARC = 3;
+const SHELL_TAIL = 3;
 const MISSILE = {
-  swings: 1.5, // side swings over one flight
-  smokePerSecond: 90, // trail puffs
-  nose: 0x9a3a2a, // warhead, palette rust top family
+  swings: 1.5,
+  smokePerSecond: 90,
+  nose: 0x9a3a2a,
   flame: 0xffc060,
 };
 
-// What a round hit: a truck, the ground, or nothing drawn, like a stray into a truck the player cannot see.
 export type Impact = 'truck' | 'ground' | 'none';
 export type RoundPlan = { land: V3; impact: Impact; delayMs: number; flightMs: number };
-// Where one round flies: point b of the truck it struck and its offset across the line of fire, or the point where
-// it lands on the ground or ends unseen.
 export type RoundAim = { impact: 'truck'; b: V3; offset: number } | { impact: 'ground' | 'none'; land: V3 };
 
-// A round that struck no truck lands where the sim put its miss. A round that struck a truck other than its target
-// flies to that truck when it shows, else it ends unseen at the miss point. pointOf gives the point of a truck that
-// shows, and missAt the ground point of a miss at an offset across the line of fire.
 export function roundAims(b: V3, targetId: string, rounds: ShotRound[], pointOf: (id: string) => V3 | null, missAt: (offset: number) => V3): RoundAim[] {
   return rounds.map((r): RoundAim => {
     if (r.struck === null) return { impact: 'ground', land: missAt(r.offset) };
@@ -106,12 +90,8 @@ export function roundAims(b: V3, targetId: string, rounds: ShotRound[], pointOf:
   });
 }
 
-// When a volley leaves and how long its band is. startMs is the volley's own start; burstMaxMs caps one burst's length.
 export type VolleyTiming = { startMs: number; windowMs: number; burstMaxMs: number };
 
-// Where and when each round of a volley from gun point a lands. groundY gives the ground height under a point.
-// Rounds leave gapMs apart from startMs, and every one lands within the window. A ground miss of a round with a
-// blast radius lands exactly on its point, since the sim applied the splash there.
 export function planVolley(spec: ProjectileSpec, a: V3, rounds: RoundAim[], timing: VolleyTiming, groundY: (p: V3) => number, blastRadius: number): RoundPlan[] {
   const { startMs, windowMs, burstMaxMs } = timing;
   const gap = rounds.length > 1 ? Math.min(spec.gapMs, burstMaxMs / (rounds.length - 1)) : 0;
@@ -129,7 +109,6 @@ function hitPoint(a: V3, b: V3, offset: number): V3 {
   return { x: p.x, y: b.y - HIT.drop + (Math.random() - 0.5) * HIT.band, z: p.z };
 }
 
-// A miss moved a little short or long along the line of fire, so a burst does not sit on one straight line.
 function groundMiss(a: V3, land: V3, groundY: (p: V3) => number): V3 {
   const dx = land.x - a.x;
   const dz = land.z - a.z;
@@ -139,18 +118,15 @@ function groundMiss(a: V3, land: V3, groundY: (p: V3) => number): V3 {
   return { ...end, y: groundY(end) };
 }
 
-// ---- Flights.
-
-// A round waiting for its delay, then flying from the muzzle to its landing point over its life.
 type Flight = {
   spec: ProjectileSpec;
   obj: THREE.Object3D;
   muzzle: () => Muzzle;
   from: THREE.Vector3;
   to: THREE.Vector3;
-  side: THREE.Vector3; // unit horizontal direction the wobble swings along
+  side: THREE.Vector3;
   phase: number;
-  age: number; // seconds; negative while waiting
+  age: number;
   life: number;
   onFire: (m: Muzzle) => void;
   onLand: () => void;
@@ -160,7 +136,6 @@ export type Launch = { spec: ProjectileSpec; muzzle: () => Muzzle; plan: RoundPl
 
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 
-// Builds meshes from shared geometry and materials, which live as long as the scene.
 class ProjectileKit {
   private box = new THREE.BoxGeometry(1, 1, 1);
   private solid = new Map<number, THREE.MeshBasicMaterial>();
@@ -178,7 +153,6 @@ class ProjectileKit {
     return this.missile(spec);
   }
 
-  // A streak whose front is the round. It is stretched each frame, so its x scale is set by the flight.
   private tracer(spec: ProjectileSpec): THREE.Object3D {
     const streak = new THREE.Mesh(this.box, this.glowOf(spec.color, 1));
     streak.position.x = -0.5;
@@ -188,7 +162,6 @@ class ProjectileKit {
     return g;
   }
 
-  // A hot slug with a fading glow trail behind it.
   private shell(spec: ProjectileSpec): THREE.Object3D {
     const g = new THREE.Group();
     const core = new THREE.Mesh(this.shellCore, this.glowOf(0xfff0c0, 1));
@@ -200,14 +173,12 @@ class ProjectileKit {
     return g;
   }
 
-  // A dull round grenade with no glow, lobbed on an arc.
   private grenade(spec: ProjectileSpec): THREE.Object3D {
     const body = new THREE.Mesh(this.shellCore, this.solidOf(spec.color));
     body.scale.set(spec.length, spec.width, spec.width);
     return body;
   }
 
-  // A finned rocket: body, warhead cone and a flame at the tail.
   private missile(spec: ProjectileSpec): THREE.Object3D {
     const g = new THREE.Group();
     const L = spec.length;
@@ -269,7 +240,6 @@ export class Projectiles {
   private ahead = new THREE.Vector3();
   private dir = new THREE.Vector3();
 
-  // smoke puffs one trail puff at a point behind a missile.
   constructor(private scene: THREE.Scene, private smoke: (p: V3) => void) {}
 
   launch(l: Launch): void {
@@ -298,7 +268,7 @@ export class Projectiles {
       const before = f.age;
       f.age += dt;
       if (f.age < 0) continue;
-      if (before <= 0) this.fire(f); // the delay ran out this frame
+      if (before <= 0) this.fire(f);
       if (f.age >= f.life) {
         this.scene.remove(f.obj);
         this.flights.splice(i, 1);
@@ -324,12 +294,10 @@ export class Projectiles {
     this.dir.subVectors(this.ahead, this.at).normalize();
     f.obj.position.copy(this.at);
     f.obj.quaternion.setFromUnitVectors(X_AXIS, this.dir);
-    // A streak never reaches back past the muzzle.
     if (f.spec.look === 'tracer') f.obj.scale.x = Math.min(f.spec.length, this.at.distanceTo(f.from));
     if (f.spec.look === 'missile') this.trail(f, dt);
   }
 
-  // Straight from the muzzle to the landing point, plus a swing that is zero at both ends. A grenade also arcs up.
   private pointAt(f: Flight, t: number, out: THREE.Vector3): THREE.Vector3 {
     out.lerpVectors(f.from, f.to, t);
     const swing = f.spec.wobble * Math.sin(Math.PI * t) * Math.sin(MISSILE.swings * 2 * Math.PI * t + f.phase);
@@ -345,46 +313,41 @@ export class Projectiles {
   }
 }
 
-// Spent brass a gun throws out as each round fires. A casing leaves from behind the muzzle, flies out to the gun's
-// right side and up, bounces once on the ground or deck and lies flat. Casings stay a day of turns and shrink away in
-// the last tenth of it. Render-only: never saved, so they are gone after a load, and never read by sim or physics.
-
 export type CasingSize = 'small' | 'large';
 
-// Sizes are a little larger than real brass, so a casing still reads from the isometric camera without looking like loot.
 export const CASING = {
-  max: 400, // casings alive at once, both sizes together; a new one past it replaces the oldest
+  max: 400,
   lifeTurns: TIME.turnsPerDay,
-  fadeShare: 0.1, // the last share of the life over which a casing shrinks away
-  small: { length: 0.14, radius: 0.03 }, // meters
+  fadeShare: 0.1,
+  small: { length: 0.14, radius: 0.03 },
   large: { length: 0.28, radius: 0.06 },
-  glint: 0x4a3810, // brass glows this much, so a casing reads against dark ground and in shade
-  back: 0.6, // meters behind the muzzle along the barrel where the casing leaves the breech
-  eject: { side: 2.4, up: 2.2, spread: 0.8, spin: 18 }, // m/s out to the right and up, ± m/s of spread, rad/s of tumble
-  gravity: 9.8, // m/s^2
-  bounce: 0.35, // share of the falling speed kept by the one bounce
-  slide: 0.4, // share of the ground speed kept by the bounce
+  glint: 0x4a3810,
+  back: 0.6,
+  eject: { side: 2.4, up: 2.2, spread: 0.8, spin: 18 },
+  gravity: 9.8,
+  bounce: 0.35,
+  slide: 0.4,
 } as const;
 
 type Casing = {
   size: CasingSize;
   pos: THREE.Vector3;
   vel: THREE.Vector3;
-  yaw: number; // radians about up
-  roll: number; // radians of tumble about the casing's own axis line
-  spin: number; // rad/s of tumble while flying
+  yaw: number;
+  roll: number;
+  spin: number;
   bounced: boolean;
   resting: boolean;
-  turn: number; // the turn it was thrown in
+  turn: number;
 };
 
 const SIZES: CasingSize[] = ['small', 'large'];
 const UP = new THREE.Vector3(0, 1, 0);
-const AXIS = new THREE.Vector3(1, 0, 0); // a casing's length, before its yaw
+const AXIS = new THREE.Vector3(1, 0, 0);
 
 export class Casings {
   readonly meshes: Record<CasingSize, THREE.InstancedMesh>;
-  private casings: Casing[] = []; // oldest first
+  private casings: Casing[] = [];
   private matrix = new THREE.Matrix4();
   private quat = new THREE.Quaternion();
   private tumble = new THREE.Quaternion();
@@ -396,13 +359,11 @@ export class Casings {
     scene.add(this.meshes.small, this.meshes.large);
   }
 
-  // Throws one casing from the gun as its round fires. A gun with no casing (size null) throws nothing.
   eject(muzzle: Muzzle, size: CasingSize | null, turn: number): void {
     if (size === null) return;
     const dir = new THREE.Vector3(muzzle.dir.x, muzzle.dir.y, muzzle.dir.z).normalize();
     const flat = Math.hypot(dir.x, dir.z);
     if (!(flat > 0)) throw new Error('A casing needs a muzzle pointing off the vertical, to know its right side');
-    // Positive offsets across the line of fire are the shooter's right, as in computeRoundPoint.
     const right = new THREE.Vector3(-dir.z / flat, 0, dir.x / flat);
     const pos = new THREE.Vector3(muzzle.pos.x, muzzle.pos.y, muzzle.pos.z).addScaledVector(dir, -CASING.back);
     const e = CASING.eject;
@@ -412,7 +373,6 @@ export class Casings {
     this.casings.push({ size, pos, vel, yaw, roll: 0, spin: e.spin * (Math.random() + 0.5), bounced: false, resting: false, turn });
   }
 
-  // Moves flying casings, drops the expired ones and draws the rest. terrain gives the ground or deck height.
   tick(dt: number, terrain: Terrain, turn: number): void {
     this.casings = this.casings.filter((c) => turn - c.turn < CASING.lifeTurns);
     for (const c of this.casings) if (!c.resting) this.fly(c, dt, terrain);
@@ -425,7 +385,6 @@ export class Casings {
     this.material.dispose();
   }
 
-  // A simple arc under gravity. The first touch of the ground bounces it, the second lays it flat at a random yaw.
   private fly(c: Casing, dt: number, terrain: Terrain): void {
     c.vel.y -= CASING.gravity * dt;
     c.pos.addScaledVector(c.vel, dt);
@@ -460,7 +419,6 @@ export class Casings {
   }
 }
 
-// The size share left at an age in turns: whole until the last fadeShare of the life, then down toward nothing.
 function fadeOf(age: number): number {
   const fade = CASING.lifeTurns * CASING.fadeShare;
   return Math.min(1, (CASING.lifeTurns - age) / fade);
@@ -470,12 +428,11 @@ function spread(): number {
   return (Math.random() * 2 - 1) * CASING.eject.spread;
 }
 
-// A six-sided brass cylinder lying along +x, one instance per casing of a size.
 function casingMesh(size: { length: number; radius: number }, material: THREE.Material): THREE.InstancedMesh {
   const geo = new THREE.CylinderGeometry(size.radius, size.radius, size.length, 6).rotateZ(Math.PI / 2);
   const mesh = new THREE.InstancedMesh(geo, material, CASING.max);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.count = 0;
-  mesh.frustumCulled = false; // casings land anywhere; the bounds of one casing mean nothing
+  mesh.frustumCulled = false;
   return mesh;
 }

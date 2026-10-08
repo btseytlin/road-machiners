@@ -20,8 +20,8 @@ import { READY_ARC_BIT, SPENT_ARC_BIT } from './models';
 
 const S = PHYSICS.metersPerTile;
 const ICON_PX = 26;
-const LIFT = 0.15; // meters above the ground, so the shape does not z-fight with it
-const DEG_PER_STEP = 5; // at most this many degrees per edge segment keeps the curve smooth
+const LIFT = 0.15;
+const DEG_PER_STEP = 5;
 const LINE_WIDTH_PX = 2;
 const FILL_ALPHA = 0.075;
 const LINE_ALPHA = 0.075;
@@ -32,7 +32,6 @@ export class WeaponRangeView {
   private fill: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
   private edges: Line2[] = [];
 
-  // stencilBit: the fill draws each pixel once, so where its arcs overlap it is no darker.
   constructor(private readonly color: number, stencilBit: number) {
     this.fill = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({
       color, transparent: true, opacity: FILL_ALPHA, depthTest: false, side: THREE.DoubleSide,
@@ -44,7 +43,6 @@ export class WeaponRangeView {
     this.root.visible = false;
   }
 
-  // Sides a tall part blocks are left out, so each shape shows where its gun can fire. No guns hides the view.
   set(terrain: Terrain, pos: Vec, heading: number, weapons: MountedWeapon[]): void {
     this.root.visible = weapons.length > 0;
     const at = (x: number, y: number) => new THREE.Vector3(x * S, markHeightAt(terrain, pos, x, y) * S + LIFT, y * S);
@@ -85,21 +83,19 @@ export class WeaponRangeView {
   }
 }
 
-// Points along the rim of one span, at most DEG_PER_STEP degrees apart.
 function rimPoints(span: FireSpan, heading: number, point: (angle: number) => THREE.Vector3): THREE.Vector3[] {
   const steps = Math.max(1, Math.ceil((span.to - span.from) / DEG_PER_STEP));
   return Array.from({ length: steps + 1 }, (_, i) => point(heading + (span.from + ((span.to - span.from) * i) / steps) * DEG));
 }
 
 
-export type IconSpot = { angle: number; distance: number }; // degrees from the truck heading, tiles from the truck
-export type HoverArc = { weapon: MountedWeapon; slot: number; spans: FireSpan[]; spent: boolean; spot: IconSpot }; // slot: the gun's number, as the weapon panel shows it
+export type IconSpot = { angle: number; distance: number };
+export type HoverArc = { weapon: MountedWeapon; slot: number; spans: FireSpan[]; spent: boolean; spot: IconSpot };
 
-const ICON_RANGE_SHARE = 0.5; // an icon sits at this share of the gun's range
-const ICON_NUDGE_SHARE = 0.15; // icons on one spot step outward by this share of range
-const SAME_SPOT_TILES = 1.5; // icons closer than this overlap
+const ICON_RANGE_SHARE = 0.5;
+const ICON_NUDGE_SHARE = 0.15;
+const SAME_SPOT_TILES = 1.5;
 
-// Center of the widest span at half range. A spot that touches one already taken moves out along the radius until it is free.
 export function iconSpot(spans: readonly FireSpan[], range: number, taken: readonly IconSpot[]): IconSpot {
   const widest = spans.reduce((a, b) => (b.to - b.from > a.to - a.from ? b : a));
   const angle = (widest.from + widest.to) / 2;
@@ -110,7 +106,6 @@ export function iconSpot(spans: readonly FireSpan[], range: number, taken: reado
   return { angle, distance };
 }
 
-// The arcs to draw: guns with hit points, in mount order. Empty and cooling guns are spent.
 export function hoverArcs(world: World, vehicle: Vehicle, weapons: readonly MountedWeapon[]): HoverArc[] {
   const arcs: HoverArc[] = [];
   for (const [i, weapon] of weapons.entries()) {
@@ -127,14 +122,13 @@ export class HoverArcsView {
   readonly root = new THREE.Group();
   private readonly ready = new WeaponRangeView(PAL.select, READY_ARC_BIT);
   private readonly spent = new WeaponRangeView(PAL.arcSpent, SPENT_ARC_BIT);
-  private readonly icons = new Map<string, HTMLElement>(); // by weapon part id
+  private readonly icons = new Map<string, HTMLElement>();
 
   constructor(private readonly overlay: HTMLElement, private readonly rig: CameraRig) {
     this.root.add(this.ready.root, this.spent.root);
     this.hide();
   }
 
-  // Draws the arcs of the hovered vehicle at its shown pose, or hides them without one.
   follow(world: World, hovered: string | null, frames: Record<string, VehicleFrame>, off: boolean): void {
     const vehicle = hovered === null ? undefined : world.vehicles.find((v) => v.id === hovered);
     const frame = vehicle && frames[vehicle.id];

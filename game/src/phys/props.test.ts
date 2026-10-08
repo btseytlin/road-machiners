@@ -37,7 +37,6 @@ function landmark(id: string, look: LandmarkLook, pos: { x: number; y: number },
   return { id, kind: 'landmark', look, pos, r, yaw };
 }
 
-// A careless driver, so the truck drives straight at its point instead of routing around the prop.
 function straight(from: { x: number; y: number }, heading: number, to: { x: number; y: number }, props: Obstacle[]): World {
   const w = emptyWorld(from);
   me(w).heading = heading;
@@ -47,7 +46,6 @@ function straight(from: { x: number; y: number }, heading: number, to: { x: numb
   return setMoveOrder(w, { kind: 'through', dest: to });
 }
 
-// A careless driver holding a steady pace in tiles per turn, from the start.
 function paced(from: { x: number; y: number }, to: { x: number; y: number }, pace: number, props: Obstacle[]): World {
   const w = emptyWorld(from);
   me(w).speed = pace;
@@ -57,9 +55,6 @@ function paced(from: { x: number; y: number }, to: { x: number; y: number }, pac
   return w;
 }
 
-// Plays turns through the real turn pipeline, carrying one Drive from turn to turn as the game does.
-// live holds the props with colliders in the physics world the last turn left. speeds holds the player truck's
-// ground speed in m/s over each physics step.
 function play(w: World, turns: number): { w: World; hits: string[]; crashes: Crash[]; breaks: Break[]; live: string[]; speeds: number[] } {
   let d = buildDrive(w);
   const hits: string[] = [];
@@ -83,18 +78,15 @@ function play(w: World, turns: number): { w: World; hits: string[]; crashes: Cra
   return { w, hits, crashes, breaks, live, speeds };
 }
 
-// Tiles from a truck's center line to its side.
 const halfWidth = (w: World) => bodyOf(me(w).chassisId).half.z / S;
 
-// Prop colliders that hold a point in meters.
 function propsAt(d: Drive, p: { x: number; y: number; z: number }): string[] {
   return Object.entries(d.obstacles).flatMap(([id, handles]) => (handles.some((h) => d.world.getCollider(h).containsPoint(p)) ? [id] : []));
 }
 
 describe('prop colliders follow the model shape', () => {
-  // A fence segment is 4 m long at scale 1, so its radius is half a tile. Yaw a quarter turn lays it along map y.
   const fence = landmark('fence1', 'fence', { x: 40, y: 30 }, 0.5, Math.PI / 2);
-  const fenceEnd = 2.02 / S; // tiles from the fence center to its end post
+  const fenceEnd = 2.02 / S;
 
   it('a truck driving at the middle of a fence is stopped by it', () => {
     const { w, hits } = play(paced({ x: 37, y: 30 }, { x: 48, y: 30 }, toTilesPerTurn(BREAKABLE.breakSpeed / 2), [fence]), 8);
@@ -117,7 +109,6 @@ describe('prop colliders follow the model shape', () => {
   });
 
   it('a truck drives under the end of a billboard board', () => {
-    // The billboard stands at its real size. Its board reaches past its left leg, 4 to 7 m out and over 3.1 m up.
     const board = landmark('board1', 'billboard', { x: 40, y: 30 }, 1.5, 0);
     const y = 30 - 5.6 / S;
     const { w, hits } = play(straight({ x: 34, y }, 0, { x: 48, y }, [board]), 5);
@@ -126,7 +117,6 @@ describe('prop colliders follow the model shape', () => {
   });
 
   it('a gas station canopy is no collider, its posts are', () => {
-    // Scale 0.74, as the baked stations stand. The canopy then starts 3 m up; a post stands at model (0, -3.5).
     const station = landmark('gas1', 'gasStation', { x: 40, y: 30 }, 1.332, 0);
     const w = emptyWorld();
     w.obstacles = [station];
@@ -217,7 +207,6 @@ describe('breakable props', () => {
     expect(me(w).pos.x).toBeGreaterThan(42);
   });
 
-  // The contact pushes the truck back for the steps it lasts. Within a few steps of the first push it drives at the kept speed.
   it('breaking a fence costs the truck its slowdown share of speed, not a full stop', () => {
     const { w, speeds } = play(paced({ x: 37, y: 30 }, { x: 60, y: 30 }, fast, [fence]), 3);
     const hit = speeds.indexOf(Math.min(...speeds));
@@ -256,7 +245,6 @@ describe('breakable props', () => {
     let w = paced({ x: 34, y: 30 }, { x: 80, y: 30 }, fast, [fence]);
     let d = buildDrive(w);
     const broke: string[] = [];
-    // The drive passes through a snapshot between turns, as the game's playback does.
     const turn = () => {
       let r: TurnResult | null = null;
       w = endTurn(w, physicsMove(d, (x) => (r = x)));
@@ -286,7 +274,6 @@ describe('Broken Wing', () => {
   const deck = deckById('broken-wing');
   const across = (p: Vec) => (p.y - deck.from.y) * deck.axis.x - (p.x - deck.from.x) * deck.axis.y;
 
-  // The baked map's world with only the player truck, driving carelessly straight through `to`.
   function onMap(from: Vec, heading: number, to: Vec): World {
     const w = newWorld(1337, START_KITS.standard, TEST_MAP, false);
     w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
@@ -298,7 +285,6 @@ describe('Broken Wing', () => {
     return setMoveOrder(w, { kind: 'through', dest: to });
   }
 
-  // Plays turns as play() does, keeping the player truck's frames: its map point and body height in meters.
   function drive(w: World, turns: number): { w: World; hits: string[]; frames: { at: Vec; y: number }[] } {
     let d = buildDrive(w);
     const hits: string[] = [];
@@ -322,7 +308,6 @@ describe('Broken Wing', () => {
     const { w, hits, frames } = drive(onMap(BROKEN_WING_POINT(BROKEN_WING.hoopAt - 8, 0), 0, end), 14);
     expect(hits).toEqual([]);
     expect(me(w).pos.x).toBeGreaterThan(end.x - 2);
-    // On the deck the body rides at its rest height over the deck line.
     const b = bodyOf(me(w).chassisId);
     const rest = b.wheelRadius + PHYSICS.truck.suspensionRest - b.wheelY;
     const onDeck = frames.filter((f) => deckAt(f.at.x, f.at.y)?.deck.id === deck.id);
@@ -345,12 +330,8 @@ describe('a Fallen Sun flap', () => {
   const on = (along: number): Vec => ({ x: flap.from.x + flap.axis.x * along, y: flap.from.y + flap.axis.y * along });
   const alongOf = (p: Vec) => (p.x - flap.from.x) * flap.axis.x + (p.y - flap.from.y) * flap.axis.y;
 
-  // Turn by turn after the truck leaves the lip: whether it landed that turn, how hard, and whether it is upright.
   type JumpTurn = { landing: Landing | null; upright: boolean; air: number };
 
-  // The baked map's world with only the player truck, at road speed on the run-up, driving carelessly straight over
-  // the flap and on across the landing. The run-up, the flap and the landing are levelled to the ground at the flap's
-  // low end and cleared of props, as the bake leaves a flap's landing strip: the flat landing the rise is tuned for.
   function jump(turns: number): { w: World; hp: Map<string, number>; after: JumpTurn[]; hits: string[]; lipSpeed: number } {
     let w = newWorld(1337, START_KITS.standard, TEST_MAP);
     const [start, end] = [on(-12), on(flap.length + 36)];
@@ -400,12 +381,10 @@ describe('a Fallen Sun flap', () => {
 
     expect(lipSpeed).toBeGreaterThan(0.9 * max);
     expect(after.length).toBeGreaterThanOrEqual(2);
-    // The body rises well over its rest height above the ground in flight, and the wheels touch down within 2 turns.
     expect(after[0].air).toBeGreaterThan(0.5);
     const landed = after.slice(0, 2).findIndex((a) => a.landing !== null);
     expect(landed).toBeGreaterThanOrEqual(0);
     for (const a of after) expect(a.upright).toBe(true);
-    // No crash: neither the body on the ground, the rails nor the lip.
     expect(hits).toEqual([]);
     for (const wheel of coreParts(me(w), 'wheel')) {
       expect(hp.get(wheel.id)! - wheel.hp).toBeGreaterThan(0);

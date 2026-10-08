@@ -331,7 +331,6 @@ describe('local game save', () => {
     world.player = { ...world.player, explored: new Uint8Array(REGION.size * REGION.size).fill(1) };
     for (const slot of SLOTS) writeSave(storage, slot, world, 1000);
     const total = SLOTS.reduce((sum, slot) => sum + storage.getItem(slot === 'auto' ? 'roam.save' : `roam.save:${slot}`)!.length, 0);
-    // Browsers allow about 5 MB of local storage per origin.
     expect(total).toBeLessThan(5_000_000);
   });
 

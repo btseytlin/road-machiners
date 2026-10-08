@@ -4,29 +4,25 @@
 
 export const DETECT = {
   sound: {
-    limp: 24, // tiles heard at limp speed or below, a little past sight
-    perSpeed: 8, // extra tiles per tile/turn of the source's speed above limp speed, ignoring terrain and hills
-    ownPenalty: 10, // tiles of hearing lost per tile/turn of the listener's own speed
+    limp: 24,
+    perSpeed: 8,
+    ownPenalty: 10,
   },
   dust: {
-    perSpeed: 20, // tiles per tile/turn of the source's speed, before the terrain's dust multiplier; none at limp speed or below
-    eyeHeight: 0.6, // dust rises above the truck, so it clears hills a plain sight line would not
-    samplesPerTile: 1, // height samples along a dust sight line; a tall plume needs less care than sight
-    spawnBack: 0.5, // share of the turn's trail behind the truck where its new cloud rises
-    lifetime: 8, // turns a cloud hangs in the air before it is gone
-    riseTurns: 1, // turns before a cloud has risen high enough to be seen beyond sight range
-    riseHeight: 0.5, // height units a cloud climbs per turn, so older clouds clear taller hills
-    backDrift: 1.2, // tiles per turn a cloud drifts back the way its truck came
-    windDrift: 0.8, // tiles per turn a cloud drifts with the wind, per unit of wind
-    wander: 0.6, // tiles per turn of random push each cloud gets, fresh every turn
+    perSpeed: 20,
+    eyeHeight: 0.6,
+    samplesPerTile: 1,
+    spawnBack: 0.5,
+    lifetime: 8,
+    riseTurns: 1,
+    riseHeight: 0.5,
+    backDrift: 1.2,
+    windDrift: 0.8,
+    wander: 0.6,
   },
-  // Scanner range lives on the part itself (src/data/parts.ts, PARTS.scanner.range), so towns and
-  // the grid read one number.
-  // A contact circle's radius. Sound and dust give only a vague area, about a third of the distance.
-  // A scanner fixes the position far better, which is what its weapon mount buys.
   fuzz: {
-    base: 2, // tiles: the smallest contact circle, even at close range
-    perTile: 0.35, // tiles of extra circle radius per tile of true distance, by sound or dust
-    radioPerTile: 0.03, // the same, once a scanner has the vehicle
+    base: 2,
+    perTile: 0.35,
+    radioPerTile: 0.03,
   },
 } as const;

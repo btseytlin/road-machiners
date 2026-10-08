@@ -12,14 +12,10 @@ const BOTTLENECK = 'BOTTLENECK: ';
 const CHANGE = 'CHANGE:';
 const PROPOSAL_HEADING = '## Proposed change';
 const PREVIOUS_HEADING = '## Previous period';
-// Hermes's incident watch prints this file, so a finished review wakes Hermes. Hermes deletes it once handled.
 export const reviewPendingPath = (factoryHome: string): string => join(factoryHome, 'review-pending');
 
 export type Brief = { bottleneck: string; change: string | null };
 
-// Names the biggest waste of the period and proposes one factory change. The review hands it to Hermes, who checks it and tells the committee only what matters, so the review never changes the factory itself.
-// The period starts at the last review. The start is recorded first, so a failed review waits a full period, and Hermes reruns it by hand.
-// The period before it, of the same length, sits beside it, so a jump from one day to the next shows.
 export async function runStage(ctx: Ctx): Promise<void> {
   const to = ctx.now();
   const from = periodStart(ctx, to);
@@ -42,7 +38,6 @@ export async function runStage(ctx: Ctx): Promise<void> {
   rmSync(dir, { recursive: true, force: true });
 }
 
-// Agents have no GitHub login, so the job hands the agent the histories of the most expensive issues and the earlier reviews.
 async function writeInputs(ctx: Ctx, home: string, issues: number[]): Promise<void> {
   mkdirSync(`${home}/${OUT_DIR}/issues`, { recursive: true });
   for (const issue of issues) {
@@ -66,7 +61,6 @@ function periodStart(ctx: Ctx, to: Date): Date {
 
 async function runReviewAgent(ctx: Ctx, dir: string): Promise<void> {
   const ledger = join(ctx.cfg.home, 'ledger.jsonl');
-  // Docker mounts a missing file as an empty folder, so the review refuses to start without a ledger.
   if (!existsSync(ledger)) throw new Error(`The factory has no ledger at ${ledger} yet`);
   const readOnly = { [ledger]: FACTORY_LEDGER_MOUNT, [`${ctx.cfg.home}/logs`]: FACTORY_LOGS_MOUNT, [dirname(ctx.statePath)]: FACTORY_STATE_MOUNT };
   const prompt = fillPrompt('waste', { days: String(ctx.cfg.wasteReviewDays), ledger: FACTORY_LEDGER_MOUNT, logs: FACTORY_LOGS_MOUNT, state: FACTORY_STATE_MOUNT });
@@ -88,7 +82,6 @@ function parseChange(lines: string[]): string {
   return change;
 }
 
-// The issue keeps the numbers and the brief, so later reviews see what was tried. Hermes reads it from there.
 async function publish(ctx: Ctx, to: Date, numbers: string, brief: Brief): Promise<void> {
   const day = to.toISOString().slice(0, 10);
   const proposal = brief.change === null ? 'No change proposed.' : brief.change;

@@ -1,3 +1,4 @@
+import { stepScript } from '../activity';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -41,12 +42,11 @@ describe('ship', () => {
     expect(f.calls.slice(at('fetch'), at('fetch') + 4)).toEqual(['fetch', 'merge release/2026-09-29 main', 'merge main dev', 'push main dev']);
     expect(at('push main dev')).toBeLessThan(at('prepare main'));
     expect(at('prepare main')).toBeLessThan(at('run butler'));
-    expect(shells).toEqual([{ script: 'npm ci && npm run build', env: { SAVE_SCOPE: '', ERROR_REPORT_URL: 'https://play.test/errors', ERROR_REPORT_BUILD: 'release' } }]);
+    expect(shells).toEqual([{ script: stepScript('Building the release', [['npm ci', 'npm ci'], ['build', 'npm run build']]), env: { SAVE_SCOPE: '', ERROR_REPORT_URL: 'https://play.test/errors', ERROR_REPORT_BUILD: 'release' } }]);
     expect(runs).toEqual([
       { cmd: 'git', args: ['rev-parse', 'HEAD'], env: undefined },
       { cmd: 'butler', args: ['push', join(ROOT, 'work', 'release-main', 'game', 'dist'), 'u/g:html5', '--userversion', 'abc1234'], env: { BUTLER_API_KEY: 'secret' } },
     ]);
-    // The maps stay on the host under the commit, so itch never gets them.
     expect(existsSync(join(ROOT, 'work', 'release-main', 'game', 'dist', 'assets', 'index.js.map'))).toBe(false);
     expect(existsSync(join(ROOT, 'sourcemaps', CLONE_SHA, 'assets', 'index.js.map'))).toBe(true);
     expect(readPublished(ROOT)).toEqual([{ sha: CLONE_SHA, kind: 'release', publishedAt: '2026-09-29T10:00:00.000Z' }]);
@@ -117,26 +117,24 @@ describe('ship', () => {
     expect(f.calls).toContain('release release-2026-09-29 main ROAM release 2026-09-29\n- [#3] Trucks are faster.');
   });
 
-  it('merges main into the release and stops when main has game changes the release lacks, so a new candidate follows', async () => {
+  it('merges main into the release and ships when main has game changes the release lacks', async () => {
     const f = shippable();
     f.ctx.repo.isMerged = async () => false;
     f.ctx.repo.changedFiles = async () => ['factory/src/tick.ts', 'game/src/sim/sun.ts'];
     await ship(f.ctx, 11, 'Ann');
-    expect(f.calls.filter((call) => call.startsWith('merge') || call.startsWith('push'))).toEqual(['merge main release/2026-09-29', 'push release/2026-09-29']);
-    expect(f.calls.some((call) => call.startsWith('run butler') || call.startsWith('photo'))).toBe(false);
-    expect(f.calls).toContain('comment main changed 1 game files that release/2026-09-29 lacked, like game/src/sim/sun.ts, so the committee had not played them. The factory merged main into release/2026-09-29. A new candidate follows, and Ship works on that one.');
-    const state = readState(f.ctx.statePath);
-    expect(state.release).toMatchObject({ postId: null });
-    expect(state.pendingShip).toBeNull();
+    expect(f.calls.filter((call) => call.startsWith('merge') || call.startsWith('push'))).toEqual(['merge main release/2026-09-29', 'merge release/2026-09-29 main', 'merge main dev', 'push release/2026-09-29 main dev']);
+    expect(f.calls.some((call) => call.startsWith('run butler'))).toBe(true);
+    expect(readState(f.ctx.statePath).release).toBeNull();
   });
 
-  it('has an agent resolve a conflict of main into the release when main has game changes, and pushes the release', async () => {
+  it('has an agent resolve a conflict of main into the release, then ships', async () => {
     const f = shippable();
     f.ctx.repo.isMerged = async () => false;
     f.ctx.repo.changedFiles = async () => ['game/src/sim/sun.ts'];
     f.mergeConflicts = ['main release/2026-09-29'];
     await ship(f.ctx, 11, 'Ann');
-    expect(f.calls.filter((call) => /^(merge|open|agent|close (dev|main|release)|push)/.test(call))).toEqual(['merge main release/2026-09-29', 'open release/2026-09-29', 'agent', 'close release/2026-09-29', 'merge main release/2026-09-29', 'push release/2026-09-29']);
+    expect(f.calls.filter((call) => /^(merge|open|agent|close (dev|main|release)|push)/.test(call))).toEqual(['merge main release/2026-09-29', 'open release/2026-09-29', 'agent', 'close release/2026-09-29', 'merge main release/2026-09-29', 'merge release/2026-09-29 main', 'merge main dev', 'push release/2026-09-29 main dev']);
+    expect(readState(f.ctx.statePath).releasePost).not.toBeNull();
   });
 
   it('has an agent resolve a conflict of the release into main, then ships', async () => {

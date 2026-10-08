@@ -121,7 +121,7 @@ describe('part cheats', () => {
 
   it('gives parts as spares and goods as cargo', () => {
     const start = emptyWorld();
-    removeAllGoods(playerVehicle(start)); // the start cargo fills most of the panniers row
+    removeAllGoods(playerVehicle(start));
     const w = give(give(start, 'plates', 1), 'salt', 2);
     const me = playerVehicle(w);
     expect(spareParts(me).map((p) => p.defId)).toContain('plates');

@@ -12,10 +12,8 @@ const HOME = resolve('tmp/factory-container-test');
 const tokenPrices: FactoryConfig['tokenPrices'] = { opus: { input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5, cacheWrite1h: 8 } };
 const cfg = { image: 'img:1', oauthToken: 'secret-token', elevenlabsKey: 'sound-key', sfxMaxGenerations: 6, agentJobMaxMinutes: 30, home: HOME, tokenPrices } as FactoryConfig;
 
-// A finished agent run ends with this event, which the job's ledger line reads.
 const AGENT_RESULT = JSON.stringify({ type: 'result', duration_ms: 60_000, total_cost_usd: 1 });
 
-// Setup calls (network, proxy) answer per `setup`. Only the `docker run --rm` call answers with `code`.
 function fakeRun(code = 0, setup: Record<string, { code: number; stdout?: string }> = {}, stderr = 'boom'): { run: Run; calls: Call[] } {
   const calls: Call[] = [];
   const run: Run = async (cmd, args, opts) => {
@@ -43,7 +41,7 @@ describe('dockerContainer', () => {
     expect(runCall(free.calls).args).not.toContain('--cpuset-cpus');
   });
 
-  it('passes the secrets by env only and mounts only the clone and the npm cache', async () => {
+  it('passes the secrets by env only and mounts only the clone, the npm cache and the check command', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'do it', log: '/l.log' });
     const call = runCall(calls);
@@ -56,7 +54,7 @@ describe('dockerContainer', () => {
     expect(call.opts?.input).toContain('factory-status milestone');
     expect(call.opts?.input).toMatch(/\n\ndo it$/);
     expect(call.opts?.logPath).toBe('/l.log');
-    expect(call.args.filter((a) => a === '-v')).toHaveLength(2);
+    expect(call.args.filter((a) => a === '-v')).toHaveLength(3);
     expect(call.args).toContain('/w/c:/work');
     expect(call.args).toContain(`${HOME}/npm-cache:/home/pwuser/.npm`);
     expect(call.args.slice(call.args.indexOf('-w'), call.args.indexOf('-w') + 2)).toEqual(['-w', '/work/game']);
@@ -68,32 +66,26 @@ describe('dockerContainer', () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', readOnly: { '/h/state': '/factory/state' } });
     const args = runCall(calls).args;
-    expect(args.filter((a) => a === '-v')).toHaveLength(3);
+    expect(args.filter((a) => a === '-v')).toHaveLength(4);
     expect(args).toContain('/h/state:/factory/state:ro');
   });
 
-  it('mounts the bundled evidence check read only, and only when the run asks for it', async () => {
+  it('mounts the bundled check command read only for every agent, since the commit hook runs it', async () => {
     const { run, calls } = fakeRun();
-    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', evidenceCheck: true });
-    const args = runCall(calls).args;
-    expect(args).toContain(`${HOME}/agent-check:/opt/factory-check:ro`);
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
+    expect(runCall(calls).args).toContain(`${HOME}/agent-check:/opt/factory-check:ro`);
     expect(existsSync(`${HOME}/agent-check/check.mjs`)).toBe(true);
-    const plain = fakeRun();
-    await dockerContainer(plain.run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
-    expect(runCall(plain.calls).args.join(' ')).not.toContain('/opt/factory-check');
   });
 
-  it('tells the agents that write evidence to run the mounted command as their last step', () => {
-    for (const [name, round] of [['test', 'test'], ['test-fix-evidence', 'test'], ['patch', 'patch']]) {
-      expect(readFileSync(`prompts/${name}.md`, 'utf8'), name).toContain(`${EVIDENCE_CHECK_COMMAND} ${round}`);
-    }
+  it('tells the testing agent to run the mounted command before it ends', () => {
+    expect(readFileSync('prompts/test.md', 'utf8')).toContain(`${EVIDENCE_CHECK_COMMAND} test`);
   });
 
   it('mounts the reference images read only inside the clone, and only when the run has them', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', mediaDir: '/h/media/issue-7' });
     expect(runCall(calls).args).toContain('/h/media/issue-7:/work/.factory-media:ro');
-    expect(runCall(calls).args.filter((a) => a === '-v')).toHaveLength(3);
+    expect(runCall(calls).args.filter((a) => a === '-v')).toHaveLength(4);
   });
 
   it('mounts the session folder under the agent projects folder and starts the session by id', async () => {
@@ -101,7 +93,7 @@ describe('dockerContainer', () => {
     await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', session: { dir: '/h/sessions/issue-7', id: 'abc', resume: false } });
     const { args } = runCall(calls);
     expect(args).toContain('/h/sessions/issue-7:/home/pwuser/.claude/projects');
-    expect(args.filter((a) => a === '-v')).toHaveLength(3);
+    expect(args.filter((a) => a === '-v')).toHaveLength(4);
     expect(args.slice(args.indexOf('--verbose'))).toEqual(['--verbose', '--session-id', 'abc']);
     expect(args).not.toContain('--resume');
   });
@@ -119,6 +111,15 @@ describe('dockerContainer', () => {
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'sonnet', prompt: 'p', log: '/l.log', effort: 'low' });
     const args = runCall(calls).args;
     expect(args.slice(args.indexOf('--model'), args.indexOf('--model') + 4)).toEqual(['--model', 'sonnet', '--effort', 'low']);
+  });
+
+  it('passes an advisor only when a stage names one', async () => {
+    const { run, calls } = fakeRun();
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'sonnet', prompt: 'p', log: '/l.log', advisor: 'opus' });
+    await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'sonnet', prompt: 'p', log: '/l.log' });
+    const [advised, plain] = calls.filter((call) => call.args.includes('--model')).map((call) => call.args);
+    expect(advised.slice(advised.indexOf('--advisor'), advised.indexOf('--advisor') + 2)).toEqual(['--advisor', 'opus']);
+    expect(plain).not.toContain('--advisor');
   });
 
   it('passes disallowed tools only when a stage names them', async () => {
@@ -319,7 +320,6 @@ describe('agent usage', () => {
 });
 
 describe('usage limit', () => {
-  // The result line of a real run that hit the weekly limit, cut to the fields the factory reads. The real message separates its parts with a middle dot.
   const LIMIT_RESULT = JSON.stringify({ type: 'result', subtype: 'success', is_error: true, api_error_status: 429, total_cost_usd: 0, result: "You've hit your weekly limit, resets 11pm (UTC)" });
   const limitRun = (stdout: string): Run => async (_cmd, args) => (args[0] === 'run' && args[1] === '--rm' ? { code: 1, stdout, stderr: '' } : { code: 0, stdout: args[0] === 'inspect' ? 'true sha:1' : 'sha:1\n', stderr: '' });
   const pause = `${HOME}/paused`;

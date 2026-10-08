@@ -16,11 +16,11 @@ A work clone with no commit checked out, like one a full disk cut short, holds n
 
 Each job's containers run on a fixed set of CPUs. `FACTORY_CPU_LIGHT`, `FACTORY_CPU_IMPLEMENT` and `FACTORY_CPU_TEST` set each pool's share, and each pool gets round(share × cores) whole CPUs, at least 1. The pools must fit the host, or every job start throws.
 
-- light: triage, waste review, design and branch jobs.
-- implement: implementation, patch, ad hoc, change and verify jobs.
-- test: checks.
+- light: triage, waste review, design and branch jobs other than the merge and the candidate.
+- implement: implementation, ad hoc, change, verify, harden and release playtest jobs. The Testing job runs its preview checks here.
+- test: the merge job, which runs the full suite, the candidate, which checks the frame rate, and the post-only checks.
 
-On the 8-core host that is CPU 0, CPUs 1-3 and CPUs 4-7. A pool never borrows from another, so the checks always get their CPUs. Docker pins containers with `--cpuset-cpus`. A step run by hand is not pinned.
+On the 8-core host that is CPU 0, CPUs 1-3 and CPUs 4-7. A pool never borrows from another, so the merge checks always get their CPUs. Docker pins containers with `--cpuset-cpus`. A step run by hand is not pinned.
 
 `FACTORY_VITEST_WORKERS_IMPLEMENT` and `FACTORY_VITEST_WORKERS_TEST` set how many workers the game's test runner starts in a container of each pool. The factory passes the count as `TEST_WORKERS`. Light containers get none and keep the game's rule of one worker per CPU.
 
@@ -32,7 +32,7 @@ Memory, not CPU, limits how many jobs fit on the host. Each container prints its
 
 ## Daily cap
 
-The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public jobs in any 24 hours: triage, design, implementation, patch, verify, the release cut, the release playtest and the candidate. Checks, approve, remove, ship, change, ad hoc, incident, dev and waste jobs do not count. Hotfix jobs count but run at the cap. The cap sends no chat message. The dashboard shows the work it holds back and the time the next slot frees.
+The factory starts at most `FACTORY_MAX_JOBS_PER_DAY` public jobs in any 24 hours: triage, design, implementation, verify, harden, the release cut, the release playtest and the candidate. Checks, approve, merge, remove, ship, change, ad hoc, incident, dev and waste jobs do not count. Hotfix jobs count but run at the cap. The cap sends no chat message. The dashboard shows the work it holds back and the time the next slot frees.
 
 One card may start at most `FACTORY_MAX_JOBS_PER_CARD` of those jobs in any 24 hours. A card at its limit waits with the reason `card-budget` until its oldest start leaves the window, and other cards keep the daily cap. Hotfix jobs count but run at the limit.
 
@@ -46,11 +46,11 @@ A job whose process dies within its time limit resumes once. This covers a crash
 
 Every tick, after it checks the running jobs:
 
-- It deletes each folder in the web root except `dev`, `concepts` and the builds of cards in Approval or Hardening. It skips this while a checks or branch job runs, since those deploy builds.
-- It deletes the clones in `$FACTORY_HOME/work` of finished work: issues whose card is Done or off the board, `check-issue-*`, `dev-build`, `release-main`, `change-*` and `incident-*` not queued, `release-playtest`, `release-baseline`, and `release-candidate` with no release open. The playtest audit in `$FACTORY_HOME/playtest/` stays. A clone that stays loses its `node_modules`. A running or interrupted job keeps its clones. Folders with other names stay, and the tick log names them.
+- It deletes each folder in the web root except `dev`, `concepts` and the builds of cards in Approval or Hardening. It skips this while a verify, checks or branch job runs, since those deploy builds before they record them.
+- It deletes the clones in `$FACTORY_HOME/work` of finished work: issues whose card is Done or off the board, `check-issue-*`, `merge-queue`, `dev-build`, `release-main`, `change-*` and `incident-*` not queued, `release-playtest`, `release-baseline`, and `release-candidate` with no release open. The playtest audit in `$FACTORY_HOME/playtest/` stays. A clone that stays loses its `node_modules`. A running or interrupted job keeps its clones. Folders with other names stay, and the tick log names them.
 - It deletes job logs older than `FACTORY_LOG_DAYS`, except `tick.log`, `update.log` and the logs that `failures` names.
 - It deletes archived agent transcripts older than `FACTORY_TRANSCRIPT_DAYS`.
-- It deletes files older than `FACTORY_TEST_CACHE_DAYS` in `$FACTORY_HOME/test-cache/`, then the empty folders. The game test tool owns this folder and touches an entry each time it skips a test file on it. Only the checks container mounts the folder, and the release playtest runs the full suite without it.
+- It deletes files older than `FACTORY_TEST_CACHE_DAYS` in `$FACTORY_HOME/test-cache/`, then the empty folders. The game test tool owns this folder and touches an entry each time it skips a test file on it. Only the check containers of the post and merge checkpoints mount the folder, and the release playtest runs the full suite without it.
 
 Every tick writes `$FACTORY_HOME/health` with its time, the free disk and the available memory, also while paused. Under `FACTORY_MIN_FREE_GB` free, the tick starts no job. Memory under `FACTORY_MIN_AVAILABLE_GB` blocks nothing, and a host with no `/proc/meminfo` records none.
 
@@ -80,7 +80,7 @@ A failure after the move keeps the backup where it is, moves the half-made clone
 
 Each factory process sends its GitHub calls one at a time, as GitHub asks. A call that hits a rate limit waits `FACTORY_GITHUB_RETRY_BASE_SECONDS` and runs again, up to `FACTORY_GITHUB_RETRIES` times, with the wait doubled each time. Any other GitHub error fails at once. A call that runs past `FACTORY_GITHUB_TIMEOUT_SECONDS` is killed and fails, so a dead connection cannot hang a tick. It does not run again, since a write may have landed.
 
-A failed or timed-out job labels its issue `factory-stuck` and records the failure in `failures` for a day. The factory posts nothing about it. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
+A card stage that fails resumes once on the next tick in its own sessions, and its agent gets the error. It takes no label and records no failure. A failed job after that, a timed-out job, a stage that spent its budget or asked the committee, and any other failed job labels its issue `factory-stuck` and records the failure in `failures` for a day. A failed merge job labels every card of its batch. The factory posts nothing about it. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
 
 An agent run that ends on the Claude weekly usage limit is the exception. The factory writes `Hermes: Claude weekly usage limit; <message>` to `$FACTORY_HOME/paused`, unless a pause is already there. The job still records its failure, but the card takes no label. Hermes resumes the factory after the reset, and the card runs its stage again.
 
@@ -96,7 +96,7 @@ Each job reports a heartbeat every `FACTORY_OBSERVATION_HEARTBEAT_MS`. Agents re
 
 ## Chat answers
 
-When a member acts on a post by button or reply, the factory adds a status line under its caption, like "Approved by Ann", and drops its buttons. The state keeps each open post's caption for this, since Telegram cannot read one back. A command on a post answers with that status line alone. A waived approval post is a text message, so its status line edits the text, not a caption. `/change` and `/waive-visual` get one reply from the tick. An ad hoc task gets Hermes's reply, then the report, then any files. Errors always get a reply.
+When a member acts on a post by button or reply, the factory adds a status line under its caption, like "Approved by Ann", and drops its buttons. The state keeps each open post's caption for this, since Telegram cannot read one back. A command on a post answers with that status line alone. An approval post with no screenshot is a text message, so its status line edits the text, not a caption. `/change` gets one reply from the tick. An ad hoc task gets Hermes's reply, then the report, then any files. Errors always get a reply.
 
 ## Ledger and waste review
 
@@ -110,8 +110,9 @@ Every routed approval reply adds a line too.
 
 Every card move adds a card line: the issue, the new column, the time and a step that names the move. `src/card-events.ts` writes it after the board takes the move, and no other code moves a card. A line holds no actor, comment or reason.
 
-- Normal path: `entered`, `accepted`, `planned`, `built`, `patched`, `posted`, `approved`, `hardened` and `merged`.
-- Loops back: `questions`, `rebuild`, `plan-wrong`, `review-failed`, `patch`, `redesign`, `patch-replan`, `conflict`, `removed` and `unbundled`.
+- Normal path: `entered`, `accepted`, `planned`, `built`, `posted`, `approved`, `hardened` into Merging, and `merged`.
+- Loops back: `questions`, `plan-wrong`, `patch` into Testing, `redesign`, `conflict` of a hotfix into Testing, `removed` and `unbundled`.
+- Lines from before one session ran each stage also hold `patched`, `rebuild`, `review-failed` and `patch-replan`. No stage writes them now.
 - Early ends: `triage-wont-do`, `design-wont-do`, `bundled`, `denied`, and `dropped` by `factory move N done`.
 - Other moves: `moved` by `factory move`, `merge-ordered` by `factory merge`, `shipped` for the release card and `reported` for an ad hoc task.
 - A line carries `flow` when the card is a hotfix, a release task, the release card or an ad hoc task.

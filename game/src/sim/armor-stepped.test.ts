@@ -9,17 +9,6 @@ import { gridOf, MOUNT_CELLS, mountedItems, mountSpots, sideOf } from './grid';
 import { addVehicle, emptyWorld } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
 
-// A 5 by 8 chassis. The nose is one cell wide, then steps out. The armor cells at (1,1), (3,1), (1,6) and (3,6) face
-// two ways, so they carry the letter of the front or rear. The wheels are two cells long and stand at (1,2), (3,2),
-// (1,4) and (3,4), which leaves the middle column for the two cell cab.
-//   row 0   '  F  '
-//   row 1   ' FDF '
-//   row 2   'LXXXR'   wheels, the cab
-//   row 3   'LXXXR'   wheels, the rest of the cab
-//   row 4   'LXDXR'   wheels
-//   row 5   'LXDXR'   wheels
-//   row 6   ' BDB '
-//   row 7   '  B  '
 const STEPPED = {
   ...CHASSIS.scout,
   id: 'stepped',
@@ -33,14 +22,12 @@ const STEPPED = {
   ],
 };
 
-// The stepped truck has no model of its own, so it borrows the scout's collision boxes.
 const SHAPES = TRUCK_SHAPES as Record<string, unknown>;
 beforeAll(() => { CHASSIS.stepped = STEPPED; SHAPES.base_stepped = TRUCK_SHAPES.base_scout; PARTS.cabTall = { ...PARTS.cab, id: 'cabTall', tall: true }; });
 afterAll(() => { delete CHASSIS.stepped; delete SHAPES.base_stepped; delete PARTS.cabTall; });
 
 let nextItem = 0;
 
-// A stepped truck with the given parts standing on the given cells.
 function steppedWith(w: World, parts: { defId: string; x: number; y: number }[]): Vehicle {
   const v = addVehicle(w, 'player', 'stepped', [], { x: 40, y: 40 });
   for (const p of parts) v.items.push({ id: `i-stepped-${nextItem++}`, x: p.x, y: p.y, rot: 0, kind: 'part', part: makePart(w, p.defId, 0) });

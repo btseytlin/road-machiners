@@ -15,23 +15,19 @@ const TITLE_LIMIT = 80;
 const KINDS = ['approve', 'deny', 'reply', 'answer', 'patch', 'redesign', 'change', 'adhoc', 'ship', 'remove', 'release-task', 'release-draft', 'publish'];
 const ROUTES: Route[] = ['answer', 'patch', 'redesign'];
 const SILENT_KINDS: InboxCommand['kind'][] = ['adhoc', 'reply', 'answer', 'release-draft'];
-// Hermes writes its own orders with this `by`. It may queue a task, route a reply and draft the release post, which are mechanical. The rest is a member's decision.
 const HERMES = 'hermes';
 const HERMES_KINDS: InboxCommand['kind'][] = ['adhoc', 'answer', 'patch', 'redesign', 'release-draft'];
 
-// One committee command, written by the Hermes plugin into $FACTORY_HOME/inbox.
-// `reply` is a plain reply to an approval post that Hermes still has to route. Hermes's route tool writes kind `route`,
-// which parsing turns into the kind of its route, so a member's `patch:` reply and Hermes's patch run the same path.
 export type InboxCommand = {
   kind: 'approve' | 'deny' | 'reply' | Route | 'change' | 'adhoc' | 'ship' | 'remove' | 'release-task' | 'release-draft' | 'publish';
   issue: number | null;
   text: string | null;
-  by: string; // Telegram user id, or `hermes` for an order Hermes gives on its own reading
+  by: string;
   byName: string | null;
   chat: string;
-  messageId: number | null; // null for an order of Hermes that answers no message
-  postId: number | null; // the approval, candidate or release post draft the command acts on. Null for change, adhoc and release-draft.
-  image?: string | null; // release-draft only: a picture under the inbox media folder that goes out with the post
+  messageId: number | null;
+  postId: number | null;
+  image?: string | null;
 };
 
 export function inboxDir(home: string): string {
@@ -63,7 +59,6 @@ function requirePostId(postId: unknown): void {
   if (typeof postId !== 'number' && postId !== null) throw new Error('Inbox command lacks postId');
 }
 
-// Handles every queued command once, oldest first. A bad command is answered and dropped, never retried.
 export async function drainInbox(ctx: Ctx): Promise<void> {
   const dir = inboxDir(ctx.cfg.home);
   mkdirSync(dir, { recursive: true });
@@ -75,13 +70,10 @@ function isControlFile(raw: string): boolean {
   try {
     return (JSON.parse(raw) as { kind?: unknown } | null)?.kind === 'control';
   } catch {
-    // Not JSON at all. The command path reports it.
     return false;
   }
 }
 
-// A control order comes from the `factory` CLI, not from a chat. A failure is a failure record that Hermes's incident watch reports, and the chat hears nothing.
-// The failure names the card in its text but carries no issue, so a refused order does not stick the card.
 async function handleControl(ctx: Ctx, raw: string): Promise<void> {
   let card = '';
   try {
@@ -113,17 +105,12 @@ async function handleChatCommand(ctx: Ctx, raw: string): Promise<void> {
   }
 }
 
-// Each command gets one answer in the chat, never two.
-// A command on a post answers with a status line on that post. A reply comes only when that edit fails.
-// An ad hoc task, a reply Hermes is routing and an answer have Hermes's own reply already, so the factory adds nothing.
-// An answer also keeps the post open with its buttons. Other commands get the answer as a reply.
 async function deliver(ctx: Ctx, command: InboxCommand, answer: string): Promise<void> {
   if (SILENT_KINDS.includes(command.kind)) return;
   if (command.postId === null) return void (await ctx.telegram.sendMessage(command.chat, answer, command.messageId));
   try {
     await markPost(ctx, command, senderName(command));
   } catch (error) {
-    // The command already worked, so a failed status edit is not "That did not work".
     const message = error instanceof Error ? error.message : String(error);
     ctx.log('tick', command.issue, `post status failed: ${message}`);
     await ctx.telegram.sendMessage(command.chat, `${answer}\nThe post could not show its status: ${message}`, command.messageId);
@@ -131,7 +118,6 @@ async function deliver(ctx: Ctx, command: InboxCommand, answer: string): Promise
 }
 
 
-// Hermes acts as itself on the mechanical kinds. Every other command needs a member, by Telegram id.
 function resolveSender(ctx: Ctx, command: InboxCommand): string {
   if (command.by === HERMES) {
     if (!HERMES_KINDS.includes(command.kind)) throw new Error(`Only committee members can do that. Hermes may only queue a task, route a reply or draft the release post, not ${command.kind}.`);
@@ -158,7 +144,6 @@ async function handle(ctx: Ctx, command: InboxCommand): Promise<string> {
 
 type IssueHandler = (ctx: Ctx, command: InboxCommand, issue: number, by: string) => string | Promise<string>;
 
-// The commands that act on one issue. Approve is the rest.
 const ISSUE_HANDLERS: Partial<Record<InboxCommand['kind'], IssueHandler>> = {
   ship: (ctx, _command, issue, by) => queueShip(ctx, issue, by),
   remove: (ctx, command, issue, by) => queueRemoval(ctx, issue, by, requireText(command)),
@@ -181,7 +166,6 @@ const ROUTE_ANSWERS: Record<Route, (issue: number) => string> = {
   redesign: (issue) => `Feedback on #${issue} is on the issue. The task goes back to design.`,
 };
 
-// Hermes routes the reply later. Until then the state holds it, so a reply that never gets a route becomes a failure.
 function awaitRoute(ctx: Ctx, command: InboxCommand, issue: number): string {
   const postId = requirePost(command);
   const reply = { issue, postId, text: requireText(command), at: ctx.now().toISOString() };
@@ -189,7 +173,6 @@ function awaitRoute(ctx: Ctx, command: InboxCommand, issue: number): string {
   return `Reply on #${issue} waits for Hermes to route it.`;
 }
 
-// A route settles every reply still waiting on the same post, since Hermes may route after a follow-up message.
 async function routed(ctx: Ctx, command: InboxCommand, issue: number, by: string): Promise<string> {
   const route = command.kind as Route;
   const postId = requirePost(command);
@@ -207,7 +190,7 @@ async function queueApproval(ctx: Ctx, issue: number, by: string): Promise<strin
   const card = (await ctx.github.cards()).find((item) => item.issue === issue);
   if (card?.column !== 'Approval') throw new Error(`Issue #${issue} is not waiting for approval.`);
   updateState(ctx.statePath, (state) => ({ ...state, pendingApprovals: { ...state.pendingApprovals, [String(issue)]: by } }));
-  return `Approval of #${issue} is queued. The merge into dev starts on a coming tick.`;
+  return `Approval of #${issue} is queued. Hardening starts on a coming tick.`;
 }
 
 async function queueAdhoc(ctx: Ctx, command: InboxCommand, by: string): Promise<string> {
@@ -220,7 +203,6 @@ async function queueAdhoc(ctx: Ctx, command: InboxCommand, by: string): Promise<
   return `Queued as #${n}. The report comes as a reply here.`;
 }
 
-// A reply to the candidate post that is not a command. The old post cannot ship, since the new task must be played first.
 async function openReleaseTask(ctx: Ctx, command: InboxCommand, by: string): Promise<string> {
   const release = openRelease(ctx);
   const text = requireText(command).trim();

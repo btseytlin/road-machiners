@@ -24,15 +24,12 @@ import type { World } from "./types";
 import { TEST_MAP } from "../test/map";
 import { FALLEN_SUN_DECKS, TERRITORIES } from "../data/territory";
 
-// Several tests below read the start world without changing it (destinations, canyon shape,
-// cliff checks), so they share one.
 let startWorld: World | undefined;
 function worldOnMap(): World {
   startWorld ??= newWorld(1337, START_KITS.standard, TEST_MAP);
   return startWorld;
 }
 
-// Flat terrain with a raised block of cliff tiles over x in [cx0, cx1).
 function flatWith(
   size: number,
   lift: (i: number, j: number) => number,
@@ -58,7 +55,6 @@ describe("road index", () => {
 
 describe('terrain variety', () => {
   it('has every type with a bake rule on the baked map, with road/site priority', () => {
-    // Ash has no bake rule yet.
     const unruled = ['ash'];
     const ruled = Object.keys(TERRAIN_TYPES).filter((id) => !unruled.includes(id));
     const t = TEST_MAP.terrain;
@@ -113,17 +109,14 @@ describe("terrain grid", () => {
   it('links both towns by northern and southern canyon crossings', () => {
     const connects = (a: string, b: string) => {
       const sites = [...REGION.towns, ...REGION.locations];
-      // A location beside a road joins it at the first point of its spur. A town lies on its roads.
       const access = (id: string) => {
         const site = sites.find((s) => s.id === id)!;
-        // A territory's spur ends on its edge.
         const reach = 'kind' in site && site.kind === 'territory' ? site.radius : 0.01;
         return REGION.roads.find((road) => dist(road.at(-1)!, site.pos) <= reach && road.length === 2)?.[0] ?? site.pos;
       };
       const p = access(a);
       const q = access(b);
       const passes = (road: Vec[], at: Vec) => road.some((point) => dist(point, at) < 0.01);
-      // One road links them, or it meets another road that reaches the second, as at a T junction.
       return REGION.roads.some((road) => passes(road, p) && (passes(road, q) || REGION.roads.some((other) => passes(other, q) && road.some((point) => passes(other, point)))));
     };
     for (const [a, b] of [
@@ -142,9 +135,7 @@ describe("terrain grid", () => {
     for (const road of REGION.roads) {
       const firstInside = road.findIndex((p) => siteGap(wreck, p) < 0);
       const outside = firstInside < 0 ? road : road.slice(0, firstInside);
-      // Once a road is inside, it ends there.
       if (firstInside >= 0) for (const p of road.slice(firstInside)) expect(siteGap(wreck, p)).toBeLessThan(0);
-      // Before it enters, no stretch crosses the edge.
       for (let i = 1; i < outside.length; i++) expect(siteEdgeCrossings(wreck, outside[i - 1], outside[i])).toEqual([]);
     }
   });
@@ -154,13 +145,11 @@ describe("terrain grid", () => {
     const entering = REGION.roads.filter((road) => road.some((p) => siteGap(orchard, p) < 0));
     expect(entering).toHaveLength(1);
     const [spur] = entering;
-    // A spur is one straight piece from a trunk point, and its end is the territory exception for road access.
     expect(spur).toHaveLength(2);
     expect(siteGap(orchard, spur[0])).toBeGreaterThan(0);
     expect(siteGap(orchard, spur[1])).toBeLessThan(0);
     expect(siteGap(orchard, spur[1])).toBeGreaterThan(-0.5);
     expect(REGION.roads.some((road) => road !== spur && road.some((p) => dist(p, spur[0]) < 0.01))).toBe(true);
-    // Every other road stays outside: no point along it, a quarter tile apart, lies inside.
     for (const road of REGION.roads.filter((r) => r !== spur)) {
       for (let i = 1; i < road.length; i++) {
         const steps = Math.ceil(dist(road[i - 1], road[i]) * 4);
@@ -195,7 +184,6 @@ describe("terrain grid", () => {
     }
     const { concrete, asphalt } = TERRAIN_TYPES;
     expect([concrete.speed, concrete.wear, concrete.dust]).toEqual([asphalt.speed, asphalt.wear, asphalt.dust]);
-    // Paler than the asphalt road in every channel.
     for (const shift of [0, 8, 16]) expect((concrete.color >> shift) & 0xff).toBeGreaterThan((asphalt.color >> shift) & 0xff);
   });
 
@@ -208,7 +196,6 @@ describe("terrain grid", () => {
     }
     const { canal, dirtyWater } = TERRAIN_TYPES;
     expect([canal.speed, canal.wear, canal.dust]).toEqual([dirtyWater.speed, dirtyWater.wear, dirtyWater.dust]);
-    // Blue over red: the concrete and clear water of a canal, not an olive pool.
     expect(canal.color & 0xff).toBeGreaterThan(canal.color >> 16);
     expect(dirtyWater.color & 0xff).toBeLessThan(dirtyWater.color >> 16);
   });
@@ -258,7 +245,6 @@ describe("terrain grid", () => {
 
   it("routes go around cliffs", () => {
     const w = emptyWorld({ x: 20, y: 30 });
-    // A cliff wall at x = 25..26, from y = 20 to 40.
     w.terrain = flatWith(60, (i, j) =>
       i === 26 && j >= 20 && j <= 41 ? 5 : 0,
     );
@@ -284,9 +270,6 @@ describe("the Broken Wing deck on the baked map", () => {
     x: W.from.x + W.axis.x * along - W.axis.y * across,
     y: W.from.y + W.axis.y * along + W.axis.x * across,
   });
-  // Each deck end rests on its ramp, so there the ground meets the slab. The ground falls across the road, so at an
-  // end it stands a little over the deck line on one side. Within this many tiles of an end the ground may stand
-  // in the slab, under the deck model's crumpled end plates, but never above the rail tops along the edges.
   const END = 4;
   const thickness = PHYSICS.bridge.deckThickness / PHYSICS.metersPerTile;
   const rails = PHYSICS.bridge.railHeight / PHYSICS.metersPerTile;
@@ -346,7 +329,6 @@ describe("deck heights", () => {
     }
   });
 
-  // A ramp, a span and a ramp as one deck, on the baked map's uneven ground.
   const spec: DeckSpec = {
     id: "ridge",
     line: [[100, 0], [108, 1.5], [130, 1.5], [138, 0]].map(([x, rise]) => ({ at: { x, y: 205 }, rise })),

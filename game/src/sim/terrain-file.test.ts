@@ -5,7 +5,6 @@ import { decodeMap, encodeMap, PROP_KINDS, TYPE_IDS, type BakedProp } from './te
 
 const PROP_BYTES = 1 + 4 * 4 + 2 * 2;
 
-// A 3 x 3 tile draft with distinct heights, types and three props: a rock, a crag and a pole of a power line.
 function smallDraft(): MapDraft {
   const d = newDraft(3);
   d.heights.forEach((_, k) => (d.heights[k] = k * 0.25 - 2));

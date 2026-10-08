@@ -20,7 +20,6 @@ import { endTurn } from './world';
 const camps = REGION.locations.filter((l) => l.kind === 'camp');
 const kiln = camps.find((c) => c.id === 'kiln')!;
 const gate = siteGates(kiln)[0];
-// A point `d` tiles out from the gate, away from the camp.
 function outside(d: number): Vec {
   return { x: gate.x + ((gate.x - kiln.pos.x) / kiln.radius) * d, y: gate.y + ((gate.y - kiln.pos.y) / kiln.radius) * d };
 }

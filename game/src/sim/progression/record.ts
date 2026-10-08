@@ -1,8 +1,6 @@
 // The progression recorder. It plays a bot in the player truck through the real turn pipeline, with every truck on
-// far travel, so no physics runs and nothing crashes. Each practice event becomes a trace line, and each in-game day
-// an economy row. The player starts with no XP, so the trace holds every XP the run gives. The bot buys the cheapest
-// affordable rank at the start of each turn, so it plays with the skill effects its XP pays for, like a player does.
-// A stall event from any truck fails the run.
+// far travel, so no physics runs and nothing crashes. Each practice event becomes a trace line. The player starts
+// with no XP, so the trace holds every XP the run gives.
 
 import { startKit } from '../../data/start';
 import { partDef } from '../../data/parts';
@@ -30,25 +28,18 @@ import { botOrders, parkedOnPurpose, type Archetype, type BotOptions, type Polic
 import { emptyLedger, LEDGER_KEYS, type BotTurn, type Ledger } from './orders';
 import { TEST_MAP } from '../../test/map';
 
-// One practice event. turn is the world turn it happened on; a run of N turns ends on world turn N + 1.
 export type TraceLine = { turn: number; source: XpSource; amount: number; difficulty: number | null; target: string };
-// The last entry of a run the player did not survive. turn is the world turn the player died on.
 export type RunEnd = { end: 'death'; turn: number };
-// The last entry of a run an error stopped. turn is the last world turn that finished, and message the error.
 export type RunFailure = { end: 'error'; turn: number; message: string };
-// rows holds the economy row of a day that ended on this step. death is set on the last step of a run the player did
-// not survive. events holds everything the bot's commands and the turn raised, and ledger the money they moved.
 export type RecordStep = { world: World; lines: TraceLine[]; rows: DayRow[]; death: RunEnd | null; events: GameEvent[]; ledger: Ledger };
 export type Recording = { lines: TraceLine[]; rows: DayRow[]; death: RunEnd | null };
 
-// A truck that moves less than this many tiles in a whole in-game day, while not parked on purpose, has stalled.
 const STALL_TILES = 1;
 
 export function record(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Recording {
   return recordFrom(startWorld(seed, options.kit), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
-// Records from a given world. label names the run in errors.
 export function recordFrom(start: World, label: string, archetype: Archetype, turns: number, options: BotOptions = {}): Recording {
   const recording: Recording = { lines: [], rows: [], death: null };
   for (const step of stepsFrom(start, label, archetype, turns, options)) {
@@ -59,16 +50,13 @@ export function recordFrom(start: World, label: string, archetype: Archetype, tu
   return recording;
 }
 
-// Plays the turns one at a time and yields each turn's world and trace lines, so a caller can write as it goes.
 export function recordTurns(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Generator<RecordStep> {
   return stepsFrom(startWorld(seed, options.kit), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
-// Plays the turns one at a time from a given world. The player's death ends the run early, since no turn runs after
-// it. A stall or any other error fails loud.
 export function* stepsFrom(start: World, label: string, archetype: Policy, turns: number, options: BotOptions = {}): Generator<RecordStep> {
   const tally = new DayTally();
-  let carried: DayRow[] = [tally.close(0, start)]; // the starting state rides on the first step
+  let carried: DayRow[] = [tally.close(0, start)];
   let i = 0;
   for (const played of playTurns(start, label, archetype, turns, options)) {
     const { before, next: world } = played;
@@ -81,8 +69,6 @@ export function* stepsFrom(start: World, label: string, archetype: Policy, turns
   }
 }
 
-// Plays the turns one at a time on far travel and yields each one with the bot's commands. The player's death ends the
-// run after its turn. A stall of the player truck or any error fails loud, with the label, turn and position.
 export function* playTurns(start: World, label: string, policy: Policy, turns: number, options: BotOptions = {}): Generator<PlayedTurn> {
   if (!Number.isInteger(turns) || turns <= 0) throw new Error(`A recording needs a positive whole number of turns, got ${turns}`);
   setHeadless(true);
@@ -107,12 +93,10 @@ export function* playTurns(start: World, label: string, policy: Policy, turns: n
   }
 }
 
-// A day ends on the turn the clock moves to the next day. The last turn of a run closes its day as well.
 function dayEnds(before: World, after: World, last: boolean): boolean {
   return last || clockOf(after.turn).day > clockOf(before.turn).day;
 }
 
-// A new world on the start kit with no XP, every skill at `rank`, and no XP logged today. It picks no perks.
 export function startWorld(seed: number, kit = 'standard', rank = 0): World {
   if (!Number.isInteger(rank) || rank < 0 || rank > MAX_RANK) throw new Error(`No skill rank ${rank}; ranks run 0 to ${MAX_RANK}`);
   return update(newWorld(seed, startKit(kit), TEST_MAP), (w) => {
@@ -127,15 +111,10 @@ export function startWorld(seed: number, kit = 'standard', rank = 0): World {
   });
 }
 
-// events is everything the bot's commands and the turn raised on the way to next.
 export type PlayedTurn = { before: World; orders: BotTurn; next: World; lines: TraceLine[]; events: GameEvent[]; ledger: Ledger };
 
-// Money sums differ by float rounding only below this.
 const MONEY_EPSILON = 1e-6;
 
-// The money the turn moved by itself, after the bot's commands, booked by the events that moved it: contract pay and
-// penalties as contracts, tow, patch and escort pay as fees. Money no event explains throws, so a new source in the
-// turn pipeline cannot hide under another key.
 export function turnLedger(orders: BotTurn, next: World): Ledger {
   const ledger = { ...orders.ledger };
   let explained = 0;
@@ -152,8 +131,6 @@ export function turnLedger(orders: BotTurn, next: World): Ledger {
 
 type Move = { key: 'contracts' | 'fees'; amount: number };
 
-// The money one event moved for the player. The player's own tow fee has a money event, so towDone counts only when
-// the player pays it.
 function playerMove(e: GameEvent, me: string): Move | null {
   if (e.t === 'money') return { key: moneyEventKey(e.reason), amount: e.amount };
   return feeMove(e, me);
@@ -166,13 +143,11 @@ function feeMove(e: GameEvent, me: string): Move | null {
   return null;
 }
 
-// A fee from payer to payee, as the player sees it, or null when the player is neither.
 function paidBetween(payee: string, payer: string, me: string, fee: number): Move | null {
   if (payee === me) return { key: 'fees', amount: fee };
   return payer === me ? { key: 'fees', amount: -fee } : null;
 }
 
-// A money event is a contract's pay or penalty, or the player's own tow fee.
 function moneyEventKey(reason: string): 'contracts' | 'fees' {
   if (reason === 'contract' || reason === 'failed haul contract') return 'contracts';
   if (reason.startsWith('towing ')) return 'fees';
@@ -190,7 +165,6 @@ function playTurn(world: World, archetype: Policy, options: BotOptions): PlayedT
   return { before: world, orders, next, lines, events, ledger: turnLedger(orders, next) };
 }
 
-// Adds the seed, archetype, turn and truck position to any error of the turn.
 function inContext<T>(label: string, world: World, fn: () => T): T {
   try {
     return fn();
@@ -201,7 +175,6 @@ function inContext<T>(label: string, world: World, fn: () => T): T {
   }
 }
 
-// The movement step: every truck travels far. A towed player follows its tower in the pipeline instead.
 function moveAllFar(w: World): void {
   const towed = isTowed(w);
   for (const v of w.vehicles) if (!(towed && v.id === w.player.vehicleId)) advanceFar(w, v);
@@ -211,8 +184,6 @@ function traceOf(events: GameEvent[], turn: number): TraceLine[] {
   return events.flatMap((e) => (e.t === 'practice' ? [{ turn, source: e.source, amount: e.amount, difficulty: e.difficulty, target: e.target }] : []));
 }
 
-// Fails loud when the player truck stays within STALL_TILES of one point for a whole in-game day. A turn parked on
-// purpose starts the day over.
 export class StallWatch {
   private anchor: { turn: number; pos: Vec };
 
@@ -231,9 +202,6 @@ export class StallWatch {
   }
 }
 
-// ---- NPC stalls. A stall event means some rule left a driver with no way forward, so a run has none.
-
-// Each driver's top goal before the turn, so a stall report can say where the given-up goal pointed.
 function topGoals(w: World): Map<string, NpcActivity> {
   const tops = new Map<string, NpcActivity>();
   for (const v of w.vehicles) {
@@ -243,13 +211,11 @@ function topGoals(w: World): Map<string, NpcActivity> {
   return tops;
 }
 
-// A run that tolerates stalls only counts them in its rows, for runs that must reach the end whatever NPCs do.
 function failOnStall(w: World, goals: Map<string, NpcActivity>, tolerate: boolean): void {
   const stalls = w.events.flatMap((e) => (e.t === 'stall' ? [describeStall(w, e, goals.get(e.vehicle))] : []));
   if (stalls.length > 0 && !tolerate) throw new Error(`${stalls.length} stall${stalls.length > 1 ? 's' : ''}:\n${stalls.join('\n')}`);
 }
 
-// Fails when more than half the NPCs hold an empty tank at once, which means fuel supply or fuel buying is broken.
 function failOnDryMajority(w: World): void {
   const drivers = w.vehicles.filter((v) => v.brain);
   const dry = drivers.filter((v) => getResources(w, v).fuel <= 0).length;
@@ -264,7 +230,6 @@ function describeStall(w: World, e: Extract<GameEvent, { t: 'stall' }>, goal: Np
   return `${at}${dest}\n  ${vehicleLine(w, v)} free cells ${freeCells(v)}\n  ${surroundings(w, v)}`;
 }
 
-// The order and route the driver holds, the trucks close by and the hostiles it sees.
 function surroundings(w: World, v: Vehicle): string {
   const near = w.vehicles.filter((o) => o.id !== v.id && dist(o.pos, v.pos) < 6)
     .map((o) => `${o.id}:${o.brain?.templateId ?? 'player'}@${Math.round(dist(o.pos, v.pos))} top ${o.brain?.goals.at(-1)?.kind ?? '-'}`);
@@ -282,9 +247,6 @@ function vehicleLine(w: World, v: Vehicle): string {
     + `goals now ${goals} states ${states} goods ${JSON.stringify(goodsCount(v))}`;
 }
 
-// ---- What the player holds, in money.
-
-// Every part on the truck that is not built in, mounted or loose in the grid.
 function nonCoreTruckValue(v: Vehicle): number {
   return v.items.reduce((sum, it) => (it.kind === 'part' && partDef(it.part.defId).kind !== 'core' ? sum + partValue(it.part) : sum), 0);
 }
@@ -293,17 +255,12 @@ function storageValue(world: World): number {
   return world.player.storage.reduce((sum, p) => sum + partValue(p), 0);
 }
 
-// The goods the truck holds that are its own. Units a haul contract carries belong to the client, so they are not
-// worth: accepting a haul would raise net worth by their value and delivering it would drop it again.
 function cargoValue(world: World, v: Vehicle): number {
   const hauled = new Map<string, number>();
   for (const c of world.player.contracts) if (c.kind === 'haul') hauled.set(c.good, (hauled.get(c.good) ?? 0) + c.units);
   return Object.entries(goodsCount(v)).reduce((sum, [good, n]) => sum + goodValue(good) * Math.max(0, n - (hauled.get(good) ?? 0)), 0);
 }
 
-// What the player holds, split by kind. The chassis is its trade-in once repaired, less the whole repair bill, gear
-// damage included. The game's own trade-in scales with core HP, so a dented cab would swing net worth by most of the
-// chassis value while a repair of a tenth of that fixes it.
 export type Worth = { money: number; cargo: number; gear: number; storage: number; chassis: number };
 
 export function worthOf(world: World): Worth {
@@ -317,7 +274,6 @@ function repairedTradeIn(world: World): number {
   }));
 }
 
-// Cash plus every part, good and truck the player holds, in the truck or in garage storage.
 export function netWorth(world: World): number {
   return worthTotal(worthOf(world));
 }
@@ -326,7 +282,6 @@ export function worthTotal(w: Worth): number {
   return w.money + w.cargo + w.gear + w.storage + w.chassis;
 }
 
-// The best tier among the mounted parts that are not built in, or 1 with none.
 export function gearTier(v: Vehicle): Tier {
   const tiers = mountedParts(v)
     .filter((p) => partDef(p.defId).kind !== 'core')
@@ -334,10 +289,6 @@ export function gearTier(v: Vehicle): Tier {
   return (tiers.length > 0 ? Math.max(...tiers) : 1) as Tier;
 }
 
-// ---- The economy rows: one per in-game day, written beside the trace.
-
-// day is the in-game day the row closes, 0 for the starting state. turns is how many turns the row covers, one day
-// except for the start and a last partial day. Counts are for those turns alone. tier is the best gear tier mounted.
 export type DayRow = {
   day: number;
   turns: number;
@@ -349,21 +300,19 @@ export type DayRow = {
   knockouts: number;
   gearLost: number;
   deaths: number;
-  stalls: number; // NPC stall events, only nonzero in a run that tolerates them
-  ledger: Ledger; // money moved that day by key: negative is spent, positive earned
-  worth: Worth; // net worth by kind at the end of the row
+  stalls: number;
+  ledger: Ledger;
+  worth: Worth;
 };
 
 type Counts = Pick<DayRow, 'fightsWon' | 'knockouts' | 'gearLost' | 'deaths' | 'stalls' | 'ledger'>;
 
 const noCounts = (): Counts => ({ fightsWon: 0, knockouts: 0, gearLost: 0, deaths: 0, stalls: 0, ledger: emptyLedger() });
 
-// Mounted parts the player does not carry from the factory: the gear a robber strips.
 function gearIds(world: World): Set<string> {
   return new Set(mountedParts(playerVehicle(world)).filter((p) => partDef(p.defId).kind !== 'core').map((p) => p.id));
 }
 
-// Parts lying in loot piles and stocks or held by other trucks.
 function takenIds(world: World): Set<string> {
   const others = world.vehicles.filter((v) => v.id !== world.player.vehicleId).flatMap((v) => v.items);
   const held = others.flatMap((it) => (it.kind === 'part' ? [it.part.id] : []));
@@ -374,9 +323,6 @@ export class DayTally {
   private counts = noCounts();
   private turns = 0;
 
-  // Counts one turn. `before` is the world the turn started on and `next` the one it ended on. Lost gear is mounted
-  // gear that ended in a loot pile or on another truck: a robbery, whether a knockout or a surrender handed it over.
-  // The bot's own sales and refits never land there.
   note(before: World, next: World, events: readonly GameEvent[], ledger: Ledger): void {
     const me = before.player.vehicleId;
     this.turns++;
@@ -393,7 +339,6 @@ export class DayTally {
     if (e.t === 'stall') this.counts.stalls++;
   }
 
-  // The row for the day that just ended, and a fresh count for the next day.
   close(day: number, world: World): DayRow {
     const me = playerVehicle(world);
     const worth = worthOf(world);
@@ -404,12 +349,8 @@ export class DayTally {
   }
 }
 
-// ---- What the rows say.
-
 export const TIERS: readonly Tier[] = [1, 2, 3];
 
-// Net worth gained per turn while the best mounted gear was each tier. A period counts for the tier held at its start.
-// A tier the run never held has no wage.
 export function wageByTier(rows: readonly DayRow[]): Record<Tier, number | null> {
   const gained: Record<Tier, number> = { 1: 0, 2: 0, 3: 0 };
   const turns: Record<Tier, number> = { 1: 0, 2: 0, 3: 0 };
@@ -425,7 +366,6 @@ function ratio(gained: number, turns: number): number | null {
   return turns > 0 ? gained / turns : null;
 }
 
-// The first day the player held gear of each tier or better, or null when it never did.
 export function tierDays(rows: readonly DayRow[]): Record<Tier, number | null> {
   const first = (tier: Tier) => rows.find((r) => r.tier >= tier)?.day ?? null;
   return { 1: first(1), 2: first(2), 3: first(3) };
@@ -433,7 +373,6 @@ export function tierDays(rows: readonly DayRow[]): Record<Tier, number | null> {
 
 export type FightTotals = Pick<Counts, 'fightsWon' | 'knockouts' | 'gearLost' | 'deaths' | 'stalls'>;
 
-// The money each ledger key moved over the whole run: negative is spent, positive earned.
 export function ledgerTotals(rows: readonly DayRow[]): Ledger {
   const total = emptyLedger();
   for (const row of rows) for (const key of LEDGER_KEYS) total[key] += row.ledger[key];

@@ -25,7 +25,7 @@ export function applyContactCrash(world: World, a: Vehicle, b: Vehicle | null, w
   if (Boolean(b) !== Boolean(contact.b)) throw new Error('Crash geometry does not match the bodies');
   if (b) {
     const { hitsA, hitsB } = damageVehicleCrash(world, a, b, impact, contact);
-    stallRammed(world, a, b, hitsA, hitsB); // before the crash itself makes the trucks hostile
+    stallRammed(world, a, b, hitsA, hitsB);
     noteCollision(world, a, b, hitsA, hitsB);
     world.events.push({ t: 'collision', a: a.id, b: b.id, hitsA, hitsB });
     practiceRam(world, a, b, hitsA, hitsB);
@@ -35,14 +35,12 @@ export function applyContactCrash(world: World, a: Vehicle, b: Vehicle | null, w
   world.events.push({ t: 'collision', a: a.id, b: what, hitsA, hitsB: [] });
 }
 
-// The truck's body hit the ground, which hurts far more than a crash at the same speed into an obstacle.
 export function applyGroundCrash(world: World, v: Vehicle, what: string, impact: number, contact: CrashContact): void {
   if (!Number.isFinite(impact) || impact < 0) throw new Error(`Bad ground crash impact ${impact}`);
   const hitsA = applyContactDamage(world, v, contact, impact, 1, RULES.groundCrash);
   world.events.push({ t: 'collision', a: v.id, b: what, hitsA, hitsB: [] });
 }
 
-// The truck landed on its wheels after a jump. Each working wheel takes a small blow.
 export function applyLanding(world: World, v: Vehicle, what: string, impact: number): void {
   if (!Number.isFinite(impact) || impact < 0) throw new Error(`Bad landing impact ${impact}`);
   if (impact < RULES.collisionMinImpact) return;
@@ -52,13 +50,10 @@ export function applyLanding(world: World, v: Vehicle, what: string, impact: num
   world.events.push({ t: 'collision', a: v.id, b: what, hitsA, hitsB: [] });
 }
 
-// How much harder a fast crash into an obstacle hits; see RULES.hardCrashSpeed.
 function hardCrash(impact: number): number {
   return Math.max(1, impact / RULES.hardCrashSpeed) ** 2;
 }
 
-// The player practices driving from the damage its truck deals in a crash with another vehicle. A heavier
-// vehicle is harder to hurt.
 function practiceRam(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hitsB: PartHit[]): void {
   const ram = playerRam(world, a, b, hitsA, hitsB);
   if (!ram) return;
@@ -66,15 +61,12 @@ function practiceRam(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hit
   practice(world, 'ram', damage, vehicleMass(other) / (vehicleMass(other) + vehicleMass(own)), other.id);
 }
 
-// Rammer: the player truck damaging a hostile truck in a crash stalls that truck's engine.
 function stallRammed(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hitsB: PartHit[]): void {
   const ram = playerRam(world, a, b, hitsA, hitsB);
   if (!ram || !vehicleHasPerk(world, ram.own, 'rammer') || !isHostile(world, ram.own, ram.other)) return;
   ram.other.stalledUntil = world.turn + PERK_NUMBERS.rammer.stallTurns;
 }
 
-// The player truck, the other truck and the damage the player dealt it, or null when the player is not in the crash
-// or dealt no damage.
 function playerRam(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hitsB: PartHit[]): { own: Vehicle; other: Vehicle; damage: number } | null {
   const me = world.player.vehicleId;
   if (a.id !== me && b.id !== me) return null;
@@ -83,13 +75,11 @@ function playerRam(world: World, a: Vehicle, b: Vehicle, hitsA: PartHit[], hitsB
   return damage === 0 ? null : { own, other, damage };
 }
 
-// Damage only. The real crash also notes the attacks, which a ram forecast must not.
 function damageVehicleCrash(world: World, a: Vehicle, b: Vehicle, impact: number, contact: CrashGeometry): { hitsA: PartHit[]; hitsB: PartHit[] } {
   if (!contact.b) throw new Error('Vehicle crash has no target contact');
   const share = vehicleMass(b) / (vehicleMass(a) + vehicleMass(b));
   const multA = ramMult(a, contact.a.side);
   const multB = ramMult(b, contact.b.side);
-  // A tower and the truck it tows hurt each other in no crash, whoever drove into whom.
   if (towsClient(world, a, b) || towsClient(world, b, a)) return { hitsA: [], hitsB: [] };
   const hitsA = applyContactDamage(world, a, contact.a, impact, share, multB);
   const hitsB = applyContactDamage(world, b, contact.b, impact, 1 - share, multA);
@@ -101,10 +91,8 @@ function applyContactDamage(world: World, vehicle: Vehicle, contact: CrashContac
   if (impact < RULES.collisionMinImpact) return [];
   const energy = computeCrashEnergy(world, vehicle, impact, share, mult);
   const hits = new Map<string, number>();
-  // A glancing contact transfers only its touched share of the side's damage budget.
   const round = { damage: energy / laneCount(vehicle, contact.side), pen: RULES.crashPen * mult, blast: false, armorShare: 1 };
   for (const lane of contact.lanes) {
-    // All lanes meet the same pre-impact armor, even if this crash breaks it.
     const copy = structuredClone(vehicle);
     const draft = { ...world, player: structuredClone(world.player), events: [] };
     for (const hit of walkLane(draft, copy, contact.side, lane, round)) {
@@ -114,7 +102,6 @@ function applyContactDamage(world: World, vehicle: Vehicle, contact: CrashContac
   return applyCrashHits(world, vehicle, hits);
 }
 
-// The player's driving cuts the crash damage the player truck takes.
 function computeCrashEnergy(world: World, vehicle: Vehicle, impact: number, share: number, mult: number): number {
   const driving = skillEffect(world, vehicle, 'driving', 'crashDamage');
   return RULES.ramDamage * RULES.crashDamage * impact * impact * share * mult * Math.max(0, 1 - driving);
@@ -129,8 +116,6 @@ function applyCrashHits(world: World, vehicle: Vehicle, hits: Map<string, number
   });
 }
 
-// The closing speed of a ram if the attacker drove at the target now, in tiles per turn. Null when it cannot ram: it
-// cannot drive, the target lies more than 45 degrees off its nose, or the blow would be too slow to hurt.
 export function ramImpact(world: World, attacker: Vehicle, target: Vehicle): number | null {
   if (isStranded(world, attacker)) return null;
   const heading = bearing(attacker.pos, target.pos);
@@ -142,14 +127,9 @@ export function ramImpact(world: World, attacker: Vehicle, target: Vehicle): num
   return impact < RULES.collisionMinImpact ? null : impact;
 }
 
-// The hit points a forecast ram takes off each part of both trucks, and whether the attacker stays fit to fight.
-// Fit means its driving parts and cab stay above the flee condition. A part that lost nothing is left out.
 export type PartLoss = { defId: string; lost: number };
 export type RamForecast = { dealt: PartLoss[]; cost: PartLoss[]; fit: boolean };
 
-// The forecast of a ram at the given closing speed, run through the crash model on copies. Nothing in the world
-// changes. Enemy part health is not observable, so the target's parts count as intact, except junk, which no
-// repair rebuilds.
 export function forecastRam(world: World, attacker: Vehicle, target: Vehicle, impact: number): RamForecast {
   const own = structuredClone(attacker);
   const other = structuredClone(target);
@@ -175,10 +155,6 @@ function partLosses(before: Vehicle, after: Vehicle): PartLoss[] {
 
 const R = NPC_BEHAVIOR.ram;
 
-// What a ram is worth against firing: 0 to 1. Both count expected damage per point of part weight. The ram is the
-// crash model's net damage times the chance it connects. The guns are what the attacker's working guns deliver past
-// the armor on the side the target shows them, over the turns the ram takes to close plus the turn it lands. The
-// value is the ram's share of the two. It is 0 when the ram cannot be made, nets nothing or leaves the attacker unfit.
 export function ramValue(world: World, attacker: Vehicle, target: Vehicle): number {
   const impact = ramImpact(world, attacker, target);
   if (impact === null) return 0;
@@ -191,20 +167,17 @@ export function ramValue(world: World, attacker: Vehicle, target: Vehicle): numb
   return worth / (worth + guns);
 }
 
-// The ram weight factor. A ram worth nothing weighs R.riskyRam, and a worthwhile one its value times R.valueScale.
 export function ramFactor(world: World, attacker: Vehicle, target: Vehicle): number {
   const value = ramValue(world, attacker, target);
   return value > 0 ? value * R.valueScale : R.riskyRam;
 }
 
-// The chance a ram at this closing speed connects. See NPC_BEHAVIOR.ram.dodge.
 export function ramHitChance(world: World, attacker: Vehicle, target: Vehicle, impact: number): number {
   const line = bearing(attacker.pos, target.pos);
   const sway = target.speed * (R.dodge + Math.abs(Math.sin(angleDiff(target.heading, line)))) * turnsToClose(world, attacker, target, impact);
   return 1 / (1 + sway / pathWidth(world, attacker, target));
 }
 
-// Turns the attacker drives before the blow lands, at the closing speed.
 function turnsToClose(world: World, attacker: Vehicle, target: Vehicle, impact: number): number {
   const gap = Math.max(0, dist(attacker.pos, target.pos) - pathWidth(world, attacker, target));
   return gap / impact;
@@ -226,7 +199,6 @@ function partWeight(defId: string): number {
   return weight;
 }
 
-// The attacker's working gun damage per turn that gets past the armor on the side the target shows it.
 function gunDamage(world: World, attacker: Vehicle, target: Vehicle): number {
   const side = sideToward(target, attacker.pos);
   return vehicleStats(world, attacker).weapons.filter((mw) => mw.part.hp > 0).reduce((sum, mw) => sum + sustainedDamage(mw.def) * passShare(target, side, mw.def.round), 0);

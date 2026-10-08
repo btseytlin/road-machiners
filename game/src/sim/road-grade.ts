@@ -1,10 +1,6 @@
 // Road grading. The ground on and beside every road is set so no step across the road surface is
 // steeper than TERRAIN.roadGrade per tile, and no step beside it steeper than TERRAIN.bankGrade,
 // while staying as close to the ungraded ground as that allows. Ground in the road margin blends
-// back to its own height, so hills become cuttings and dips become banks. Crossings and junctions
-// share one graded surface. Site ground grades like road surface, so it keeps its height unless
-// the road from a neighbor site cannot climb to it. gradePaths() grades other paths, like a
-// territory's farm roads, by the same rule with their own grade and margin.
 
 import { REGION } from '../data/region';
 import { TERRAIN } from '../data/terrain';
@@ -17,12 +13,8 @@ import { dist, segmentDist, type Vec } from './vec';
 
 const SITES = [...REGION.towns, ...REGION.locations];
 const HALF_WIDTH = REGION.roadWidth / 2;
-// Corners this far from a road get graded ground, then blend back over the margin.
 const REACH = HALF_WIDTH + TERRAIN.flattenMargin;
-// Corners up to this far from a road are road surface. The extra tile covers every tile a
-// point on the road reads its height from.
 const SURFACE = HALF_WIDTH + 1;
-// Neighbor steps between corners. Knight steps keep grades close to the same in every direction.
 const STEPS: [number, number][] = [
   [1, 0], [-1, 0], [0, 1], [0, -1],
   [1, 1], [1, -1], [-1, 1], [-1, -1],
@@ -30,34 +22,19 @@ const STEPS: [number, number][] = [
 ];
 const STEP_LENGTHS = STEPS.map(([dx, dy]) => Math.hypot(dx, dy));
 
-// Road surface and site ground hold the road grade and give a target height, their ungraded height. Margin
-// ground holds the bank grade and gives no target. falloff is the share of its graded height a corner takes,
-// blending back to its own height past the edge. Corners of one pad group, numbered in pad (-1 for none), are one
-// rigid level: a step between them costs no grade, so the whole group grades to one height. slope is the grade of
-// the road or path a corner belongs to; a step between two surface corners holds the steeper of their two.
 type Corners = { size: number; corner: Int32Array; at: Int32Array; target: (number | null)[]; pad: Int32Array; falloff: Float64Array; surface: Uint8Array; slope: Float64Array };
 
-// A levelled pad: a disc r tiles round pos aiming at height, as surface, whose bank blends back to the ground over
-// margin tiles past its edge. The corners of one group level as one rigid piece.
 export type GradedPad = { pos: Vec; r: number; height: number; margin: number; group: number };
 type GradedPath = { points: Vec[]; width: number; grade: number };
 
-// Graded corner heights for terrain whose ungraded heights are in raw.
 export function gradeRoads(raw: Terrain): number[] {
   return gradeCorners(raw, roadCorners(raw), bridgeCut);
 }
 
-// Graded corner heights for paths that are not roads of today's world, like a territory's farm roads: each path's
-// own grade along its surface, the bank grade beside it, blending back to the ungraded ground over margin tiles
-// past its edge. Paths have no site ground and no bridge. Pads are rigid level surface aiming at their height, and
-// path surface near a pad aims at the pad's height, blending back to its own over the pad's margin, so a road beside
-// a pad meets it level. A path's surface still holds its grade where it crosses a pad.
 export function gradePaths(raw: Terrain, paths: readonly GradedPath[], margin: number, pads: readonly GradedPad[] = []): number[] {
   return gradeCorners(raw, pathCorners(raw, paths, margin, pads), () => 0);
 }
 
-// Graded heights for the corners of c. cut gives the share of a corner where the grading is cut away, like the
-// gap under Canyon Bridge.
 function gradeCorners(raw: Terrain, c: Corners, cut: (x: number, y: number) => number): number[] {
   const under = envelope(c, c.target, 1);
   const over = envelope(c, c.target, -1);
@@ -73,7 +50,6 @@ function gradeCorners(raw: Terrain, c: Corners, cut: (x: number, y: number) => n
   return heights;
 }
 
-// Every corner within REACH of a road, numbered.
 function roadCorners(raw: Terrain): Corners {
   const size = raw.size;
   const corner = new Int32Array((size + 1) * (size + 1)).fill(-1);
@@ -95,8 +71,6 @@ function roadCorners(raw: Terrain): Corners {
   return { size, corner, at: Int32Array.from(at), target, pad: new Int32Array(at.length).fill(-1), falloff: Float64Array.from(falloff), surface: Uint8Array.from(surface), slope: new Float64Array(at.length).fill(TERRAIN.roadGrade) };
 }
 
-// Every corner less than margin tiles past a path's edge or a pad's margin past its edge, numbered. Corners up to
-// a tile past a path's edge are surface, as on a road. A corner on a pad takes the pad's height as its target.
 function pathCorners(raw: Terrain, paths: readonly GradedPath[], margin: number, pads: readonly GradedPad[]): Corners {
   const box = reachBox(raw.size, paths, margin, pads);
   const found: { k: number; info: CornerInfo }[] = [];
@@ -109,7 +83,6 @@ function pathCorners(raw: Terrain, paths: readonly GradedPath[], margin: number,
 
 type CornerInfo = { target: number | null; falloff: number; surface: boolean; pad: number; slope: number };
 
-// The corner at p, or null when it lies past every path's and pad's margin.
 function pathCorner(raw: Terrain, paths: readonly GradedPath[], margin: number, pads: readonly GradedPad[], p: Vec): CornerInfo | null {
   const path = nearestPath(paths, p);
   const pad = padAt(pads, p);
@@ -125,7 +98,6 @@ function pathCorner(raw: Terrain, paths: readonly GradedPath[], margin: number, 
   };
 }
 
-// The corners the paths and pads can reach: a box of corner coordinates.
 function reachBox(size: number, paths: readonly GradedPath[], margin: number, pads: readonly GradedPad[]): { x0: number; x1: number; y0: number; y1: number } {
   const reaches = [...paths.flatMap((p) => p.points.map((q) => ({ q, reach: p.width / 2 + margin }))), ...pads.map((p) => ({ q: p.pos, reach: p.r + p.margin }))];
   const lo = (v: number) => Math.max(0, Math.floor(v));
@@ -155,7 +127,6 @@ function toCorners(size: number, found: readonly { k: number; info: CornerInfo }
   };
 }
 
-// Tiles from p past the edge of the nearest path, negative on one, and that path's grade.
 function nearestPath(paths: readonly GradedPath[], p: Vec): { gap: number; grade: number } {
   let best = { gap: Infinity, grade: 0 };
   for (const path of paths) {
@@ -167,15 +138,12 @@ function nearestPath(paths: readonly GradedPath[], p: Vec): { gap: number; grade
   return best;
 }
 
-// The pad whose edge lies nearest p, or null when there are none.
 function nearestPad(pads: readonly GradedPad[], p: Vec): GradedPad | null {
   let best: GradedPad | null = null;
   for (const pad of pads) if (best === null || dist(pad.pos, p) - pad.r < dist(best.pos, p) - best.r) best = pad;
   return best;
 }
 
-// Tiles from p past the nearest pad's edge, the share of the pad's height a corner there takes, and the pad's height,
-// group and margin. With no pads, a pad infinitely far away.
 type PadAt = { gap: number; share: number; height: number; group: number; margin: number };
 const NO_PAD: PadAt = { gap: Infinity, share: 0, height: 0, group: -1, margin: 0 };
 
@@ -186,15 +154,11 @@ function padAt(pads: readonly GradedPad[], p: Vec): PadAt {
   return { gap, share: flattenFalloff(gap, pad.margin), height: pad.height, group: pad.group, margin: pad.margin };
 }
 
-// Under Canyon Bridge the ground is the canyon, so it is margin there.
 function isSurface(x: number, y: number, roadDist: number): boolean {
   if (SITES.some((s) => siteGap(s, { x, y }) < 0)) return true;
   return roadDist <= SURFACE && bridgeCut(x, y) === 0;
 }
 
-// For side 1, the highest heights within the grades, grade on surface and the bank grade off it, that
-// stay at or under every given height. For side -1, the lowest that stay at or over them. Corners with no given height are no sources.
-// Where no source reaches, heights are Infinity for side 1 and -Infinity for side -1.
 function envelope(c: Corners, given: readonly (number | null)[], side: 1 | -1): Float64Array {
   const best = Float64Array.from(given, (h) => (h === null ? Infinity : side * h));
   const queue = new MinQueue();
@@ -224,8 +188,6 @@ function spread(c: Corners, best: Float64Array, queue: MinQueue, n: number): voi
   }
 }
 
-// Grade per tile of a step between two corners: none inside one pad, the steeper slope of the two on surface, and the
-// bank grade off it.
 function stepCost(c: Corners, n: number, m: number): number {
   if (c.pad[n] >= 0 && c.pad[n] === c.pad[m]) return 0;
   return c.surface[n] & c.surface[m] ? Math.max(c.slope[n], c.slope[m]) : TERRAIN.bankGrade;
@@ -236,7 +198,6 @@ function neighbor(c: Corners, x: number, y: number): number {
   return c.corner[y * (c.size + 1) + x];
 }
 
-// Binary heap of items by key. Stale entries stay in, and the reader skips them.
 class MinQueue {
   private items = new Int32Array(1024);
   private keys = new Float64Array(1024);
@@ -266,7 +227,6 @@ class MinQueue {
     return top;
   }
 
-  // Moves the last entry down from the root to its place.
   private sink(item: number, key: number): void {
     const n = this.size;
     let i = 0;

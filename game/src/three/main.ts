@@ -38,15 +38,12 @@ function element(id: string): HTMLElement {
   return el;
 }
 
-// The baked map, fetched relative to the page. A missing or broken file stops boot with the crash screen.
 async function fetchMap(): Promise<BakedMap> {
   const response = await fetch(MAPGEN.file);
   if (!response.ok) throw new Error(`Map file ${MAPGEN.file} failed to load: ${response.status} ${response.statusText}`);
   return decodeMap(new Uint8Array(await response.arrayBuffer()));
 }
 
-// The world the boot request names, else the newest save, else a new one. A save that cannot load goes to the player:
-// migrate it or start over.
 async function bootWorld(): Promise<World> {
   const request = takeBootRequest(window.sessionStorage, SAVE_KEY);
   if (request === 'new') return freshRun();
@@ -63,8 +60,6 @@ async function bootSlot(slot: SlotId): Promise<World> {
   }
 }
 
-// A new run clears the old one's autosaves and tips. Its first save comes at once, so a reload before the next
-// autosave does not load an older run's save.
 function freshRun(): World {
   clearGame(window.localStorage);
   return newGameSaved();
@@ -72,7 +67,6 @@ function freshRun(): World {
 
 function newGameSaved(): World {
   const world = newGame();
-  // Full storage does not stop the new game. The first autosave that fails tells the player.
   tryWriteSave(window.localStorage, 'auto', world, Date.now());
   return world;
 }
@@ -98,11 +92,9 @@ const mixer = new Mixer(MIX);
 mixer.unlockOn(window);
 const loading = Promise.all([initPhysics(), loadModels(), loadBank(mixer.ctx, SOUNDS)]);
 const map = await fetchMap();
-// The world and its ground build while physics, models and sounds load, since those wait mostly on the network and decoders.
 const world = await bootWorld();
 groundTexture(world);
 const [, , bank] = await loading;
-// UI code may use Math.random(), and the radio changes no rule.
 const radio = new RadioPanel(new RadioStation(Math.random));
 const soundSettings = new SoundSettings(mixer, window.localStorage, radio.faceplate, radio.keys, () => game.loops.nextTrack());
 radio.hear(world);
@@ -120,7 +112,6 @@ if (import.meta.env.DEV) {
   (window as any).__ROAM_PERF__ = { snapshot: perfSnapshot, reset: resetPerf };
 }
 
-// Route grids build after boot, one per task, the player's first. Any route asked for earlier builds its own grid.
 function warmAfterBoot(radii: number[]): void {
   const radius = radii.shift();
   if (radius === undefined) return;
@@ -128,7 +119,6 @@ function warmAfterBoot(radii: number[]): void {
   setTimeout(() => warmAfterBoot(radii));
 }
 
-// A random 32-bit integer. Boot is outside the sim, so it may use Math.random().
 function freshSeed(): number {
   return Math.floor(Math.random() * 2 ** 32) | 0;
 }

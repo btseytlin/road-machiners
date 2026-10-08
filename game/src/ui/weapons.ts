@@ -29,7 +29,6 @@ export const BLOCK_TEXT: Record<FireBlock, string> = {
   out: "driver knocked out",
 };
 
-// The same reasons in one short word for the compact panel. A gun with no order shows nothing.
 export const BLOCK_SHORT: Record<FireBlock, string> = {
   disabled: "broken",
   cooldown: "wait",
@@ -46,20 +45,15 @@ export const BLOCK_SHORT: Record<FireBlock, string> = {
 
 export const WEAPONS_PER_ROW = 5;
 
-// Columns of the gun grid. Up to WEAPONS_PER_ROW guns fill one row. More fill two balanced rows of smaller elements.
 export function weaponGrid(count: number): { cols: number; small: boolean } {
   if (count <= WEAPONS_PER_ROW) return { cols: count, small: false };
   return { cols: Math.ceil(count / 2), small: true };
 }
 
-// One weapon aimed at a vehicle, as its marker shows it.
 export type WeaponMark = { slot: number; look: "mg" | "cannon"; status: string; ready: boolean };
-// Timed work a seen NPC does, with its progress from 0 to 1.
 export type JobMark = { label: string; progress: number };
 export type VehicleMark = { weapons: WeaponMark[]; radio: boolean; job: JobMark | null; out: boolean; gaveUp: boolean };
 
-// Markers above vehicles, by vehicle id: each player weapon aimed at the vehicle with its status, the
-// radio key on the hovered truck when it can take a call, the job of each seen NPC, and each seen knocked-out NPC.
 export function vehicleMarks(w: World, hovered: string | null): Map<string, VehicleMark> {
   const marks = new Map<string, VehicleMark>();
   const markOf = (id: string) => {
@@ -95,7 +89,6 @@ function seenNpcJob(w: World, v: Vehicle): JobMark | null {
   return work && { label: workLabel(w, v, work), progress: workProgress(work) };
 }
 
-// A click on a vehicle aims the weapons at it. When all of them already aim at it, the click clears them.
 export function toggleTarget(w: World, weapons: MountedWeapon[], target: Vehicle): World {
   const orders = playerVehicle(w).weaponOrders;
   const aimed = weapons.length > 0 && weapons.every((mw) => orders[mw.part.id]?.targetId === target.id);
@@ -105,7 +98,6 @@ export function toggleTarget(w: World, weapons: MountedWeapon[], target: Vehicle
   return w;
 }
 
-// Aims the chosen guns at one part of a target. When they all aim at that part already, they go back to a body shot.
 export function aimAtPart(w: World, weapons: MountedWeapon[], target: Vehicle, partId: string): World {
   const orders = playerVehicle(w).weaponOrders;
   const aimed = weapons.length > 0 && weapons.every((mw) => orders[mw.part.id]?.targetId === target.id && orders[mw.part.id].aim === partId);
@@ -115,7 +107,6 @@ export function aimAtPart(w: World, weapons: MountedWeapon[], target: Vehicle, p
   return w;
 }
 
-// Gun numbers, as the panel counts them, that aim at each part of a target. A body shot marks no part.
 export function aimMarks(w: World, targetId: string): Map<string, number[]> {
   const marks = new Map<string, number[]>();
   const orders = playerVehicle(w).weaponOrders;
@@ -127,7 +118,6 @@ export function aimMarks(w: World, targetId: string): Map<string, number[]> {
   return marks;
 }
 
-// The aimed spot in words: "body shot" or the part's name.
 export function aimName(target: Vehicle, aim: Aim): string {
   const part = aim === "body" ? null : findPart(target, aim);
   return part ? partDef(part.defId).name : "body shot";
@@ -137,7 +127,6 @@ function turns(n: number): string {
   return `${n} ${n === 1 ? "turn" : "turns"}`;
 }
 
-// Why a gun cannot fire, with the turns left for a cooldown or a reload.
 export function blockText(mw: MountedWeapon, block: FireBlock): string {
   const gun = gunOf(mw.part);
   if (block === "cooldown") return `ready in ${turns(gun.cooldown)}`;
@@ -145,15 +134,12 @@ export function blockText(mw: MountedWeapon, block: FireBlock): string {
   return BLOCK_TEXT[block];
 }
 
-// Rounds left in the magazine, like "3/5".
 export function ammoText(mw: MountedWeapon): string {
   return `${gunOf(mw.part).ammo}/${mw.def.magazine}`;
 }
 
 export type AmmoCell = "loaded" | "spent" | "reloading";
 
-// One cell per magazine round: loaded rounds first, then spent ones. A gun at work on a reload
-// fills its spent cells left to right with the share reloadWork / reload of the whole row.
 export function ammoCells(magazine: number, ammo: number, reloadWork: number, reload: number): AmmoCell[] {
   const spent = magazine - ammo;
   const filled = reloadWork > 0 ? Math.min(spent, Math.ceil((reloadWork / reload) * magazine)) : 0;
@@ -161,20 +147,17 @@ export function ammoCells(magazine: number, ammo: number, reloadWork: number, re
     i < ammo ? "loaded" : i < ammo + filled ? "reloading" : "spent");
 }
 
-// Ammo status for the tooltip and screen readers.
 export function ammoLabel(mw: MountedWeapon): string {
   const gun = gunOf(mw.part);
   if (gun.reloadWork > 0) return `reloading, ${turns(mw.def.reload - gun.reloadWork)} left`;
   return `${gun.ammo}/${mw.def.magazine} rounds`;
 }
 
-// A forced reload helps only a gun with a partly spent magazine.
 export function canForceReload(mw: MountedWeapon): boolean {
   const ammo = gunOf(mw.part).ammo;
   return mw.part.hp > 0 && ammo > 0 && ammo < mw.def.magazine;
 }
 
-// Current-position feedback shared by the weapon buttons and map markers.
 export function getWeaponReadout(w: World, mw: MountedWeapon) {
   const me = playerVehicle(w);
   const order = me.weaponOrders[mw.part.id];
@@ -196,7 +179,6 @@ export function getWeaponReadout(w: World, mw: MountedWeapon) {
   };
 }
 
-// The visible state of a gun in a word: the hit chance when it can fire at a target, else why it cannot.
 export function shortStatus(mw: MountedWeapon, readout: ReturnType<typeof getWeaponReadout>): string {
   if (readout.chance !== null) return `${Math.round(readout.chance * 100)}%`;
   const { block } = readout;
@@ -207,7 +189,6 @@ export function shortStatus(mw: MountedWeapon, readout: ReturnType<typeof getWea
   return BLOCK_SHORT[block];
 }
 
-// Hold has something to do while the gun has an order or auto fire is on.
 function canHold(w: World, mw: MountedWeapon): boolean {
   return w.player.autoFire || playerVehicle(w).weaponOrders[mw.part.id] !== undefined;
 }
@@ -235,7 +216,6 @@ export class WeaponPanel {
     this.turn.replaceChildren(this.renderTurnButton(phase));
   }
 
-  // While turns run on their own, the button shows it and stops them.
   private renderTurnButton(phase: ReturnType<UiHost["getTurnPhase"]>): HTMLElement {
     if (this.host.autoTravel())
       return el('button', {
@@ -248,7 +228,6 @@ export class WeaponPanel {
     }, createIcon('turn'), el('span', {}, phase ? `${phase}…` : 'Space'));
   }
 
-  // Presses like Space keydown now and releases like Space keyup when this press ends, even if the button is redrawn.
   private pressTurn(e: PointerEvent): void {
     if (e.button !== 0) return;
     this.host.pressTurn();
@@ -333,7 +312,6 @@ export class WeaponPanel {
     );
   }
 
-  // Rounds left, one pip each.
   private renderAmmo(mw: MountedWeapon): HTMLElement {
     const gun = gunOf(mw.part);
     const label = ammoLabel(mw);
@@ -346,7 +324,6 @@ export class WeaponPanel {
     );
   }
 
-  // The button that drops a gun's order (nothing to hold with no order and auto fire off) and the one that forces a reload.
   private renderActions(mw: MountedWeapon, locked: boolean, canHold: boolean): HTMLElement {
     return el(
       "div",
@@ -392,7 +369,6 @@ export class WeaponPanel {
     this.host.selectWeapon(id);
   }
 
-  // A digit key picks the weapon at that index, and picks all again when it is already selected.
   selectIndex(i: number): void {
     const w = this.host.world();
     const all = vehicleStats(w, playerVehicle(w)).weapons;
@@ -421,15 +397,11 @@ export function weaponsForClick(
   return selected ? all.filter((m) => m.part.id === selected) : all;
 }
 
-// Keeps a hover alive for a short delay after the pointer leaves the hovered truck, and while the pointer is over the
-// panel that truck opened, so the pointer can travel from a truck to its panel.
 export class HoverHold {
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private apply: (id: string | null) => void, private delayMs: number) {}
 
-  // Passes a new hover on at once. The pointer leaving a hovered truck passes on after the delay, unless the pointer
-  // arrives on the panel or hovers again first.
   move(next: string | null, current: string | null): void {
     if (next !== null || current === null) return this.now(next);
     this.timer ??= setTimeout(() => this.now(null), this.delayMs);
@@ -445,7 +417,6 @@ export class HoverHold {
     this.apply(id);
   }
 
-  // The panel holds the hover while the pointer is on it and ends it when the pointer leaves.
   watch(panel: EventTarget): void {
     panel.addEventListener("mouseenter", () => this.cancel());
     panel.addEventListener("mouseleave", () => this.now(null));

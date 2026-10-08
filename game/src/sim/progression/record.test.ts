@@ -7,16 +7,12 @@ import { record, recordFrom, recordTurns, StallWatch, stepsFrom, type TraceLine 
 import { replay } from './replay';
 
 const SHORT_RUN = 60;
-// A nondeterminism bug (stray Math.random, object-identity leaks, iteration-order drift) shows up within a
-// handful of turns; it does not need thousands to surface. Short enough to keep this check cheap, long enough
-// to have run through several bot decisions.
 const DETERMINISM_RUN = 15;
-const RUN_TIMEOUT = 360_000; // one world turn takes about 40 ms and a new world about 400 ms; a loaded machine running the whole suite made the 60-turn run take over 120 s
+const RUN_TIMEOUT = 360_000;
 
 describe('record', () => {
   it('gives the same trace for the same seed and archetype', async () => {
     const first = record(1337, 'trader', DETERMINISM_RUN);
-    // Each run takes about half a minute on a loaded machine, so the worker's status messages get a turn between them.
     await new Promise<void>((resolve) => setTimeout(resolve, 0));
     const second = record(1337, 'trader', DETERMINISM_RUN);
 
@@ -31,7 +27,6 @@ describe('record', () => {
     for (const step of recordTurns(1337, 'scavenger', SHORT_RUN)) {
       lines.push(...step.lines);
       last = step.world;
-      // A minute of turns without a yield would starve the worker's status messages to the runner.
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
     }
     if (!last) throw new Error('The recording ran no turns');
@@ -43,7 +38,6 @@ describe('record', () => {
       const bySource = (Object.keys(XP_SOURCES) as XpSource[]).filter((s) => XP_SOURCES[s].skill === skill).reduce((sum, s) => sum + world.player.xpBySource[s], 0);
       expect(curve[skill].total, skill).toBeCloseTo(bySource, 6);
     }
-    // The recorder buys ranks from the pool as it fills, so the XP earned is what is left plus what ranks cost.
     const pool = SKILL_IDS.reduce((sum, skill) => sum + curve[skill].total, 0);
     const spent = SKILL_IDS.reduce((sum, skill) => sum + RANK_COSTS.slice(0, world.player.ranks[skill]).reduce((a, b) => a + b, 0), 0);
     expect(pool).toBeCloseTo(world.player.xp + spent, 6);

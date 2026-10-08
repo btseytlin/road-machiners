@@ -32,7 +32,6 @@ export type TurnResponse =
   | { id: number; error: string };
 
 export function computeTurn(task: TurnTask, terrain: World['terrain']): PreparedTurn {
-  // Worker messages drop frozen flags. Turn clones must keep the terrain and its route cache.
   Object.freeze(terrain.heights);
   Object.freeze(terrain.types);
   Object.freeze(terrain);
@@ -77,18 +76,15 @@ function describeWorkerError(error: unknown): string {
   return error instanceof Error ? error.stack ?? error.message : String(error);
 }
 
-// The same turn pipeline is importable by the game and is the dedicated worker entry point.
 if (typeof self !== 'undefined' && !('document' in self)) startTurnWorker();
 
-const EXPLORE_EVERY = 4; // trail poses between sight checks while exploring along a turn
-const STOPPED = 0.05; // tiles per turn; slower than this a braking truck counts as stopped
+const EXPLORE_EVERY = 4;
+const STOPPED = 0.05;
 
-// Returns the movement step for endTurn. It keeps the turn's result for the caller through done.
 export function physicsMove(d: Drive, done: (r: TurnResult) => void): (w: World) => void {
   return (w) => {
     syncDrive(d, w);
     const r = simulateTurn(d, w);
-    // A towed truck has no frames either, but its tower places it after this step.
     const far = w.vehicles.filter((v) => !r.frames[v.id] && !isOnRope(w, v.id));
     applyTurn(w, r);
     for (const v of far) {
@@ -100,11 +96,6 @@ export function physicsMove(d: Drive, done: (r: TurnResult) => void): (w: World)
   };
 }
 
-// Writes the physics result back for the vehicles that drove in it. Vehicles without frames were far
-// and are left alone. A vehicle driving in physics drops any route stored while it was far, since it
-// no longer starts where that route left off. Breaks go first, from each truck's pose at the turn's start, so
-// the side that hit takes the scrape. The body's speed then replaces the sim's, since physics already took the
-// slowdown when the prop broke.
 export function applyTurn(w: World, r: TurnResult): void {
   applyBreaks(w, r);
   for (const v of w.vehicles) {
@@ -136,7 +127,6 @@ function applyBreaks(w: World, r: TurnResult): void {
   for (const b of r.breaks) breakProp(w, b.prop, b.vehicle);
 }
 
-// Moves a stranded truck to free ground and stops it. syncDrive then sets its body there on its wheels.
 function setDown(w: World, v: Vehicle): void {
   v.pos = setDownSpot(w, v);
   v.speed = 0;
@@ -156,8 +146,6 @@ function applyDriven(w: World, r: TurnResult, v: Vehicle, frames: TurnResult['fr
   settleOrder(w, v, r.results[v.id]);
 }
 
-// Clears an order the turn completed. A stop order holds until the truck stands still,
-// so a slow roll after arrival still brakes.
 function settleOrder(w: World, v: Vehicle, res: VehicleResult): void {
   if (!v.order || !orderDone(v.order, res, v.speed < STOPPED)) return;
   if (v.order.kind !== 'brake') w.events.push({ t: 'arrived', vehicle: v.id });
@@ -175,7 +163,6 @@ function orderDone(order: MoveOrder, res: VehicleResult, stopped: boolean): bool
   }
 }
 
-// Tiles the player saw while driving count as explored, not only those seen at the turn's end.
 function exploreAlong(w: World): void {
   const me = playerVehicle(w);
   for (let i = 0; i < me.trail.length; i += EXPLORE_EVERY) {
@@ -183,16 +170,12 @@ function exploreAlong(w: World): void {
   }
 }
 
-// The sim keeps RULES.substeps + 1 poses per turn, from the start pose, for fuel and the log. Pose i is the pose at
-// time i / substeps of the turn, so playing the trail back runs at the speed the truck drove.
 export function trailOf(start: Pose, frames: TurnResult['frames'][string]): Pose[] {
   const trail: Pose[] = [start];
   for (let i = 1; i <= RULES.substeps; i++) trail.push(poseAt(start, frames, (i * TURN_STEPS) / RULES.substeps));
   return trail;
 }
 
-// The pose at a fractional physics step: step 0 is the start, step k is frame k - 1. Position and heading are
-// interpolated between the two frames around it.
 function poseAt(start: Pose, frames: TurnResult['frames'][string], step: number): Pose {
   const poseOfFrame = (k: number): Pose => {
     if (k === 0) return start;

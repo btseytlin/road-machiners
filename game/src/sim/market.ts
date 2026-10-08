@@ -1,10 +1,6 @@
 // Shops: goods price pressure, finite random part stock and contract boards. Pure functions on an
 // explicit ShopState.
 // IV1: every price here derives from a good's base value through goodBasePrice/goodPrice.
-// IV5: stock is finite; takeStockPart removes, addStockPart adds.
-// IV6: stock, restock and contract rolls draw only from world.marketRng, the market's own stream in
-// the world, so they replay from the seed without shifting the main stream combat and NPCs use.
-// IV7: recordTrade is the one place pressure moves, for player and NPC trades alike.
 
 import { ECONOMY, GOODS } from '../data/goods';
 import { PARTS } from '../data/parts';
@@ -28,15 +24,12 @@ import { isJunk, partValue } from './wear';
 import { dist, type Vec } from './vec';
 
 export type ShopState = {
-  contracts: Contract[]; // offers on the board, not yet taken
-  pressure: Record<string, number>; // good id -> signed fraction of base price, clamped to PRESSURE_MAX
+  contracts: Contract[];
+  pressure: Record<string, number>;
   stock: PartInstance[];
-  restockAt: number; // world.turn at which the shop next restocks
+  restockAt: number;
 };
 
-// A good's base value before any shop's make/need profile or pressure. GOODS has no `value` field
-// yet (PH2 adds one to GoodDef); GOOD_VALUE in src/data/shops.ts stands in until then. This is the
-// only function that reads either source, so the switch to a real field touches one place.
 export function goodValue(good: string): number {
   const def = GOODS[good];
   if (!def) throw new Error(`Unknown good ${good}`);
@@ -56,8 +49,6 @@ function rollStock(world: World, def: ShopDef, count: number): PartInstance[] {
   return stock;
 }
 
-// Rolls a shop's opening stock and sets its first restock turn. Called once per shop at world
-// creation by the phase that wires World.shops.
 export function initShop(world: World, shopId: string): ShopState {
   const def = shopDef(shopId);
   const pressure: Record<string, number> = {};
@@ -66,9 +57,6 @@ export function initShop(world: World, shopId: string): ShopState {
   return { contracts: [], pressure, stock: rollStock(world, def, count), restockAt: world.turn + def.restockTurns };
 }
 
-// Drifts pressure back toward 0 every turn, and replaces the whole stock on restock. Restocking
-// keeps nothing of the old stock: the simplest rule, and it matches a shop taking in a fresh haul
-// rather than the same shelf slowly refilling.
 export function advanceShop(world: World, shopId: string, state: ShopState): void {
   const def = shopDef(shopId);
   for (const good of def.goods) state.pressure[good] = (state.pressure[good] ?? 0) * (1 - def.driftPerTurn);
@@ -79,10 +67,6 @@ export function advanceShop(world: World, shopId: string, state: ShopState): voi
   }
 }
 
-// Straight distance from a shop to the nearest other shop that makes the good, or to the nearest
-// source site in GOOD_SOURCES, so a haul's pay follows the miles it actually takes to move a good to
-// where nobody makes it. Throws if the good has neither, since then no price for it could ever be
-// grounded in a maker.
 function nearestMakerDistance(shopId: string, good: string): number {
   const makers = Object.values(SHOPS).filter((s) => s.id !== shopId && s.makes.includes(good)).map((s) => s.id);
   const origins = [...makers, ...(GOOD_SOURCES[good] ?? [])];
@@ -95,22 +79,16 @@ function priceFactorFor(def: ShopDef, good: string): number {
   return def.priceFactor.make + DISTANCE_PREMIUM.perTile * nearestMakerDistance(def.id, good);
 }
 
-// A good's price at a shop before pressure and spread: its base value times a factor that sits near
-// `make` at a shop that makes it, and climbs with distance to the nearest maker anywhere else. Throws
-// if the shop does not trade the good.
 export function goodBasePrice(shopId: string, good: string): number {
   const def = shopDef(shopId);
   if (!def.goods.includes(good)) throw new Error(`${shopId} does not trade ${good}`);
   return goodValue(good) * priceFactorFor(def, good);
 }
 
-// A good's price at a shop at a given standing pressure, before spread.
 export function standingPrice(shopId: string, good: string, pressure: number): number {
   return goodBasePrice(shopId, good) * (1 + pressure);
 }
 
-// The buy or sell price of one unit at a given standing pressure, from the good's base price and a
-// spread fraction applied on top (buy up, sell down). Sell always rounds to strictly below buy (IV4).
 export function priceAtPressure(shopId: string, good: string, pressure: number, direction: 'buy' | 'sell', spread: number): number {
   if (!(spread >= 0)) throw new Error(`Bad spread ${spread}`);
   const pressured = standingPrice(shopId, good, pressure);
@@ -119,15 +97,10 @@ export function priceAtPressure(shopId: string, good: string, pressure: number, 
   return direction === 'buy' ? buy : Math.max(0, sell);
 }
 
-// The buy or sell price of one unit at a shop's standing pressure (IV1).
 export function goodPrice(shopId: string, state: ShopState, good: string, direction: 'buy' | 'sell', spread: number): number {
   return priceAtPressure(shopId, good, state.pressure[good] ?? 0, direction, spread);
 }
 
-// The price of a whole lot: each unit priced at the pressure left by the unit before it, so a lot
-// price always equals the sum of trading the same units one at a time. A round trip through
-// tradeGoods, which prices every unit this way and moves pressure only after the whole lot, can
-// never turn a profit at one shop.
 export function lotPrice(shopId: string, state: ShopState, good: string, direction: 'buy' | 'sell', spread: number, count: number): number {
   if (!Number.isInteger(count) || count <= 0) throw new Error(`Bad lot count ${count}`);
   const perUnit = shopDef(shopId).pressurePerUnit * (direction === 'buy' ? 1 : -1);
@@ -140,9 +113,6 @@ export function lotPrice(shopId: string, state: ShopState, good: string, directi
   return total;
 }
 
-// Moves standing pressure by the shop's pressurePerUnit per unit traded, clamped to PRESSURE_MAX
-// either side of base price. Buying raises price, selling lowers it. The one function player and
-// NPC trades both call, so both move prices the same way (IV7).
 export function recordTrade(shopId: string, state: ShopState, good: string, units: number, direction: 'buy' | 'sell'): void {
   const def = shopDef(shopId);
   if (!def.goods.includes(good)) throw new Error(`${shopId} does not trade ${good}`);
@@ -152,7 +122,6 @@ export function recordTrade(shopId: string, state: ShopState, good: string, unit
   state.pressure[good] = Math.max(-PRESSURE_MAX, Math.min(PRESSURE_MAX, next));
 }
 
-// Removes and returns a stocked part. Throws if the shop has none with that id (IV5).
 export function takeStockPart(state: ShopState, partId: string): PartInstance {
   const index = state.stock.findIndex((part) => part.id === partId);
   if (index < 0) throw new Error(`No part ${partId} in stock`);
@@ -160,76 +129,53 @@ export function takeStockPart(state: ShopState, partId: string): PartInstance {
   return part;
 }
 
-// Adds a part to stock, as when a shop buys a spare from a seller (IV5).
 export function addStockPart(state: ShopState, part: PartInstance): void {
   state.stock.push(part);
 }
 
-// Contracts. Shops post them; rewards follow the effort model.
-
-// `window` is the turns a contract allows from acceptance. `deadline` is the withdrawal turn while
-// the offer is posted and the due turn once it is held.
 export type Contract =
   | { id: string; shop: string; kind: 'haul'; good: string; units: number; to: string; reward: number; deadline: number; window: number; rush: boolean; tier: Tier }
   | { id: string; shop: string; kind: 'fetch'; defId: string; reward: number; deadline: number; window: number; tier: Tier }
   | { id: string; shop: string; kind: 'bounty'; template: string; targetName: string; reward: number; deadline: number; window: number; tier: Tier };
 
-// Estimated turns to travel between two points: straight distance stretched to a road-like route,
-// at cruise speed, plus the turns spent handling the stop.
 export function estimateTurns(from: Vec, to: Vec): number {
   return (dist(from, to) * EFFORT.routeFactor) / EFFORT.refSpeed + EFFORT.handlingTurns;
 }
 
-// A haul's reward: turns of estimated travel at the good's tier wage, times the haul's reward
-// factor, plus a small cut of the hauled goods' value. A rush haul pays the rush premium on top.
 export function contractReward(turns: number, tier: Tier, cargoValue: number, rush: boolean): number {
   const commission = cargoValue * CONTRACTS.haul.valueShare;
   const standard = turns * EFFORT.wage[tier] * CONTRACTS.haul.rewardFactor + commission;
   return Math.round(rush ? standard * CONTRACTS.haul.rush.premium : standard);
 }
 
-// Turns a haul allows from acceptance.
 export function haulWindow(turns: number, rush: boolean): number {
   return Math.round(turns * (rush ? CONTRACTS.haul.rush.durationFactor : CONTRACTS.haul.durationFactor));
 }
 
-// A vehicle's total worth: its chassis value plus every part it carries, mounted or spare, at each
-// part's own current worth (junk counts at scrap value only).
 export function vehicleValue(v: Vehicle): number {
   const parts = v.items.flatMap((it) => (it.kind === 'part' ? [it.part] : []));
   return chassisDef(v.chassisId).value + parts.reduce((a, p) => a + partValue(p), 0);
 }
 
-// What a robber gets without a refit: the goods at their price plus the spare parts at their worth.
-// Mounted parts are the truck, not the load.
 export function cargoValue(v: Vehicle): number {
   const goods = Object.entries(goodsCount(v)).reduce((a, [good, n]) => a + n * goodValue(good), 0);
   return goods + spareParts(v).reduce((a, p) => a + partValue(p), 0);
 }
 
-// A bounty's reward: a fixed sum for the target's raider template, whatever it carries. The deadline window is
-// random and does not change the pay.
 export function bountyReward(templateId: string): number {
   const turns = CONTRACTS.bounty.rewardTurns[templateId];
   if (turns === undefined) throw new Error(`No bounty reward for template ${templateId}`);
   return Math.round(turns * EFFORT.wage[1]);
 }
 
-// The pristine buy price of a part def: its base value plus the shop spread, ignoring wear. A fetch
-// reward is priced off this, not off any one stocked instance, since the contract does not name a
-// condition.
 export function partPristineBuyPrice(defId: string): number {
   return Math.round(PARTS[defId].value * (1 + ECONOMY.spread));
 }
 
-// A fetch's reward: the part's own pristine buy price, plus a flat search fee of turns at the
-// fetch's tier wage. So the reward always covers the part's cost, whatever the part.
 export function fetchReward(defId: string, tier: Tier): number {
   return partPristineBuyPrice(defId) + Math.round(CONTRACTS.fetch.searchFeeTurns * EFFORT.wage[tier]);
 }
 
-// Highest tier among a truck's mounted or spare non-core parts. A bare truck with none carries the
-// lowest tier: there is nothing riskier to name on its bounty.
 function highestPartTier(v: Vehicle): Tier {
   const tiers = v.items.flatMap((it) => (it.kind === 'part' && PARTS[it.part.defId].kind !== 'core' ? [PARTS[it.part.defId].tier] : []));
   return tiers.length ? (Math.max(...tiers) as Tier) : 1;
@@ -254,9 +200,6 @@ function possibleKinds(input: RollInput): Contract['kind'][] {
   if (input.raiders.length > 0) kinds.push('bounty');
   return kinds;
 }
-
-// Tier follows the content on offer, not a random roll: a haul takes the good's own tier, a fetch
-// the part's own tier, and a bounty the highest tier fitted to its target.
 
 function rollHaul(world: World, input: RollInput, id: string): Contract {
   const to = pick(world, input.places);
@@ -289,9 +232,6 @@ function rollBounty(world: World, input: RollInput, id: string): Contract {
 
 const ROLLS = { haul: rollHaul, fetch: rollFetch, bounty: rollBounty };
 
-// Draws one contract for a shop, from the kinds it can currently offer. A kind with nothing to draw
-// from (no other places for a haul, no part defs for a fetch, no living raiders for a bounty) is
-// skipped. Returns null when no kind is possible.
 export function rollContract(
   world: World,
   shop: { id: string; pos: Vec },
@@ -311,8 +251,6 @@ export function isExpired(world: World, c: Contract): boolean {
   return world.turn > c.deadline;
 }
 
-// This turn's defeats that count for bounties, per NPC template: each truck the player knocked out, and each truck
-// the player wrecked while it still fought. A truck already lying defeated or heading home counted when it fell.
 export function playerDefeats(world: World): Map<string, number> {
   const out = new Map<string, number>();
   for (const e of world.events) {
@@ -322,7 +260,6 @@ export function playerDefeats(world: World): Map<string, number> {
   return out;
 }
 
-// The template of the truck an event shows the player defeating, or null when the event is no such defeat.
 function playerDefeatOf(world: World, e: GameEvent): string | null {
   if (!isPlayerBlow(world, e)) return null;
   const v = beatenTruck(world, e.vehicle);
@@ -340,8 +277,6 @@ function beatenTruck(world: World, id: string): Vehicle {
   return v;
 }
 
-// A truck that gives up to the player counts as beaten: it finishes one held bounty on its template, as a knockout
-// does. Called outside the turn's event scan, since a dialogue command clears the events.
 export function creditBounty(world: World, npc: Vehicle): void {
   if (!npc.brain) throw new Error(`${npc.id} has no driver to name in a bounty`);
   const template = npc.brain.templateId;
@@ -349,19 +284,14 @@ export function creditBounty(world: World, npc: Vehicle): void {
   if (c) finishContract(world, c, 'done');
 }
 
-// True once no truck of the bounty's template is left in the world. Check playerDefeats for the
-// same turn first: once a bounty is fulfilled, the completed contract is removed, so this never runs on it.
 export function bountyLapsed(world: World, c: Contract): boolean {
   if (c.kind !== 'bounty') throw new Error(`${c.kind} contract has no bounty target`);
   return !world.vehicles.some((v) => v.brain?.templateId === c.template);
 }
 
-// Owed share of the haul's goods value if its deadline passes.
 export function haulPenalty(c: Extract<Contract, { kind: 'haul' }>, goodValue: number): number {
   return Math.round(c.units * goodValue * CONTRACTS.haul.penaltyShare);
 }
-
-// World wiring: every shop's state lives in world.shops, keyed by shop id.
 
 function shopPos(shopId: string): Vec {
   return siteOf(shopId).pos;
@@ -373,16 +303,11 @@ export function shopState(world: World, shopId: string): ShopState {
   return state;
 }
 
-// A copy of a shop's standing pressure for every good it trades, read as goodPrice() reads it.
 export function standingPressures(world: World, shopId: string): Record<string, number> {
   const live = shopState(world, shopId).pressure;
   return Object.fromEntries(shopDef(shopId).goods.map((good) => [good, live[good] ?? 0]));
 }
 
-// Tops a shop's board up to its contract slots. Haul targets are the other shops that trade the good.
-// A fetch never asks for a part the shop has in stock. A board never names the same bounty template
-// twice: raiders already posted on this board are dropped before each roll, so one kill can never be
-// asked for by two offers on the same board.
 function fillBoard(world: World, shopId: string, state: ShopState): void {
   const def = shopDef(shopId);
   const places = Object.keys(SHOPS).filter((id) => id !== shopId).map((id) => ({ id, pos: shopPos(id) }));
@@ -397,7 +322,6 @@ function fillBoard(world: World, shopId: string, state: ShopState): void {
   }
 }
 
-// The market stream starts from the world seed mixed with a fixed salt, so it differs from the main stream.
 const MARKET_SALT = 0x6d61726b;
 
 export function marketStream(seed: number): Rng {
@@ -413,9 +337,6 @@ export function initializeShops(world: World): void {
   }
 }
 
-// Drift and restock every shop. Expired offers drop from every board every turn, so an accepted
-// offer is never past its deadline. A restock also drops offers whose target has lapsed and refills
-// the board.
 export function advanceShops(world: World): void {
   for (const [shopId, state] of Object.entries(world.shops)) {
     const restockAt = state.restockAt;
@@ -431,12 +352,10 @@ function offerStillValid(world: World, c: Contract): boolean {
   return c.kind !== 'bounty' || !bountyLapsed(world, c);
 }
 
-// The shop the parked player truck can use, or null.
 export function shopAt(world: World): string | null {
   return playerVehicle(world).speed > RULES.parkedSpeed ? null : shopNear(world);
 }
 
-// The shop in reach of the player truck at any speed, or null.
 export function shopNear(world: World): string | null {
   const pos = playerVehicle(world).pos;
   return Object.keys(SHOPS).find((id) => canUseSite(pos, siteOf(id))) ?? null;
@@ -448,8 +367,6 @@ export function siteOf(siteId: string): Site {
   return site;
 }
 
-// The shop the parked player uses for trade and garage work: storage and instant refits. Every shop is
-// staffed and does both. Throws when there is none.
 export function requireShop(world: World): string {
   const shopId = shopAt(world);
   if (!shopId) throw new Error('Not parked at a shop');
@@ -460,7 +377,6 @@ function requireParkedAt(world: World, shopId: string): void {
   if (shopAt(world) !== shopId) throw new Error(`Not parked at ${shopId}`);
 }
 
-// Takes an offer from the board of the shop the player is parked at. A haul loads its goods now.
 export function acceptContract(world: World, contractId: string): World {
   return playerCommand(world, (w) => {
     const shopId = shopAt(w);
@@ -478,9 +394,6 @@ export function acceptContract(world: World, contractId: string): World {
   });
 }
 
-// A haul loads its goods for free, so a player in debt could otherwise stock up on cargo it never
-// paid for. Refused outright: pay off the debt before taking on more work.
-// Hauled goods count as paid at the value a missed deadline charges, so selling them teaches no trade.
 function loadHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void {
   if (world.player.money < 0) throw new Error('Cannot take on a haul while in debt');
   const v = playerVehicle(world);
@@ -491,7 +404,6 @@ function loadHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void {
   world.player.costBasis[c.good] = (paid * held + goodValue(c.good) * c.units) / (held + c.units);
 }
 
-// Hands in a haul at its destination or a fetch at the shop that posted it. Bounties pay on the kill.
 export function deliverContract(world: World, contractId: string): World {
   return playerCommand(world, (w) => {
     const contract = w.player.contracts.find((c) => c.id === contractId);
@@ -510,8 +422,6 @@ function handInHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void 
   removeGoods(v, c.good, c.units);
 }
 
-// A fetch takes a part that still does its job: working, not junk, and rebuilt at most
-// CONTRACTS.fetch.maxWear times.
 export function fitsFetch(c: Extract<Contract, { kind: 'fetch' }>, p: PartInstance): boolean {
   return p.defId === c.defId && p.hp > 0 && !isJunk(p) && p.wear <= CONTRACTS.fetch.maxWear;
 }
@@ -529,14 +439,11 @@ function handInFetch(world: World, c: Extract<Contract, { kind: 'fetch' }>): voi
   world.player.storage.splice(stored, 1);
 }
 
-// Social XP for a done contract, from the money that paid for work. A fetch's part price is a purchase, so only
-// its search fee counts.
 export function contractXp(c: Contract): number {
   const effort = c.kind === 'fetch' ? c.reward - partPristineBuyPrice(c.defId) : c.reward;
   return Math.round(effort * CONTRACTS[c.kind].xpPerEffort);
 }
 
-// Ends an active contract. Done pays the reward and the contract's XP to Social; failed charges the haul penalty, debt allowed.
 function finishContract(world: World, c: Contract, outcome: 'done' | 'failed' | 'lapsed'): void {
   world.player.contracts = world.player.contracts.filter((x) => x.id !== c.id);
   world.events.push({ t: 'contract', contract: { ...c }, outcome });
@@ -552,8 +459,6 @@ function finishContract(world: World, c: Contract, outcome: 'done' | 'failed' | 
   }
 }
 
-// Settles bounties from this turn's defeats and ends contracts past their deadline or target. Each qualifying
-// defeat finishes one held bounty on its template, in held order.
 export function advanceContracts(world: World): void {
   const defeats = playerDefeats(world);
   for (const c of [...world.player.contracts]) {
@@ -563,7 +468,6 @@ export function advanceContracts(world: World): void {
   }
 }
 
-// Takes one of this turn's defeats on the bounty's template when any is left.
 function bountyOutcome(world: World, c: Extract<Contract, { kind: 'bounty' }>, defeats: Map<string, number>): 'done' | 'lapsed' | null {
   const left = defeats.get(c.template) ?? 0;
   if (left > 0) {

@@ -7,12 +7,10 @@ export function consumeSupplies(world: World): void {
   for (const vehicle of world.vehicles) consumeVehicleSupplies(world, vehicle);
 }
 
-// Catches stores that left a truck this turn, like a looter taking one off a knocked-out truck.
 export function fitAllStores(world: World): void {
   for (const vehicle of world.vehicles) fitStores(world, vehicle);
 }
 
-// A tank at 0 HP leaks.
 export function tankLeaks(v: Vehicle): boolean {
   return corePart(v, "tank").hp <= 0;
 }

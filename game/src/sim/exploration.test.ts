@@ -12,7 +12,6 @@ import { bodyOf } from './body';
 import { TEST_MAP } from '../test/map';
 import { budget } from '../test/budget';
 
-// Old Orchard stands at (22.8, 56.8), north of its first place.
 const original = [
   [16, 94], [102, 35], [22.8, 56.8], [33.8, 32], [50, 32.8], [60, 18.8], [78.2, 21],
   [106.2, 70], [90.3, 86.3], [71.8, 89], [56.8, 94], [41, 90.2], [40.7, 51.7], [64, 54], [82, 52.2],
@@ -21,7 +20,6 @@ const original = [
 
 describe('Icarus exploration distances', () => {
   it('multiplies every pairwise destination distance by five', () => {
-    // Broken Wing is newer than the five-fold scaling, so it has no original position.
     const sites = [...REGION.towns, ...REGION.locations].filter((s) => s.id !== 'broken-wing');
     expect(sites).toHaveLength(original.length);
     for (let i = 0; i < sites.length; i++) for (let j = i + 1; j < sites.length; j++) {
@@ -39,7 +37,6 @@ describe('Icarus exploration distances', () => {
     const toRoad = polylineDist(player.pos, REGION.roads[REGION.playerStart.road]);
     expect(toRoad).toBeLessThan(gray);
     expect(toRoad).toBeGreaterThan(TERRAIN.vision.radius * 2);
-    // Driving straight ahead crosses the road.
     const ahead = { x: player.pos.x + Math.cos(player.heading) * gray, y: player.pos.y + Math.sin(player.heading) * gray };
     expect(polylineDist(ahead, REGION.roads[REGION.playerStart.road])).toBeLessThan(gray - toRoad + REGION.roadWidth);
     for (const site of [...REGION.towns, ...REGION.locations]) expect(siteGap(site, player.pos)).toBeGreaterThan(TERRAIN.vision.radius);
@@ -63,7 +60,7 @@ describe('Icarus exploration distances', () => {
     expect(next.player).not.toBe(world.player);
     expect(next.vehicles).not.toBe(world.vehicles);
     expect(world.vehicles[0].order).toBeNull();
-  }, budget(60_000)); // a new 600-tile world takes about 9 s alone on a loaded machine and longer beside the suite
+  }, budget(60_000));
 });
 
 describe('discovering an outlined territory', () => {
