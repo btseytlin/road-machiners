@@ -46,7 +46,8 @@ function setup(state: Partial<ReleaseState> = {}, start = 'abc1234'): Run {
     if (args.includes('rev-parse')) return { code: 0, stdout: `${start}0123456789abcdef\n`, stderr: '' };
     return { code: 0, stdout: args.includes('status') ? run.dirty : '', stderr: '' };
   };
-  f.ctx.repo.headHash = async (name: string) => (name === BRANCH ? run.releaseHead : name === 'main' ? 'main001' : name);
+  f.ctx.repo.headHash = async (name: string) => (name === BRANCH ? run.releaseHead : name);
+  f.ctx.repo.forkPoint = async () => 'main001';
   f.ctx.repo.fetchFromWork = async () => run.cloneHead;
   f.ctx.repo.isMerged = async (base: string) => (base === 'main' ? run.mainMerged : run.passedAncestor);
   f.ctx.repo.changedFiles = async () => run.changed;
@@ -95,7 +96,7 @@ const pushes = (f: Fake): string[] => f.calls.filter((call) => call.startsWith('
 beforeEach(reset);
 
 describe('playtest', () => {
-  it('plays the release head and main side by side, has Opus review both logs and passes the head with no push', async () => {
+  it('plays the release head and main where the release branched side by side, has Opus review both logs and passes the head with no push', async () => {
     const run = setup();
     run.turns = [clean];
     await playtest(run.f.ctx, 11);
@@ -104,7 +105,7 @@ describe('playtest', () => {
       [CLONE, stepScript('Playing the release seed', [['npm ci', 'npm ci'], ['playtest', `npm run progression:playthrough -- --seed ${SEED} --turns 100 --sha abc1234 --out .factory/playtest/log.jsonl`]])],
       [join(ROOT, 'work', 'release-baseline'), stepScript('Playing the baseline seed', [['npm ci', 'npm ci'], ['playtest', `npm run progression:playthrough -- --seed ${SEED} --turns 100 --sha main001 --out .factory/playtest/log.jsonl`]])],
     ]);
-    expect(run.f.calls).toContain('prepare main');
+    expect(run.f.calls).toContain(`prepare ${BRANCH}`);
     expect(readFileSync(join(HOME, 'playtest', 'baseline.jsonl'), 'utf8')).toContain('"sha":"main001"');
     expect(run.prompts[0]).toContain(`seed ${SEED}, 100 turns`);
     expect(run.prompts[0]).toContain('commit abc1234');
@@ -238,14 +239,13 @@ describe('playtest', () => {
     expect(comments(run.f)[0]).toContain('The release moved during the playtest');
   });
 
-  it('merges main into the release before it plays when the release lacks it', async () => {
+  it('never merges main into the release, so main waits for the ship', async () => {
     const run = setup();
     run.mainMerged = false;
     run.turns = [clean];
     await playtest(run.f.ctx, 11);
-    const merged = run.f.calls.indexOf(`merge main ${BRANCH}`);
-    expect(merged).toBeGreaterThan(-1);
-    expect(merged).toBeLessThan(run.f.calls.indexOf(`prepare ${BRANCH}`));
+    expect(run.f.calls.some((call) => call.startsWith('merge main'))).toBe(false);
+    expect(release(run.f).playtest).toMatchObject({ passed: 'abc1234' });
   });
 
   it('passes nothing when the release moved during a clean play, so the tick plays the new head', async () => {
@@ -317,51 +317,12 @@ describe('playtest', () => {
     const run = setup();
     await expect(playtest(run.f.ctx, 12)).rejects.toThrow('not the tracking issue');
   });
-  describe('a release head after a pass', () => {
-    const passedBefore = { playtest: { ...RELEASE.playtest, runs: 6, passed: 'old0001' } };
-
-    it('carries the pass with no suite and no play when only factory and docs files changed since the passed commit', async () => {
-      const run = setup(passedBefore);
-      run.changed = ['factory/src/tick.ts', 'game-notes.md', 'docs/process.md'];
-      await playtest(run.f.ctx, 11);
-      expect(run.shells).toEqual([]);
-      expect(run.prompts).toEqual([]);
-      expect(release(run.f).playtest).toMatchObject({ runs: 6, passed: 'abc1234', blocked: null });
-      expect(comments(run.f)).toEqual([expect.stringContaining('carried the pass of old0001 to abc1234 with no play')]);
-      expect(comments(run.f)[0]).toContain('It changed 3 other files, like factory/src/tick.ts.');
-    });
-
-    it('plays in full when a game file changed since the passed commit', async () => {
-      const run = setup(passedBefore);
-      run.changed = ['factory/src/tick.ts', 'game/src/sim/raid.ts'];
-      run.turns = [clean];
-      await playtest(run.f.ctx, 11);
-      expect(run.shells[0].script).toBe(SUITE);
-      expect(harnessRuns(run)).toHaveLength(2);
-      expect(release(run.f).playtest).toMatchObject({ runs: 7, passed: 'abc1234' });
-    });
-
-    it('plays in full when the release no longer holds the passed commit', async () => {
-      const run = setup(passedBefore);
-      run.changed = ['docs/process.md'];
-      run.passedAncestor = false;
-      run.turns = [clean];
-      await playtest(run.f.ctx, 11);
-      expect(harnessRuns(run)).toHaveLength(2);
-      expect(release(run.f).playtest).toMatchObject({ runs: 7, passed: 'abc1234' });
-    });
-
-    it('passes nothing when the release moves while the factory compares it', async () => {
-      const run = setup(passedBefore);
-      run.changed = ['docs/process.md'];
-      run.f.ctx.repo.changedFiles = async () => {
-        run.releaseHead = 'moved01';
-        return run.changed;
-      };
-      await playtest(run.f.ctx, 11);
-      expect(run.shells).toEqual([]);
-      expect(release(run.f).playtest).toMatchObject({ runs: 6, passed: 'old0001' });
-      expect(comments(run.f)).toEqual([]);
-    });
+  it('plays a new head after a pass in full', async () => {
+    const run = setup({ playtest: { ...RELEASE.playtest, runs: 6, passed: 'old0001' } });
+    run.turns = [clean];
+    await playtest(run.f.ctx, 11);
+    expect(run.shells[0].script).toBe(SUITE);
+    expect(harnessRuns(run)).toHaveLength(2);
+    expect(release(run.f).playtest).toMatchObject({ runs: 7, passed: 'abc1234' });
   });
 });

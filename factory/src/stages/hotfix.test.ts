@@ -30,14 +30,12 @@ describe('hotfix fan-out', () => {
     expect(f.calls.some((call) => call.startsWith('addLabel'))).toBe(false);
   });
 
-  it('has an agent resolve a conflict of main into the open release', async () => {
+  it('leaves the open release and its candidate post alone', async () => {
     const f = hotfixable();
     writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: 42, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } } });
-    f.mergeConflicts = ['main release/2026-09-29'];
     await shipHotfix(f.ctx, 7, 'Big horn', 'Ann');
-    expect(f.calls).toContain('open release/2026-09-29');
-    expect(f.calls).toContain('push main dev release/2026-09-29');
-    expect(readState(f.ctx.statePath).release?.postId).toBeNull();
+    expect(f.calls.some((call) => call.includes('release/2026-09-29'))).toBe(false);
+    expect(readState(f.ctx.statePath).release?.postId).toBe(42);
   });
 
   it('leaves a conflict of the hotfix branch itself to the approval', async () => {

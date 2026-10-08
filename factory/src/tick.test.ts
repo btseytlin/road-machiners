@@ -679,13 +679,12 @@ describe('tick', () => {
     expect(readState(h.ctx.statePath).pendingShip).toBe('Ann');
   });
 
-  it('drops the candidate post and a queued ship once the release moved past the posted commit, and plays the new head', async () => {
+  it('keeps the candidate post and a queued ship when the release head differs from the posted commit, and plays nothing', async () => {
     const h = harness(null, false, [card(20, 'Approval', ['release'])]);
     writeState(h.ctx.statePath, state({ release: { ...RELEASE, postId: 7, candidateSha: 'rel0000', playtest: { ...RELEASE.playtest, passed: 'rel0000' } }, pendingShip: 'Ann' }));
     await tick(h.ctx, '/code', h.deps);
     const after = readState(h.ctx.statePath);
-    expect(after.release?.postId).toBeNull();
-    expect(after.pendingShip).toBeNull();
-    expect(args(h)).toEqual([['playtest', '20']]);
+    expect(after.release?.postId).toBe(7);
+    expect(args(h).some(([stage]) => stage === 'playtest')).toBe(false);
   });
 });

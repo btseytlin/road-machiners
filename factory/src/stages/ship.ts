@@ -7,9 +7,10 @@ import { must } from '../exec';
 import { releasePostDir } from '../release-post';
 import { reportEnv, takeMaps } from '../sourcemaps';
 import { updateState } from '../state';
-import { BUG_LABEL, GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type MergeStep, type ReleasePost, type ReleaseState } from '../types';
+import { BUG_LABEL, GAME_DIR, OUT_DIR, RELEASE_CANDIDATE_LABEL, type Ctx, type ReleasePost, type ReleaseState } from '../types';
 import { closeBundle } from './bundle';
-import { agentLog } from './common';
+import { agentLog, fillPrompt, resetOutputs } from './common';
+import { checkAndPush, landingAgent, mergeIn, type Landing } from './merge';
 import { queueIncidents } from './incident';
 import { mergeResolving } from './merge-resolve';
 import { candidateDir, changeLines, openReleaseTasks, releaseFeatures, releaseLog, requireRelease } from './release-common';
@@ -37,9 +38,14 @@ async function requirePlayed(ctx: Ctx, release: ReleaseState): Promise<void> {
   if (release.candidateSha !== head) throw new Error(`The release moved to ${head} after the candidate of ${release.candidateSha ?? 'an unknown commit'} was posted, so the committee has not played it. A new candidate follows.`);
 }
 
-async function takeMain(ctx: Ctx, branch: string): Promise<MergeStep[]> {
-  if (await ctx.repo.isMerged('main', branch)) return [];
-  return [{ branch: 'main', into: branch, message: `Merge main into ${branch} before the ship` }];
+async function landRelease(ctx: Ctx, release: ReleaseState): Promise<void> {
+  const dir = join(ctx.cfg.home, 'work', 'ship-main');
+  rmSync(dir, { recursive: true, force: true });
+  await ctx.repo.prepareWorkClone('main', 'main', dir);
+  resetOutputs(join(dir, GAME_DIR));
+  const land: Landing = { stage: 'ship', dir, into: 'main', agent: landingAgent(ctx, 'ship', dir, 'main') };
+  const spent = await mergeIn(ctx, land, { branch: release.branch, message: `Release ${release.day}`, reason: `release ${release.day} ships` });
+  await checkAndPush(ctx, land, spent, (failure) => fillPrompt('ship-fix', { release: release.branch, failure }));
 }
 
 export async function publish(ctx: Ctx, keys: ItchKeys, logName: string): Promise<void> {
@@ -65,12 +71,8 @@ export async function ship(ctx: Ctx, issue: number, by: string | null): Promise<
   await requirePlayed(ctx, release);
   const features = await releaseFeatures(ctx, release);
   const changelog = changeLines(readFileSync(notesPath, 'utf8'), features).join('\n');
-  const taken = await takeMain(ctx, release.branch);
-  await mergeResolving(ctx, 'ship', [
-    ...taken,
-    { branch: release.branch, into: 'main', message: `Release ${release.day}` },
-    { branch: 'main', into: 'dev', message: `Merge main into dev after release ${release.day}` },
-  ]);
+  await landRelease(ctx, release);
+  await mergeResolving(ctx, 'ship', [{ branch: 'main', into: 'dev', message: `Merge main into dev after release ${release.day}` }]);
   await publish(ctx, keys, 'ship');
   const kept = join(releasePostDir(ctx.cfg.home, release.day), 'screenshot.png');
   mkdirSync(dirname(kept), { recursive: true });

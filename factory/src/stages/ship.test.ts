@@ -39,10 +39,10 @@ describe('ship', () => {
     f.ctx.container.shell = async (clone, script, _log, env) => { shells.push({ script, env }); f.calls.push(`shell ${clone}`); };
     await ship(f.ctx, 11, 'Ann');
     const at = (name: string) => f.calls.findIndex((call) => call.startsWith(name));
-    expect(f.calls.slice(at('fetch'), at('fetch') + 4)).toEqual(['fetch', 'merge release/2026-09-29 main', 'merge main dev', 'push main dev']);
-    expect(at('push main dev')).toBeLessThan(at('prepare main'));
-    expect(at('prepare main')).toBeLessThan(at('run butler'));
-    expect(shells).toEqual([{ script: stepScript('Building the release', [['npm ci', 'npm ci'], ['build', 'npm run build']]), env: { SAVE_SCOPE: '', ERROR_REPORT_URL: 'https://play.test/errors', ERROR_REPORT_BUILD: 'release' } }]);
+    expect(at('push work-head main')).toBeLessThan(at('merge main dev'));
+    expect(at('push dev')).toBeLessThan(at('run butler'));
+    expect(shells.at(-1)).toEqual({ script: stepScript('Building the release', [['npm ci', 'npm ci'], ['build', 'npm run build']]), env: { SAVE_SCOPE: '', ERROR_REPORT_URL: 'https://play.test/errors', ERROR_REPORT_BUILD: 'release' } });
+    expect(shells[0].env).toMatchObject({ BUILD_SCOPE: 'ship' });
     expect(runs).toEqual([
       { cmd: 'git', args: ['rev-parse', 'HEAD'], env: undefined },
       { cmd: 'butler', args: ['push', join(ROOT, 'work', 'release-main', 'game', 'dist'), 'u/g:html5', '--userversion', 'abc1234'], env: { BUTLER_API_KEY: 'secret' } },
@@ -62,7 +62,8 @@ describe('ship', () => {
     const merge = f.ctx.repo.merge;
     f.ctx.repo.merge = async (steps) => { if (steps.some((step) => step.into === 'dev')) throw new Error('merge conflict in dev'); return merge(steps); };
     await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('merge conflict in dev');
-    expect(f.calls.some((call) => call.startsWith('prepare') || call.startsWith('run butler') || call.includes('public'))).toBe(false);
+    expect(f.calls.some((call) => call.startsWith('prepare main main') && call.includes('release-main'))).toBe(false);
+    expect(f.calls.some((call) => call.startsWith('run butler') || call.includes('public'))).toBe(false);
     expect(readState(f.ctx.statePath).release).not.toBeNull();
   });
 
@@ -117,42 +118,52 @@ describe('ship', () => {
     expect(f.calls).toContain('release release-2026-09-29 main ROAM release 2026-09-29\n- [#3] Trucks are faster.');
   });
 
-  it('merges main into the release and ships when main has game changes the release lacks', async () => {
+  it('never merges main into the release', async () => {
     const f = shippable();
     f.ctx.repo.isMerged = async () => false;
-    f.ctx.repo.changedFiles = async () => ['factory/src/tick.ts', 'game/src/sim/sun.ts'];
     await ship(f.ctx, 11, 'Ann');
-    expect(f.calls.filter((call) => call.startsWith('merge') || call.startsWith('push'))).toEqual(['merge main release/2026-09-29', 'merge release/2026-09-29 main', 'merge main dev', 'push release/2026-09-29 main dev']);
-    expect(f.calls.some((call) => call.startsWith('run butler'))).toBe(true);
-    expect(readState(f.ctx.statePath).release).toBeNull();
+    expect(f.calls.some((call) => call.startsWith('merge main release') || call.startsWith('mergeWork main'))).toBe(false);
   });
 
-  it('has an agent resolve a conflict of main into the release, then ships', async () => {
+  it('has the ship agent resolve a conflict of the release into main, then checks and ships', async () => {
     const f = shippable();
-    f.ctx.repo.isMerged = async () => false;
-    f.ctx.repo.changedFiles = async () => ['game/src/sim/sun.ts'];
-    f.mergeConflicts = ['main release/2026-09-29'];
+    let open = true;
+    f.ctx.repo.mergeBranchIntoWork = async (_dir, branch) => {
+      f.calls.push(`mergeWork ${branch}`);
+      const result = open ? { commit: 'c0ffee1', conflicts: ['game/src/sim/sun.ts'] } : { commit: null, conflicts: [] };
+      open = false;
+      return result;
+    };
     await ship(f.ctx, 11, 'Ann');
-    expect(f.calls.filter((call) => /^(merge|open|agent|close (dev|main|release)|push)/.test(call))).toEqual(['merge main release/2026-09-29', 'open release/2026-09-29', 'agent', 'close release/2026-09-29', 'merge main release/2026-09-29', 'merge release/2026-09-29 main', 'merge main dev', 'push release/2026-09-29 main dev']);
+    expect(f.calls.filter((call) => /^(mergeWork|agent|shell .*ship-main|push)/.test(call))).toEqual(['mergeWork release/2026-09-29', 'agent', 'mergeWork release/2026-09-29', 'push work-head main', 'push dev']);
+    expect(f.agentRuns[0].prompt).toContain('merges branch release/2026-09-29 into it');
     expect(readState(f.ctx.statePath).releasePost).not.toBeNull();
   });
 
-  it('has an agent resolve a conflict of the release into main, then ships', async () => {
+  it('gives failed checks of the merged main to the ship agent and checks its fix again', async () => {
     const f = shippable();
-    f.mergeConflicts = ['release/2026-09-29 main'];
+    let fails = 1;
+    f.ctx.container.shell = async (clone) => {
+      f.calls.push(`shell ${clone}`);
+      if (clone.endsWith('ship-main') && fails-- > 0) throw new Error('tests failed');
+    };
     await ship(f.ctx, 11, 'Ann');
-    expect(f.calls.filter((call) => /^(merge|open|agent|close (dev|main|release)|push)/.test(call))).toEqual(['merge release/2026-09-29 main', 'open main', 'agent', 'close main', 'merge release/2026-09-29 main', 'merge main dev', 'push main dev']);
+    expect(f.agentRuns.map((run) => run.prompt.split('\n')[0])).toEqual(['This is the ship stage of the ROAM factory.']);
+    expect(f.calls.filter((call) => call.endsWith('ship-main'))).toHaveLength(2);
     expect(readState(f.ctx.statePath).releasePost).not.toBeNull();
-    expect(f.calls.some((call) => call.startsWith('addLabel'))).toBe(false);
   });
 
-  it('merges main into the release first when main has only other changes', async () => {
+  it('fails and ships nothing when the ship agent spent its budget and the checks still fail', async () => {
     const f = shippable();
-    f.ctx.repo.isMerged = async () => false;
-    f.ctx.repo.changedFiles = async () => ['factory/src/tick.ts'];
-    await ship(f.ctx, 11, 'Ann');
-    const merges = f.calls.filter((call) => call.startsWith('merge') || call.startsWith('push'));
-    expect(merges).toEqual(['merge main release/2026-09-29', 'merge release/2026-09-29 main', 'merge main dev', 'push release/2026-09-29 main dev']);
+    f.ctx.cfg.mergingBudgetUsd = 1;
+    f.ctx.container.shell = async (clone) => {
+      f.calls.push(`shell ${clone}`);
+      if (clone.endsWith('ship-main')) throw new Error('tests failed');
+    };
+    await expect(ship(f.ctx, 11, 'Ann')).rejects.toThrow('budget');
+    expect(f.calls.some((call) => call.startsWith('push'))).toBe(false);
+    expect(readState(f.ctx.statePath).releasePost).toBeNull();
+    expect(readState(f.ctx.statePath).release).not.toBeNull();
   });
 
   it('stops before it merges anything when the changelog does not match the release', async () => {

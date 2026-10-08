@@ -59,7 +59,7 @@ Flags hold on any position:
 - Playtest: every release task is done, and `release.playtest.passed` is not the release head. The playtest runs.
 - Playtest blocked: `release.playtest.blocked` holds the commit and the reason. The tracking card has `factory-stuck`. `retry <tracking> [decision]` lifts it.
 - Candidate building: `release.playtest.passed` is the release head and no post is current. The candidate runs.
-- Candidate posted: `release.postId` holds the current candidate post, and `release.candidateSha` the commit it plays. Ship runs when a member presses Ship, or on `ship`. A tick that finds the release head past `candidateSha` drops the post and a queued Ship.
+- Candidate posted: `release.postId` holds the current candidate post, and `release.candidateSha` the commit it plays. Ship runs when a member presses Ship, or on `ship`. A release task merge, a playtest fix or Remove that moves the release drops the post and a queued Ship. Ship refuses a release head other than `candidateSha`.
 - Shipped: `ship` merged the release into `main`, closed its cards and set `release` to null.
 
 `release.playtest` holds the playtest of the open release: `seed`, fixed at the cut; `runs`, every play started, which names the audit folders; `passed`, the commit a clean play approved, which is also the next job's baseline; `blocked`; and `notes`, the members' decisions from `retry`. One job plays at most `FACTORY_PLAYTEST_RUNS` times, so the state keeps no count of plays left.

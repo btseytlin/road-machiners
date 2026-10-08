@@ -29,7 +29,7 @@ Run these from `factory/`. Run `npm ci` first.
 - The server runs only GitHub's `main`. Factory changes reach it by a merge into `main`, never by a hand edit on the server.
 - GitHub holds every branch. Each git step runs in a throwaway worktree under a lock and pushes at once. A conflict or rejected push must leave GitHub and the host as they were.
 - Any branch can move on GitHub at any time. A step merges the moved branch and pushes again, and never fails because a branch moved.
-- Branch moves that go together, like a ship or a hotfix, go to GitHub in one atomic push.
+- Branch moves that go together, like a hotfix, go to GitHub in one atomic push.
 - An agent's work reaches GitHub only after the factory checks its diff. Only `butler push` on the host gets `BUTLER_API_KEY`.
 - Jobs share the host clone and the state file, so every state update runs under its lock.
 - Hermes's SOUL.md repeats no process detail. It points to `docs/process.md` and `docs/state.md`.

@@ -28,20 +28,26 @@ async function mergeBatch(ctx: Ctx, base: string, cards: Card[]): Promise<void> 
   await ctx.repo.fetch();
   await ctx.repo.prepareWorkClone(base, base, dir);
   resetOutputs(join(dir, GAME_DIR));
-  const session = newSession(ctx);
-  const agent = (prompt: string): Promise<string> => runMergeAgent(ctx, dir, base, session, prompt);
+  const land: Landing = { stage: 'merge', dir, into: base, agent: landingAgent(ctx, 'merge', dir, base) };
   let spent = 0;
   for (const card of cards) {
     const message = `Merge issue #${card.issue}: ${(await ctx.github.issue(card.issue)).title}`;
-    spent += await mergeIn(ctx, dir, base, { branch: BRANCH(card.issue), message, reason: `issue #${card.issue} was approved` }, agent);
+    spent += await mergeIn(ctx, land, { branch: BRANCH(card.issue), message, reason: `issue #${card.issue} was approved` });
   }
   const fixList = cards.map((card) => `- #${card.issue} on ${BRANCH(card.issue)}`).join('\n');
-  for (;;) {
-    await untilPasses(ctx.cfg.mergingBudgetUsd, spent, () => mergedChecks(ctx, dir, base), (failure) => agent(fillPrompt('merge-fix', { into: base, cards: fixList, failure })));
-    if (await pushed(ctx, dir, base)) break;
-    spent += await mergeIn(ctx, dir, base, { branch: base, message: undefined, reason: `${base} moved on GitHub while the checks ran` }, agent);
-  }
+  await checkAndPush(ctx, land, spent, (failure) => fillPrompt('merge-fix', { into: base, cards: fixList, failure }));
   await settle(ctx, base, cards);
+}
+
+export type Landing = { stage: 'merge' | 'ship'; dir: string; into: string; agent: (prompt: string) => Promise<string> };
+
+export async function checkAndPush(ctx: Ctx, land: Landing, spent: number, fixPrompt: (failure: string) => string): Promise<void> {
+  let total = spent;
+  for (;;) {
+    total = await untilPasses(ctx.cfg.mergingBudgetUsd, total, () => mergedChecks(ctx, land), (failure) => land.agent(fixPrompt(failure)));
+    if (await pushed(ctx, land)) return;
+    total += await mergeIn(ctx, land, { branch: land.into, message: undefined, reason: `${land.into} moved on GitHub while the checks ran` });
+  }
 }
 
 async function nextBatch(ctx: Ctx): Promise<{ base: string; cards: Card[] } | null> {
@@ -52,53 +58,57 @@ async function nextBatch(ctx: Ctx): Promise<{ base: string; cards: Card[] } | nu
   return { base, cards: waiting.filter((card) => baseBranchFor(ctx, card.labels) === base) };
 }
 
-function newSession(ctx: Ctx): AgentSession {
-  const dir = join(ctx.cfg.home, 'sessions', 'merge');
+export function landingAgent(ctx: Ctx, stage: Landing['stage'], dir: string, into: string): (prompt: string) => Promise<string> {
+  const session = newSession(ctx, stage);
+  const log = releaseLog(ctx, `${stage}-${into.replaceAll('/', '-')}`);
+  return (prompt) => {
+    const run = { dir: session.dir, id: session.id, resume: session.resume };
+    session.resume = true;
+    return ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt, log, session: run });
+  };
+}
+
+function newSession(ctx: Ctx, stage: Landing['stage']): AgentSession {
+  const dir = join(ctx.cfg.home, 'sessions', stage);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
   return { dir, id: randomUUID(), resume: false };
 }
 
-async function runMergeAgent(ctx: Ctx, dir: string, base: string, session: AgentSession, prompt: string): Promise<string> {
-  const run = { dir: session.dir, id: session.id, resume: session.resume };
-  session.resume = true;
-  return ctx.container.agent({ clone: dir, dir: GAME_DIR, model: ctx.cfg.buildModel, prompt, log: releaseLog(ctx, `merge-${base.replaceAll('/', '-')}`), session: run });
-}
-
 type Incoming = { branch: string; message: string | undefined; reason: string };
 
-async function mergeIn(ctx: Ctx, dir: string, base: string, { branch, message, reason }: Incoming, agent: (prompt: string) => Promise<string>): Promise<number> {
-  const { commit, conflicts } = await ctx.repo.mergeBranchIntoWork(dir, branch, message);
+export async function mergeIn(ctx: Ctx, land: Landing, { branch, message, reason }: Incoming): Promise<number> {
+  const { commit, conflicts } = await ctx.repo.mergeBranchIntoWork(land.dir, branch, message);
   if (commit === null || conflicts.length === 0) return 0;
-  ctx.log('merge', null, `${branch} conflicts with ${base} in ${conflicts.join(', ')}, an agent resolves it`);
-  const cost = runCost(await agent(fillPrompt('merge-branches', { into: base, branch, reason, files: conflicts.map((file) => `- ${file}`).join('\n') })));
-  if ((await ctx.repo.mergeBranchIntoWork(dir, branch)).commit !== null) throw new Error(`The merge agent left the merge of ${branch} into ${base} unfinished.`);
+  ctx.log(land.stage, null, `${branch} conflicts with ${land.into} in ${conflicts.join(', ')}, an agent resolves it`);
+  const cost = runCost(await land.agent(fillPrompt('merge-branches', { into: land.into, branch, reason, files: conflicts.map((file) => `- ${file}`).join('\n') })));
+  if ((await ctx.repo.mergeBranchIntoWork(land.dir, branch)).commit !== null) throw new Error(`The ${land.stage} agent left the merge of ${branch} into ${land.into} unfinished.`);
   return cost;
 }
 
-async function mergedChecks(ctx: Ctx, dir: string, base: string): Promise<string | null> {
-  const log = releaseLog(ctx, `merge-checks-${base.replaceAll('/', '-')}`);
+async function mergedChecks(ctx: Ctx, land: Landing): Promise<string | null> {
+  const log = releaseLog(ctx, `${land.stage}-checks-${land.into.replaceAll('/', '-')}`);
   const script = checkScript(playtestCommand(ctx.cfg, false));
   return checkUntilReal(async () => {
     try {
-      await ctx.container.shell(dir, script, log, { BUILD_SCOPE: 'merge' }, testCacheMount(ctx));
+      await ctx.container.shell(land.dir, script, log, { BUILD_SCOPE: land.stage }, testCacheMount(ctx));
       return null;
     } catch (error) {
       return checkFailure(log, error);
     }
-  }, (run) => ctx.log('merge', null, `the checks only timed out, run ${run}, running them again`));
+  }, (run) => ctx.log(land.stage, null, `the checks only timed out, run ${run}, running them again`));
 }
 
-async function pushed(ctx: Ctx, dir: string, base: string): Promise<boolean> {
-  const head = await ctx.repo.fetchFromWork(dir, base);
-  guardDiff(await ctx.repo.diff(base, head));
+async function pushed(ctx: Ctx, land: Landing): Promise<boolean> {
+  const head = await ctx.repo.fetchFromWork(land.dir, land.into);
+  guardDiff(await ctx.repo.diff(land.into, head));
   try {
-    await ctx.repo.push(head, base);
+    await ctx.repo.push(head, land.into);
     return true;
   } catch (error) {
     await ctx.repo.fetch();
-    if (await ctx.repo.isMerged(base, head)) throw error;
-    ctx.log('merge', null, `${base} moved during the checks, merging it in again`);
+    if (await ctx.repo.isMerged(land.into, head)) throw error;
+    ctx.log(land.stage, null, `${land.into} moved during the checks, merging it in again`);
     return false;
   }
 }

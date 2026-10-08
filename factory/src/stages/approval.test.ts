@@ -68,7 +68,7 @@ describe('approve', () => {
     expect(state.pendingApprovals).toEqual({});
   });
 
-  it('ships a hotfix from main to itch.io, brings main into dev and the open release, and closes the issue', async () => {
+  it('ships a hotfix from main to itch.io, brings main into dev, leaves the open release and its candidate alone, and closes the issue', async () => {
     labels = ['bug', 'hotfix'];
     writeState(`${home}/state.json`, { ...EMPTY_STATE, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } }, pendingShip: 'ann', pendingApprovals: { 7: 'bob' } });
     await approve(fakeCtx(), 7, 'bob');
@@ -77,8 +77,7 @@ describe('approve', () => {
       'fetch ',
       'merge factory/issue-7 main Hotfix #7: Big horn',
       'merge main dev Merge main into dev after hotfix #7',
-      'merge main release/2026-09-29 Merge main into release/2026-09-29 after hotfix #7',
-      'push main dev release/2026-09-29',
+      'push main dev',
       'run git rev-parse',
       'run butler push',
       `message public ${changelog}`,
@@ -86,11 +85,11 @@ describe('approve', () => {
       'comment 7 Approved by bob in the committee chat and shipped as a hotfix. It is on main and itch.io.',
       'close 7 completed',
       'move 7 Done',
-      'message chat Hotfix #7 Big horn is on main and itch.io.\nRelease 2026-09-29 took the fix, so its candidate is built again.',
+      'message chat Hotfix #7 Big horn is on main and itch.io.',
     ]);
     const state = readState(`${home}/state.json`);
-    expect(state.release?.postId).toBeNull();
-    expect(state.pendingShip).toBeNull();
+    expect(state.release?.postId).toBe(300);
+    expect(state.pendingShip).toBe('ann');
     expect(state.pendingApprovals).toEqual({});
     expect(state.pendingIncidents).toEqual([7]);
   });

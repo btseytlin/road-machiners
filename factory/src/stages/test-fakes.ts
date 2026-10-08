@@ -97,6 +97,7 @@ export function fake(): Fake {
       hasNewCommits: async () => true,
       isMerged: async () => true,
       headHash: async () => 'abc1234',
+      forkPoint: async () => 'f0a1b2c',
       createBranch: async (name: string, from: string) => note(`branch ${name} ${from}`),
       revertIssueMerge: async (issue: number, branch: string, resolutions: Resolution[] = []) => {
         note(`revert ${issue} ${branch}`);

@@ -32,9 +32,7 @@ type Round = { meta: RunMeta; outcome: Outcome; sha: string; head: string; play:
 export async function playtest(ctx: Ctx, issue: number): Promise<void> {
   const release = await requirePlayable(ctx, issue);
   const baseline = await baselineOf(ctx, release);
-  await takeMain(ctx, release);
   const start = await ctx.repo.headHash(release.branch);
-  if (await carryPass(ctx, release, start)) return;
   const dir = join(ctx.cfg.home, 'work', 'release-playtest');
   rmSync(dir, { recursive: true, force: true });
   await ctx.repo.prepareWorkClone(release.branch, release.branch, dir);
@@ -61,39 +59,6 @@ async function fullSuite(ctx: Ctx, dir: string): Promise<void> {
   await ctx.container.shell(dir, stepScript('Release full suite', [['npm ci', 'npm ci'], ['tests', 'npm test']]), releaseLog(ctx, 'playtest'));
 }
 
-async function carryPass(ctx: Ctx, release: ReleaseState, start: string): Promise<boolean> {
-  const passed = release.playtest.passed;
-  if (passed === null) return false;
-  const changed = await sameGame(ctx, passed, start);
-  if (changed === null) return false;
-  await ctx.repo.fetch();
-  const now = await ctx.repo.headHash(release.branch);
-  if (now !== start) {
-    ctx.log('playtest', release.issue, `the release moved to ${now} while the factory compared ${start} with ${passed}. Nothing played, the new head is next.`);
-    return true;
-  }
-  setPlaytest(ctx, (playtest) => ({ ...playtest, passed: start }));
-  const files = changed.length ? `It changed ${changed.length} other files, like ${changed[0]}.` : 'It changed no files.';
-  const note = `Release playtest: carried the pass of ${passed} to ${start} with no play. ${start} only adds commits to ${passed} and changes no file under ${GAME_DIR}/, so it plays the same game. ${files} The candidate builds from ${start}.`;
-  ctx.log('playtest', release.issue, note);
-  await ctx.github.comment(release.issue, note);
-  return true;
-}
-
-async function sameGame(ctx: Ctx, passed: string, start: string): Promise<string[] | null> {
-  if (passed === start) return [];
-  if (!(await ctx.repo.isMerged(passed, start))) return null;
-  const changed = await ctx.repo.changedFiles(passed, start);
-  return changed.some((file) => file.startsWith(`${GAME_DIR}/`)) ? null : changed;
-}
-
-async function takeMain(ctx: Ctx, release: ReleaseState): Promise<void> {
-  if (await ctx.repo.isMerged('main', release.branch)) return;
-  await mergeResolving(ctx, 'playtest', [{ branch: 'main', into: release.branch, message: `Merge main into ${release.branch} before the playtest` }]);
-  await ctx.repo.fetch();
-  ctx.log('playtest', release.issue, `merged main into ${release.branch} before the playtest`);
-}
-
 async function cloneAt(ctx: Ctx, dir: string, sha: string): Promise<boolean> {
   const head = must(await ctx.run('git', ['-C', dir, 'rev-parse', 'HEAD']), 'git rev-parse in the playtest clone').trim();
   if (head.startsWith(sha)) return true;
@@ -117,7 +82,7 @@ async function openSession(ctx: Ctx, release: ReleaseState, dir: string, start: 
 
 async function baselineOf(ctx: Ctx, release: ReleaseState): Promise<Baseline> {
   if (release.playtest.passed !== null) return { branch: release.branch, sha: release.playtest.passed, kind: 'the last commit this release passed' };
-  return { branch: 'main', sha: await ctx.repo.headHash('main'), kind: 'main, since this release has not passed yet' };
+  return { branch: release.branch, sha: await ctx.repo.forkPoint('main', release.branch), kind: 'main where the release branched off it, since this release has not passed yet' };
 }
 
 async function rounds(ctx: Ctx, session: Session): Promise<{ plays: RunMeta[]; end: Ending }> {
