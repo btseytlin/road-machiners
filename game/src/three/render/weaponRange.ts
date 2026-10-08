@@ -27,7 +27,13 @@ const FILL_ALPHA = 0.075;
 const LINE_ALPHA = 0.075;
 const ICON_ALPHA = 0.5;
 
+// The fire spans of a mounted weapon, centered on the way it faces.
+export function weaponSpans(weapon: MountedWeapon): FireSpan[] {
+  return fireSpans(weapon.def.arc, weapon.sides, weapon.facing);
+}
+
 // A shooter's mount: the truck's spot and heading, and the sides its mount can fire to.
+
 export type MountPose = { pos: Vec; heading: number; sides: readonly Side[] };
 
 export class WeaponRangeView {
@@ -49,7 +55,7 @@ export class WeaponRangeView {
 
   // Sides a tall part blocks are left out, so each shape shows where its gun can fire. No guns hides the view.
   set(terrain: Terrain, pos: Vec, heading: number, weapons: MountedWeapon[]): void {
-    this.draw(terrain, pos, heading, weapons.map((w) => ({ range: w.def.range, spans: fireSpans(w.def.arc, w.sides) })));
+    this.draw(terrain, pos, heading, weapons.map((w) => ({ range: w.def.range, spans: weaponSpans(w) })));
   }
 
   hide(): void {
@@ -126,7 +132,7 @@ export function hoverArcs(world: World, vehicle: Vehicle, weapons: readonly Moun
   const arcs: HoverArc[] = [];
   for (const [i, weapon] of weapons.entries()) {
     const block = fireBlock(world, vehicle, weapon, null);
-    const spans = fireSpans(weapon.def.arc, weapon.sides);
+    const spans = weaponSpans(weapon);
     if (block === 'disabled' || spans.length === 0) continue;
     const spot = iconSpot(spans, weapon.def.range, arcs.map((arc) => arc.spot));
     arcs.push({ weapon, slot: i + 1, spans, spent: block === 'empty' || block === 'cooldown', spot });

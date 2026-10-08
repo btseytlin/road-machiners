@@ -5,7 +5,7 @@ import { RULES } from '../data/rules';
 import { REGION } from '../data/region';
 import { makePart } from './factory';
 import { update } from './world';
-import { openSides } from './armor';
+import { openSides, reachedSides } from './armor';
 import { freeCells, goodsCount, gridOf, isMounted, mountedItems, mountedParts } from './grid';
 import { canStowPart, dumpItem, installSpot, mountPart, moveItem, removeAllGoods, spareParts, storePart, stowPart, stowSpot, takeFromStorage } from './inventory';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
@@ -173,9 +173,11 @@ describe('auto mounting on the deck', () => {
   it('places a cargo box where it blinds no mounted gun', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'longbed', ['stockEngine', 'mg'], { x: 40, y: 40 });
-    const before = openSides(v, mountedItemOf(v, 'mg'));
+    // Only the sides the gun's arc reaches count: the box may stand in its blind spot.
+    const firing = (u: Vehicle) => openSides(u, mountedItemOf(u, 'mg')).filter((side) => reachedSides(mountedItemOf(u, 'mg')).includes(side));
+    const before = firing(v);
     expect(mountPart(w, v, makePart(w, 'trailerBox', 0))).toBe(true);
-    expect(openSides(v, mountedItemOf(v, 'mg'))).toEqual(before);
+    expect(firing(v)).toEqual(before);
   });
 
   it('lets a gun and a cargo frame compete for the same deck cells', () => {

@@ -40,7 +40,7 @@ import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from
 import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
 import { advanceAid, readyAid } from './aid';
-import type { GridItem, MoveOrder, PartInstance, UtilityOrder, Vehicle, WeaponOrder, World, WorldSettings, WorldSetup, XpSource } from './types';
+import type { GridItem, MoveOrder, PartInstance, Rot, UtilityOrder, Vehicle, WeaponOrder, World, WorldSettings, WorldSetup, XpSource } from './types';
 import { defaultSetup, parseSetup, repairSetup } from './settings';
 import { canOverdrive, vehicleStats } from './stats';
 import { playerSees, refreshVision } from './vision';
@@ -454,7 +454,7 @@ export function hostileToPlayer(world: World, v: Vehicle): boolean {
 // The reader in src/three/save-rescue.ts hands in plain values. This section knows what the ids mean.
 
 export type CarriedPart = { defId: string; wear: number; hp: number; rebuilt: boolean };
-export type CarriedItem = ({ kind: 'part'; part: CarriedPart } | { kind: 'good'; good: string }) & { x: number; y: number; rot: 0 | 1 };
+export type CarriedItem = ({ kind: 'part'; part: CarriedPart } | { kind: 'good'; good: string }) & { x: number; y: number; rot: Rot };
 
 export type Carried = {
   seed: number | null;

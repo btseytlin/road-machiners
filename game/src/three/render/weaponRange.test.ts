@@ -19,7 +19,7 @@ describe('hoverArcs', () => {
     const arcs = hoverArcs(world, raider, weapons);
 
     expect(arcs).toHaveLength(weapons.length);
-    expect(arcs[0].spans).toEqual(fireSpans(weapons[0].def.arc, weapons[0].sides));
+    expect(arcs[0].spans).toEqual(fireSpans(weapons[0].def.arc, weapons[0].sides, weapons[0].facing));
     expect(arcs[0].spent).toBe(false);
   });
 

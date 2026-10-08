@@ -1670,14 +1670,6 @@ body {
   text-align: center;
   font-size: 12px;
 }
-.inv-legend {
-  margin-top: 15px;
-  max-width: 340px;
-  font-size: 12px;
-}
-.inv-legend > div {
-  margin-top: 7px;
-}
 .inv-item.refitting {
   border: 2px dashed #eac779;
 }

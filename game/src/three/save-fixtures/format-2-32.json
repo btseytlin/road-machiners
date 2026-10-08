@@ -1,0 +1,14 @@
+{
+  "turn": 900,
+  "vehicles": [
+    {
+      "id": "player",
+      "items": [
+        { "id": "i1", "x": 0, "y": 0, "rot": 0, "kind": "part", "part": { "id": "p1", "defId": "mg", "hp": 20, "wear": 0 } },
+        { "id": "i2", "x": 2, "y": 1, "rot": 1, "kind": "part", "part": { "id": "p2", "defId": "mg", "hp": 20, "wear": 0 } },
+        { "id": "i3", "x": 3, "y": 3, "rot": 0, "kind": "good", "good": "scrap" }
+      ]
+    }
+  ],
+  "removed": []
+}

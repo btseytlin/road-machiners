@@ -3,7 +3,6 @@ import { chassisDef, PLAYER_CHASSIS } from '../data/chassis';
 import { openSides, reachedSides } from './armor';
 import { mountedItems } from './grid';
 import { generateNpcLoadout } from './npc-loadout';
-import type { WeaponDef } from '../data/parts';
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { WEATHER } from '../data/weather';
@@ -21,7 +20,7 @@ import { installSpot, removeAllGoods, spareParts, stowSpot } from './inventory';
 import { clockOf } from './sun';
 import { maxHp } from './wear';
 import { addState, stateOf } from './states';
-import { addVehicle, emptyWorld, npcBrain, startCombat, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, startCombat, testDrive } from './testkit';
 import type { World } from './types';
 import { dist } from './vec';
 import { stormStrength } from './weather';
@@ -217,6 +216,8 @@ describe('frozen NPCs', () => {
   });
 
   it('keeps a hostile NPC from raising a radio call', () => {
+    // A hostile that judges the fight lost flees without a call, so it always fights back here.
+    forceOption('attacked', 'fightBack');
     const called = (frozen: boolean): boolean => {
       const start = frozen ? toggleFrozen(emptyWorld()) : emptyWorld();
       const { w } = withSpawned(start, 'buggy', true);
@@ -555,7 +556,7 @@ describe('randomkit', () => {
       const guns = mountedItems(me, 'weapon');
       expect(guns.length).toBeGreaterThan(0);
       for (const item of guns) {
-        const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
+        const reach = reachedSides(item);
         expect(openSides(me, item).some((side) => reach.includes(side))).toBe(true);
       }
     }

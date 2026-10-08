@@ -40,6 +40,10 @@ The player is not a Chosen one, gets no plot armor or special treatment. It's do
 
 The lore and atmosphere is based on contrasts between the pre-apocalypse Old World and the currently living New World. Armed trucks are riding around crashed spaceships on what used to be farming fields.
 
+9. Show, don't tell
+
+The game shows how things are through the world and the screen, not through words. A gun's reach is a drawn arc, a hurt truck looks more worn as it takes damage, a driver's nature shows in how it drives and fights. Text explains only what nothing else can show, and never repeats what the player already sees.
+
 # Core systems
 
 Each section states what a system is for and the rules it must keep. The detailed rules live in [docs/wiki/mechanics/](wiki/mechanics/), and the numbers and content tables in [docs/wiki/](wiki/README.md).

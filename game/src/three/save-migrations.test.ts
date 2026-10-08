@@ -38,6 +38,7 @@ import FORMAT_2_28 from './save-fixtures/format-2-28.json';
 import FORMAT_2_29 from './save-fixtures/format-2-29.json';
 import FORMAT_2_30 from './save-fixtures/format-2-30.json';
 import FORMAT_2_31 from './save-fixtures/format-2-31.json';
+import FORMAT_2_32 from './save-fixtures/format-2-32.json';
 import SAVE_SHAPE from './save-shape.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
@@ -745,5 +746,14 @@ describe('save migration 31 to 32', () => {
       vehicles: [player, { ...resting, brain: { goals: [resting.brain!.goals[0], { ...resting.brain!.goals[1], destination: { x: 198.5, y: 230.2 } }] } }, patrol],
       removed: [{ ...gone, brain: { goals: [{ ...gone.brain.goals[0], destination: { x: 10, y: 20 } }] } }],
     });
+  });
+});
+
+describe('save migration 32 to 33', () => {
+  it('keeps every item and its rot, since 0 and 1 keep their footprint', () => {
+    const next = MIGRATIONS[32](FORMAT_2_32);
+
+    expect(next).toEqual(FORMAT_2_32);
+    expect(FORMAT_2_32.vehicles[0].items.map((it) => it.rot)).toEqual([0, 1, 0]);
   });
 });

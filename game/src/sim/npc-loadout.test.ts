@@ -13,7 +13,7 @@ import { loadFactor, vehicleMass } from './mass';
 import { generateNpcLoadout, sampleWeighted } from './npc-loadout';
 import { spawnAt, spawnInitial, spawnNpcs } from './spawn';
 import { openSides, reachedSides } from './armor';
-import { mountedItems } from './grid';
+import { facingOf, mountedItems } from './grid';
 import type { EngineDef, WeaponDef } from '../data/parts';
 import { gunDrag, isStranded, npcMassRoom, speedShare } from './stats';
 import { wornDef } from './wear';
@@ -105,7 +105,7 @@ describe('NPC equipment generation', () => {
     // A driver who can only shoot forward is beaten by anyone who drives behind it.
     // A buggy's deck is so small that its utility, which most carry, often takes the spot a rear gun needs.
     it.each([['gunwagon', 0.75], ['trader', 0.75], ['buggy', 0.35], ['courier', 0.75]])('gives most %s trucks a gun that fires at the rear', (id, share) => {
-      const rearGun = (v: Vehicle) => (mountedItems(v, 'weapon').some((g) => reachedSides(partDef(g.part.defId) as WeaponDef).includes('rear') && openSides(v, g).includes('rear')) ? 1 : 0);
+      const rearGun = (v: Vehicle) => (mountedItems(v, 'weapon').some((g) => reachedSides(g).includes('rear') && openSides(v, g).includes('rear')) ? 1 : 0);
       expect(average(NPCS[id], 'standard', rearGun)).toBeGreaterThanOrEqual(share);
     }, budget(120_000));
 
@@ -404,11 +404,27 @@ describe('NPC gun placement', () => {
         w.rngState = seed * 7919;
         const v = spawnAt(w, NPCS[id], generateNpcLoadout(w, NPCS[id]), { x: 40, y: 30 });
         for (const item of mountedItems(v, 'weapon')) {
-          const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
+          const reach = reachedSides(item);
           expect(openSides(v, item).some((side) => reach.includes(side)), `${id} seed ${seed} ${item.part.defId}`).toBe(true);
         }
       }
     }
+  });
+
+  it('mounts some guns turned to face the rear, and each one fires out an open side', () => {
+    let rearFacing = 0;
+    for (let seed = 1; seed <= 40; seed++) {
+      const w = emptyWorld();
+      w.rngState = seed * 7919;
+      const v = spawnAt(w, NPCS.gunwagon, generateNpcLoadout(w, NPCS.gunwagon), { x: 40, y: 30 });
+      for (const item of mountedItems(v, 'weapon')) {
+        if (facingOf(item) !== 180) continue;
+        rearFacing++;
+        expect(reachedSides(item)).toContain('rear');
+        expect(openSides(v, item).some((side) => reachedSides(item).includes(side))).toBe(true);
+      }
+    }
+    expect(rearFacing).toBeGreaterThan(0);
   });
 });
 

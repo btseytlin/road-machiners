@@ -4,8 +4,8 @@ import { GOODS } from "../data/goods";
 import { partDef, type WeaponDef } from "../data/parts";
 import { fireSpans, reachedSides, sideBlockers, SIDES, type FireSpan } from "../sim/armor";
 import { maxHp } from "../sim/wear";
-import { itemCells, itemSize, type Cell, type Grid } from "../sim/grid";
-import type { GridItem, PartInstance, RefitJob, RefitMove, Vehicle, World } from "../sim/types";
+import { facingOf, itemCells, itemSize, type Cell, type Grid } from "../sim/grid";
+import type { GridItem, PartInstance, Rot, RefitJob, RefitMove, Vehicle, World } from "../sim/types";
 import { playerVehicle } from "../sim/damage";
 import { el } from "./dom";
 import { truckOutline } from "./plans";
@@ -62,6 +62,15 @@ export function cellEl(c: Cell, x: number, y: number, cell: number): HTMLElement
   return el("div", { class: `inv-cell c-${c === "." ? "plain" : c}`, style: pos(x, y, 1, 1, cell), title: CELL_TITLE[c] });
 }
 
+// An item's grid icon. A gun's icon keeps the gun's own shape and turns with it about the box center, so its barrel
+// points the way it fires.
+export function turnedIcon(it: GridItem, cell: number): HTMLElement {
+  const icon = gridItemIcon(it);
+  const gun = weaponDefOf(it);
+  if (gun) icon.style.cssText += `;position:absolute;left:50%;top:50%;width:${gun.w * cell}px;height:${gun.h * cell}px;transform:translate(-50%,-50%) rotate(${facingOf(it)}deg)`;
+  return icon;
+}
+
 // The box an item draws on the grid of a truck of chassisId: its tone, icon, name and condition bar.
 export function itemBox(it: GridItem, chassisId: string, mounted: boolean, cell: number): HTMLElement {
   const cells = itemCells(it);
@@ -69,10 +78,11 @@ export function itemBox(it: GridItem, chassisId: string, mounted: boolean, cell:
   const y = Math.min(...cells.map((c) => c.y));
   const size = itemSize(it);
   const id = it.kind === "part" ? it.part.defId : it.good;
+  const icon = turnedIcon(it, cell);
   const node = el(
     "div",
     { class: itemClass(it, mounted), "data-item-id": it.id, style: `${pos(x, y, size.w, size.h, cell)};${toneStyle(id)}`, title: itemTitle(it, mounted), tabindex: 0, role: "button", "aria-label": itemTitle(it, mounted) },
-    gridItemIcon(it),
+    icon,
     el("span", { class: "inv-item-name" }, itemLabel(it).short),
   );
   if (it.kind === "part") node.append(conditionBar(it.part));
@@ -170,6 +180,12 @@ export function itemState(it: GridItem, mounted: boolean): string {
 
 const SVG = "http://www.w3.org/2000/svg";
 
+// The rotation after one turn. A gun turns through all four quarters. Other parts only swap width and height, so they toggle 0 and 1.
+export function nextRot(it: GridItem): Rot {
+  if (weaponDefOf(it)) return ((it.rot + 1) % 4) as Rot;
+  return it.rot === 0 ? 1 : 0;
+}
+
 export function weaponDefOf(it: GridItem): WeaponDef | null {
   if (it.kind !== "part") return null;
   const def = partDef(it.part.defId);
@@ -177,9 +193,9 @@ export function weaponDefOf(it: GridItem): WeaponDef | null {
 }
 
 // The ids of the tall parts that block this gun, for outlining them on the grid.
-export function blockerIds(v: Vehicle, it: GridItem, def: WeaponDef): string[] {
+export function blockerIds(v: Vehicle, it: GridItem): string[] {
   const blockers = sideBlockers(v, it);
-  return reachedSides(def).flatMap((side) => {
+  return reachedSides(it).flatMap((side) => {
     const b = blockers[side];
     return b ? [b.id] : [];
   });
@@ -196,7 +212,7 @@ export function fanSvg(v: Vehicle, it: GridItem, def: WeaponDef, size: { w: numb
   svg.setAttribute("width", String(size.w * cell));
   svg.setAttribute("height", String(size.h * cell));
   const open = SIDES.filter((side) => !sideBlockers(v, it)[side]);
-  for (const span of fireSpans(def.arc, open)) {
+  for (const span of fireSpans(def.arc, open, facingOf(it))) {
     const path = document.createElementNS(SVG, "path");
     path.setAttribute("d", spanPath(cx, cy, radius, span));
     svg.append(path);

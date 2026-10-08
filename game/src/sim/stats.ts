@@ -9,7 +9,7 @@ import { skillEffect } from './progress';
 import { TOW } from '../data/tow';
 import { maxHp, wornDef } from './wear';
 import { openSides, type Side } from './armor';
-import { corePart, coreParts, mountedItems, mountedParts } from './grid';
+import { corePart, coreParts, facingOf, mountedItems, mountedParts } from './grid';
 import { loadFactor, vehicleMass } from './mass';
 import { getResources } from './resources';
 import { isTowing } from './tow';
@@ -20,7 +20,8 @@ import { weatherOn } from './weather';
 import { fuelUseScale } from './settings';
 
 // sides: the sides of the truck the weapon can fire toward, past the tall parts around it.
-export type MountedWeapon = { part: PartInstance; def: WeaponDef; sides: Side[] };
+// facing: degrees clockwise from the truck's front that the weapon's arc is centered on.
+export type MountedWeapon = { part: PartInstance; def: WeaponDef; sides: Side[]; facing: number };
 
 export type VehicleStats = {
   maxSpeed: number;
@@ -193,7 +194,7 @@ export function vehicleStats(world: World, v: Vehicle): VehicleStats {
     roughSkill: skillEffect(world, v, 'driving', 'roughSpeed'),
     mass,
     radius: ch.radius,
-    weapons: mountedItems(v, 'weapon').map((item) => ({ part: item.part, def: wornDef<WeaponDef>(item.part), sides: openSides(v, item) })),
+    weapons: mountedItems(v, 'weapon').map((item) => ({ part: item.part, def: wornDef<WeaponDef>(item.part), sides: openSides(v, item), facing: facingOf(item) })),
   };
 }
 

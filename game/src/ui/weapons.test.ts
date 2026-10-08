@@ -573,7 +573,8 @@ function harpoonDuel(gap = 5) {
   const me = w.vehicles[0];
   const harpoon = makePart(w, "harpoon", 0);
   if (!mountPart(w, me, harpoon)) throw new Error("No deck room for the harpoon");
-  const target = addVehicle(w, "traders", "hauler", ["stockEngine"], { x: me.pos.x + gap, y: me.pos.y }, Math.PI / 2);
+  // The truck's machine gun covers the front, so auto-mount turns the harpoon to face the rear. The target lies behind.
+  const target = addVehicle(w, "traders", "hauler", ["stockEngine"], { x: me.pos.x - gap, y: me.pos.y }, Math.PI / 2);
   refreshVision(w);
   return { w, me, harpoon, target };
 }

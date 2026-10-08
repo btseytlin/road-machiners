@@ -40,14 +40,17 @@ export type GunState = { cooldown: number; ammo: number; reloadWork: number };
 // waits for a crash. See src/sim/utility.ts.
 export type ChargeState = { reload: number; armed?: true };
 
-// An item in a vehicle's inventory grid. x and y are the top-left cell. rot 1 swaps width and height.
+// Quarter turns clockwise. Odd turns swap width and height. A gun faces rot * 90 degrees from the truck's front.
+export type Rot = 0 | 1 | 2 | 3;
+
+// An item in a vehicle's inventory grid. x and y are the top-left cell.
 // A part works only while it lies fully on mount cells of its kind. Each good unit takes one cell.
 export type GridItem =
   | {
       id: string;
       x: number;
       y: number;
-      rot: 0 | 1;
+      rot: Rot;
       kind: "part";
       part: PartInstance;
     }
@@ -55,7 +58,7 @@ export type GridItem =
       id: string;
       x: number;
       y: number;
-      rot: 0 | 1;
+      rot: Rot;
       kind: "good";
       good: string;
     };
@@ -102,8 +105,8 @@ export type Pile = { until: number; fromPlayer: boolean; basis: Record<string, n
 
 export type RefitMove = {
   itemId: string;
-  from: { x: number; y: number; rot: 0 | 1 };
-  to: { x: number; y: number; rot: 0 | 1 };
+  from: { x: number; y: number; rot: Rot };
+  to: { x: number; y: number; rot: Rot };
 };
 
 // A part a refit takes onto the grid, from a salvage stock or off a knocked-out truck. itemId is its new grid item.

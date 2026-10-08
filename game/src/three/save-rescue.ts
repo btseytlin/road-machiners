@@ -48,8 +48,8 @@ function isGridInt(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value);
 }
 
-function spotOf(item: Json): { x: number; y: number; rot: 0 | 1 } | null {
-  return isGridInt(item.x) && isGridInt(item.y) ? { x: item.x, y: item.y, rot: item.rot === 1 ? 1 : 0 } : null;
+function spotOf(item: Json): { x: number; y: number; rot: 0 | 1 | 2 | 3 } | null {
+  return isGridInt(item.x) && isGridInt(item.y) ? { x: item.x, y: item.y, rot: item.rot === 1 || item.rot === 2 || item.rot === 3 ? item.rot : 0 } : null;
 }
 
 function itemOf(value: unknown): CarriedItem | null {

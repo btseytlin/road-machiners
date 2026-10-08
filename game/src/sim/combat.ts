@@ -101,7 +101,7 @@ function isLawman(v: Vehicle): boolean {
 // What a shot is fired from. Only its def counts.
 export type ShotSource = { def: WeaponDef };
 // A mounted shot source and the sides of the truck it can fire toward, past the tall parts around it.
-export type AimedSource = ShotSource & { sides: Side[] };
+export type AimedSource = ShotSource & { sides: Side[]; facing: number };
 
 
 // The target lies in the gun's own arc and on a side that no tall part blocks.
@@ -109,10 +109,11 @@ export function inArc(shooter: Vehicle, mw: AimedSource, target: Vehicle): boole
   return inGunArc(shooter, mw, target) && sideOpen(shooter, mw, target);
 }
 
-function inGunArc(shooter: Vehicle, src: ShotSource, target: Vehicle): boolean {
+// The arc is centered on the way the gun faces, which turns with the truck.
+function inGunArc(shooter: Vehicle, src: AimedSource, target: Vehicle): boolean {
   const { arc } = src.def;
   if (arc >= 360) return true;
-  return Math.abs(angleDiff(shooter.heading, bearing(shooter.pos, target.pos))) <= (arc / 2) * DEG;
+  return Math.abs(angleDiff(shooter.heading + src.facing * DEG, bearing(shooter.pos, target.pos))) <= (arc / 2) * DEG;
 }
 
 function sideOpen(shooter: Vehicle, mw: AimedSource, target: Vehicle): boolean {

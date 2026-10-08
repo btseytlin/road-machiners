@@ -49,10 +49,10 @@ import {
   blockerIds,
   clearFan,
   fanSvg,
+  nextRot,
   weaponDefOf,
   gridEl,
   itemBox,
-  itemLabel,
   itemName,
   itemState,
   lootGoodItem,
@@ -62,6 +62,7 @@ import {
   removalIds,
   storageItem,
   footprint,
+  turnedIcon,
 } from "./inventory-draw";
 import { fuelLiters, kg, moneyText } from "./units";
 import { maxSpeedSteps } from "../sim/stats";
@@ -179,7 +180,6 @@ export class InventoryView {
           "div",
           { class: "inv-truck" },
           el("div", { class: "truck-shell" }, grid),
-          this.legend(),
         ),
         el(
           "div",
@@ -195,29 +195,6 @@ export class InventoryView {
       this.error ? el("div", { class: "bad" }, this.error) : el("div"),
     );
     return this.root;
-  }
-
-  private legend(): HTMLElement {
-    return el(
-      "details",
-      { class: "dim inv-legend" },
-      el("summary", {}, "Mounts & controls"),
-      el(
-        "div",
-        {},
-        "Top view, nose up. Brown cells are deck mounts for weapons, scanners and cargo frames. Blue-grey cells are the engine mount. The cells around the truck are armor mounts. Hover a cell to see what it mounts.",
-      ),
-      el(
-        "div",
-        {},
-        "A part works only when it lies fully on one kind of mount. The marks on a gun show its blocked sides.",
-      ),
-      el(
-        "div",
-        {},
-        "Drag to move or swap. R or right click turns an item.",
-      ),
-    );
   }
 
   private itemEl(w: World, it: GridItem): HTMLElement {
@@ -291,7 +268,7 @@ export class InventoryView {
     const def = weaponDefOf(it);
     if (!def) return;
     grid.append(fanSvg(me, it, def, gridOf(me), this.cell));
-    for (const id of blockerIds(me, it, def)) grid.querySelector(`[data-item-id="${id}"]`)?.classList.add("blocking");
+    for (const id of blockerIds(me, it)) grid.querySelector(`[data-item-id="${id}"]`)?.classList.add("blocking");
   }
 
   // The selected item wherever it lies: on the grid, in storage, in the loot stock or on the looted truck.
@@ -747,7 +724,7 @@ export class InventoryView {
     this.drag.moved = true;
     this.drag.item = {
       ...this.drag.item,
-      rot: this.drag.item.rot === 0 ? 1 : 0,
+      rot: nextRot(this.drag.item),
     };
     this.drag.grab = { x: 0, y: 0 };
     if (this.lastPointer) this.onMove(this.lastPointer);
@@ -762,7 +739,7 @@ export class InventoryView {
     if (!item || item.kind !== "part") return;
     const id = item.id;
     this.run((w) =>
-      this.moveGridItem(w, id, { x: item.x, y: item.y, rot: item.rot === 0 ? 1 : 0 }),
+      this.moveGridItem(w, id, { x: item.x, y: item.y, rot: nextRot(item) }),
     );
   }
 
@@ -783,23 +760,38 @@ export class InventoryView {
     this.paintGhost(e, spot !== null);
   }
 
-  // The ghost shows the item's footprint: green where it fits, red where it does not.
+  // The ghost shows the item's footprint and icon, green where it fits and red where it does not. A gun's icon turns
+  // with it, and over the grid the gun's fan shows where it would fire from that spot.
   private paintGhost(e: PointerEvent, onGrid: boolean): void {
     const d = this.drag!;
     const size = footprint(d.item);
-    const g = this.gridEl?.getBoundingClientRect();
-    const ok = onGrid && this.placementProblem(d) === null;
-    d.ghost.className = `inv-ghost ${onGrid ? (ok ? "ok" : "no") : ""}`;
-    d.ghost.textContent = itemLabel(d.item).short;
+    d.ghost.className = `inv-ghost ${this.ghostTone(d, onGrid)}`;
+    d.ghost.replaceChildren(turnedIcon(d.item, this.cell));
+    this.ghostFan(d, onGrid);
     d.ghost.style.width = `${size.w * this.cell}px`;
     d.ghost.style.height = `${size.h * this.cell}px`;
-    if (onGrid && g) {
-      d.ghost.style.left = `${g.left + d.item.x * this.cell}px`;
-      d.ghost.style.top = `${g.top + d.item.y * this.cell}px`;
-    } else {
-      d.ghost.style.left = `${e.clientX - this.cell / 2}px`;
-      d.ghost.style.top = `${e.clientY - this.cell / 2}px`;
-    }
+    const at = this.ghostCorner(e, d, onGrid);
+    d.ghost.style.left = `${at.x}px`;
+    d.ghost.style.top = `${at.y}px`;
+  }
+
+  private ghostTone(d: Drag, onGrid: boolean): string {
+    if (!onGrid) return "";
+    return this.placementProblem(d) === null ? "ok" : "no";
+  }
+
+  // Over the grid a dragged gun's fan shows where it would fire from that spot.
+  private ghostFan(d: Drag, onGrid: boolean): void {
+    if (!this.gridEl) return;
+    clearFan(this.gridEl);
+    if (onGrid) this.drawFan(this.gridEl, playerVehicle(this.host.world()), d.item);
+  }
+
+  // Snapped to its grid spot over the grid, centered under the pointer elsewhere.
+  private ghostCorner(e: PointerEvent, d: Drag, onGrid: boolean): { x: number; y: number } {
+    const g = this.gridEl?.getBoundingClientRect();
+    if (onGrid && g) return { x: g.left + d.item.x * this.cell, y: g.top + d.item.y * this.cell };
+    return { x: e.clientX - this.cell / 2, y: e.clientY - this.cell / 2 };
   }
 
   private placementProblem(d: Drag): string | null {
@@ -836,6 +828,7 @@ export class InventoryView {
     if (!d) return;
     this.drag = null;
     d.ghost.remove();
+    this.showFan(playerVehicle(this.host.world()), this.selectedGun(playerVehicle(this.host.world())));
     if (this.finishSelection(d)) return;
     // A drop the sim refuses leaves the item where it was and shows no error.
     this.run(this.dropCommand(e, d), true);

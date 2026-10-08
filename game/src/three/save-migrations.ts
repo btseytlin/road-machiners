@@ -702,6 +702,9 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => world,
   // 31 to 32: a lie-up holds the spot the driver lies up at, the driver's place for an old one.
   withLieUpSpot_31_32,
+  // 32 to 33: a grid item's rot counts quarter turns clockwise, 0 to 3. Saves hold 0 and 1, which keep their meaning
+  // for the footprint. A rot 1 gun now faces right instead of the front.
+  (world) => world,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

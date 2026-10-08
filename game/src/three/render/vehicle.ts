@@ -14,7 +14,7 @@ import { CLIP_TOLERANCE, bodyOf, cellCenter, cellRect, engineAnchor, highestUnde
 import { headingOf, headingQuat, type V3, type VehicleFrame } from '../../phys/frames';
 import { FACTION_COLORS, PAL } from '../../render/palette';
 import { BODY_PARTS, baseModel, grayShare, grayed, jagOffset, partModel, weaponLook, wearLookStep } from '../../render/partLooks';
-import { baseGrid, isMounted, itemCells, itemSize, plateSide, type SideLetter } from '../../sim/grid';
+import { baseGrid, facingOf, isMounted, itemCells, itemSize, plateSide, type SideLetter } from '../../sim/grid';
 import type { GridItem, Vehicle, World } from '../../sim/types';
 import { angleDiff, DEG } from '../../sim/vec';
 import { clearTop, headShape, sweepOf, type Obstacle } from './gunClearance';
@@ -74,7 +74,7 @@ const RADIO_HALO = 0.6; // meters across the lit bulb's glow
 const CHAIN_SIDE = 0.4; // fraction of the half width from the center line to the chain
 
 // A turning weapon head, its barrel tip in head space, and where its gun can fire in degrees off the truck heading.
-type Turret = { head: THREE.Group; tip: THREE.Vector3; spans: FireSpan[] };
+type Turret = { head: THREE.Group; tip: THREE.Vector3; spans: FireSpan[]; facing: number };
 
 // How a part draws: the broken tone, its wear look step and the id that seeds its jag. A good has step 0 and no id.
 type Look = { tone: number; step: number; partId: string | null };
@@ -210,13 +210,13 @@ export class VehicleView {
     this.glassMat.emissive.copy(glow);
   }
 
-  // yawOf gives each weapon part's map-space heading (radians, 0 = +x). null points its turret forward.
+  // yawOf gives each weapon part's map-space heading (radians, 0 = +x). null points its turret along its facing.
   // A turret turns only within its fire spans, so its barrel shows where it can shoot.
   aim(yawOf: (partId: string) => number | null): void {
     for (const [id, turret] of this.turrets) {
       const yaw = yawOf(id);
-      const want = yaw === null ? 0 : angleDiff(this.heading, yaw) / DEG;
-      const turn = aimWithin(sweepOf(turret.spans, true), want);
+      const want = yaw === null ? turret.facing : angleDiff(this.heading, yaw) / DEG;
+      const turn = aimWithin(sweepOf(turret.spans, true, turret.facing), want);
       const q = headingQuat(turn * DEG);
       turret.head.quaternion.set(q.x, q.y, q.z, q.w);
     }
@@ -475,7 +475,8 @@ export class VehicleView {
 
     const stand = weaponStand(v, item);
     const headAt = socket(look.mount, 'head');
-    const spans = fireSpans((partDef(item.part.defId) as WeaponDef).arc, openSides(v, item));
+    const facing = signedDegrees(facingOf(item));
+    const spans = fireSpans((partDef(item.part.defId) as WeaponDef).arc, openSides(v, item), facingOf(item));
     const shape = headShape(head, socket(look.receiver, 'muzzle').x);
     // The head socket turns and stretches with the mount, so its x and z come from the mount's matrix.
     const mount = model(look.mount);
@@ -486,7 +487,7 @@ export class VehicleView {
     const ground = surfaceSamples(v.chassisId, pivot, Math.max(shape.core, shape.reach) + SAMPLE_REACH)
       .filter((s) => !(s.x >= own.x0 && s.x <= own.x1 && s.z >= own.z0 && s.z <= own.z1))
       .map((s): Obstacle => ({ x0: s.x - s.half, x1: s.x + s.half, z0: s.z - s.half, z1: s.z + s.half, top: s.y }));
-    const clear = clearTop(pivot, shape, sweepOf(spans, active), [...obstacles, ...ground], GUN_GAP);
+    const clear = clearTop(pivot, shape, sweepOf(spans, active, facing), [...obstacles, ...ground], GUN_GAP);
     const top = Math.max(stand.top, clear - headAt.y - shape.bottom);
     if (!Number.isFinite(top)) throw new Error(`Gun ${item.part.id} on ${v.chassisId} has a post height of ${top}`);
 
@@ -497,12 +498,14 @@ export class VehicleView {
     mount.updateMatrix();
     head.position.copy(headAt.applyMatrix4(mount.matrix));
     this.anchors.set(item.part.id, { local: head.position.clone(), parent: this.body });
+    const turn = headingQuat(facing * DEG);
+    head.quaternion.set(turn.x, turn.y, turn.z, turn.w);
     if (!active) {
       still.add(head);
       return;
     }
     this.body.add(head);
-    this.turrets.set(item.part.id, { head, tip, spans });
+    this.turrets.set(item.part.id, { head, tip, spans, facing });
   }
 
   // Wheels hang at the physics wheel mounts, scaled from the 1 m model to the look's radius and width.
@@ -692,6 +695,12 @@ export function weaponStand(v: Pick<Vehicle, 'chassisId'>, item: GridItem): { at
   return { at, bottom: postBottom(foot, top), top, foot };
 }
 
+// A facing in degrees clockwise from the nose, as the signed bearing in (-180, 180] that fire spans use.
+export function signedDegrees(deg: number): number {
+  const turn = ((deg % 360) + 360) % 360;
+  return turn > 180 ? turn - 360 : turn;
+}
+
 // Where a post starts under a mount at top, given the surface under the post. No post when the mount touches it or nothing holds one.
 export function postBottom(foot: number, top: number): number {
   return foot !== -Infinity && top - foot > CLIP_TOLERANCE ? foot : top;
@@ -812,7 +821,7 @@ export function footprint(v: Pick<Vehicle, 'chassisId'>, item: GridItem, y: numb
   const dz = rect.z1 - rect.z0 > 0 ? rect.z1 - rect.z0 : size.w * CELL.across;
   const own = item.kind === 'part' ? partDef(item.part.defId) : { w: 1, h: 1 };
   const pos = new THREE.Vector3((rect.x0 + rect.x1) / 2, y, (rect.z0 + rect.z1) / 2);
-  if (item.rot === 0) return { pos, yaw: 0, scale: new THREE.Vector3(dx / (own.h * CELL.along), 1, dz / (own.w * CELL.across)) };
+  if (item.rot % 2 === 0) return { pos, yaw: 0, scale: new THREE.Vector3(dx / (own.h * CELL.along), 1, dz / (own.w * CELL.across)) };
   return { pos, yaw: ROT_YAW, scale: new THREE.Vector3(dz / (own.h * CELL.along), 1, dx / (own.w * CELL.across)) };
 }
 

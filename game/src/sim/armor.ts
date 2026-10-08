@@ -9,7 +9,7 @@ import { bodyOf } from './body';
 import { partDef, type PartDef, type WeaponDef } from '../data/parts';
 import { wornDef } from './wear';
 import { damagePart } from './damage';
-import { cellKey, gridOf, itemCells, itemSize, mountedItems, mountedParts, sideOf, type Grid, type SideLetter } from './grid';
+import { cellKey, facingOf, gridOf, itemCells, itemSize, mountedItems, mountedParts, sideOf, type Grid, type SideLetter } from './grid';
 import type { GridItem, PartInstance, Vehicle, World } from './types';
 import { angleDiff, bearing, type Vec } from './vec';
 
@@ -353,7 +353,7 @@ export function everyGunFires(v: Vehicle): boolean {
   const g = gridOf(v);
   const tall = tallCells(v);
   return mountedItems(v, 'weapon').every((item) => {
-    const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
+    const reach = reachedSides(item);
     return openIn(g, tall, item).some((side) => reach.includes(side));
   });
 }
@@ -367,7 +367,7 @@ export function gunLayoutScore(v: Vehicle): number {
   const covered = new Set<Side>();
   let sum = 0;
   for (const item of guns) {
-    const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
+    const reach = reachedSides(item);
     const open = openIn(g, tall, item).filter((side) => reach.includes(side));
     for (const side of open) covered.add(side);
     sum += open.length;
@@ -375,12 +375,16 @@ export function gunLayoutScore(v: Vehicle): number {
   return covered.size * (SIDES.length * guns.length + 1) + sum;
 }
 
-// The sides a centered arc reaches. The front quarter spans 90 degrees, so a wider arc reaches the flanks, and one
-// wider than 270 degrees also reaches the rear.
-export function reachedSides(def: WeaponDef): Side[] {
-  if (def.arc > 270) return [...SIDES];
-  if (def.arc > 90) return ['front', 'left', 'right'];
-  return ['front'];
+// The sides a gun's arc reaches, centered on the way the gun faces. The side it faces is always reached. A side a
+// quarter turn away needs an arc over 90 degrees, and the side behind the gun needs one over 270 degrees.
+export function reachedSides(item: GridItem): Side[] {
+  if (item.kind !== 'part') throw new Error(`${item.id} is not a part`);
+  const { arc } = partDef(item.part.defId) as WeaponDef;
+  const facing = facingOf(item);
+  return SIDES.filter((side) => {
+    const off = Math.abs(((SIDE_CENTER[side] - facing + 540) % 360) - 180);
+    return off === 0 || (off === 90 ? arc > 90 : arc > 270);
+  });
 }
 
 function inGrid(g: Grid, c: { x: number; y: number }): boolean {
@@ -392,12 +396,13 @@ export type FireSpan = { from: number; to: number };
 
 const SIDE_CENTER: Record<Side, number> = { front: 0, right: 90, rear: 180, left: -90 };
 
-// Where a gun can fire: its own arc cut to its open sides, merged into spans. One span of 360 degrees is a full circle.
-export function fireSpans(arc: number, sides: readonly Side[]): FireSpan[] {
+// Where a gun can fire: its arc, centered on `facing` degrees off the heading, cut to its open sides and merged into
+// spans. One span of 360 degrees is a full circle.
+export function fireSpans(arc: number, sides: readonly Side[], facing = 0): FireSpan[] {
   const half = Math.min(arc, 360) / 2;
   const pieces = sides
     .flatMap((side) => splitAtBack(SIDE_CENTER[side] - 45, SIDE_CENTER[side] + 45))
-    .map((p) => ({ from: Math.max(p.from, -half), to: Math.min(p.to, half) }))
+    .flatMap((p) => [-360, 0, 360].map((turn) => ({ from: Math.max(p.from, facing - half + turn), to: Math.min(p.to, facing + half + turn) })))
     .filter((p) => p.to > p.from)
     .sort((a, b) => a.from - b.from);
   const merged: FireSpan[] = [];

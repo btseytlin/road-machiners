@@ -40,11 +40,9 @@ export function headShape(head: THREE.Object3D, muzzleX: number): HeadShape {
   return shape;
 }
 
-const AHEAD: readonly FireSpan[] = [{ from: 0, to: 0 }];
-
-// The yaws a head turns through: its fire spans if it turns and has any, else straight ahead.
-export function sweepOf(spans: readonly FireSpan[], turns: boolean): readonly FireSpan[] {
-  return turns && spans.length > 0 ? spans : AHEAD;
+// The yaws a head turns through: its fire spans if it turns and has any, else along its facing in degrees off the nose.
+export function sweepOf(spans: readonly FireSpan[], turns: boolean, facing = 0): readonly FireSpan[] {
+  return turns && spans.length > 0 ? spans : [{ from: facing, to: facing }];
 }
 
 // True when a point can be inside the head at some yaw of the sweep.

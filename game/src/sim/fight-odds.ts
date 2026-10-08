@@ -114,7 +114,7 @@ export function gunsBySide(v: Vehicle): Record<Side, WeaponDef[]> {
   for (const item of mountedItems(v, 'weapon')) {
     if (item.part.hp <= 0) continue;
     const def = wornDef<WeaponDef>(item.part);
-    for (const side of openSides(v, item)) if (reachedSides(def).includes(side)) out[side].push(def);
+    for (const side of openSides(v, item)) if (reachedSides(item).includes(side)) out[side].push(def);
   }
   return out;
 }
