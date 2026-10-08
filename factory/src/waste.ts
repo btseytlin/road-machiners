@@ -58,14 +58,18 @@ function modelNumbers(jobs: JobLine[]): WasteNumbers['models'] {
   return [...group(jobs.flatMap((line) => line.agents), (agent) => agent.model)].map(([model, runs]) => ({ model, runs: runs.length, costUsd: cost(runs) })).sort(byCost);
 }
 
-// After checks the card waits for the committee, not for a worker, so that gap is no handoff. A failed job hands off to nobody.
+// After a post the card waits for the committee, not for a worker, so that gap is no handoff. Testing and checks jobs post.
+// A Testing job that sends the card back to Design posts nothing, and its gap is left out too, since job lines do not tell the two apart.
+const POSTS: JobStage[] = ['verify', 'checks'];
+
+// A failed job hands off to nobody.
 function handoffs(jobs: JobLine[]): { queue: Queue; issue: number; minutes: number }[] {
   const card = jobs.filter((line): line is JobLine & { issue: number } => line.issue !== null && QUEUE_OF[line.stage] !== 'branch');
   return [...group(card, (line) => line.issue)].flatMap(([issue, lines]) => {
     const ordered = [...lines].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
     return ordered.slice(1).flatMap((line, index) => {
       const before = ordered[index];
-      if (before.outcome !== 'done' || before.stage === 'checks') return [];
+      if (before.outcome !== 'done' || POSTS.includes(before.stage)) return [];
       return [{ queue: QUEUE_OF[line.stage], issue, minutes: minutesBetween(before.endedAt, line.startedAt) }];
     });
   });

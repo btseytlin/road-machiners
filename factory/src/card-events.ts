@@ -3,6 +3,7 @@ import { ADHOC_LABEL, HOTFIX_LABEL, RELEASE_LABEL, RELEASE_TASK_LABEL, type Colu
 
 // Why a card changed column. Each name is one edge of the card lifecycle, so the dashboard can tell the normal path from a loop back
 // and an early end without reading any text. A line holds no actor, comment or reason.
+// No stage writes patched, patch-replan, rebuild or review-failed any more. Older ledger lines carry them, and the dashboard still reads those.
 export const CARD_STEPS = [
   'entered', 'accepted', 'triage-wont-do', 'bundled', 'unbundled', 'questions', 'planned', 'design-wont-do', 'built', 'patched', 'patch-replan',
   'rebuild', 'plan-wrong', 'review-failed', 'posted', 'hardened', 'approved', 'conflict', 'patch', 'redesign', 'merged', 'denied', 'dropped',

@@ -1,11 +1,16 @@
-import type { FactoryConfig, Queue } from './types';
+import { QUEUE_OF, type FactoryConfig, type JobStage, type Queue } from './types';
 
 // Job containers are pinned to whole CPUs by pool, with docker's --cpuset-cpus. Pinning, unlike a CPU quota, also shows inside the container:
 // node's availableParallelism() follows it, so the game's test runner starts one worker per CPU it got.
 export type Pool = 'light' | 'implement' | 'test';
 
-// Verify agents run focused tests like implement agents, so they share that pool, and the test pool stays for the factory's checks.
-export const POOL_OF: Record<Queue, Pool> = { triage: 'light', design: 'light', branch: 'light', implement: 'implement', verify: 'implement', test: 'test' };
+// Testing agents run focused tests and the preview checks like implement agents, so they share that pool.
+const POOL_OF: Record<Queue, Pool> = { triage: 'light', design: 'light', branch: 'light', implement: 'implement', verify: 'implement', test: 'test' };
+
+// The merge job runs in the branch queue, since it moves a base. It runs the only full suite of a card, so it takes the test pool.
+export function poolOf(stage: JobStage): Pool {
+  return stage === 'merge' ? 'test' : POOL_OF[QUEUE_OF[stage]];
+}
 
 const ORDER: Pool[] = ['light', 'implement', 'test'];
 

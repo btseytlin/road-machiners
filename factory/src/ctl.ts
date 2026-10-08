@@ -40,7 +40,7 @@ const IMMEDIATE: Record<string, { usage: string; help: string; run: Handler }> =
 
 const WRITE: Record<string, { usage: string; help: string; build: Builder }> = {
   move: { usage: 'move N <to>', help: `put a card in one of ${MOVE_TARGETS.join(', ')}`, build: ([n, to]) => ({ action: 'move', issue: number(n), to: target(to) }) },
-  merge: { usage: 'merge N', help: 'merge a card into its base now', build: ([n]) => ({ action: 'merge', issue: number(n) }) },
+  merge: { usage: 'merge N', help: 'put a card in the merge queue, past its post and hardening', build: ([n]) => ({ action: 'merge', issue: number(n) }) },
   ship: { usage: 'ship', help: 'ship the open release now', build: () => ({ action: 'ship' }) },
   cut: { usage: 'cut', help: 'cut a release now', build: () => ({ action: 'cut' }) },
   remove: { usage: 'remove N', help: 'take a feature out of the release', build: ([n]) => ({ action: 'remove', issue: number(n) }) },
@@ -161,8 +161,7 @@ function cardFacts(found: Card, state: FactoryState): string[] {
     `position: ${cardPosition(found, state)}`,
     `column: ${found.column}`,
     `labels: ${shown(found.labels.join(', '))}`,
-    `testPhase: ${shown(state.testPhase[key])}`,
-    `patching: ${shown(state.patching[key])}`,
+    `post only: ${state.postOnly.includes(found.issue) ? 'yes' : 'no'}`,
     `approvedResolving: ${shown(state.approvedResolving[key])}`,
     `queued approval: ${shown(state.pendingApprovals[key])}`,
     `open posts: ${shown(posts.join(', '))}`,

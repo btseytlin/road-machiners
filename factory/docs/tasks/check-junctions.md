@@ -1,6 +1,7 @@
 # The game suite runs once per card, before the merge
 
 **Status:** done
+**Superseded by:** [trusted-agent-flow.md](trusted-agent-flow.md). The suite now runs at the merge checkpoint of the merge queue, not in Hardening.
 **Branch:** check-junctions
 **Worktree:** .worktrees/check-junctions
 **Mode:** interactive

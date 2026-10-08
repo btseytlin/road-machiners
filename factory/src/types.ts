@@ -1,12 +1,11 @@
 // Shared types of the game factory. Every module codes against these, so stages, wrappers and tests agree.
 
-export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Approval' | 'Hardening' | 'Done';
+export type Column = 'Triage' | 'Design' | 'Implementation' | 'Testing' | 'Approval' | 'Hardening' | 'Merging' | 'Done';
 
-// Stages that run agents on a card. Verify is the agent half of the Testing column, and harden the agent half of the Hardening column.
-// Patch applies a small committee reply to a built card.
-export type CardStage = 'triage' | 'design' | 'implement' | 'patch' | 'verify' | 'harden';
+// Stages that run agents on a card. Verify runs the Testing column, and harden the Hardening column.
+export type CardStage = 'triage' | 'design' | 'implement' | 'verify' | 'harden';
 export type ReleaseStage = 'release' | 'playtest' | 'candidate' | 'ship' | 'remove';
-export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste' | 'intake' | 'tick' | 'control';
+export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'merge' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste' | 'intake' | 'tick' | 'control';
 
 export type FactoryConfig = {
   observationHeartbeatMs: number;
@@ -50,6 +49,9 @@ export type FactoryConfig = {
   playtestTurns: number; // turns of the release playtest's progression run
   playtestRuns: number; // plays of one release playtest job before it blocks for a member
   playtestTimeoutMinutes: number; // minutes a release playtest job may run, since its plays and fixes outlast the verify queue's limit
+  mergeTimeoutMinutes: number; // minutes a merge job may run, since its full checks and fixes outlast the branch queue's limit
+  testingBudgetUsd: number; // dollars a Testing job's agents may spend while its checkpoint fails
+  mergingBudgetUsd: number; // dollars a Merging job's agent may spend while the merged checks fail
   wasteReviewDays: number; // days between waste reviews of the factory
   itchTarget: string | null; // itch.io page as "user/game". Null until set, and then a release fails loud.
   butlerKey: string | null; // BUTLER_API_KEY, only ever in the env of the butler call
@@ -106,26 +108,27 @@ export type Card = { itemId: string; issue: number; column: Column; labels: stri
 // A job is one detached `factory run` process. `issue` is null for the release cut and a change id for change.
 // Candidate and ship carry the tracking issue, remove the issue of the feature to take out. Dev rebuilds /dev/ and has no issue.
 // An incident job carries the issue of a shipped bug fix.
-// A waste job reviews the factory itself and has no issue.
-export type JobStage = CardStage | ReleaseStage | 'checks' | 'approve' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste';
+// A waste job reviews the factory itself and has no issue. A merge job takes every Merging card of one base and carries no issue.
+export type JobStage = CardStage | ReleaseStage | 'checks' | 'approve' | 'merge' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste';
 // `id` names the job's containers, so a kill stops only its own.
 export type Job = { id: string; stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string };
 
 // Jobs run in parallel up to a limit per queue.
 // The branch queue moves dev, main and the release, or rebuilds a shared build, so it runs one job at a time.
 // Triage, design, implement and verify each get their own queue, so a short triage never waits behind a long build.
-// The test queue runs only the factory's checks: it builds the game and plays it in a browser, which loads the CPU. It runs no agent.
+// The test queue only builds and posts post-only cards. It runs no agent.
 export type Queue = 'branch' | 'triage' | 'design' | 'implement' | 'verify' | 'test';
 // Queues whose jobs only run agents in work clones, with no deploy or branch move.
 export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement', 'verify'];
 export const QUEUE_OF: Record<JobStage, Queue> = {
   // The waste review only reads, so it shares the light triage queue.
-  triage: 'triage', waste: 'triage', design: 'design', implement: 'implement', adhoc: 'implement', patch: 'implement', verify: 'verify', harden: 'verify',
+  triage: 'triage', waste: 'triage', design: 'design', implement: 'implement', adhoc: 'implement', verify: 'verify', harden: 'verify',
   // A factory change runs a full up:make and only pushes its own branch, so it must not hold the branch queue for hours.
   change: 'implement',
   checks: 'test',
   // An incident job pushes dev, and two of them at once would pick the same log id.
-  approve: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', incident: 'branch',
+  // A merge job moves dev or the release, so it runs one at a time with the other branch moves.
+  approve: 'branch', merge: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', incident: 'branch',
   // The release playtest runs for hours, so it never holds the branch queue. Its two release moves, main in and its fixes out,
   // go through the locked merge and push, which merge again when another job moved the release.
   playtest: 'verify',
@@ -177,7 +180,7 @@ export type FactoryState = {
   pendingShip: string | null; // Telegram user who pressed Ship, run by the next tick
   pendingRemovals: Removal[]; // features to take out of the release, run by the next ticks in order
   pendingApprovals: Record<string, string>; // issue number -> approving Telegram user, run by the next tick
-  approvedResolving: Record<string, string>; // issue number -> approver, for an approved card in Hardening. Hardening queues its merge with no new post.
+  approvedResolving: Record<string, string>; // issue number -> approver, for an approved card in Hardening or Merging. The merge comment names them.
   pendingChanges: ChangeRequest[]; // factory change requests, run by the next ticks in order
   pendingIncidents: number[]; // shipped bug issues whose incident job has not run yet, run by the next ticks in order
   bundles: Record<string, number[]>; // lead issue number -> the issues triage bundled into its card, which close when the lead ships
@@ -192,10 +195,8 @@ export type FactoryState = {
   devFailed: string | null; // short hash of dev whose build failed. The tick skips it until dev moves or Hermes clears it.
   devError: string | null; // what broke in that build, for Hermes's incident watch. Cleared with devFailed.
   interrupted: number[]; // issues whose job process died and got one resume. The next job on the issue continues its agents' sessions, and its end clears the issue.
-  testPhase: Record<string, TestPhase>; // issue number -> where its Testing card stands. No entry means verify runs next.
-  patching: Record<string, string>; // issue number -> the commit of its last posted build. Its Implementation card runs a patch, not an implementation.
+  postOnly: number[]; // Testing cards a control move sent to Approval. A checks job builds and posts them with no tests. Any other Testing card runs verify.
   unroutedReplies: Record<string, UnroutedReply>; // Telegram message id of a plain approval reply -> what it answered. A route clears it, and a late one becomes an incident for Hermes.
-  visualSendBacks: Record<string, number>; // issue number -> times the visual review sent its card back to Design or Implementation. It caps the loop, and a passed review clears it.
   textPosts: string[]; // Telegram message ids of approval posts sent as text, since a post with no screenshot has no photo to caption
   lastWasteReview: string | null; // ISO start of the last waste review. The tick sets it when it first sees it empty, so the first review waits a full period.
   held: Record<string, Hold>; // issue number -> the hold `factory pause-card` put on its card. The tick starts no job on the issue until `resume-card` lifts it.
@@ -205,13 +206,6 @@ export type FactoryState = {
 export type Hold = { by: string; reason: string; at: string; stage: JobStage | null };
 
 export type UnroutedReply = { issue: number; postId: number; text: string; at: string };
-
-// The phases of a card in Testing or Hardening.
-// `checks`: verify, harden or a patch is done, the factory checks run next. `fix`: the checks failed once, the column's agent stage runs the fix round.
-// `checks-after-fix`: the checks run again, and a second failure stops the card.
-// `post`: a control move to Approval. Only the build and the post run, with no tests and no playtest.
-// `resolve`: approve hit a conflict with the base. Harden merges the base, a merge agent resolves the conflict, and the checks run next.
-export type TestPhase = 'checks' | 'fix' | 'checks-after-fix' | 'post' | 'resolve';
 
 export interface GitHub {
   candidates(labels: string[]): Promise<Issue[]>;
@@ -259,13 +253,12 @@ export interface Telegram {
 // `openNetwork` runs the container on the normal network with no proxy. Absent means the restricted network.
 // `mediaDir` is a host folder of reference images. The agent sees it read only at /work/.factory-media.
 // `readOnly` maps host folders to container paths, mounted read only.
-// `evidenceCheck` mounts the factory's evidence check read only, so the agent can run it before it ends. See `buildCheckBundle` in container.ts.
 // `session` names the agent's Claude Code session. The container mounts `dir` as the agent's session store and starts the session with `id`, or continues it when `resume` is set.
 // `skill` is a slash command like `/code-review`. Claude runs it only from the first line of the input, so it goes first.
 // `effort` is the reasoning effort passed to claude --effort. Absent means the model's default.
 // `disallowedTools` names Claude Code tools the agent cannot use, passed to claude --disallowedTools.
 export type AgentSession = { dir: string; id: string; resume: boolean };
-export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; evidenceCheck?: boolean; session?: AgentSession; skill?: string; effort?: string; disallowedTools?: string[] };
+export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; session?: AgentSession; skill?: string; effort?: string; disallowedTools?: string[] };
 
 export interface Container {
   // Runs Claude Code headless in the clone and returns its stream-json output. Throws on a nonzero exit.
@@ -306,8 +299,9 @@ export interface HostRepo {
   // Parallel jobs move `base` on, so a later check names the returned commit, not the branch.
   mergeBaseIntoWork(dir: string, base: string): Promise<{ commit: string; conflicts: string[] }>;
   // Merges GitHub's copy of `branch` into the work clone when it holds commits the clone lacks, like a member's push. A null commit means nothing to merge.
-  // A conflicted merge stays open, like in mergeBaseIntoWork.
-  mergeBranchIntoWork(dir: string, branch: string): Promise<{ commit: string | null; conflicts: string[] }>;
+  // A conflicted merge stays open, like in mergeBaseIntoWork. A `message` makes a merge commit with it, never a fast-forward, as the merge queue
+  // needs: the release changelog and Remove find a feature by its "Merge issue #N: title" commit.
+  mergeBranchIntoWork(dir: string, branch: string, message?: string): Promise<{ commit: string | null; conflicts: string[] }>;
   isMerged(base: string, branch: string): Promise<boolean>; // whether `branch` holds every commit of `base`, a branch or a commit
   headHash(branch: string): Promise<string>; // short hash
   diff(base: string, branch: string): Promise<string>;
@@ -403,9 +397,6 @@ export const QUESTIONS_HEADING = '## Questions from the factory';
 export const FEEDBACK_HEADING = '## Committee feedback';
 // An approval reply routed as an answer. Design reads it as context, never as a change request.
 export const QUESTION_HEADING = '## Committee question';
-export const REVIEW_HEADING = '## Review findings';
-// The testing agent's reading of the captured gameplay images found the look wrong. The agent that gets the card back reads it as a mismatch report.
-export const VISUAL_HEADING = '## Visual review findings';
 // Agent containers sit on an internal Docker network. The proxy container is their only way out.
 export const AGENT_NETWORK = 'roam-factory-agents';
 export const PROXY_NAME = 'roam-factory-proxy';

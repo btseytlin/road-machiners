@@ -1,7 +1,7 @@
 import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildAndDeploy, recordBuild } from '../deploy';
-import { readEvidence, type Evidence } from '../evidence';
+import { readShown, type Evidence } from '../evidence';
 import { postWithEvidence } from '../evidence-post';
 import { readState, updateState } from '../state';
 import { GAME_DIR, OUT_DIR, type Ctx, type ReleaseState } from '../types';
@@ -64,7 +64,7 @@ export async function candidate(ctx: Ctx, issue: number): Promise<void> {
   await ctx.github.comment(issue, `Release candidate: ${url}\n\n${changes}`);
   const caption = candidateCaption(release.day, url, trackingLink(ctx, issue), pr, features.length);
   const buttons = [[{ text: 'Ship', data: `factory:ship:${issue}` }]];
-  const evidence = await candidateEvidence(ctx, issue, home, release.branch);
+  const evidence = candidateEvidence(ctx, issue, home);
   const photoId = await postWithEvidence(ctx, evidence, caption, buttons, {
     add: (id) => updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: id, candidateSha: sha }, postCaptions: { ...state.postCaptions, [id]: caption } })),
     drop: (id) => updateState(ctx.statePath, (state) => ({ ...state, release: state.release && { ...state.release, postId: null, candidateSha: null }, postCaptions: Object.fromEntries(Object.entries(state.postCaptions).filter(([name]) => name !== String(id))) })),
@@ -97,24 +97,13 @@ async function staleBuild(ctx: Ctx, release: ReleaseState, sha: string): Promise
   return true;
 }
 
-// The release agent may add views of the changes in `.factory/evidence.json`. Those are optional, so a manifest that fails a rule is logged and the one screenshot stands.
-async function candidateEvidence(ctx: Ctx, issue: number, home: string, branch: string): Promise<Evidence> {
-  try {
-    return readEvidence(home, await ctx.repo.headHash(branch));
-  } catch (error) {
-    ctx.log('candidate', issue, `evidence manifest ignored: ${error instanceof Error ? error.message : String(error)}`);
-    return {
-      images: [
-        {
-          path: join(home, OUT_DIR, 'screenshot.png'),
-          description: '',
-          covers: [],
-          sheet: false,
-        },
-      ],
-      features: [],
-    };
-  }
+// The release agent may add views of the changes in `.factory/evidence.json`. An image the post cannot show is logged and left out.
+// The candidate post is a photo with the Ship button, so it needs the screenshot.
+function candidateEvidence(ctx: Ctx, issue: number, home: string): Evidence {
+  const { evidence, problem } = readShown(home);
+  if (problem !== null) ctx.log('candidate', issue, problem);
+  if (evidence === null) throw new Error(`The release agent wrote no usable .factory/screenshot.png: ${problem ?? 'no reason'}`);
+  return evidence;
 }
 
 // One line per change, with the issues bundled into it indented under it, so the changelog sums up a bundle in one line.

@@ -14,7 +14,6 @@ From `factory/`:
 ## What the numbers mean
 
 - Job outcomes, durations, costs and tokens come from the factory ledger. Older lines have cost but no tokens, and a missing count shows as unavailable, never as zero.
-- Review rounds count under Verify, since their ledger job is Verify.
 - The 24-hour, 7-day and 30-day ranges are rolling UTC windows. Hermes chat, agent runs outside the factory and hosting costs are not counted.
 - Cards waiting is the average number of cards held back at once over the measured clock time. A card that waits behind its own running job does not count. Its tooltip and the stage bars show summed card-time, so 20 cards waiting for one hour count as 20 hours. Worker time sums the same way across parallel jobs. Gaps longer than three ticks are left out of both and counted.
 - Runner heartbeats show a job is alive. Agent activity reports are labelled apart and never prove a check passed. Scheduler explanations come from job selection.
@@ -28,7 +27,7 @@ Agents report their phase with `factory-status <activity>`, with no free text. `
 
 The Delivery tab reads only the card lines of the ledger. The board shows where a card is now, and job lines give worker time, so neither tells when a card entered a column. The tab shows nothing for history before the first card line, and states when that was.
 
-- Time in stage is calendar time from the move into a stage to the next move out, waits included. It is never worker time, which Analytics shows. Testing is the preview and Hardening the harden stage. Approval splits into the committee's wait and the merge queue after hardening or `factory merge`. A `factory move` into Testing counts as preview.
+- Time in stage is calendar time from the move into a stage to the next move out, waits included. It is never worker time, which Analytics shows. Testing is the preview, Hardening the harden stage and Merging the merge queue. Older lines, written before the Merging column, count Approval after hardening or `factory merge` as the merge queue. A `factory move` into Testing counts as preview.
 - A stage counts in a range when it ended in that range. Stages still open are counted with their mean age and are not in the means.
 - Triage to dev runs from the first triage acceptance to the first merge into dev after it, the merge that adds `release-candidate`. Weekly Ship is not its end. Cards merged in the range count. Accepted cards not yet merged or closed are in flight. A merge with no recorded acceptance is counted apart.
 - Loops count each move back by its transition, with the cards it touched. The loop rate is cards with a loop over cards with any move in the range.

@@ -3,21 +3,27 @@ import { basename, dirname, join } from 'node:path';
 import { withLockSync } from './lock';
 import type { FactoryState, Job, PlaytestState, ReleaseState } from './types';
 
-export const EMPTY_STATE: FactoryState = { jobs: [], approvalPosts: {}, lastRelease: null, release: null, releasePost: null, pendingShip: null, pendingRemovals: [], pendingApprovals: {}, approvedResolving: {}, pendingChanges: [], pendingIncidents: [], bundles: {}, adhocReplies: {}, lastTickError: null, failures: [], builds: {}, jobStarts: [], cardStarts: {}, postCaptions: {}, devBuild: null, devFailed: null, devError: null, interrupted: [], testPhase: {}, patching: {}, unroutedReplies: {}, visualSendBacks: {},textPosts: [], lastWasteReview: null, held: {} };
+export const EMPTY_STATE: FactoryState = { jobs: [], approvalPosts: {}, lastRelease: null, release: null, releasePost: null, pendingShip: null, pendingRemovals: [], pendingApprovals: {}, approvedResolving: {}, pendingChanges: [], pendingIncidents: [], bundles: {}, adhocReplies: {}, lastTickError: null, failures: [], builds: {}, jobStarts: [], cardStarts: {}, postCaptions: {}, devBuild: null, devFailed: null, devError: null, interrupted: [], postOnly: [], unroutedReplies: {}, textPosts: [], lastWasteReview: null, held: {} };
 
 // A state update is a few file operations, so a writer that waits this long found a stuck lock.
 const STATE_LOCK_MS = 30_000;
 
-type SavedState = Partial<FactoryState> & { job?: Omit<Job, 'id'> | null };
+// Fields of the stages before one session ran each stage. `testPhase` maps an issue to its step, and only `post` lives on as `postOnly`.
+type OldFields = { job?: Omit<Job, 'id'> | null; testPhase?: Record<string, string>; patching?: unknown; visualSendBacks?: unknown };
+type SavedState = Partial<FactoryState> & OldFields;
 
 export function readState(path: string): FactoryState {
   if (!existsSync(path)) return structuredClone(EMPTY_STATE);
-  const { job, ...saved } = JSON.parse(readFileSync(path, 'utf8')) as SavedState;
+  const { job, testPhase, patching: _patching, visualSendBacks: _visualSendBacks, ...saved } = JSON.parse(readFileSync(path, 'utf8')) as SavedState;
   // A file from before parallel jobs holds one `job`. Its log name serves as its id.
   const jobs = (saved.jobs ?? (job ? [{ ...job, id: basename(job.log, '.log') }] : [])).map(renameTesting);
   // Fields an old file lacks take the empty value.
   const release = saved.release ? fillRelease(saved.release) : null;
-  return { ...structuredClone(EMPTY_STATE), ...saved, jobs, release };
+  return { ...structuredClone(EMPTY_STATE), ...saved, jobs, release, postOnly: saved.postOnly ?? postPhases(testPhase) };
+}
+
+function postPhases(testPhase: Record<string, string> | undefined): number[] {
+  return Object.entries(testPhase ?? {}).filter(([, phase]) => phase === 'post').map(([issue]) => Number(issue));
 }
 
 // The seed of a release is its cut day as YYYYMMDD, so each release plays a seed of its own and every run of it plays the same one.
