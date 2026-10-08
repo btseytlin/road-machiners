@@ -16,6 +16,7 @@ Quests are scripts written in [ink](https://github.com/inkle/ink/blob/master/Doc
 - A save keeps the last checkpoint, not ink's position. Load starts the quest again there, so the player sees the lines from that checkpoint on.
 - Load restarts ink's own counts. A used-up `*` choice comes back, and `{knot}` visit counts start from zero. A fact that must last past a load or into another quest lives in a variable.
 - Every checkpoint must run on its own from a fresh story, so it may not rely on temporary variables or tunnels from before it.
+- A load plays a checkpoint's opening again, up to its first choices. So that opening may call no effect and change no variable, or each load would pay or count again. Put them after a choice. `restoreQuest()` throws on either, and `npm run quests:check` tries a load at every state it walks.
 
 ## State
 

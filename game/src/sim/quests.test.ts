@@ -4,6 +4,8 @@ import { UNITS } from '../data/units';
 import { TEST_MAP } from '../test/map';
 import { chooseQuestOption, QUESTS, questProblems, questView, restoreQuest, startQuest } from './quests';
 import { defaultSetup } from './settings';
+import type { QuestBundle } from '../data/quests';
+import { compileBundle } from '../test/quest-compile';
 import type { World } from './types';
 import { newWorld } from './world';
 
@@ -85,6 +87,11 @@ describe('chooseQuestOption', () => {
   });
 });
 
+function inlineBundle(quest: string): QuestBundle {
+  const sources = { 'world.ink': 'EXTERNAL money()\nEXTERNAL give_money(amount)\n', 'q.ink': `INCLUDE world.ink\n${quest}` };
+  return compileBundle(sources);
+}
+
 function withoutLive(w: World): World {
   const copy = structuredClone(w);
   copy.player.quests.live = null;
@@ -106,6 +113,18 @@ describe('restoreQuest', () => {
     expect(questView(restored).choices).toEqual(questView(w).choices);
     expect(restored.player.quests).toEqual({ ...w.player.quests, live: restored.player.quests.live });
   });
+  it('refuses a checkpoint whose opening pays, since every load would pay again', () => {
+    const bundle = inlineBundle('=== start ===\n# checkpoint: start\n~ give_money(2)\nTake this.\n+ [Thanks.] -> END\n');
+    const restored = withoutLive(startQuest(world(), bundle, 'q', 'start'));
+    expect(() => restoreQuest(restored, bundle)).toThrow('Effect give_money ran while loading checkpoint start');
+  });
+
+  it('refuses a checkpoint whose opening changes a variable, since every load would change it again', () => {
+    const bundle = inlineBundle('VAR n = 0\n=== start ===\n# checkpoint: start\n~ n += 1\nCounted.\n+ [Done.] -> END\n');
+    const restored = withoutLive(startQuest(world(), bundle, 'q', 'start'));
+    expect(() => restoreQuest(restored, bundle)).toThrow('Loading checkpoint start changed its variables');
+  });
+
   it('does nothing without an open session', () => {
     const w = world();
     restoreQuest(w, QUESTS);

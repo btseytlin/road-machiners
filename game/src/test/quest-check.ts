@@ -2,7 +2,7 @@
 // every choice through the sim runner that finds ink errors, loops with no way out and sections never reached.
 
 import type { QuestBundle } from '../data/quests';
-import { chooseQuestOption, QUEST_EFFECTS, QUEST_QUERIES, questView, startQuest } from '../sim/quests';
+import { chooseQuestOption, QUEST_EFFECTS, QUEST_QUERIES, questView, restoreQuest, startQuest } from '../sim/quests';
 import type { World } from '../sim/types';
 import { compileSources, type QuestSources } from './quest-compile';
 
@@ -53,6 +53,7 @@ function step(walk: Walk, bundle: QuestBundle, id: string, seen: Map<string, See
   for (const path of Object.keys(inkOf(walk.world).visitCounts)) visited.add(path);
   const node: Seen = { picks: walk.picks, next: [], ended: view.ended };
   seen.set(walk.key, node);
+  if (!view.ended) attempt(problems, `${id}: after ${walk.picks.join(' > ') || 'the start'}: a load here fails`, () => reloaded(walk, bundle));
   return view.choices.flatMap((text, index) => attempt(problems, `${id}: after ${[...walk.picks, text].join(' > ')}`, () => {
     const next = walkOf(chooseQuestOption(walk.world, bundle, index), [...walk.picks, text]);
     node.next.push(next.key);
@@ -81,6 +82,13 @@ function trapProblems(id: string, seen: Map<string, Seen>): string[] {
     }
   }
   return [...seen].filter(([key]) => !ends.has(key)).map(([, node]) => `${id}: after ${node.picks.join(' > ')}: no choice leads to an end from here`);
+}
+
+function reloaded(walk: Walk, bundle: QuestBundle): Walk {
+  const loaded = structuredClone(walk.world);
+  loaded.player.quests.live = null;
+  restoreQuest(loaded, bundle);
+  return walk;
 }
 
 function walkOf(world: World, picks: string[]): Walk {

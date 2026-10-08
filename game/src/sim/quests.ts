@@ -14,7 +14,7 @@ export type QuestView = { lines: QuestLine[]; choices: string[]; ended: boolean 
 export type QuestQuery = (world: World, args: readonly unknown[]) => QuestValue;
 export type QuestEffect = (world: World, args: readonly unknown[]) => void;
 
-type Runner = { story: Story; world: World | null };
+type Runner = { story: Story; world: World | null; restoring: string | null };
 
 const INK_SEED_RANGE = 2 ** 31;
 const runners = new WeakMap<CompiledQuest, Runner>();
@@ -89,7 +89,18 @@ export function chooseQuestOption(world: World, bundle: QuestBundle, index: numb
 }
 
 export function restoreQuest(world: World, bundle: QuestBundle): void {
-  if (world.player.quests.session) enterCheckpoint(world, bundle);
+  const session = world.player.quests.session;
+  if (!session) return;
+  const saved = JSON.stringify([world.player.quests.world, world.player.quests.local]);
+  const runner = runnerOf(bundle, questOf(bundle, session.quest));
+  runner.restoring = session.checkpoint;
+  try {
+    enterCheckpoint(world, bundle);
+  } finally {
+    runner.restoring = null;
+  }
+  const loaded = JSON.stringify([world.player.quests.world, world.player.quests.local]);
+  if (loaded !== saved) throw new Error(`Loading checkpoint ${session.checkpoint} changed its variables from ${saved} to ${loaded}. A checkpoint may not change variables before its first choice.`);
 }
 
 export function questView(world: World): QuestView {
@@ -196,7 +207,7 @@ function injectVars(story: Story, vars: QuestVars): void {
 function runnerOf(bundle: QuestBundle, quest: CompiledQuest): Runner {
   const known = runners.get(quest);
   if (known) return known;
-  const runner: Runner = { story: new Story(quest.story), world: null };
+  const runner: Runner = { story: new Story(quest.story), world: null, restoring: null };
   for (const name of bundle.externals) bindExternal(runner, name);
   runners.set(quest, runner);
   return runner;
@@ -206,8 +217,13 @@ function bindExternal(runner: Runner, name: string): void {
   const query = QUEST_QUERIES[name];
   const effect = QUEST_EFFECTS[name];
   if (query) return runner.story.BindExternalFunction(name, (...args: unknown[]) => query(runnerWorld(runner), args), true);
-  if (effect) return runner.story.BindExternalFunction(name, (...args: unknown[]) => effect(runnerWorld(runner), args), false);
+  if (effect) return runner.story.BindExternalFunction(name, (...args: unknown[]) => effect(effectWorld(runner, name), args), false);
   throw new Error(`External function ${name} has no query or effect in src/sim/quests.ts`);
+}
+
+function effectWorld(runner: Runner, name: string): World {
+  if (runner.restoring) throw new Error(`Effect ${name} ran while loading checkpoint ${runner.restoring}, so every load would run it again. Move it after a choice.`);
+  return runnerWorld(runner);
 }
 
 function runnerWorld(runner: Runner): World {

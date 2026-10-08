@@ -61,6 +61,11 @@ describe('checkQuests', () => {
     expect(problems.join('\n')).toContain('q: after Take it.: give_money takes no negative amount');
   });
 
+  it('fails a checkpoint that a load would replay with an effect, and names the picks', () => {
+    const problems = check('=== start ===\n# checkpoint: start\n+ [Pay me.] -> paid\n+ [Bye.] -> END\n= paid\n# checkpoint: start.paid\n~ give_money(1)\nHere.\n+ [Bye.] -> END\n');
+    expect(problems.join('\n')).toContain('q: after Pay me.: a load here fails: Effect give_money ran while loading checkpoint start.paid');
+  });
+
   it('fails a quest whose states outgrow the limit instead of passing it', () => {
     const problems = check('VAR n = 0\n=== start ===\n# checkpoint: start\n- (hub)\n+ [More.]\n  ~ n += 1\n  -> hub\n+ [Bye.] -> END\n');
     expect(problems).toContain(`q: stopped after ${LIMIT} states, so loops and reach are unchecked`);
