@@ -8,11 +8,12 @@ import { resetPerf, perfSnapshot } from '../perf';
 import { PHYSICS } from '../data/physics';
 import { boxDistance, boxSegmentDistance, isDriveObstacle, propBoxes, propReach } from './mapgen';
 import { findCells, nearestFreeCell, stampOverlay } from './nav/astar';
-import { COARSE, componentOf, dynamicBlockers, navLayer, onRouteRoad, terrainNav, tileIndex } from './nav/layer';
+import { COARSE, componentOf, dynamicBlockers, navLayer, offRoadTaste, onRouteRoad, tasteKey, tasteOf, terrainNav, tileIndex } from './nav/layer';
 import { continueRoute, keepRoute, route, routeLength, straightClear, type Blocker } from './path';
 import { nextRandom } from './rng';
 import { isCliff, tileAt, tileSlope, type Terrain } from './terrain';
-import type { Obstacle, Vehicle, World } from './types';
+import type { NpcActivity, Obstacle, Vehicle, World } from './types';
+import type { TraitId } from '../data/npcs';
 import { siteGap, siteGates } from './sites';
 import { addVehicle, editableTerrain, emptyWorld, npcBrain } from './testkit';
 import { dist, polylineDist, segmentDist, type Vec } from './vec';
@@ -386,6 +387,98 @@ describe('routes prefer roads', () => {
     const pts = route(w, a, b, 0.6, []);
     expect(routeLength(a, pts)).toBeLessThan(1.2 * dist(a, b));
   });
+
+  describe('hunting raiders', () => {
+    // One driver id, so the raider and the trader share the same taste noise and differ only in style.
+    function driverOn(w: World, faction: 'raiders' | 'traders', traits: TraitId[], kind: NpcActivity['kind']): Vehicle {
+      const v = addVehicle(w, faction, 'buggy', ['mg', 'stockEngine'], { x: 0, y: 0 });
+      v.id = 'v7';
+      v.brain = npcBrain('buggy', { x: 0, y: 0 }, traits);
+      v.brain.goals = [{ kind, targetId: null, destination: null, phase: 'travel', reason: 'test' }];
+      return v;
+    }
+    // Each driver lives in its own copy of the world, since they share an id and the world stays untouched.
+    function drivers(w: World) {
+      return { raider: driverOn(structuredClone(w), 'raiders', ['raider'], 'raid'), trader: driverOn(structuredClone(w), 'traders', ['trader'], 'trade') };
+    }
+    // A straight road along map x at y = 100.
+    const straightRoad = () => roadWorld([{ x: 40, y: 100 }, { x: 220, y: 100 }]);
+    const onRoadLength = (w: World, from: Vec, pts: Vec[]) => roadShare(w, from, pts) * routeLength(from, pts);
+
+    it('a raider on a raid routes off the road between two open points beside it, while a trader takes it', () => {
+      const w = straightRoad();
+      const { raider, trader } = drivers(w);
+      const a = { x: 100, y: 106 };
+      const b = { x: 160, y: 106 };
+
+      const hunting = route(w, a, b, 0.6, [], raider);
+      const trading = route(w, a, b, 0.6, [], trader);
+
+      expect(roadShare(w, a, hunting)).toBeLessThan(0.05);
+      expect(roadShare(w, a, trading)).toBeGreaterThan(0.7);
+    });
+
+    it('a raider on a raid leaves a straight road between two points on it', () => {
+      const w = straightRoad();
+      const { raider, trader } = drivers(w);
+      const a = { x: 100, y: 100 };
+      const b = { x: 160, y: 100 };
+
+      const hunting = route(w, a, b, 0.6, [], raider);
+
+      expect(roadShare(w, a, hunting)).toBeLessThan(0.25);
+      expect(route(w, a, b, 0.6, [], trader)).toEqual([b]);
+    });
+
+    it('a raider crossing a road crosses it rather than following it', () => {
+      const w = straightRoad();
+      const { raider, trader } = drivers(w);
+      const a = { x: 110, y: 85 };
+      const b = { x: 170, y: 115 };
+
+      const hunting = route(w, a, b, 0.6, [], raider);
+      const trading = route(w, a, b, 0.6, [], trader);
+
+      expect(onRoadLength(w, a, hunting)).toBeLessThan(3 * REGION.roadWidth);
+      expect(onRoadLength(w, a, trading)).toBeGreaterThan(3 * REGION.roadWidth);
+    });
+
+    it("keeps the trader's taste, cache key and route, and keys the hunting style apart", () => {
+      const w = straightRoad();
+      const { raider, trader } = drivers(w);
+      const a = { x: 100, y: 106 };
+      const b = { x: 160, y: 106 };
+      const traderTaste = tasteOf(w, trader)!;
+      const huntingTaste = offRoadTaste(tasteOf(w, raider)!, terrainNav(w.terrain));
+
+      // The raider's route is planned first, so a shared cache key would hand it to the trader.
+      const hunting = route(w, a, b, 0.6, [], raider);
+      const trading = route(w, a, b, 0.6, [], trader);
+
+      expect(traderTaste.roads).toBeNull();
+      expect(tasteKey(traderTaste)).toBe(String(traderTaste.seed));
+      expect(tasteKey(huntingTaste)).toBe(`${traderTaste.seed}:off`);
+      expect(trading).not.toEqual(hunting);
+      // A raider that is not hunting plans exactly as the trader does.
+      expect(route(w, a, b, 0.6, [], driverOn(structuredClone(w), 'raiders', ['raider'], 'sell'))).toEqual(trading);
+    });
+
+    it('plans off-road legs on the real map that a truck can drive straight', () => {
+      const w = w1337;
+      const { raider, trader } = drivers(w);
+      const gate = (id: string) => siteGates([...REGION.towns, ...REGION.locations].find((s) => s.id === id)!)[0];
+      const from = gate('nose');
+      const to = gate('dustwell');
+
+      const hunting = route(w, from, to, 0.8, [], raider);
+
+      // The first leg drives out of the gate's site clearance, as for every driver, so the legs after it are checked.
+      // Legs under a tile are cell snaps beside a site's clearance edge.
+      expect(hunting.length).toBeGreaterThan(2);
+      for (let i = 1; i < hunting.length; i++) if (dist(hunting[i - 1], hunting[i]) >= 1) expect(straightClear(w, hunting[i - 1], hunting[i], 0.8, [])).toBe(true);
+      expect(roadShare(w, from, hunting)).toBeLessThan(roadShare(w, from, route(w, from, to, 0.8, [], trader)));
+    });
+  });
 });
 
 describe('raiders that keep off roads', () => {
@@ -402,7 +495,7 @@ describe('raiders that keep off roads', () => {
   function raider(w: World, pos: Vec): Vehicle {
     const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], pos);
     v.brain = npcBrain('test', pos, []);
-    v.brain.goals = [{ kind: 'patrol', targetId: null, destination: null, phase: 'travel', reason: 'test patrol' }];
+    v.brain.goals = [{ kind: 'sell', targetId: null, destination: null, phase: 'travel', reason: 'test sell' }];
     return v;
   }
   function flee(v: Vehicle): void {

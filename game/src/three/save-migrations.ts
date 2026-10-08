@@ -686,6 +686,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, setup: { mode: 'roaming', settings: { damage: 1, fuelUse: 1, supplyUse: 1 } } }),
   // 29 to 30: money becomes integer cents of M, 1 M per 5 L of fuel.
   withCents_29_30,
+  // 30 to 31: a raid may record when its watch ends; older raids have none.
+  (world) => world,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

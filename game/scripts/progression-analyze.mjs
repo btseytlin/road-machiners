@@ -5,6 +5,7 @@
 import { createReadStream, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { JobTally } from '../src/sim/progression/job-checks.ts';
+import { HUNT } from '../src/data/npc-behavior.ts';
 import { moneyText } from '../src/ui/units.ts';
 
 // A loss of more than this share of net worth within LOSS_TURNS counts as a big loss: about one stolen gun.
@@ -20,6 +21,11 @@ const STALL_TURNS = 60;
 const FLAP_COUNT = 6;
 const FLAP_TURNS = 40;
 const FLAP_KINDS = new Set(['towDropped', 'towOffer', 'towHitched', 'stateEnded', 'hostile']);
+
+// Raiders on a hunting goal travel off the road, so road traffic does not see them coming. At most this share of
+// their moving snapshots may be on road.
+const HUNT_ROAD_TARGET = 0.25;
+const HUNT_GOALS = new Set(HUNT.offRoadGoals);
 
 const argv = process.argv.slice(2).filter((a) => a !== '--');
 const dir = argv[0];
@@ -247,11 +253,15 @@ function printOffRoad(lines) {
   const by = Map.groupBy(moving.filter((v) => v.offRoad), offRoadReason);
   const off = [...by.entries()].map(([why, vs]) => `${why} ${share(vs)}`).join(', ') || 'none';
   console.log(`raiders keeping off roads: ${off}; healthy raiders ${share(moving.filter((v) => !v.offRoad))}`);
+  const hunting = by.get('hunting') ?? [];
+  const onRoad = hunting.filter((v) => v.onRoad).length;
+  if (hunting.length > 0 && onRoad / hunting.length > HUNT_ROAD_TARGET) console.log(`MISS: hunting raiders on road above ${100 * HUNT_ROAD_TARGET}%`);
 }
 
 function offRoadReason(v) {
   const top = v.goals.at(-1)?.split(':')[0];
-  return top === 'retreat' || top === 'flee' ? top : 'stranded';
+  if (top === 'retreat' || top === 'flee') return top;
+  return HUNT_GOALS.has(top) ? 'hunting' : 'stranded';
 }
 
 // Every truck lost or knocked out, with the turn and who did it.

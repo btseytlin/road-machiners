@@ -239,7 +239,7 @@ describe('far NPC travel', () => {
     for (let i = 0; i < t.types.length; i++) t.types[i] = Math.abs(Math.floor(i / t.size) + 0.5 - 120) < 3 ? 'road' : 'hardpan';
     const far = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 120, y: 120 });
     far.brain = npcBrain('raider', { x: 0, y: 0 }, ['raider']);
-    far.brain.goals = [{ kind: 'patrol', targetId: null, destination: null, phase: 'travel', reason: 'test patrol' }];
+    far.brain.goals = [{ kind: 'sell', targetId: null, destination: null, phase: 'travel', reason: 'test patrol' }];
     far.order = { kind: 'stopAt', dest: { x: 180, y: 120 } };
     advanceFar(w, far);
     expect(far.brain.farRoute!.offRoad).toBe(false);

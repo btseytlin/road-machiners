@@ -101,6 +101,13 @@ export const NPC_BEHAVIOR = {
   // Investigate weight times this when the cab or a driving part is at or below the recover condition. A raider's
   // investigate weight of 12 drops to 0.12, so a crippled raider closes in on a contact 1 to 4 times in 100.
   crippledInvestigate: 0.01,
+  // Keep weight times this when a raider watching from its post hears prey beyond sight. A raider's 1 : 10.8 : 3 for
+  // keep, investigate and flee becomes 30 : 10.8 : 3, so it lies low about 2 times in 3 and lets the prey come on.
+  watchKeep: 30,
+  // Resume weight times this when a raider with sale cargo comes back to its raid or patrol after an interruption,
+  // like looting a robbed truck. Resume 9 x 0.01 against new 1 resumes about 1 time in 12, so the raider mostly drops
+  // the hunt and takes the cargo to a camp, or scrap and parts to the Salvage Yard, as an empty stack does.
+  lootedResume: 0.01,
   // A ram is worth its expected net damage: what the crash model says it takes off the target minus what it takes off
   // the rammer, each part counted by partWeight, times the chance it connects. It competes with the rammer's guns over
   // the same turns, at gunWeight per point of gun damage that gets past the armor. The ram's share of the two is the
@@ -218,6 +225,20 @@ export const HUNT = {
   siteDistance: 40,
   // Tiles from any lawman town gate within which a raider never hunts: the farthest lawman patrol stop plus its sight.
   lawReach: NPC_BEHAVIOR.patrolRadius + TERRAIN.vision.radius,
+  // A raider whose top goal is one of these routes off the road; see src/sim/hunt-style.ts, read by keepsOffRoads() in src/sim/off-road.ts.
+  offRoadGoals: ['raid', 'patrol', 'investigate'] as const,
+  // Watch posts; see src/sim/watch-posts.ts. A post lies at least postRoadGap tiles from a road's edge, where a
+  // parked raider is out of the way of traffic but a road in sight. A ground that is no post itself tries points
+  // on each ring, in tiles around it, at postBearings even bearings, and keeps the first that qualifies. Every ring
+  // lies inside the 20-tile sight radius, so the post sees its ground.
+  postRoadGap: 6,
+  postRings: [10, 14, 7],
+  postBearings: 16,
+  // Tiles along a road between two stops of a raider patrol around its camp, before they move to their posts.
+  patrolPostSpacing: 20,
+  // Turns a raid watches from its post, parked and silent. It stays under NPC_BEHAVIOR.stallTurns, so a watching
+  // raider never stalls.
+  watchTurns: 40,
 };
 
 // Driver memories; see src/sim/memory.ts. Each kind's lifetime in turns is explicit. One game day is the default:
