@@ -6,25 +6,22 @@ import type { Observation, SchedulerData } from '../observability';
 import { summarizeDelivery, type DeliverySummary } from './delivery';
 
 const DAY_MS = 86_400_000;
-// A card can take months from triage to its merge, so card lines stay longer than the 30 days of usage. Each card writes a few lines, so this stays small.
 const CARD_DAYS = 180;
 type Job = Extract<LedgerLine, { kind: 'job' }>;
 type CardLine = Extract<LedgerLine, { kind: 'card' }>;
 type Counts = { input: number; output: number; cacheRead: number; cacheWrite: number };
-// A bucket is one UTC hour for the 24-hour range and one UTC day otherwise. Segment tokens count measured usage only.
 type Segment = { cost: number; tokens: number };
 type Bucket = { start: string; cost: number; tokens: Counts | null; stages: Record<string, Segment>; models: Record<string, Segment> };
 const UNATTRIBUTED = 'unattributed';
 type Summary = {
   days: number; since: string | null; completed: number; failed: number; timeouts: number; workerMs: number;
   cost: number | null; tokens: Counts | null; missingUsage: number; collectionFaults: number;
-  // Spend of jobs that failed, died or timed out, including runs priced from their transcripts.
   wasted: { cost: number | null; tokens: Counts | null };
   models: ModelUsage[]; stageModels: (ModelUsage & { stage: JobStage })[]; stages: { stage: string; workerMs: number; cost: number | null }[];
   issues: { issue: number; workerMs: number; cost: number | null }[];
   buckets: Bucket[];
   activity: { stage: JobStage; issue: number | null; outcome: string; at: string }[];
-  waitingMs: number | null; waitingStages: { stage: string; workerMs: number }[]; waitingGaps: number;
+  waitingMs: number | null; waitingSpanMs: number | null; waitingStages: { stage: string; workerMs: number }[]; waitingGaps: number;
   retries: { outcome: string; runs: number; workerMs: number; cost: number | null }[];
   delivery: DeliverySummary | null;
 };
@@ -42,7 +39,7 @@ function getPublicIssue(job: Job): number | null {
   return job.stage === 'change' || job.stage === 'adhoc' ? null : job.issue;
 }
 function createSummary(days: number, since: string | null): Summary {
-  return { days, since, completed: 0, failed: 0, timeouts: 0, workerMs: 0, cost: null, tokens: null, missingUsage: 0, collectionFaults: 0, wasted: { cost: null, tokens: null }, waitingMs: null, waitingStages: [], waitingGaps: 0, retries: [], delivery: null, models: [], stageModels: [], stages: [], issues: [], buckets: [], activity: [] };
+  return { days, since, completed: 0, failed: 0, timeouts: 0, workerMs: 0, cost: null, tokens: null, missingUsage: 0, collectionFaults: 0, wasted: { cost: null, tokens: null }, waitingMs: null, waitingSpanMs: null, waitingStages: [], waitingGaps: 0, retries: [], delivery: null, models: [], stageModels: [], stages: [], issues: [], buckets: [], activity: [] };
 }
 function addCost(summary: Summary, stage: StageRow, issue: IssueRow | null, cost: number): void {
   summary.cost = (summary.cost ?? 0) + cost;
@@ -126,7 +123,6 @@ function getJobRows(totals: Totals, job: Job, publicIssue: number | null, durati
   return { stage, issue };
 }
 
-// A run cut off and then resumed is priced once from its transcript and once by Claude Code. Both price the same tokens, but sum the floats in another order.
 const COST_ROUNDING = 1e-6;
 function subtractMeasurement(current: number, previous: number): number {
   const value = current - previous;
@@ -173,6 +169,7 @@ type SchedulerPoint = Observation & { data: SchedulerData };
 function addWaitInterval(summary: Summary, point: SchedulerPoint, duration: number): void {
   if (point.data.report === null) return;
   summary.waitingMs ??= 0;
+  summary.waitingSpanMs = (summary.waitingSpanMs ?? 0) + duration;
   const waiting = point.data.report.decisions.filter((decision) => decision.reasons.length && !decision.reasons.includes('issue-running'));
   const issues = new Set<string>();
   for (const decision of waiting) {

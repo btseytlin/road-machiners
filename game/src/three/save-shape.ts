@@ -3,7 +3,6 @@
 
 export type Shape = string | Shape[] | { [key: string]: Shape };
 
-// Arrays list each distinct element shape once, in a fixed order, so the shape does not grow with the data.
 export function shapeOf(value: unknown): Shape {
   if (value === null) return 'null';
   if (Array.isArray(value)) {

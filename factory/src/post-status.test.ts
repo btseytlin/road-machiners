@@ -17,7 +17,7 @@ describe('withStatus', () => {
 
 describe('pruneCaptions', () => {
   it('keeps the captions of open approval posts and the current candidate only', () => {
-    const release = { issue: 3, branch: 'release/x', day: 'x', postId: 30, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } };
+    const release = { issue: 3, branch: 'release/x', day: 'x', postId: 30, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } };
     const state = { ...structuredClone(EMPTY_STATE), approvalPosts: { 10: 1 }, release, postCaptions: { 10: 'a', 20: 'gone', 30: 'rc' } };
     expect(pruneCaptions(state).postCaptions).toEqual({ 10: 'a', 30: 'rc' });
   });

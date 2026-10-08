@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { pointInPolygon, polygonEdgeDist } from './vec';
 
-// A 10 by 10 square with one corner at the origin.
 const SQUARE = [
   { x: 0, y: 0 },
   { x: 10, y: 0 },

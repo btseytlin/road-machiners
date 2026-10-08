@@ -11,13 +11,11 @@ function setUp() {
   return w;
 }
 
-// A wagon with a forward cannon: it can only shoot what is ahead.
 function cannonWagon(w: World, x: number, engine = 'stockEngine'): Vehicle {
   return addVehicle(w, 'raiders', 'wagon', ['cannon', engine], { x, y: 10 });
 }
 
 describe('fight odds', () => {
-  // A truck that only shoots forward loses to one that is faster and gets behind it.
   it('lets the faster truck pick the sides', () => {
     const w = setUp();
     const slowMg = addVehicle(w, 'traders', 'wagon', ['mg', 'heavyDiesel'], { x: 40, y: 10 });
@@ -56,7 +54,6 @@ describe('fight odds', () => {
     expect(fightOdds(w, [unarmed], [cannonWagon(w, 10)]).win).toBe(0);
   });
 
-  // A trader with no gun fled from a stranded buggy with no gun, as if the stand-off were a coin flip.
   it('is never lost against a truck with no working gun', () => {
     const w = setUp();
     const unarmed = addVehicle(w, 'traders', 'van', ['stockEngine'], { x: 40, y: 10 });

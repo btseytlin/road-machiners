@@ -3,7 +3,6 @@ import { addVehicle, emptyWorld } from './testkit';
 import { autoOrders, fireWeapons } from './combat';
 import { canVehicleSee } from './vision';
 
-// A rock spire stands taller than eye height, unlike a low wreck, which trucks see over.
 it('can see a rock spire itself without seeing through it', () => {
   const w = emptyWorld();
   const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 13, y: 12 });

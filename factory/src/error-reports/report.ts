@@ -5,8 +5,6 @@ import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 
 import type { ReportBuild } from '../sourcemaps';
 
-// An error report from a game build, as game/src/three/error-report.ts sends it. Change both together.
-// Everything in it comes from a stranger, so each field is checked before use.
 export type ErrorReport = {
   build: ReportBuild;
   version: string;
@@ -22,7 +20,6 @@ export type ErrorReport = {
 
 export type RejectReason = 'origin' | 'address' | 'rate' | 'size' | 'shape' | 'commit' | 'stack' | 'disk';
 
-// A report the service refuses. The status is the HTTP answer, and the reason counts in the store.
 export class Rejected extends Error {
   constructor(readonly reason: RejectReason, readonly status: number, message: string) {
     super(message);
@@ -30,7 +27,6 @@ export class Rejected extends Error {
 }
 
 const BUILDS: readonly string[] = ['release', 'dev', 'candidate'];
-// SAVE_MAJOR.minor.commits+hash, from game/src/version.ts.
 const VERSION = /^\d+\.\d+\.\d+\+([0-9a-f]{7,40})$/;
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -57,7 +53,6 @@ export function parseReport(value: unknown): ErrorReport {
   return value as ErrorReport;
 }
 
-// The short commit hash at the end of the version.
 export function commitOf(report: ErrorReport): string {
   return (VERSION.exec(report.version) as RegExpExecArray)[1];
 }
@@ -65,7 +60,6 @@ export function commitOf(report: ErrorReport): string {
 export type Frame = { source: string; line: number; column: number; name: string | null };
 type RawFrame = { url: string; line: number; column: number };
 
-// Chrome and Safari write "at fn (url:line:col)" or "at url:line:col". Firefox writes "fn@url:line:col".
 const FRAME = /(?:\(|@|at )(\S+?):(\d+):(\d+)\)?$/;
 
 function rawFrames(stack: string): RawFrame[] {
@@ -75,8 +69,6 @@ function rawFrames(stack: string): RawFrame[] {
   });
 }
 
-// Maps each stack frame of a build file through that file's map in `mapDir`. A frame with no map, like a browser
-// extension's, drops out. Columns in stacks count from 1, in maps from 0.
 export function mapFrames(stack: string, mapDir: string): Frame[] {
   const maps = existsSync(mapDir) ? mapFiles(mapDir) : new Map<string, string>();
   const loaded = new Map<string, TraceMap>();
@@ -95,16 +87,12 @@ function mapFiles(dir: string): Map<string, string> {
   return new Map(files.map((file) => [basename(file), join(dir, file)]));
 }
 
-// Vite writes sources relative to the map, like ../../src/sim/damage.ts. The game path reads better.
 function sourcePath(source: string): string {
   return source.replace(/^(\.\.\/)+/, '');
 }
 
-// Three frames tell code paths apart, while callers further up may change without making a new error.
 const FINGERPRINT_FRAMES = 3;
 
-// The same error from any commit gets the same fingerprint. Line numbers move between commits, so the fingerprint
-// takes the file and the name at the top game frames, and the message with its numbers blanked.
 export function fingerprintOf(error: ErrorReport['error'], frames: readonly Frame[]): string {
   const game = frames.filter((frame) => !frame.source.includes('node_modules'));
   const top = (game.length > 0 ? game : frames).slice(0, FINGERPRINT_FRAMES).map((frame) => `${frame.source}:${frame.name ?? ''}`);

@@ -1,10 +1,6 @@
 // Sound around the player's truck: for each truck heard beyond sight, a faint arc about 3 tiles out,
 // pointing toward it, that hums and sends small ripples outward like an engine note made visible.
 // Sound gives a bearing, not a place, so it shows only direction, vagueness, loudness and distance.
-// - Width: how vague the bearing is. A near truck gives a narrow arc, a far one a wide arc.
-// - Thickness: how loud the engine is. Big engines and fast trucks are louder.
-// - Brightness: how near the sound is.
-// Every arc pulses once when a turn begins.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
@@ -14,31 +10,31 @@ import type { Contact } from '../../sim/types';
 import { dist, type Vec } from '../../sim/vec';
 
 const S = PHYSICS.metersPerTile;
-const RENDER_ORDER = 906; // above the fog and the contact markers
-const LIFT = 0.1; // meters above the ground under the truck
+const RENDER_ORDER = 906;
+const LIFT = 0.1;
 const DEG = Math.PI / 180;
 const ARC = {
-  radius: 3, // tiles from the truck center to the arc's inner edge
-  thin: 0.12, // tiles thick for the quietest engine
-  thick: 0.7, // tiles thick for the loudest
-  quietest: 60, // loudness, in tiles an engine carries, drawn thinnest
-  loudest: 260, // loudness drawn thickest
-  minHalf: 8, // degrees; the narrowest arc, for a near sound
-  maxHalf: 70, // degrees; the widest, for the vaguest bearing
-  far: 90, // tiles at which a sound is at its faintest
-  dim: 0.08, // opacity of the faintest sound
-  bright: 0.3, // opacity of the nearest sound
-  pulse: 0.2, // extra opacity at the start of a turn
-  pulseSeconds: 1.2, // time for the pulse to die away
-  hum: 0.025, // share of radius the arc trembles by
+  radius: 3,
+  thin: 0.12,
+  thick: 0.7,
+  quietest: 60,
+  loudest: 260,
+  minHalf: 8,
+  maxHalf: 70,
+  far: 90,
+  dim: 0.08,
+  bright: 0.3,
+  pulse: 0.2,
+  pulseSeconds: 1.2,
+  hum: 0.025,
   humHz: 3,
 };
 const RIPPLE = {
-  count: 3, // in flight per arc, evenly spaced
-  seconds: 3.2, // time for one ripple to travel out and fade
-  travel: 1.6, // tiles a ripple moves out from the arc
-  opacity: 0.6, // share of the arc's opacity a fresh ripple starts at
-  thickness: 0.35, // share of the arc's thickness a ripple has
+  count: 3,
+  seconds: 3.2,
+  travel: 1.6,
+  opacity: 0.6,
+  thickness: 0.35,
 };
 
 type Arc = { main: THREE.Mesh; ripples: THREE.Mesh[]; key: string; thickness: number };
@@ -49,7 +45,6 @@ export class SoundRingView {
   private lastTurn = -1;
   private turnMs = 0;
 
-  // listener: the player's truck as drawn this frame, in map tiles.
   update(terrain: Terrain, contacts: Contact[], listener: Vec, turn: number, nowMs: number): void {
     if (turn !== this.lastTurn) {
       this.lastTurn = turn;
@@ -76,7 +71,6 @@ export class SoundRingView {
       const loud = Math.min(1, Math.max(0, (c.loudness! - ARC.quietest) / (ARC.loudest - ARC.quietest)));
       const thickness = ARC.thin + (ARC.thick - ARC.thin) * loud;
       const arc = this.arcFor(c.vehicleId);
-      // Rebuild the shapes only when bearing, width or thickness change, which happens once a turn.
       const key = `${bearing.toFixed(3)},${half.toFixed(3)},${thickness.toFixed(3)}`;
       if (key !== arc.key) {
         arc.key = key;
@@ -86,7 +80,6 @@ export class SoundRingView {
       }
       const near = Math.max(0, 1 - d / ARC.far);
       const opacity = Math.min(1, ARC.dim + (ARC.bright - ARC.dim) * near + pulse);
-      // A small tremble at engine frequency, offset per contact so arcs do not hum in step.
       arc.main.scale.setScalar(1 + ARC.hum * Math.sin((seconds * ARC.humHz + index * 0.37) * Math.PI * 2));
       (arc.main.material as THREE.MeshBasicMaterial).opacity = opacity;
       arc.ripples.forEach((r, k) => {
@@ -112,8 +105,6 @@ export class SoundRingView {
   }
 }
 
-// An arc on the ground centered on a map bearing. RingGeometry sweeps in its own plane; after the
-// rotation onto the ground, map angle a becomes -a.
 function setArc(mesh: THREE.Mesh, bearing: number, half: number, radius: number, thickness: number): void {
   mesh.geometry.dispose();
   mesh.geometry = new THREE.RingGeometry(radius * S, (radius + thickness) * S, 24, 1, -bearing - half, half * 2).rotateX(-Math.PI / 2);

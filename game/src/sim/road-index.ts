@@ -4,7 +4,6 @@
 import { REGION } from '../data/region';
 import type { Vec } from './vec';
 
-// Cell side in tiles. Terrain queries reach 1.5 to 25 tiles, so a query touches at most 4 x 4 cells.
 export const INDEX_CELL = 16;
 
 export class RoadIndex {
@@ -17,7 +16,6 @@ export class RoadIndex {
   private readonly cols: number;
   private readonly rows: number;
   private readonly cells: Int32Array[];
-  // Stamp per segment, so a segment in several cells is measured once per query.
   private readonly seen: Uint32Array;
   private stamp = 0;
 
@@ -52,8 +50,6 @@ export class RoadIndex {
     this.seen = new Uint32Array(n);
   }
 
-  // Exact distance from (x, y) to the nearest segment when it is under reach, else Infinity.
-  // Matches polylineDist over all lines bit for bit inside reach.
   nearestWithin(x: number, y: number, reach: number): number {
     const cell = this.cell;
     const c0 = Math.max(0, Math.floor((x - reach - this.minX) / cell));
@@ -82,7 +78,6 @@ export class RoadIndex {
   }
 }
 
-// Same arithmetic as segmentDist in vec.ts, without object arguments.
 function segmentDistXY(px: number, py: number, ax: number, ay: number, bx: number, by: number): number {
   const dx = bx - ax;
   const dy = by - ay;

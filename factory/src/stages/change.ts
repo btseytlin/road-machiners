@@ -6,20 +6,16 @@ import { FACTORY_DIR, OUT_DIR, TASK_DIR, type Ctx } from '../types';
 import { prBody, prGuide, prTitle } from './change-pr';
 import { RESUME_NOTE, agentHome, agentLog, fillPrompt, isResuming, prepareOutputs, readOutput, useOpenNetwork } from './common';
 
-// Every path a unified diff touches, from its `diff --git a/x b/y` headers.
 export function diffPaths(diff: string): string[] {
   const paths: string[] = [];
   for (const match of diff.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)) paths.push(match[1], match[2]);
   return [...new Set(paths)];
 }
 
-// The server runs main's factory code and settings, and deploys each new main. So a factory change starts from main and merges into it.
 const CHANGE_BASE = 'main';
 
-// The change agent's task file, in the gitignored task folder of its clone, like a game issue's.
 export const CHANGE_TASK_FILE = (id: number): string => `${TASK_DIR}/change-${id}.md`;
 
-// Runs one committee request to change the factory, or anything else in the repo, through up:make and opens a pull request that only a human merges.
 export async function change(ctx: Ctx, id: number): Promise<void> {
   const request = readState(ctx.statePath).pendingChanges.find((item) => item.id === id);
   if (!request) throw new Error(`no pending factory change ${id}`);
@@ -45,7 +41,6 @@ export async function change(ctx: Ctx, id: number): Promise<void> {
   ctx.log('change', id, `opened ${url}`);
 }
 
-// The agent runs on the design model, since it designs and plans as well as builds. A resumed job continues its session in the clone it left.
 async function runChangeAgent(ctx: Ctx, id: number, dir: string, resuming: boolean): Promise<void> {
   const session = roundSession(ctx.cfg.home, id, 'change', resuming);
   if (session.resume) ctx.log('change', id, `resuming round change, session ${session.id}`);

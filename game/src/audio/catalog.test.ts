@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { filesOf, SOUNDS } from "../data/sounds";
 
-// Keys are paths like /public/sfx/mg-fire-1.ogg; the glob skips dotfiles.
 const onDisk = Object.keys(import.meta.glob("/public/sfx/*")).map((p) => p.split("/").pop()!);
 
 describe("sound catalog", () => {

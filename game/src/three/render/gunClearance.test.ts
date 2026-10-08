@@ -24,8 +24,8 @@ await loadModels(async (name) => {
   return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0)).buffer;
 });
 
-const SLOW = 600_000; // ms: each case builds many truck views
-const TOLERANCE = 0.01; // meters a head may cut into an obstacle
+const SLOW = 600_000;
+const TOLERANCE = 0.01;
 type Box = { x0: number; x1: number; z0: number; z1: number; top: number; what: string };
 
 function headVertices(gun: Extract<GridItem, { kind: 'part' }>): THREE.Vector3[] {
@@ -46,7 +46,6 @@ function headVertices(gun: Extract<GridItem, { kind: 'part' }>): THREE.Vector3[]
   return out;
 }
 
-// Boxes of the drawn items a head can hit: no weapons, no body parts, no armor, engines or mounted wheels.
 function obstacles(v: Vehicle, skip: GridItem): Box[] {
   const g = baseGrid(v.chassisId);
   const out: Box[] = [];
@@ -62,7 +61,6 @@ function obstacles(v: Vehicle, skip: GridItem): Box[] {
     }
     if (wouldFloat(v, it)) continue;
     const rest = restOn(v.chassisId, cellRect(v.chassisId, itemCells(it)));
-    // The model's own box, stretched and turned to its footprint: a model need not fill its cells.
     const at = footprint(v, it, rest.y);
     const box = new THREE.Box3().setFromObject(model(partModel(what))).applyMatrix4(new THREE.Matrix4().compose(at.pos, new THREE.Quaternion().setFromEuler(new THREE.Euler(0, at.yaw, 0)), at.scale));
     out.push({ x0: box.min.x, x1: box.max.x, z0: box.min.z, z1: box.max.z, top: box.max.y, what });
@@ -70,12 +68,11 @@ function obstacles(v: Vehicle, skip: GridItem): Box[] {
   return out;
 }
 
-// Every clip of every gun's head on the vehicle, as readable lines.
 function clips(world: World, v: Vehicle): string[] {
   const view = new VehicleView(v, true);
   const problems: string[] = [];
   for (const gun of v.items.filter((it): it is Extract<GridItem, { kind: 'part' }> => it.kind === 'part' && partDef(it.part.defId).kind === 'weapon')) {
-    if (itemCells(gun).some((c) => c.y >= baseGrid(v.chassisId).h)) continue; // a cargo row gun is not drawn
+    if (itemCells(gun).some((c) => c.y >= baseGrid(v.chassisId).h)) continue;
     const pivot = view.partPoint(gun.part.id);
     const pts = headVertices(gun);
     const spans = isMounted(v.chassisId, gun) ? fireSpans((partDef(gun.part.defId) as WeaponDef).arc, openSides(v, gun)) : [];
@@ -97,7 +94,6 @@ function clips(world: World, v: Vehicle): string[] {
         for (const b of boxes) {
           if (x > b.x0 && x < b.x1 && z > b.z0 && z < b.z1 && b.top - y > worst) { worst = b.top - y; where = `${b.what} at yaw ${a}`; }
         }
-        // The body is a 10 cm height map and a sample whose center lies in the gun's own footprint belongs to the gun.
         const cell = surfaceSamples(v.chassisId, { x, z }, 0.08).find((c) => Math.abs(c.x - x) <= c.half && Math.abs(c.z - z) <= c.half);
         if (cell && cell.x >= own.x0 && cell.x <= own.x1 && cell.z >= own.z0 && cell.z <= own.z1) continue;
         const surface = highestUnder(v.chassisId, { x0: x - 0.02, x1: x + 0.02, z0: z - 0.02, z1: z + 0.02 });
@@ -128,7 +124,6 @@ function bare(chassisId: string): { world: World; v: Vehicle } {
   return { world, v };
 }
 
-// Fills every free plain or deck cell with the tallest good, so a head has something to cut at each cell.
 function fill(world: World, v: Vehicle): void {
   const g = baseGrid(v.chassisId);
   for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) if (g.cells[y][x] === '.' || g.cells[y][x] === 'D') place(world, v, null, 'electronics', x, y, 0);

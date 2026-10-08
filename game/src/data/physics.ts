@@ -1,16 +1,16 @@
 // Physics driving numbers. Lengths in meters, time in seconds, mass in kilograms.
 
 export const PHYSICS = {
-  metersPerTile: 4, // one map tile and one height unit are this many meters
+  metersPerTile: 4,
   gravity: 9.81,
   stepsPerSecond: 60,
-  turnSeconds: 1, // simulated time per turn; tiles per turn in the rules become tiles per second
+  turnSeconds: 1,
   truck: {
-    gravityScale: 2, // trucks fall faster than the world's gravity, so bumps do not throw them in the air
-    comBelow: 0.7, // meters the center of mass sits below the chassis box center, near the axles, so trucks rarely flip
-    flipTilt: 60, // degrees of body tilt from upright past which a truck counts as flipped
-    liftedRise: 0.5, // meters above its ride height past which a truck counts as lifted off the ground; above suspensionTravel, so no wheel reaches
-    inertiaScale: 2, // rotational inertia relative to a plain box of the same mass, so trucks resist rolling
+    gravityScale: 2,
+    comBelow: 0.7,
+    flipTilt: 60,
+    liftedRise: 0.5,
+    inertiaScale: 2,
     suspensionRest: 0.4,
     suspensionTravel: 0.3,
     suspensionStiffness: 30,
@@ -19,17 +19,13 @@ export const PHYSICS = {
     maxSuspensionForce: 100000,
     frictionSlip: 2,
     sideFrictionStiffness: 1,
-    engineAccel: 12, // m/s^2 the engine can give at full throttle, before damage
-    climbReserve: 0.25, // share of engine force a truck adds against a climb, never more than the climb's pull: a low gear that raises the steepest holdable grade by about 20% in sine (measured 18.5-21% across builds) without speeding up flat starts
-    brakeForce: 60, // per wheel per ton of chassis handling mass, at full brake
-    maxSteer: 0.6, // radians of front wheel angle
-    steerRate: 3, // radians per second the wheels can turn
+    engineAccel: 12,
+    climbReserve: 0.25,
+    brakeForce: 60,
+    maxSteer: 0.6,
+    steerRate: 3,
   },
-  // One deck cell in meters, as the base models are built. Only the drawing of parts still reads it. Sim code goes through the projection in src/sim/body.ts.
   cell: { across: 0.484, along: 0.65 },
-  // Body per chassis look, in meters. Length and width come from the base model. halfHeight: chassis box half height.
-  // wheelX: axle distance from the center. wheelZ: wheel distance from the center line. wheelY: suspension mount height relative to the chassis center.
-  // engine: the center of the hood hole on the bay floor, in body space. Mass comes from src/sim/mass.ts.
   bodies: {
     pickup: { halfHeight: 0.45, wheelY: -0.3, wheelX: 1.625, wheelZ: 0.968, engine: { x: 1.3, y: 0.05, z: -0.242 }, wheelRadius: 0.45, wheelHalfWidth: 0.18 },
     hauler: { halfHeight: 0.6, wheelY: -0.4, wheelX: 1.95, wheelZ: 1.452, engine: { x: 1.625, y: 1.21, z: -0.242 }, wheelRadius: 0.6, wheelHalfWidth: 0.25 },
@@ -49,25 +45,22 @@ export const PHYSICS = {
     loader: { halfHeight: 0.65, wheelY: -0.45, wheelX: 1.95, wheelZ: 1.452, engine: { x: -0.975, y: 0.5, z: -0.242 }, wheelRadius: 0.8, wheelHalfWidth: 0.32 },
   },
   driver: {
-    steerGain: 1.6, // wheel angle per radian of heading error
-    throttleGain: 0.5, // throttle per m/s of speed error
-    stopDecel: 8, // m/s^2 a driver plans to brake at when stopping on a point, at handling mass
-    cornerAccel: 15, // m/s^2 sideways a driver plans to corner at; trucks orbit a missed point at about 30 on flat ground
-    cornerCut: 8, // meters before a route corner where the driver starts its turn, and after it where the turn ends
-    reverseBelow: 4, // m/s; only a truck slower than this starts backing up
-    reverseSpeed: 5, // m/s while backing up
-    stallSpeed: 0.3, // m/s; a truck pushing at a point behind it slower than this is blocked in front
-    stallSeconds: 0.5, // seconds blocked in front before the truck backs up; a truck from rest passes stallSpeed sooner
+    steerGain: 1.6,
+    throttleGain: 0.5,
+    stopDecel: 8,
+    cornerAccel: 15,
+    cornerCut: 8,
+    reverseBelow: 4,
+    reverseSpeed: 5,
+    stallSpeed: 0.3,
+    pushSpeed: 1,
+    stallSeconds: 0.5,
   },
-  rockHeight: 3, // meters of obstacle collider height
-  rockSink: 0.5, // meters an obstacle collider reaches below the ground, so slopes leave no gap
-  // Meters above the ground past which a prop box is no collider, so trucks pass under canopies and boards.
-  // A truck collider stops at truckRoof at rest; the 0.5 m above it leave room for suspension bounce.
+  rockHeight: 3,
+  rockSink: 0.5,
   truckRoof: 2.3,
   truckClearance: 2.8,
-  // Tiles past the reach of trucks with bodies within which props keep colliders: more than a turn at the top speed
-  // of the fastest kit, 15.6 tiles, plus the longest truck.
   propLiveMargin: 20,
-  bridge: { deckThickness: 0.6, railHeight: 1.6, railThickness: 0.3 }, // meters
-  wallHeight: 200, // meters; half height of the walls at the map edge
+  bridge: { deckThickness: 0.6, railHeight: 1.6, railThickness: 0.3 },
+  wallHeight: 200,
 } as const;

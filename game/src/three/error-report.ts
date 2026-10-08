@@ -5,25 +5,25 @@
 import { CONFIG } from '../config';
 import type { DriveSnapshot } from '../phys/drive';
 import type { World } from '../sim/types';
-import { SAVE_KEY, saveOf } from './save';
-import { listSaves, slotKey } from './save-slots';
+import { saveOf } from './save';
+import type { SaveSlots } from './save-db';
+import { listSaves } from './save-slots';
 import { TurnFailure } from './travel';
 
 export type ErrorReport = {
-  build: string; // release, dev or candidate
+  build: string;
   version: string;
   error: { name: string; message: string; stack: string };
   userAgent: string;
   turn: number | null;
-  log: string[]; // newest first
-  world: object | null; // the save of the world in memory
-  autosave: string | null; // the stored Autosave as written, null when there is none or it is the world in memory
+  log: string[];
+  world: object | null;
+  autosave: string | null;
   autosaveIsWorld: boolean;
-  drive: (Omit<DriveSnapshot, 'snapshot'> & { snapshot: string }) | null; // a failed turn's start, the Rapier snapshot in base64
+  drive: (Omit<DriveSnapshot, 'snapshot'> & { snapshot: string }) | null;
 };
 
-// What the running game shows the reporter. Boot errors come before it and report no world.
-export type ReportSource = { world: () => World; log: () => string[] };
+export type ReportSource = { world: () => World; log: () => string[]; slots: SaveSlots };
 
 type Post = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -35,7 +35,6 @@ export class ErrorReporter {
     private readonly url: string,
     private readonly build: string,
     private readonly version: string,
-    private readonly storage: Storage,
     private readonly post: Post = (url, init) => fetch(url, init),
   ) {}
 
@@ -43,8 +42,6 @@ export class ErrorReporter {
     this.source = source;
   }
 
-  // Sends `err` unless this session already sent the same error, so an error that repeats every frame sends once.
-  // A failed send only warns, since a report must never change the game.
   report(err: unknown): Promise<void> {
     const error = describeError(err);
     const key = `${error.name}: ${error.message}`;
@@ -61,15 +58,16 @@ export class ErrorReporter {
 
   private compose(err: unknown, error: ErrorReport['error']): ErrorReport {
     const head = { build: this.build, version: this.version, error, userAgent: navigator.userAgent, drive: driveOf(err) };
-    const autosave = this.storage.getItem(slotKey(SAVE_KEY, 'auto'));
-    if (!this.source) return { ...head, turn: null, log: [], world: null, autosave, autosaveIsWorld: false };
+    if (!this.source) return { ...head, turn: null, log: [], world: null, autosave: null, autosaveIsWorld: false };
+    const { slots } = this.source;
+    const autosave = slots.has('auto') ? JSON.stringify(slots.get('auto')) : null;
     const world = this.source.world();
-    const autosaveIsWorld = autosave !== null && this.autosaveTurn() === world.turn;
+    const autosaveIsWorld = autosave !== null && this.autosaveTurn(slots) === world.turn;
     return { ...head, turn: world.turn, log: this.source.log(), world: saveOf(world), autosave: autosaveIsWorld ? null : autosave, autosaveIsWorld };
   }
 
-  private autosaveTurn(): number | null {
-    const info = listSaves(this.storage, SAVE_KEY, CONFIG.saveSlots).find((slot) => slot.slot === 'auto');
+  private autosaveTurn(slots: SaveSlots): number | null {
+    const info = listSaves(slots, CONFIG.saveSlots).find((slot) => slot.slot === 'auto');
     return info ? info.turn : null;
   }
 }
@@ -88,7 +86,6 @@ function encodeDrive(drive: DriveSnapshot): NonNullable<ErrorReport['drive']> {
   return { ...handles, snapshot: toBase64(snapshot) };
 }
 
-// String.fromCharCode takes its bytes as arguments, so a large snapshot goes in slices under the engines' argument limit.
 const BASE64_SLICE = 0x8000;
 
 function toBase64(bytes: Uint8Array): string {

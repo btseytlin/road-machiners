@@ -13,7 +13,6 @@ import type { Vec } from './vec';
 import { canVehicleSee, hasLineOfFire, refreshVision } from './vision';
 import { endTurn } from './world';
 
-// The player at 30,30 with its machine gun, and a raider buggy 3 tiles east facing it.
 function duel(): { w: World; me: Vehicle; buggy: Vehicle } {
   const w = emptyWorld();
   const me = w.vehicles[0];
@@ -30,7 +29,6 @@ function smokeCause(w: World, me: Vehicle, buggy: Vehicle): number {
   return hitOdds(w, me, vehicleStats(w, me).weapons[0], buggy, 'body').causes.smoke;
 }
 
-// The player's truck with the utility mounted on a free deck cell.
 function playerWith(defId: string): { w: World; me: Vehicle; part: PartInstance } {
   const w = emptyWorld();
   const me = w.vehicles[0];

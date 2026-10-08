@@ -7,10 +7,9 @@ import { cueOf, importFile } from './sfx-lib.mjs';
 
 const API = 'https://api.elevenlabs.io/v1';
 const RAW_DIR = 'tmp/sfx-raw';
-const SFX_CREDITS_PER_SECOND = 10; // ElevenLabs price for sound effects with a set duration; the API asked 12 credits for 1.2 s
-const PROMPT_INFLUENCE = 0.7; // well above the API default of 0.3, so the shared recording setup is followed
+const SFX_CREDITS_PER_SECOND = 10;
+const PROMPT_INFLUENCE = 0.7;
 
-// Agent containers get the key in their env and have no .env file.
 if (existsSync('.env')) process.loadEnvFile('.env');
 const key = process.env.ELEVENLABS_API_KEY;
 const cap = Number(process.env.SFX_MAX_GENERATIONS);
@@ -22,13 +21,11 @@ const count = Number(countArg);
 if (!id || !Number.isInteger(count) || count <= 0) throw new Error('Usage: npm run sfx:gen -- <cue> <count>');
 if (count > cap) throw new Error(`${count} generations exceed SFX_MAX_GENERATIONS=${cap}`);
 const cue = cueOf(SOUNDS, id);
-// A beat loop is exactly its bars long, so it goes to the sound API, which keeps the requested length and loops seamlessly.
 const seconds = cue.beat ? beatLoopSeconds(cue.beat) : cue.seconds;
 if (!cue.prompts || !seconds) throw new Error(`Cue ${id} needs prompts and seconds or a beat to generate`);
 const music = cue.bus === 'music' && !cue.setup;
 if (!music && !cue.setup) throw new Error(`Cue ${id} needs a setup to generate`);
 
-// Families take the next prompts in order; single-prompt cues repeat theirs.
 const textFor = (i) => {
   const subject = cue.prompts[(cue.files.length + i) % cue.prompts.length];
   return music ? subject : `${SOUND_STYLE[cue.setup]} ${subject}`;

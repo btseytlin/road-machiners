@@ -2,7 +2,6 @@
 
 export type Rng = { rngState: number };
 
-// mulberry32
 export function nextRandom(r: Rng): number {
   r.rngState = (r.rngState + 0x6d2b79f5) | 0;
   let t = r.rngState;
@@ -23,16 +22,12 @@ export function chance(r: Rng, p: number): boolean {
   return nextRandom(r) < p;
 }
 
-// Standard normal draw, Box-Muller. 1 - u keeps the log argument in (0, 1].
 export function gauss(r: Rng): number {
   const u = 1 - nextRandom(r);
   const v = nextRandom(r);
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-// A pure draw in [0, 1), keyed by a seed and any number of integer keys. Same inputs always give the
-// same output, and it never reads or writes world.rngState, so it can be called any number of times
-// within a turn (for example once per contact) without shifting the world's random stream.
 export function hashRandom(seed: number, ...keys: number[]): number {
   let h = seed | 0;
   for (const k of keys) {

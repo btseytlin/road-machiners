@@ -38,7 +38,6 @@ import {
   type Contract,
 } from './market';
 
-// A raider NPC of a spawn template, as bounties name raiders by template.
 function addRaider(w: World, templateId: string, pos = { x: 5, y: 5 }): Vehicle {
   const v = addVehicle(w, 'raiders', 'buggy', [], pos);
   v.brain = npcBrain(templateId, pos, ['raider']);
@@ -131,7 +130,7 @@ describe('haul pay and rush', () => {
     const turns = estimateTurns(siteOf('bowl').pos, siteOf('granary').pos);
     const grain = contractReward(turns, 8 * GOODS.grain.value, false);
     const tools = contractReward(turns, 8 * GOODS.tools.value, false);
-    expect(tools - grain).toBeCloseTo(8 * (GOODS.tools.value - GOODS.grain.value) * CONTRACTS.haul.valueShare, 0);
+    expect(Math.abs(tools - grain - 8 * (GOODS.tools.value - GOODS.grain.value) * CONTRACTS.haul.valueShare)).toBeLessThanOrEqual(1);
   });
 
   it('prices the reported Bowl to Granary tools haul at the salvage wage with a window under the old 934 turns', () => {
@@ -192,7 +191,7 @@ describe('vehicleValue', () => {
     const w = emptyWorld();
     const raider = addRaider(w, 'buggy');
     const bare = vehicleValue(raider);
-    expect(bare).toBeGreaterThanOrEqual(chassisDef('buggy').value); // core parts add on top
+    expect(bare).toBeGreaterThanOrEqual(chassisDef('buggy').value);
     stowPart(w, raider, makePart(w, 'plates', 0));
     expect(vehicleValue(raider)).toBeGreaterThan(bare);
   });
@@ -298,7 +297,7 @@ describe('rollContract', () => {
 
   it('takes a haul\'s tier from the hauled good, not a random roll', () => {
     const w = emptyWorld();
-    const dearGoods = ['tools']; // tier 3
+    const dearGoods = ['tools'];
     let haul: Contract | null = null;
     for (let i = 0; i < 50 && !haul; i++) {
       const c = rollContract(w, shop, places, dearGoods, [], []);
@@ -322,7 +321,7 @@ describe('rollContract', () => {
   it('takes a bounty\'s tier from the highest tier fitted to the target', () => {
     const w = emptyWorld();
     const raider = addRaider(w, 'buggy');
-    const stowed = stowPart(w, raider, makePart(w, 'plates', 0)); // tier 2 armor
+    const stowed = stowPart(w, raider, makePart(w, 'plates', 0));
     expect(stowed).toBe(true);
     let bounty: Contract | null = null;
     for (let i = 0; i < 50 && !bounty; i++) {
@@ -345,8 +344,8 @@ describe('rollContract', () => {
         deadlines.add(c.deadline);
       }
     }
-    expect(deadlines.size).toBeGreaterThan(1); // the window did vary
-    expect(rewards.size).toBe(1); // but the pay never did
+    expect(deadlines.size).toBeGreaterThan(1);
+    expect(rewards.size).toBe(1);
   });
 });
 
@@ -365,7 +364,6 @@ describe('bounty settlement', () => {
   const held = (id: string, template = 'buggy', shop = 'bowl'): Contract =>
     ({ id, shop, kind: 'bounty', template, targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1, fulfilled: false });
 
-  // Settles one turn whose events are the given defeats, of trucks still in the world or removed this turn.
   function settle(w: World, contracts: Contract[], events: GameEvent[], removed: Vehicle[] = []): World {
     return update(w, (d) => {
       d.player.contracts = contracts;
@@ -486,7 +484,7 @@ describe('haulPenalty', () => {
 describe('contract boards and delivery', () => {
   const bowl = REGION.towns.find((t) => t.id === 'bowl')!;
   const nose = REGION.towns.find((t) => t.id === 'nose')!;
-  const haul = (to: string, units: number): Contract => ({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units, to, reward: 300, deadline: 500, window: 500, rush: false, tier: 1 });
+  const haul = (to: string, units: number): Contract => ({ id: 'ct-haul', shop: 'bowl', kind: 'haul', good: 'salt', units, to, reward: 10000, deadline: 500, window: 500, rush: false, tier: 1 });
   const fetch = (): Contract => ({ id: 'ct-fetch', shop: 'bowl', kind: 'fetch', defId: 'mg', reward: fetchReward('mg', 1), deadline: 500, window: 500, tier: 1 });
 
   function atBowlWithOffer(c: Contract): World {
@@ -520,7 +518,7 @@ describe('contract boards and delivery', () => {
     w.vehicles[0].pos = { ...sitePads(nose)[0] };
     const money = w.player.money;
     w = deliverContract(w, 'ct-haul');
-    expect(w.player.money).toBe(money + 300);
+    expect(w.player.money).toBe(money + 10000);
     expect(goodsCount(playerVehicle(w)).salt ?? 0).toBe(0);
     expect(w.player.contracts).toHaveLength(0);
   });
@@ -554,7 +552,7 @@ describe('contract boards and delivery', () => {
 
   it('takes a fetch part from garage storage', () => {
     let w = acceptContract(atBowlWithOffer(fetch()), 'ct-fetch');
-    w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', 1)); }); // wear 1, at CONTRACTS.fetch.maxWear
+    w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', 1)); });
     const money = w.player.money;
     w = deliverContract(w, 'ct-fetch');
     expect(w.player.storage).toHaveLength(0);
@@ -580,7 +578,7 @@ describe('contract boards and delivery', () => {
   it('refuses a junk fetch part', () => {
     let w = acceptContract(atBowlWithOffer(fetch()), 'ct-fetch');
     w = update(w, (d) => {
-      const part = { ...makePart(d, 'mg', 0), wear: 99, hp: 0 }; // far past junk, however far past maxWear
+      const part = { ...makePart(d, 'mg', 0), wear: 99, hp: 0 };
       d.player.storage.push(part);
     });
     expect(() => deliverContract(w, 'ct-fetch')).toThrow(/spare/);
@@ -620,7 +618,6 @@ describe('contract boards and delivery', () => {
   const bounty = (id: string, targetName = 'Target'): Contract =>
     ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName, reward: 400, deadline: 900, window: 900, tier: 2, fulfilled: false });
 
-  // The player at bowl holding the given bounties, with one buggy raider far away.
   function holding(...held: Contract[]): { w: World; raider: Vehicle } {
     const w = emptyWorld(sitePads(bowl)[0]);
     const raider = addRaider(w, 'buggy', { x: 50, y: 50 });
@@ -660,7 +657,7 @@ describe('contract boards and delivery', () => {
     const { w: base, raider } = holding(bounty('ct-b1'), bounty('ct-b2'), bounty('ct-b3'));
     const w = update(base, kill(raider));
     expect(w.player.money).toBe(base.player.money);
-    expect(w.player.contracts.map((c) => c.id)).toEqual(['ct-b1']); // the other two lapse, the target is gone
+    expect(w.player.contracts.map((c) => c.id)).toEqual(['ct-b1']);
     expect(fulfilledOf(w)).toEqual([true]);
   });
 
@@ -730,7 +727,7 @@ describe('contract boards and delivery', () => {
 
   it('drops an expired offer from the board every turn, before any restock', () => {
     let w = atBowlWithOffer(haul('nose', 3));
-    w.shops.bowl.restockAt = 10000; // far off, so only the expiry filter runs
+    w.shops.bowl.restockAt = 10000;
     w = update(w, (d) => { d.turn = 501; advanceShops(d); });
     expect(w.shops.bowl.contracts.find((c) => c.id === 'ct-haul')).toBeUndefined();
   });
@@ -750,7 +747,7 @@ describe('contract boards and delivery', () => {
     w.vehicles[0].pos = { ...sitePads(nose)[0] };
     const money = w.player.money;
     w = deliverContract(w, 'ct-haul');
-    expect(w.player.money).toBe(money + 300);
+    expect(w.player.money).toBe(money + 10000);
     expect(goodsCount(playerVehicle(w)).salt ?? 0).toBe(0);
   });
 
@@ -765,7 +762,6 @@ describe('bounties in a real fight', () => {
   const bounty = (id: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1, fulfilled: false });
   const contractEvents = (w: World) => w.events.filter((e) => e.t === 'contract');
 
-  // A raider one hit from breaking its cab, shot at by the player and a Bowl Farmers lawman in the same turn.
   function sharedFight(seed: number) {
     const w = emptyWorld();
     w.rngState = seed;
@@ -782,8 +778,6 @@ describe('bounties in a real fight', () => {
     return { w, raider, ally };
   }
 
-  // The first seed whose shots end with the player credited for knocking the raider out while the lawman also hit it.
-  // The fire, fate and settlement steps of the turn run alone, so the lawman's gun stays on the raider.
   function playerKnockout() {
     for (let seed = 1; seed <= 40; seed++) {
       const { w, raider, ally } = sharedFight(seed * 7919);

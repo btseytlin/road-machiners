@@ -1,12 +1,6 @@
 // Markers for vehicles detected beyond sight: sound and radio. Dust is drawn as clouds by dust.ts. All are drawn above the fog: a contact
 // is sensed, not seen, so it does not depend on the fog of war.
 // - Sound: faint white wavefronts, in bursts. Each turn opens with a burst of quick ripples, then a long
-//   quiet pause, and the burst repeats while the turn waits. Each front starts somewhere inside the vague
-//   contact circle and travels out, past the listener. Every point of a front moves on its own: it slows while climbing, fades in the
-//   shadow behind a ridge, runs faster downwind, and wobbles a little. So fronts bend around hills.
-// - Radio: a small crisp blip, since a scanner fixes the position.
-// - Flare: the same blip in red, at the burning flare or around a truck seen launching one. Flares are drawn by hazards.ts.
-// Everything here is render-only. The sim's contact circle is the only claim about where the vehicle is.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
@@ -18,39 +12,38 @@ import type { Contact } from '../../sim/types';
 import { dist, type Vec } from '../../sim/vec';
 
 const S = PHYSICS.metersPerTile;
-const RENDER_ORDER = 905; // above the fog (900) and shade (901) layers
-const LIFT = 0.08; // meters above the ground
+const RENDER_ORDER = 905;
+const LIFT = 0.08;
 
-// Sound waves are switched off while other ways of showing sound are tried. Sound contacts still exist.
 const SHOW_SOUND_WAVES = false;
 
 const WAVE = {
-  points: 64, // vertices around one front
-  fronts: 3, // fronts in flight per contact, staggered in time
-  speed: 24, // tiles per second on flat ground with no wind
-  reachPast: 1.3, // a front travels this share of the contact's distance, so it passes the listener
-  brightness: 0.7, // peak intensity of a fresh front; it holds most of it until late, then fades out at full reach
-  climbDrag: 3, // slowdown per unit of uphill grade (height units per tile)
-  shadowFade: 2.5, // intensity lost per height unit a point sits below the highest ground it has crossed
-  wind: 0.35, // share of speed gained downwind and lost upwind
-  wobble: 0.06, // share of radius the front ripples by
-  wobbleScale: 3, // noise cycles around a front
-  originSpread: 0.7, // share of the contact radius a front may start away from the circle center
-  stagger: 0.25, // seconds between the fronts of one burst
-  repeat: 14, // seconds from one burst to the next while the turn waits
+  points: 64,
+  fronts: 3,
+  speed: 24,
+  reachPast: 1.3,
+  brightness: 0.7,
+  climbDrag: 3,
+  shadowFade: 2.5,
+  wind: 0.35,
+  wobble: 0.06,
+  wobbleScale: 3,
+  originSpread: 0.7,
+  stagger: 0.25,
+  repeat: 14,
 };
 
-const BLIP = { radius: 0.7, dot: 0.25, opacity: 0.9 }; // tiles
+const BLIP = { radius: 0.7, dot: 0.25, opacity: 0.9 };
 
 type Front = {
   line: THREE.Line;
   origin: Vec;
-  r: Float32Array; // current radius of each point, tiles
-  peak: Float32Array; // highest ground each point has crossed, height units
-  amp: Float32Array; // current intensity of each point
-  active: boolean; // travelling now
-  ran: boolean; // already travelled in the current burst
-  spawn: number; // how many times this front has restarted, for its start point
+  r: Float32Array;
+  peak: Float32Array;
+  amp: Float32Array;
+  active: boolean;
+  ran: boolean;
+  spawn: number;
 };
 
 type Marker = { id: string; fronts: Front[]; blip: THREE.Group; root: THREE.Group; burstMs: number };
@@ -69,7 +62,6 @@ export class ContactsView {
   update(terrain: Terrain, contacts: Contact[], listener: Vec, turn: number, nowMs: number): void {
     const dt = this.lastMs === null ? 0 : Math.min(0.1, (nowMs - this.lastMs) / 1000);
     this.lastMs = nowMs;
-    // A new turn restarts every burst, so the ripples open the turn.
     const newTurn = turn !== this.lastTurn;
     this.lastTurn = turn;
     if (newTurn) for (const m of this.markers.values()) startBurst(m, nowMs);
@@ -105,8 +97,6 @@ export class ContactsView {
     return { id, fronts, blip, root, burstMs: 0 };
   }
 
-  // Moves every point of a front outward by its own local speed, then rewrites the line.
-  // due: this front's slot in the current burst has come. Each front runs once per burst.
   private advanceFront(terrain: Terrain, c: Contact, listener: Vec, f: Front, dt: number, due: boolean): void {
     if (!f.active && (f.ran || !due)) {
       f.line.visible = false;
@@ -128,7 +118,7 @@ export class ContactsView {
       const dir = { x: Math.cos(a), y: Math.sin(a) };
       const here = { x: f.origin.x + dir.x * f.r[i], y: f.origin.y + dir.y * f.r[i] };
       const h = heightAt(terrain, here.x, here.y);
-      const step = 0.5; // tiles ahead to read the grade
+      const step = 0.5;
       const grade = (heightAt(terrain, here.x + dir.x * step, here.y + dir.y * step) - h) / step;
       const wind = 1 + WAVE.wind * (dir.x * WIND.x + dir.y * WIND.y);
       const speed = (WAVE.speed * wind) / (1 + WAVE.climbDrag * Math.max(0, grade));
@@ -152,10 +142,9 @@ export class ContactsView {
     pos.needsUpdate = true;
     col.needsUpdate = true;
     f.line.visible = true;
-    if (mean >= reach) f.active = false; // done until the next burst
+    if (mean >= reach) f.active = false;
   }
 
-  // A new front starts from a fresh point inside the contact circle, so the true source stays vague.
   private restartFront(terrain: Terrain, c: Contact, f: Front): void {
     f.spawn++;
     const seed = hashId(f.line.name) + f.spawn;
@@ -182,7 +171,6 @@ function makeFront(k: number, seed: number): Front {
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((n + 1) * 3), 3));
   geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array((n + 1) * 3), 3));
-  // Additive white: a dim vertex color reads as a faint, fading line over the dark map.
   const mat = new THREE.LineBasicMaterial({ color: PAL.contact, vertexColors: true, transparent: true, blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false });
   const line = new THREE.Line(geo, mat);
   line.name = `front-${seed}-${k}`;
@@ -202,7 +190,6 @@ function makeBlip(): THREE.Group {
   return group;
 }
 
-// The blip of a contact a scanner or a flare shows, in the scanner's color when it has both. Hidden for any other.
 function placeBlip(terrain: Terrain, blip: THREE.Group, c: Contact): void {
   const color = blipColor(c);
   blip.visible = color !== null;

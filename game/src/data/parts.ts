@@ -3,8 +3,6 @@ import { UNPRICED_WEAPONS } from './weapons';
 import { CLAYMORE, oilSlickLength, UNPRICED_UTILITIES } from './utilities';
 import { MASS_SCALE } from './mass-scale';
 
-// Truck parts. Core parts are built into every chassis; the rest are bought and swapped in towns.
-
 export type PartKind =
   | "weapon"
   | "engine"
@@ -15,16 +13,12 @@ export type PartKind =
   | "store"
   | "utility";
 
-// w and h are the part's footprint in inventory cells before rotation. mass in kilograms. For the same job a higher
-// tier weighs less: per cell for armor, weapons and engines, per extra row for cargo.
-// armor is the penetration the part stops when a round passes through it.
-// A tall part stands higher than a gun, so a mounted weapon cannot fire across it. See openSides() in src/sim/armor.ts.
 type PartBase = {
   id: string;
   name: string;
   hp: number;
-  base: number; // hand-set part of the value. See partModifier().
-  value: number; // money value of a pristine part, base plus a stat modifier; every price derives from it
+  base: number;
+  value: number;
   tier: Tier;
   w: number;
   h: number;
@@ -33,15 +27,8 @@ type PartBase = {
   tall: boolean;
 };
 
-// Hidden roles that shape a gun's numbers; the player never sees them. A damager wrecks the parts behind armor, a
-// chipper strips armor and a precision gun picks one part off from afar.
 export type WeaponClass = "damager" | "chip" | "precision";
 
-// One round. pen is the armor it gets through. speed in m/s. A round with a splashRadius above 0 explodes where it
-// lands, and every lane of any truck within splashRadius meters takes splashDamage and splashPen. A blast round
-// meets blastArmor on armor parts. Splash always counts as blast. Armor parts take damage and splash times armorShare.
-// craterRadius is the radius in meters of the crater an exploding round digs where it bursts on open ground, 0 for
-// none. See digCrater() in src/sim/craters.ts.
 export type WeaponRound = {
   damage: number;
   pen: number;
@@ -56,91 +43,74 @@ export type WeaponRound = {
 
 export type WeaponDef = PartBase & {
   kind: "weapon";
-  draw: number; // power draw of a working gun on the engine's capacity, see gunDrag() in src/sim/stats.ts
-  range: number; // tiles. Aim worsens toward it by RULES.rangeFalloff for the weapon's tier.
-  cooldown: number; // turns between shots, 1 = every turn
-  magazine: number; // shots before the gun must reload
-  reload: number; // turns without firing that refill the magazine
-  arc: number; // total firing arc in degrees, centered forward
-  spread: number; // degrees; standard deviation of a round's angular error from the gun alone
-  rounds: number; // rounds per shot, each rolled on its own
-  recoil: number; // degrees of spread added on a 1 t truck; the added spread falls with truck mass
-  shake: number; // multiplies the spread from the shooter's own speed; below 1 is a stabilized gun
-  stray: number; // chance a round that misses its target hits another truck near the line of fire
+  draw: number;
+  range: number;
+  cooldown: number;
+  magazine: number;
+  reload: number;
+  arc: number;
+  spread: number;
+  rounds: number;
+  recoil: number;
+  shake: number;
+  stray: number;
   round: WeaponRound;
   classes: WeaponClass[];
   look: "mg" | "cannon";
-  line?: { turns: number }; // a round that hits ties a line to the part it struck, for this many turns; see src/sim/harpoon.ts
+  line?: { turns: number };
 };
 
 export type EngineDef = PartBase & {
   kind: "engine";
   speedBonus: number;
   accelBonus: number;
-  capacity: number; // total draw of working guns the engine carries before they slow the truck fully
+  capacity: number;
   fuelMult: number;
-  noise: number; // multiplies how far the engine is heard
-  heat: number; // multiplies how fast the sun heats the engine
+  noise: number;
+  heat: number;
 };
 
-// A ram that holds an explosive charge. Armed, it blasts on the next truck crash on its side at minImpact tiles/turn
-// or more. blast hits the other truck around the contact point, radius in meters; selfBlast hits the owner's struck
-// side. reload is the turns before it can be armed again. See src/sim/claymore.ts.
 export type ClaymoreDef = {
   minImpact: number;
   blast: { damage: number; pen: number; radius: number };
   selfBlast: { damage: number; pen: number };
-  // The blast throws the two trucks apart, or the user back off an obstacle: impulse in N s on each truck, and the
-  // share of it that points up.
   throw: { impulse: number; lift: number };
   reload: number;
 };
 
-// full: a field repair lifts it to full HP. capped: to the field cap. none: only a town repairs it.
 export type FieldRepair = "full" | "capped" | "none";
 
-// armor stops kinetic rounds and blastArmor stops blast rounds and splash.
 export type ArmorDef = PartBase & {
   kind: "armor";
   blastArmor: number;
   fieldRepair: FieldRepair;
-  ramMult: number; // multiplies ram damage dealt from the side it is mounted on
+  ramMult: number;
   look: "plates" | "cage" | "ram";
   claymore?: ClaymoreDef;
 };
 
 export type CargoDef = PartBase & {
   kind: "cargo";
-  extraRows: number; // full-width inventory rows added below the chassis grid while mounted
+  extraRows: number;
   look: "rack" | "box";
 };
 
-// Built into the chassis at fixed cells. Never moved, stored or sold, only repaired.
 export type CoreDef = PartBase & {
   kind: "core";
   role: "cab" | "transmission" | "wheel" | "tank";
 };
 
-// Detects every moving vehicle within range, through hills. Mounts on deck cells, so it competes with a gun.
 export type ScannerDef = PartBase & {
   kind: "scanner";
-  range: number; // tiles
+  range: number;
 };
 
-// Adds room for fuel or supplies while mounted. The room stays while the part is broken.
 export type StoreDef = PartBase & {
   kind: "store";
   holds: "fuel" | "supplies";
-  amount: number; // fuel units or supply units added to the cap
+  amount: number;
 };
 
-// The aim numbers a utility that fires a shot gives hitOdds, as a gun does. See WeaponDef.
-
-// What a utility does. Distances are in tiles and durations in turns. An active effect acts on an order; crane
-// and scraper are passive and work while mounted. See src/sim/utility.ts.
-// behind: tiles from the truck's rear to the near edge of what it drops. fuel: fuel units one use spends. An oil
-// spill's size is in OIL in src/data/utilities.ts.
-// minRange and maxRange: how far from the truck the chosen point may lie.
 export type UtilityEffect =
   | { type: 'sprout'; radius: number; turns: number }
   | { type: 'mortar'; radius: number; turns: number; minRange: number; maxRange: number }
@@ -152,7 +122,6 @@ export type UtilityEffect =
   | { type: 'scraper' };
 export type UtilityEffectType = UtilityEffect['type'];
 
-// A yellow deck part with one job. reload: turns from one use to the next, null for a passive part.
 export type UtilityDef = PartBase & {
   kind: "utility";
   effect: UtilityEffect;
@@ -169,20 +138,17 @@ export type PartDef =
   | StoreDef
   | UtilityDef;
 
-// Each def holds a hand-set base. Its value is the base plus a modifier from the stats its kind is
-// bought for, so a better stat always adds to the price. Every price in the game derives from value.
 export type Unpriced<T> = T extends unknown ? Omit<T, 'value'> : never;
 
-// Money per unit of each priced stat.
 export const PART_PRICE_MODIFIERS = {
-  weapon: { perDamagePerTurn: 2, perRange: 2 },
-  engine: { perSpeedBonus: 60, perAccelBonus: 40 },
-  armor: { perArmorCell: 2 }, // per point of armor plus blast armor, per cell
-  cargo: { perExtraRow: 50 },
-  store: { perAmount: 5 },
-  scanner: { perRange: 1 },
-  core: { perHp: 1 },
-  utility: { perEffectTurn: 5, perReachTile: 2 }, // per turn the effect lasts, per tile it reaches from the truck
+  weapon: { perDamagePerTurn: 66.67, perRange: 66.67 },
+  engine: { perSpeedBonus: 2000, perAccelBonus: 1333.33 },
+  armor: { perArmorCell: 66.67 },
+  cargo: { perExtraRow: 1666.67 },
+  store: { perAmount: 166.67 },
+  scanner: { perRange: 33.33 },
+  core: { perHp: 33.33 },
+  utility: { perEffectTurn: 166.67, perReachTile: 66.67 },
 };
 
 type UnpricedByKind = {
@@ -211,8 +177,6 @@ function effectTurns(e: UtilityEffect): number {
   return 'turns' in e ? e.turns : 0;
 }
 
-// Tiles from the truck the effect reaches: the farthest point it can be sent to, the shot's range, the length of an
-// oil slick or the radius around the truck. A passive part reaches nothing.
 function utilityReach(d: Omit<UtilityDef, 'value'>): number {
   const e = d.effect;
   if ('maxRange' in e) return e.maxRange;
@@ -220,7 +184,6 @@ function utilityReach(d: Omit<UtilityDef, 'value'>): number {
   return 'radius' in e ? e.radius : 0;
 }
 
-// Damage per turn over a full magazine: the shots, then the reload.
 export function sustainedDamage(d: Pick<WeaponDef, 'round' | 'rounds' | 'cooldown' | 'magazine' | 'reload'>): number {
   return (d.round.damage * d.rounds * d.magazine) / (d.magazine * d.cooldown + d.reload);
 }
@@ -247,7 +210,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "engine",
     name: "Stock engine",
     hp: 50,
-    base: 150,
+    base: 5000,
     tier: 1,
     w: 2,
     h: 2,
@@ -266,7 +229,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "engine",
     name: "Tuned V8",
     hp: 40,
-    base: 230,
+    base: 7667,
     tier: 2,
     w: 2,
     h: 2,
@@ -285,7 +248,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "engine",
     name: "Light flat-four",
     hp: 36,
-    base: 180,
+    base: 6000,
     tier: 1,
     w: 2,
     h: 2,
@@ -304,7 +267,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "engine",
     name: "Workhorse diesel",
     hp: 80,
-    base: 270,
+    base: 9000,
     tier: 2,
     w: 2,
     h: 2,
@@ -323,7 +286,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "engine",
     name: "Racing V6",
     hp: 32,
-    base: 280,
+    base: 9333,
     tier: 2,
     w: 2,
     h: 2,
@@ -342,7 +305,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "engine",
     name: "Heavy diesel",
     hp: 110,
-    base: 470,
+    base: 15667,
     tier: 3,
     w: 2,
     h: 2,
@@ -361,7 +324,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "engine",
     name: "Turbine",
     hp: 44,
-    base: 510,
+    base: 17000,
     tier: 3,
     w: 2,
     h: 2,
@@ -380,7 +343,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "armor",
     name: "Steel plates",
     hp: 80,
-    base: 160,
+    base: 5333,
     tier: 2,
     w: 1,
     h: 3,
@@ -397,7 +360,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "armor",
     name: "Rebar cage",
     hp: 60,
-    base: 130,
+    base: 4333,
     tier: 1,
     w: 1,
     h: 2,
@@ -414,7 +377,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "armor",
     name: "Ram bar",
     hp: 100,
-    base: 160,
+    base: 5333,
     tier: 2,
     w: 3,
     h: 1,
@@ -431,7 +394,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "armor",
     name: "Scrap panels",
     hp: 44,
-    base: 110,
+    base: 3667,
     tier: 1,
     w: 1,
     h: 2,
@@ -448,7 +411,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "armor",
     name: "Ceramic plates",
     hp: 36,
-    base: 330,
+    base: 11000,
     tier: 2,
     w: 1,
     h: 2,
@@ -465,7 +428,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "armor",
     name: "Spaced armor",
     hp: 110,
-    base: 120,
+    base: 4000,
     tier: 2,
     w: 1,
     h: 4,
@@ -482,7 +445,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "armor",
     name: "Reinforced cage",
     hp: 130,
-    base: 170,
+    base: 5667,
     tier: 2,
     w: 1,
     h: 3,
@@ -499,7 +462,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "armor",
     name: "Plow ram",
     hp: 170,
-    base: 380,
+    base: 12667,
     tier: 3,
     w: 3,
     h: 1,
@@ -511,13 +474,12 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     ramMult: 2.8,
     look: "ram",
   },
-  // A lighter ram with an explosive charge, armed by the driver. See CLAYMORE in src/data/utilities.ts.
   claymoreRam: {
     id: "claymoreRam",
     kind: "armor",
     name: "Claymore ram",
     hp: 80,
-    base: 300,
+    base: 10000,
     tier: 2,
     w: 3,
     h: 1,
@@ -530,14 +492,12 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     look: "ram",
     claymore: CLAYMORE,
   },
-  // One-cell cuts of the plate lines above. Each keeps its line's armor value, so a single cell patches a gap
-  // or a corner that a longer row cannot fill. Per cell they cost a bit more than the long rows.
   steelPlate: {
     id: "steelPlate",
     kind: "armor",
     name: "Steel plate",
     hp: 28,
-    base: 150,
+    base: 5000,
     tier: 2,
     w: 1,
     h: 1,
@@ -554,7 +514,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "armor",
     name: "Scrap sheet",
     hp: 22,
-    base: 80,
+    base: 2667,
     tier: 1,
     w: 1,
     h: 1,
@@ -571,7 +531,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "armor",
     name: "Ceramic tile",
     hp: 18,
-    base: 200,
+    base: 6667,
     tier: 2,
     w: 1,
     h: 1,
@@ -588,7 +548,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "cargo",
     name: "Roof rack",
     hp: 30,
-    base: 70,
+    base: 2333,
     tier: 1,
     w: 2,
     h: 1,
@@ -603,7 +563,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "cargo",
     name: "Cargo box",
     hp: 60,
-    base: 150,
+    base: 5000,
     tier: 2,
     w: 2,
     h: 2,
@@ -618,7 +578,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "cargo",
     name: "Panniers",
     hp: 20,
-    base: 50,
+    base: 1667,
     tier: 1,
     w: 1,
     h: 1,
@@ -633,7 +593,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "cargo",
     name: "Flatbed extension",
     hp: 50,
-    base: 100,
+    base: 3333,
     tier: 1,
     w: 2,
     h: 1,
@@ -648,7 +608,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "cargo",
     name: "Light cargo frame",
     hp: 24,
-    base: 230,
+    base: 7667,
     tier: 2,
     w: 2,
     h: 2,
@@ -663,7 +623,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "cargo",
     name: "Enclosed cargo frame",
     hp: 110,
-    base: 290,
+    base: 9667,
     tier: 2,
     w: 2,
     h: 2,
@@ -678,7 +638,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "cargo",
     name: "Heavy cargo frame",
     hp: 90,
-    base: 400,
+    base: 13333,
     tier: 3,
     w: 2,
     h: 2,
@@ -693,22 +653,22 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     kind: "store",
     name: "Jerrycan rack",
     hp: 30,
-    base: 70,
+    base: 2333,
     tier: 1,
     w: 1,
     h: 1,
-    mass: 70, // with full cans
+    mass: 70,
     armor: 1,
     tall: false,
     holds: "fuel",
-    amount: 12, // 60 L
+    amount: 12,
   },
   supplyLocker: {
     id: "supplyLocker",
     kind: "store",
     name: "Supply locker",
     hp: 30,
-    base: 80,
+    base: 2667,
     tier: 1,
     w: 1,
     h: 1,
@@ -716,69 +676,60 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     armor: 2,
     tall: false,
     holds: "supplies",
-    amount: 10, // half the base supplies
+    amount: 10,
   },
-  // Each chassis has one cab. A closed cab is tall, so guns cannot fire across it. An open seat is not.
-  // The open seat of the buggy, courier, jeep and gunwagon.
   cab: {
-    id: "cab", kind: "core", name: "Driver seat", hp: 120, base: 80, tier: 1, w: 1, h: 2, mass: 80, armor: 3, tall: false, role: "cab",
+    id: "cab", kind: "core", name: "Driver seat", hp: 120, base: 2667, tier: 1, w: 1, h: 2, mass: 80, armor: 3, tall: false, role: "cab",
   },
-  // The closed cab of every regular chassis.
   cabPickup: {
-    id: "cabPickup", kind: "core", name: "Cab", hp: 120, base: 80, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
+    id: "cabPickup", kind: "core", name: "Cab", hp: 120, base: 2667, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
   },
-  // The convertible's closed hardtop cabin.
   cabHardtop: {
-    id: "cabHardtop", kind: "core", name: "Hardtop cab", hp: 120, base: 80, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
+    id: "cabHardtop", kind: "core", name: "Hardtop cab", hp: 120, base: 2667, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
   },
   transmission: {
-    id: "transmission", kind: "core", name: "Transmission", hp: 40, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 3, tall: false, role: "transmission",
+    id: "transmission", kind: "core", name: "Transmission", hp: 40, base: 3667, tier: 1, w: 2, h: 2, mass: 60, armor: 3, tall: false, role: "transmission",
   },
-  // Van and hauler drive parts, and the heavy ones of the gunwagon, carrier, tractor and longbed.
   transmissionMid: {
-    id: "transmissionMid", kind: "core", name: "Truck transmission", hp: 60, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 4, tall: false, role: "transmission",
+    id: "transmissionMid", kind: "core", name: "Truck transmission", hp: 60, base: 3667, tier: 1, w: 2, h: 2, mass: 60, armor: 4, tall: false, role: "transmission",
   },
   transmissionHeavy: {
-    id: "transmissionHeavy", kind: "core", name: "Heavy transmission", hp: 90, base: 110, tier: 1, w: 2, h: 2, mass: 60, armor: 6, tall: false, role: "transmission",
+    id: "transmissionHeavy", kind: "core", name: "Heavy transmission", hp: 90, base: 3667, tier: 1, w: 2, h: 2, mass: 60, armor: 6, tall: false, role: "transmission",
   },
   wheel: {
-    id: "wheel", kind: "core", name: "Wheel", hp: 30, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 2, tall: false, role: "wheel",
+    id: "wheel", kind: "core", name: "Wheel", hp: 30, base: 333, tier: 1, w: 1, h: 2, mass: 25, armor: 2, tall: false, role: "wheel",
   },
-  // Van and hauler drive parts, and the heavy ones of the gunwagon, carrier, tractor and longbed.
   wheelMid: {
-    id: "wheelMid", kind: "core", name: "Truck wheel", hp: 50, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 3, tall: false, role: "wheel",
+    id: "wheelMid", kind: "core", name: "Truck wheel", hp: 50, base: 333, tier: 1, w: 1, h: 2, mass: 25, armor: 3, tall: false, role: "wheel",
   },
   wheelHeavy: {
-    id: "wheelHeavy", kind: "core", name: "Heavy wheel", hp: 80, base: 10, tier: 1, w: 1, h: 2, mass: 25, armor: 5, tall: false, role: "wheel",
+    id: "wheelHeavy", kind: "core", name: "Heavy wheel", hp: 80, base: 333, tier: 1, w: 1, h: 2, mass: 25, armor: 5, tall: false, role: "wheel",
   },
-  // The small tank fits the scout, the buggy, the courier and the jeep. The convertible carries the long tank. All tanks lie two cells along the truck.
   tank: {
-    id: "tank", kind: "core", name: "Small fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
+    id: "tank", kind: "core", name: "Small fuel tank", hp: 30, base: 1000, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
   },
-  // The convertible's and the Lincoln's tank.
   tankLong: {
-    id: "tankLong", kind: "core", name: "Fuel tank", hp: 30, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
+    id: "tankLong", kind: "core", name: "Fuel tank", hp: 30, base: 1000, tier: 1, w: 1, h: 2, mass: 30, armor: 1, tall: false, role: "tank",
   },
-  // Van and hauler drive parts, and the heavy ones of the gunwagon, carrier, tractor and longbed.
   tankMid: {
-    id: "tankMid", kind: "core", name: "Truck fuel tank", hp: 50, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 3, tall: false, role: "tank",
+    id: "tankMid", kind: "core", name: "Truck fuel tank", hp: 50, base: 1000, tier: 1, w: 1, h: 2, mass: 30, armor: 3, tall: false, role: "tank",
   },
   tankHeavy: {
-    id: "tankHeavy", kind: "core", name: "Armored fuel tank", hp: 80, base: 30, tier: 1, w: 1, h: 2, mass: 30, armor: 6, tall: false, role: "tank",
+    id: "tankHeavy", kind: "core", name: "Armored fuel tank", hp: 80, base: 1000, tier: 1, w: 1, h: 2, mass: 30, armor: 6, tall: false, role: "tank",
   },
   scanner: {
     id: "scanner",
     kind: "scanner",
     name: "Radio scanner",
     hp: 30,
-    base: 190,
+    base: 6333,
     tier: 2,
     w: 1,
     h: 1,
     mass: 30,
     armor: 2,
     tall: false,
-    range: 160, // tiles, through hills
+    range: 160,
   },
 };
 
@@ -786,7 +737,6 @@ export const PARTS: Record<string, PartDef> = Object.fromEntries(
   Object.entries(UNPRICED_PARTS).map(([id, def]) => [id, pricePart(scaleMass(def))]),
 );
 
-// Armor and weapons take their kind's MASS_SCALE.
 function scaleMass(def: Unpriced<PartDef>): Unpriced<PartDef> {
   if (def.kind === "armor") return { ...def, mass: def.mass * MASS_SCALE.armor };
   if (def.kind === "weapon") return { ...def, mass: def.mass * MASS_SCALE.weapon };

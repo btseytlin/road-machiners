@@ -1,13 +1,10 @@
 import { moveCard } from '../card-events';
-import { updateState } from '../state';
 import { BRANCH, GAME_DIR, TASK_FILE, WONT_DO_LABEL, type Ctx } from '../types';
 import { releaseBundle } from './bundle';
 import { agentHome, askAuthor, baseBranchOf, fillPrompt, fitComment, guardAndPush, prepareOutputs, readOutput, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 import { existsSync, readFileSync } from 'node:fs';
 
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
-  // A card in Design gets a new plan, so a patch queued before it moved here, by a route or by Hermes, no longer applies.
-  updateState(ctx.statePath, (state) => ({ ...state, patching: Object.fromEntries(Object.entries(state.patching).filter(([key]) => key !== String(issue))) }));
   const clone = workDir(ctx, issue);
   const base = await baseBranchOf(ctx, issue);
   await ctx.repo.fetch();
@@ -58,7 +55,6 @@ function planText(task: string): string {
   return (end < 0 ? rest : rest.slice(0, end)).join('\n').trim();
 }
 
-// The task file never reaches git, so the issue shows the design and plan to anyone who wants to read them.
 async function postDesign(ctx: Ctx, issue: number, taskFile: string): Promise<void> {
   const body = fitComment(taskFile, 'the factory work clone');
   await ctx.github.comment(issue, `<details>\n<summary>Design and plan</summary>\n\n${body}\n\n</details>`);

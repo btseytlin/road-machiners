@@ -1,3 +1,4 @@
+import { defaultSetup } from './settings';
 import { describe, expect, it } from 'vitest';
 import { GOODS } from '../data/goods';
 import { startKit } from '../data/start';
@@ -20,7 +21,7 @@ function offer(rush: boolean): Extract<Contract, { kind: 'haul' }> {
 
 describe('Bowl to Granary tools haul', () => {
   it.each([false, true])('is delivered on time and pays its reward (rush %s)', (rush) => {
-    let world = newWorld(1, startKit('midgame'), TEST_MAP, false);
+    let world = newWorld(1, startKit('midgame'), TEST_MAP, defaultSetup('roaming'));
     const pad = nearestPad(siteOf('bowl'), playerVehicle(world).pos);
     const haul = offer(rush);
     world = update(world, (d) => {
