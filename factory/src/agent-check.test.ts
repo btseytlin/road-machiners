@@ -64,6 +64,21 @@ describe('runAgentCheck', () => {
     expect(checkClone(home).failures.join(' ')).toContain('gone.png is left out');
   });
 
+  it('guards the staged change: a protected path or a SAVE_MAJOR bump refuses the commit, other work passes', () => {
+    writeFileSync(join(home, 'a.ts'), 'export const a = 1;\n');
+    git('add', 'a.ts');
+    expect(lines(['guard'])).toEqual({ code: 0, text: '' });
+    mkdirSync(join(home, '.github', 'workflows'), { recursive: true });
+    writeFileSync(join(home, '.github', 'workflows', 'x.yml'), 'on: push\n');
+    git('add', '.github');
+    expect(lines(['guard'])).toEqual({ code: 1, text: expect.stringContaining('The factory refuses this commit: The branch touches paths an agent may not push: .github/workflows/x.yml') });
+    git('rm', '-r', '-q', '--cached', '.github');
+    mkdirSync(join(home, 'game', 'src', 'three'), { recursive: true });
+    writeFileSync(join(home, 'game', 'src', 'three', 'save-migrations.ts'), 'export const SAVE_MAJOR = 9;\n');
+    git('add', 'game');
+    expect(lines(['guard']).text).toContain('bumps SAVE_MAJOR');
+  });
+
   it('refuses a missing or unknown round', () => {
     expect(lines([]).code).toBe(2);
     expect(lines(['full']).code).toBe(2);

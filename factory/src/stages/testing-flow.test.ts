@@ -144,11 +144,10 @@ describe('testing in one job', () => {
     expect(calls.at(-1)).toBe('move 7 Approval');
   });
 
-  it('runs the testing agent on the build model with the evidence check', async () => {
+  it('runs the testing agent on the build model', async () => {
     labels = ['implementation-opus'];
     await runVerify(fakeCtx(posts), 7);
     expect(runs[0]!.model).toBe('sonnet');
-    expect(runs[0]!.evidenceCheck).toBe(true);
   });
 
   it('hands a failed checkpoint back to the same session, then posts', async () => {

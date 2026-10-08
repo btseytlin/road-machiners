@@ -39,7 +39,7 @@ async function firstRounds(ctx: Ctx, issue: number, base: string, hotfix: boolea
   let spent = 0;
   if (hotfix) spent += runCost(await runAgent(ctx, issue, 'verify', ROUND, await hardenPrompt(ctx, issue, base)));
   const vars = { issue: String(issue), taskFile: TASK_FILE(issue), branch: BRANCH(issue), playtest: playtestCommand(ctx.cfg, false), task: taskText(await ctx.github.comments(issue)) };
-  spent += runCost(await runAgent(ctx, issue, 'verify', ROUND, fillPrompt('test', vars), { evidenceCheck: true, continue: hotfix }));
+  spent += runCost(await runAgent(ctx, issue, 'verify', ROUND, fillPrompt('test', vars), { continue: hotfix }));
   return spent;
 }
 
@@ -87,7 +87,7 @@ async function checkpoint(ctx: Ctx, issue: number, base: string, build: string, 
 
 async function fixRound(ctx: Ctx, issue: number, home: string, failure: string): Promise<string> {
   const prompt = `The factory's checks of your pushed branch failed. Fix the cause, commit, and end again. The end of the log:\n\n${failure}`;
-  const stream = await runAgent(ctx, issue, 'verify', ROUND, prompt, { evidenceCheck: true, continue: true });
+  const stream = await runAgent(ctx, issue, 'verify', ROUND, prompt, { continue: true });
   throwIfNeedsCommittee(home);
   return stream;
 }

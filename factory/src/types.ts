@@ -251,13 +251,12 @@ export interface Telegram {
 // `openNetwork` runs the container on the normal network with no proxy. Absent means the restricted network.
 // `mediaDir` is a host folder of reference images. The agent sees it read only at /work/.factory-media.
 // `readOnly` maps host folders to container paths, mounted read only.
-// `evidenceCheck` mounts the factory's evidence check read only, so the agent can run it before it ends. See `buildCheckBundle` in container.ts.
 // `session` names the agent's Claude Code session. The container mounts `dir` as the agent's session store and starts the session with `id`, or continues it when `resume` is set.
 // `skill` is a slash command like `/code-review`. Claude runs it only from the first line of the input, so it goes first.
 // `effort` is the reasoning effort passed to claude --effort. Absent means the model's default.
 // `disallowedTools` names Claude Code tools the agent cannot use, passed to claude --disallowedTools.
 export type AgentSession = { dir: string; id: string; resume: boolean };
-export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; evidenceCheck?: boolean; session?: AgentSession; skill?: string; effort?: string; disallowedTools?: string[] };
+export type AgentRun = { clone: string; dir: string; model: string; prompt: string; log: string; openNetwork?: boolean; mediaDir?: string; readOnly?: Record<string, string>; session?: AgentSession; skill?: string; effort?: string; disallowedTools?: string[] };
 
 export interface Container {
   // Runs Claude Code headless in the clone and returns its stream-json output. Throws on a nonzero exit.

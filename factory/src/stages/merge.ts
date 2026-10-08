@@ -7,7 +7,8 @@ import { BRANCH, GAME_DIR, RELEASE_CANDIDATE_LABEL, STUCK_LABEL, type AgentSessi
 import { closeMerged } from './approval';
 import { runCost, untilPasses } from './checkpoint';
 import { checkFailure, checkScript, checkUntilReal, testCacheMount } from './checks';
-import { BASE_BRANCH, baseBranchFor, fillPrompt, guardDiff, playtestCommand, resetOutputs } from './common';
+import { guardDiff } from '../diff-guard';
+import { BASE_BRANCH, baseBranchFor, fillPrompt, playtestCommand, resetOutputs } from './common';
 import { releaseLog } from './release-common';
 
 // The merge queue. A merge job takes every Merging card of one base at that moment, merges them into a clone of the base,

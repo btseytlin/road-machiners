@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fetchMedia, mediaSection } from '../media';
-import { changesSaveMajor } from '../save-guard';
+import { CommitteeDecisionError, guardDiff } from '../diff-guard';
 import { isAnswered } from '../questions';
 import { resumeError, resumedStage, roundSession } from '../sessions';
 import { readCommitteeMedia } from '../reply-media';
@@ -143,9 +143,6 @@ function resumeNote(ctx: Ctx, issue: number): string {
   return error === null ? RESUME_NOTE : `${RESUME_NOTE}\n\nThe job stopped on this error. Fix its cause if it is in your work:\n\n${error}`;
 }
 
-// The agent asked the committee for a decision. A retry cannot get past it, so the stage goes to Hermes at once.
-export class CommitteeDecisionError extends Error {}
-
 // The job on this issue lost its process once, so its agents continue their sessions.
 // runJob keeps the sessions only for a job of the stage that died, so their stage mark means this job resumes.
 export function isResuming(ctx: Ctx, issue: number): boolean {
@@ -160,10 +157,9 @@ export function prepareOutputs(ctx: Ctx, issue: number, home: string): void {
 
 // `skill` is a slash command to run first, and `effort` a reasoning effort for claude --effort.
 // `fresh` starts a new session even in a resumed job, for a read-only round that is safe to run again and that clears its own output first.
-// `evidenceCheck` gives the agent the command that runs the factory's evidence checks on its clone.
 // `disallowedTools` names Claude Code tools the agent cannot use.
 // `continue` sends the prompt as the next message of the round's session, so the agent that did the work gets its failure.
-export type AgentExtras = { skill?: string; effort?: string; fresh?: boolean; evidenceCheck?: boolean; disallowedTools?: string[]; continue?: boolean };
+export type AgentExtras = { skill?: string; effort?: string; fresh?: boolean; disallowedTools?: string[]; continue?: boolean };
 
 function agentSession(ctx: Ctx, issue: number, stage: CardStage, round: string, extras: AgentExtras): AgentSession {
   const session = roundSession(ctx.cfg.home, issue, round, extras.continue === true || (extras.fresh !== true && isResuming(ctx, issue)));
@@ -183,7 +179,7 @@ export async function runAgent(ctx: Ctx, issue: number, stage: CardStage, round:
   const full = session.resume ? (extras.continue === true ? prompt : resumeNote(ctx, issue)) : [`${prompt}\n\n${await acquireMedia(ctx, issue, stage)}`, ...(reports.section ? [reports.section] : [])].join('\n\n');
   // A resumed round already ran its skill, so only the note goes in.
   const skill = session.resume ? undefined : extras.skill;
-  return ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), readOnly: reports.readOnly, session, skill, effort: extras.effort, evidenceCheck: extras.evidenceCheck, disallowedTools: extras.disallowedTools });
+  return ctx.container.agent({ clone: workDir(ctx, issue), dir: GAME_DIR, model, prompt: full, log: agentLog(ctx, issue, stage), openNetwork, mediaDir: mediaDir(ctx, issue), readOnly: reports.readOnly, session, skill, effort: extras.effort, disallowedTools: extras.disallowedTools });
 }
 
 // GitHub caps a comment at 65536 characters. The rest of the room holds the wrapper and the marker.
@@ -215,15 +211,6 @@ export function throwIfNeedsCommittee(home: string): void {
   if (text !== null) throw new CommitteeDecisionError(`The agent needs a committee decision: ${text.trim()}`);
 }
 
-// Paths an agent branch must never carry: agent messages, task files, and GitHub workflows,
-// which GitHub would run with the repo's secrets as soon as the factory pushes them.
-const FORBIDDEN_PATH = /^\.github\/|(^|\/)\.factory(-tasks|-media)?\//;
-
-export function factoryPaths(diff: string): string[] {
-  const paths = [...diff.matchAll(/^diff --git a\/(.+) b\/(.+)$/gm)].flatMap((match) => [match[1], match[2]]);
-  return [...new Set(paths)].filter((path) => FORBIDDEN_PATH.test(path));
-}
-
 // Nothing of the agent's work reaches GitHub before this check. A committed task file only leaves the branch, so the stage goes on.
 // Members and other jobs push to the branch while an agent works. Their commits are merged in before the push, and again whenever GitHub rejects it.
 export async function guardAndPush(ctx: Ctx, issue: number, base: string, stage: CardStage): Promise<void> {
@@ -248,14 +235,6 @@ async function guardedHead(ctx: Ctx, issue: number, base: string, stage: CardSta
   return head;
 }
 
-// The checks every agent diff passes before it reaches a branch on GitHub.
-export function guardDiff(diff: string): void {
-  const leaked = factoryPaths(diff);
-  if (leaked.length) throw new Error(`The branch touches paths an agent may not push: ${leaked.join(', ')}`);
-  if (changesSaveMajor(diff)) {
-    throw new CommitteeDecisionError('The change bumps SAVE_MAJOR in game/src/three/save-migrations.ts. The committee must decide on a major save bump before this can go on.');
-  }
-}
 
 // Merges the commits that reached the issue branch on GitHub since the work clone last saw it. An agent resolves a conflict at once, in the same job.
 // Returns false when GitHub held nothing new.

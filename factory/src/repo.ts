@@ -1,5 +1,6 @@
-import { appendFileSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { GUARD_HOOK } from './container';
 import { must } from './exec';
 import { withLock } from './lock';
 import { createLockWaitReporter } from './observability';
@@ -130,16 +131,23 @@ export function hostRepo(run: Run, cfg: FactoryConfig, jobId: string | null = nu
   }
 
   // Clones into `dir` unless a working clone is there.
+  // A clone made before the guard hook existed gets it too.
   async function prepareClone(branch: string, base: string, dir: string): Promise<void> {
     // A clone cut short, like by a full disk, has no commit checked out. It holds no work, so it is cloned again.
     // The note goes to the job log, so the replacement is on record.
     if (existsSync(dir)) {
-      if (existsSync(join(dir, '.git')) && (await hasRef(dir, 'HEAD'))) return;
+      if (existsSync(join(dir, '.git')) && (await hasRef(dir, 'HEAD'))) return installGuardHook(dir);
       console.error(`${dir} has no commit checked out, so it is cloned again`);
       rmSync(dir, { recursive: true, force: true });
     }
     await initClone(dir);
     await checkoutBranch(dir, branch, base);
+    installGuardHook(dir);
+  }
+
+  function installGuardHook(dir: string): void {
+    mkdirSync(join(dir, '.git', 'hooks'), { recursive: true });
+    writeFileSync(join(dir, '.git', 'hooks', 'pre-commit'), GUARD_HOOK, { mode: 0o755 });
   }
 
   // A new clone in `dir` with the host clone's refs and no branch checked out yet.

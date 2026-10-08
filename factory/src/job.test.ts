@@ -5,7 +5,7 @@ import { progressNote, runJob } from './job';
 import { appendUsage, readLedger } from './ledger';
 import { markResumed, resumeError, resumedStage } from './sessions';
 import { BudgetError } from './stages/checkpoint';
-import { CommitteeDecisionError } from './stages/common';
+import { CommitteeDecisionError } from './diff-guard';
 import { EMPTY_STATE, readState, writeState } from './state';
 import type { Ctx, FactoryConfig, JobStage } from './types';
 

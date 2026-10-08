@@ -43,7 +43,7 @@ describe('dockerContainer', () => {
     expect(runCall(free.calls).args).not.toContain('--cpuset-cpus');
   });
 
-  it('passes the secrets by env only and mounts only the clone and the npm cache', async () => {
+  it('passes the secrets by env only and mounts only the clone, the npm cache and the check command', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'opus', prompt: 'do it', log: '/l.log' });
     const call = runCall(calls);
@@ -56,7 +56,7 @@ describe('dockerContainer', () => {
     expect(call.opts?.input).toContain('factory-status milestone');
     expect(call.opts?.input).toMatch(/\n\ndo it$/);
     expect(call.opts?.logPath).toBe('/l.log');
-    expect(call.args.filter((a) => a === '-v')).toHaveLength(2);
+    expect(call.args.filter((a) => a === '-v')).toHaveLength(3);
     expect(call.args).toContain('/w/c:/work');
     expect(call.args).toContain(`${HOME}/npm-cache:/home/pwuser/.npm`);
     expect(call.args.slice(call.args.indexOf('-w'), call.args.indexOf('-w') + 2)).toEqual(['-w', '/work/game']);
@@ -68,19 +68,15 @@ describe('dockerContainer', () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', readOnly: { '/h/state': '/factory/state' } });
     const args = runCall(calls).args;
-    expect(args.filter((a) => a === '-v')).toHaveLength(3);
+    expect(args.filter((a) => a === '-v')).toHaveLength(4);
     expect(args).toContain('/h/state:/factory/state:ro');
   });
 
-  it('mounts the bundled evidence check read only, and only when the run asks for it', async () => {
+  it('mounts the bundled check command read only for every agent, since the commit hook runs it', async () => {
     const { run, calls } = fakeRun();
-    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', evidenceCheck: true });
-    const args = runCall(calls).args;
-    expect(args).toContain(`${HOME}/agent-check:/opt/factory-check:ro`);
+    await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
+    expect(runCall(calls).args).toContain(`${HOME}/agent-check:/opt/factory-check:ro`);
     expect(existsSync(`${HOME}/agent-check/check.mjs`)).toBe(true);
-    const plain = fakeRun();
-    await dockerContainer(plain.run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
-    expect(runCall(plain.calls).args.join(' ')).not.toContain('/opt/factory-check');
   });
 
   it('tells the testing agent to run the mounted command before it ends', () => {
@@ -91,7 +87,7 @@ describe('dockerContainer', () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).agent({ clone: '/w/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', mediaDir: '/h/media/issue-7' });
     expect(runCall(calls).args).toContain('/h/media/issue-7:/work/.factory-media:ro');
-    expect(runCall(calls).args.filter((a) => a === '-v')).toHaveLength(3);
+    expect(runCall(calls).args.filter((a) => a === '-v')).toHaveLength(4);
   });
 
   it('mounts the session folder under the agent projects folder and starts the session by id', async () => {
@@ -99,7 +95,7 @@ describe('dockerContainer', () => {
     await dockerContainer(run, cfg, null).agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l', session: { dir: '/h/sessions/issue-7', id: 'abc', resume: false } });
     const { args } = runCall(calls);
     expect(args).toContain('/h/sessions/issue-7:/home/pwuser/.claude/projects');
-    expect(args.filter((a) => a === '-v')).toHaveLength(3);
+    expect(args.filter((a) => a === '-v')).toHaveLength(4);
     expect(args.slice(args.indexOf('--verbose'))).toEqual(['--verbose', '--session-id', 'abc']);
     expect(args).not.toContain('--resume');
   });

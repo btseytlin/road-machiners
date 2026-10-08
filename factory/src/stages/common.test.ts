@@ -4,7 +4,8 @@ import type { AgentRun, Ctx } from '../types';
 import { markResumed } from '../sessions';
 import { EMPTY_STATE, writeState } from '../state';
 import { solidPng } from '../media-fixtures';
-import { RESUME_NOTE, agentHome, baseBranchFor, baseBranchOf, factoryPaths, fillPrompt, modelFor, prepareOutputs, runAgent } from './common';
+import { factoryPaths } from '../diff-guard';
+import { RESUME_NOTE, agentHome, baseBranchFor, baseBranchOf, fillPrompt, modelFor, prepareOutputs, runAgent } from './common';
 
 function agentCtx(labels: string[], body = '', comments: { login: string; body: string }[] = [], fetchFn?: typeof fetch): { ctx: Ctx; runs: AgentRun[]; logs: string[] } {
   const runs: AgentRun[] = [];

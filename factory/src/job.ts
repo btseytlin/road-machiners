@@ -3,7 +3,7 @@ import { failureIssue, reportFailure, summarizeError } from './fail';
 import { UsageLimitError } from './pause';
 import { CARD_JOBS } from './position';
 import { BudgetError } from './stages/checkpoint';
-import { CommitteeDecisionError } from './stages/common';
+import { CommitteeDecisionError } from './diff-guard';
 import { adhoc } from './stages/adhoc';
 import { approve } from './stages/approval';
 import { change } from './stages/change';
