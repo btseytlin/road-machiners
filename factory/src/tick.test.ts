@@ -61,7 +61,7 @@ describe('chooseJobs daily cap', () => {
   it('runs a queued incident job at the cap, after the other branch jobs', () => {
     const queuedIncident = { ...capped, pendingIncidents: [7, 8] };
     expect(chooseJobs(queuedIncident, [], NOW, CFG)).toEqual([{ stage: 'incident', issue: 7 }]);
-    expect(chooseJobs({ ...queuedIncident, pendingShip: 'u', release: { issue: 3, branch: 'release/x', day: 'x', postId: 1, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } } }, [], NOW, CFG)).toEqual([{ stage: 'ship', issue: 3 }]);
+    expect(chooseJobs({ ...queuedIncident, pendingShip: 'u', release: { issue: 3, branch: 'release/x', day: 'x', postId: 1, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } } }, [], NOW, CFG)).toEqual([{ stage: 'ship', issue: 3 }]);
   });
 
   it('runs factory changes in the implement queue after ad hoc tasks and before cards', () => {
@@ -75,7 +75,7 @@ describe('chooseJobs daily cap', () => {
   });
 });
 
-const RELEASE: ReleaseState = { issue: 20, branch: 'release/2026-01-05', day: '2026-01-05', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } };
+const RELEASE: ReleaseState = { issue: 20, branch: 'release/2026-01-05', day: '2026-01-05', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } };
 const tracking = (labels: string[] = ['release']): Card => card(20, 'Approval', labels);
 
 const AT_HEAD = { dev: null, release: 'rel0001' };

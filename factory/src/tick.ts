@@ -11,6 +11,7 @@ import { reportAttempt, reportScheduler } from './observability';
 import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { clearSessions, markResumed } from './sessions';
+import { openTasks } from './stages/release-common';
 import { readState, updateState } from './state';
 import { askedAt, isAnswered } from './questions';
 import { ADHOC_LABEL, AGENT_QUEUES, HOTFIX_LABEL, NEEDS_INFO_LABEL, QUEUE_OF, RELEASE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from './types';
@@ -103,10 +104,9 @@ export function readReleaseGate(state: FactoryState, cards: Card[], releaseHead:
   const tracking = cards.find((card) => card.issue === release.issue);
   if (!tracking) return { reason: 'tracking-missing', issues: [] };
   if (tracking.labels.includes(STUCK_LABEL)) return { reason: 'failed', issues: [release.issue] };
-  return playtestGate(cards, release.playtest, releaseHead);
+  return playtestGate(openTasks(cards, release.tasks), release.playtest, releaseHead);
 }
-function playtestGate(cards: Card[], playtest: PlaytestState, releaseHead: string | null): ReleaseGate {
-  const issues = cards.filter((card) => card.labels.includes(RELEASE_TASK_LABEL) && card.column !== 'Done').map((card) => card.issue);
+function playtestGate(issues: number[], playtest: PlaytestState, releaseHead: string | null): ReleaseGate {
   if (issues.length) return { reason: 'release-tasks', issues };
   if (playtest.blocked !== null) return { reason: 'playtest-blocked', issues: [] };
   return releaseHead !== null && playtest.passed === releaseHead ? { reason: 'candidate', issues: [] } : { reason: 'playtest', issues: [] };

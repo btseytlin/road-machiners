@@ -10,7 +10,7 @@ import { ROOT, fake, reset, type Fake } from './test-fakes';
 
 const DAY = '2026-10-07';
 const SEED = 20261007;
-const RELEASE: ReleaseState = { issue: 11, branch: `release/${DAY}`, day: DAY, postId: null, candidateSha: null, removed: [], playtest: newPlaytest(DAY) };
+const RELEASE: ReleaseState = { issue: 11, branch: `release/${DAY}`, day: DAY, postId: null, candidateSha: null, removed: [], tasks: [], playtest: newPlaytest(DAY) };
 const CLONE_LOG = join(ROOT, 'work', 'release-playtest', 'game', '.factory', 'playtest', 'log.jsonl');
 
 const finding = { id: 'F1', severity: 'important' as const, title: 'Raiders chase forever', evidence: 'turns 300 to 900, v12' };

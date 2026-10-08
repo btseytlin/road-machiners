@@ -207,6 +207,7 @@ function release(ctx: Ctx): void {
   console.log(`open release: #${state.release.issue} branch ${state.release.branch} cut ${state.release.day}`);
   console.log(`candidate post: ${candidatePost(state.release)}`);
   console.log(`removed: ${state.release.removed.map((issue) => `#${issue}`).join(', ') || 'none'}`);
+  console.log(`recorded tasks: ${state.release.tasks.map((issue) => `#${issue}`).join(', ') || 'none'}`);
   for (const line of playtestLines(state.release.playtest, ctx.cfg.playtestRuns)) console.log(line);
 }
 

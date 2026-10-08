@@ -151,6 +151,7 @@ export type ReleaseState = {
   postId: number | null; // Telegram id of the current candidate post. Null while none is current.
   candidateSha: string | null; // short hash of the release head the current post was built from
   removed: number[]; // feature issues taken out of this release
+  tasks: number[]; // release tasks the factory created or labeled. Each holds the playtest until the board shows it in Done.
   playtest: PlaytestState;
 };
 

@@ -60,7 +60,7 @@ Flags hold on any position:
 `factory release` prints the release position.
 
 - None: `release` is null. `cut` makes one.
-- Cut with open tasks: `release` is set, and release tasks are not all done. The playtest and the candidate wait.
+- Cut with open tasks: `release` is set, and release tasks are not all done. The playtest and the candidate wait. An open task is a `release-task` card outside Done, or an issue in `release.tasks` that the board does not show in Done.
 - Playtest: every release task is done, and `release.playtest.passed` is not the release head. The playtest runs.
 - Playtest blocked: `release.playtest.blocked` holds the commit and the reason. The tracking card has `factory-stuck`. `retry <tracking> [decision]` lifts it.
 - Candidate building: `release.playtest.passed` is the release head and no post is current. The candidate runs.
@@ -75,7 +75,9 @@ The public post of a shipped release has its own position in `releasePost`, besi
 - Waiting for a draft: Ship set `releasePost` with the changelog and the screenshot under `$FACTORY_HOME/release-posts/<day>/`, and `postId` is null. The incident watch shows `release post due`, and Hermes sends a draft.
 - Draft posted: `releasePost.postId` holds the draft post in the committee chat, and `releasePost.draft` its text. A reply to it goes to Hermes, who sends a new draft. Publish on the current draft posts it to `FACTORY_PUBLIC_CHANNEL` and sets `releasePost` to null.
 
-`factory audit` and `card N` flag four drifts: an open release whose tracking card is missing, a pending ship with no current candidate post, a candidate post of a commit the playtest did not pass, and a release post with a draft post id but no draft text or the reverse. `factory release` flags nothing.
+`release.tasks` lists every release task the factory created or labeled: the cut's cleanup tasks, a reply's task and a fix triage labeled. Each is written before its card or label goes on the board, since the board lists a write up to a minute late. `factory release` prints them as `recorded tasks`.
+
+`factory audit` and `card N` flag five drifts: an open release whose tracking card is missing, a recorded release task missing from the board, a pending ship with no current candidate post, a candidate post of a commit the playtest did not pass, and a release post with a draft post id but no draft text or the reverse. `factory release` flags nothing.
 
 The release tracking card has the label `release`. It waits in Approval for the whole release, and its post is `release.postId`. It never shows card drift.
 

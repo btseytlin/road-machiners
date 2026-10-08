@@ -204,7 +204,7 @@ describe('triage stage', () => {
 });
 
 describe('triage release fixes', () => {
-  const release = { issue: 40, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } };
+  const release = { issue: 40, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } };
   const openRelease = (postId: number | null) => writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { ...release, postId } });
 
   it('tells the agent that no release takes fixes when none is open', async () => {
@@ -230,6 +230,7 @@ describe('triage release fixes', () => {
     openRelease(null);
     await runStage(fakeCtx(verdict({ releaseFix: true, reason: 'Fixes the headlights of #5.' })), 7);
     expect(calls).toContain('addLabel 7 release-task');
+    expect(readState(`${home}/state.json`).release?.tasks).toEqual([7]);
     expect(calls.find((call) => call.startsWith('comment 7 Triage passed as a fix for release 2026-09-29: Fixes the headlights of #5.'))).toContain('It branches from release/2026-09-29');
     expect(calls.at(-1)).toBe('move 7 Design');
     expect(existsSync(`${home}/work/issue-7`)).toBe(false);

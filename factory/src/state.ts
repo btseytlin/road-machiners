@@ -26,8 +26,9 @@ export function newPlaytest(day: string): PlaytestState {
 }
 
 // A release cut before the playtest has no playtest yet and no candidate commit. Its post, if any, stays, and the next tick drops it, since it names no commit.
+// A release cut before the factory recorded its tasks has none recorded, and the board alone holds its playtest.
 function fillRelease(release: Partial<ReleaseState> & Pick<ReleaseState, 'day'>): ReleaseState {
-  return { ...release, candidateSha: release.candidateSha ?? null, playtest: release.playtest ?? newPlaytest(release.day) } as ReleaseState;
+  return { ...release, candidateSha: release.candidateSha ?? null, tasks: release.tasks ?? [], playtest: release.playtest ?? newPlaytest(release.day) } as ReleaseState;
 }
 
 // Testing split into verify and checks. A testing job saved before the split ran the agent half first, so the tick checks and resumes it as verify.

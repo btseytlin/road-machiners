@@ -14,7 +14,7 @@ vi.mock('../deploy', () => ({
 }));
 const { candidate, candidateCaption } = await import('./candidate');
 
-const RELEASE: ReleaseState = { issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: 'abc1234', blocked: null, notes: [] } };
+const RELEASE: ReleaseState = { issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: 'abc1234', blocked: null, notes: [] } };
 const CHANGES = '- [#3] Trucks are faster.\n- [#5] The horn is louder.\n';
 
 beforeEach(() => {

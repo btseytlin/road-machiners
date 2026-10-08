@@ -3,7 +3,7 @@ import { newPlaytest, updateState } from '../state';
 import { MAINTENANCE_LABEL, RELEASE_LABEL, RELEASE_TASK_LABEL, type Ctx } from '../types';
 import { fillPrompt } from './common';
 import { mergeResolving } from './merge-resolve';
-import { featureLine, featureMerges } from './release-common';
+import { featureLine, featureMerges, recordReleaseTask } from './release-common';
 
 // The two cleanup tasks of a release. Each runs the normal stages on the release branch and needs no committee post.
 const CLEANUP_TASKS = [
@@ -33,10 +33,11 @@ export async function release(ctx: Ctx): Promise<void> {
   });
   // The cut counts as made once the release is open. A failure before this point leaves lastRelease alone, so the next tick cuts again.
   // A failure below still names this issue, and the tick sees an open release.
-  updateState(ctx.statePath, (state) => ({ ...state, lastRelease: now.toISOString(), release: { issue: tracking, branch, day, postId: null, candidateSha: null, removed: [], playtest: newPlaytest(day) } }));
+  updateState(ctx.statePath, (state) => ({ ...state, lastRelease: now.toISOString(), release: { issue: tracking, branch, day, postId: null, candidateSha: null, removed: [], tasks: [], playtest: newPlaytest(day) } }));
   await addCard(ctx, tracking, 'Approval', 'release');
   for (const task of CLEANUP_TASKS) {
     const n = await ctx.github.createIssue(`${task.title} (release ${day})`, fillPrompt(task.prompt, {}), [RELEASE_TASK_LABEL, MAINTENANCE_LABEL]);
+    recordReleaseTask(ctx, n);
     await addCard(ctx, n, 'Design', 'release-task');
   }
   ctx.log('release', tracking, `cut ${branch} with ${features.length} features`);

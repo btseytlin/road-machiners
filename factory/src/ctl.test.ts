@@ -222,7 +222,7 @@ describe('read commands', () => {
   });
 });
 
-const RELEASE = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, candidateSha: null, removed: [] };
+const RELEASE = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, candidateSha: null, removed: [], tasks: [] };
 
 describe('immediate commands', () => {
   it('retry removes the stuck label and only that card failures', async () => {
