@@ -101,6 +101,7 @@ describe('planVolley', () => {
     expect(blastRadiusOf('grenadeLauncher')).toBeGreaterThan(0);
     expect(blastRadiusOf('cannon')).toBeGreaterThan(0);
     expect(blastRadiusOf('mg')).toBe(0);
+    expect(blastRadiusOf('harpoon')).toBe(0);
     expect(() => blastRadiusOf('stockEngine')).toThrow();
   });
 });

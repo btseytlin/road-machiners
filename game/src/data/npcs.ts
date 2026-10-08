@@ -257,7 +257,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: "plates", weight: 6 },
       { value: "spacedArmor", weight: 3 },
       { value: "reinforcedCage", weight: 3 },
-      { value: "plowRam", weight: 2 },
+      { value: "plowRam", weight: 2 }, { value: "claymoreRam", weight: 1 }, // the claymore is a ram with a charge
       { value: "ceramicPlates", weight: 1 },
     ],
     cargoPart: [

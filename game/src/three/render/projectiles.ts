@@ -1,6 +1,8 @@
-// What flies from a muzzle to where each round lands: tracers, shells and missiles, with their look and speed per
-// weapon. Rounds fly straight from the barrel tip. Hits end on the truck they struck, and misses end on the ground
-// at the point the sim put them, so the sim's spread shows. Render-only: randomness here never changes rules.
+// What flies from a muzzle to where each round lands: tracers, shells, missiles and the harpoon's bolt, with their
+// look and speed per weapon. Rounds fly straight from the barrel tip. Hits end on the truck they struck, and misses end
+// on the ground at the point the sim put them, so the sim's spread shows. A round with a rope trails it from the
+// muzzle: on a hit the rope stays until the turn's playback ends and the line takes over (see lines.ts), and on a miss
+// it lies where the round fell and reels back in. Render-only: randomness here never changes rules.
 
 import * as THREE from 'three';
 import { PARTS } from '../../data/parts';
@@ -8,6 +10,7 @@ import { TIME } from '../../data/time';
 import { computeRoundPoint, groundPoint, toMap, type V3 } from '../../phys/frames';
 import { PAL } from '../../render/palette';
 import type { Terrain } from '../../sim/terrain';
+import { reelRope, Rope, ROPE_LOOK, type GroundAt } from './lines';
 import type { ShotRound } from '../../sim/types';
 
 // Where a round leaves the gun and the unit direction it leaves in, read when the round fires.
@@ -16,7 +19,7 @@ export type Muzzle = { pos: V3; dir: V3 };
 // What a round tells the sound when it leaves the muzzle and when it lands.
 export type ShotCues = { fired: (m: Muzzle) => void; landed: () => void };
 
-type Look = 'tracer' | 'shell' | 'missile' | 'grenade';
+type Look = 'tracer' | 'shell' | 'missile' | 'grenade' | 'bolt';
 
 export type ProjectileSpec = {
   look: Look;
@@ -29,6 +32,7 @@ export type ProjectileSpec = {
   wobble: number; // meters of side swing at mid flight
   casing: CasingSize | null; // the spent casing the gun throws per round, in CASING; null for caseless rounds
   pellets?: true; // the rounds of one volley are pellets of one shell, so the volley throws one casing
+  rope?: true; // the round trails a rope from the muzzle
 };
 
 // The look of round k of a volley. Only the first pellet of a shell throws its casing.
@@ -59,6 +63,8 @@ export const PROJECTILES: Record<string, ProjectileSpec> = {
   slugCannon: { look: 'shell', speed: 100, gapMs: 150, length: 0.4, width: 0.14, color: 0xffad50, flash: 1, wobble: 0, casing: 'large' },
   recoilless: { look: 'shell', speed: 60, gapMs: 0, length: 0.7, width: 0.2, color: 0xffad50, flash: 1.6, wobble: 0, casing: null },
   grenadeLauncher: { look: 'grenade', speed: 45, gapMs: 160, length: 0.3, width: 0.3, color: 0x4a4a3c, flash: 0.9, wobble: 0, casing: null },
+  // The harpoon's dark barbed bolt flies as fast as a cannon shell, trailing its rope.
+  harpoon: { look: 'bolt', speed: 110, gapMs: 0, length: 1.1, width: 0.16, color: 0x2e2a26, flash: 0.5, wobble: 0, casing: null, rope: true },
   rocketRack: { look: 'missile', speed: 40, gapMs: 110, length: 0.9, width: 0.16, color: 0x6a6a64, flash: 0.9, wobble: 0.5, casing: null },
 };
 
@@ -154,9 +160,16 @@ type Flight = {
   life: number;
   onFire: (m: Muzzle) => void;
   onLand: () => void;
+  rope: Rope | null;
+  struck: boolean;
+  ground: GroundAt;
 };
 
-export type Launch = { spec: ProjectileSpec; muzzle: () => Muzzle; plan: RoundPlan; onFire: (m: Muzzle) => void; onLand: () => void };
+// A rope left by a round that missed: it lies from the muzzle to where the round fell and reels in over age seconds.
+type Reel = { rope: Rope; from: THREE.Vector3; to: THREE.Vector3; age: number; ground: GroundAt };
+
+// ground: the ground height under a point, where a rope comes to rest.
+export type Launch = { spec: ProjectileSpec; muzzle: () => Muzzle; plan: RoundPlan; onFire: (m: Muzzle) => void; onLand: () => void; ground: GroundAt };
 
 const X_AXIS = new THREE.Vector3(1, 0, 0);
 
@@ -175,7 +188,22 @@ class ProjectileKit {
     if (spec.look === 'tracer') return this.tracer(spec);
     if (spec.look === 'shell') return this.shell(spec);
     if (spec.look === 'grenade') return this.grenade(spec);
+    if (spec.look === 'bolt') return this.bolt(spec);
     return this.missile(spec);
+  }
+
+  // A barbed bolt: a thin shaft behind a wide pointed head, dark iron with no glow.
+  private bolt(spec: ProjectileSpec): THREE.Object3D {
+    const g = new THREE.Group();
+    const iron = this.paintOf(spec.color);
+    const shaft = new THREE.Mesh(this.body, iron);
+    shaft.scale.set(spec.length * 0.75, spec.width * 0.35, spec.width * 0.35);
+    shaft.position.x = -spec.length * 0.25;
+    const head = new THREE.Mesh(this.cone, iron);
+    head.scale.set(spec.length * 0.3, spec.width, spec.width);
+    head.position.x = spec.length * 0.3;
+    g.add(shaft, head);
+    return g;
   }
 
   // A streak whose front is the round. It is stretched each frame, so its x scale is set by the flight.
@@ -265,6 +293,8 @@ class ProjectileKit {
 export class Projectiles {
   private kit = new ProjectileKit();
   private flights: Flight[] = [];
+  private held: Rope[] = []; // ropes of rounds that struck, until releaseRopes()
+  private reels: Reel[] = [];
   private at = new THREE.Vector3();
   private ahead = new THREE.Vector3();
   private dir = new THREE.Vector3();
@@ -289,7 +319,16 @@ export class Projectiles {
       life: l.plan.flightMs / 1000,
       onFire: l.onFire,
       onLand: l.onLand,
+      rope: l.spec.rope ? new Rope() : null,
+      struck: l.plan.impact === 'truck',
+      ground: l.ground,
     });
+  }
+
+  // Drops the ropes of rounds that struck, when the turn's playback ends and the lines show.
+  releaseRopes(): void {
+    for (const rope of this.held) this.scene.remove(rope.root);
+    this.held = [];
   }
 
   tick(dt: number): void {
@@ -302,10 +341,37 @@ export class Projectiles {
       if (f.age >= f.life) {
         this.scene.remove(f.obj);
         this.flights.splice(i, 1);
+        this.landRope(f);
         f.onLand();
         continue;
       }
       this.place(f, dt);
+    }
+    this.reel(dt);
+  }
+
+  // The rope ends where the round landed: held taut there on a hit, and on a miss dropping slack onto the ground
+  // before it reels in.
+  private landRope(f: Flight): void {
+    if (!f.rope) return;
+    f.rope.set(f.from, f.to, f.from.distanceTo(f.to), f.ground);
+    if (f.struck) this.held.push(f.rope);
+    else this.reels.push({ rope: f.rope, from: f.from, to: f.to, age: 0, ground: f.ground });
+  }
+
+  // A missed rope lies on the ground for a beat, then its far end drags back into the muzzle.
+  private reel(dt: number): void {
+    for (let i = this.reels.length - 1; i >= 0; i--) {
+      const r = this.reels[i];
+      r.age += dt;
+      const left = 1 - Math.max(0, r.age * 1000 - ROPE_LOOK.restMs) / ROPE_LOOK.reelMs;
+      if (left <= 0) {
+        this.scene.remove(r.rope.root);
+        this.reels.splice(i, 1);
+        continue;
+      }
+      if (r.age * 1000 < ROPE_LOOK.restMs) r.rope.set(r.from, r.to, r.from.distanceTo(r.to) * (1 + ROPE_LOOK.missSlack), r.ground);
+      else reelRope(r.rope, r.from, r.to, left, r.ground);
     }
   }
 
@@ -314,6 +380,7 @@ export class Projectiles {
     f.from.set(m.pos.x, m.pos.y, m.pos.z);
     f.side.set(-(f.to.z - f.from.z), 0, f.to.x - f.from.x).normalize();
     f.obj.visible = true;
+    if (f.rope) this.scene.add(f.rope.root);
     f.onFire(m);
   }
 
@@ -327,6 +394,7 @@ export class Projectiles {
     // A streak never reaches back past the muzzle.
     if (f.spec.look === 'tracer') f.obj.scale.x = Math.min(f.spec.length, this.at.distanceTo(f.from));
     if (f.spec.look === 'missile') this.trail(f, dt);
+    if (f.rope) f.rope.set(f.from, this.at, f.from.distanceTo(this.at), f.ground);
   }
 
   // Straight from the muzzle to the landing point, plus a swing that is zero at both ends. A grenade also arcs up.

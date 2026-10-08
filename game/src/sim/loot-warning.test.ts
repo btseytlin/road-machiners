@@ -5,7 +5,7 @@ import { chooseOption, currentOptions, hangUp, raiseCalls } from './dialogue';
 import { pushGoal, resolveNpcActivities, topGoal } from './npc-activities';
 import { lootTaken, optionChances, optionWeights, visibleSalvage } from './npc-decisions';
 import { answerLootWarning, contestLoot, pendingWarningTo, settleLootWarning, warnedOffTarget, warnTruck } from './loot-warning';
-import { looterOf } from './salvage';
+import { emptyHidden, looterOf } from './salvage';
 import { beginSearch, startSearch } from './search';
 import { addState, advanceStates, lootWarningData, stateOf } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls } from './testkit';
@@ -18,7 +18,7 @@ const WRECK = 'wreck901';
 function quietWorld(): World {
   const w = emptyWorld({ x: 30, y: 30 });
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
-  w.salvage.push({ id: WRECK, pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 6 }, parts: [] });
+  w.salvage.push({ id: WRECK, pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 6 }, parts: [], hidden: emptyHidden() });
   w.rngState = rngStateForForcedRolls(8);
   return w;
 }

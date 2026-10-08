@@ -9,7 +9,7 @@ import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, to
 import { LogPanel } from "./log";
 import { ERROR_REPORT_URL } from "../config";
 import {
-  contractDue,
+  heldContractDue,
   contractSummary,
   eventText,
   formatNpcActivity,
@@ -43,7 +43,8 @@ export type ContextTarget =
   | { kind: 'shop' }
   | { kind: 'downed'; id: string }
   | { kind: 'oasis' }
-  | { kind: 'stock'; id: string }
+  | { kind: 'stock'; id: string } // search the stock
+  | { kind: 'loot'; id: string } // take the stock's revealed loot
   | { kind: 'empty' };
 export type ContextAction = { label: string; ready: boolean; target: ContextTarget; hint?: string; combat?: number };
 
@@ -373,7 +374,7 @@ export class Hud {
         el(
           "div",
           { class: "contract-line" },
-          `${contractSummary(c)} — ${contractDue(c)}`,
+          `${contractSummary(c)} — ${heldContractDue(c)}`,
         ),
       ),
     );

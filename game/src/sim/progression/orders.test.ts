@@ -73,7 +73,7 @@ describe('upgradeGear', () => {
 
   it('with keepRoom, takes no gun that would fill cargo cells, where a fighter would', () => {
     const roomOf = (world: World) => freeCells({ ...playerVehicle(world), items: playerVehicle(world).items.filter((it) => it.kind === 'part') });
-    // The heavy machine gun is the only part on offer, so no cargo part adds room.
+    // The gun is the only offer, so no cargo part bought beside it adds room.
     const offer = (world: World) => { shopState(world, 'bowl').stock = [makePart(world, 'heavyMg', 0)]; };
     const trader = atBowl();
     offer(trader);
