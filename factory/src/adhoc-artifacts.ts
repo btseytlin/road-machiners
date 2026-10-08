@@ -3,7 +3,6 @@ import { extname, join } from 'node:path';
 import { DOCUMENT_MAX_BYTES } from './telegram';
 import { OUT_DIR } from './types';
 
-// The only place an ad hoc agent may leave a file for the member, inside its work clone.
 export const ARTIFACT_DIR = 'files';
 export const ARTIFACT_MAX_FILES = 10;
 export const ARTIFACT_MAX_TOTAL_BYTES = 100 * 1024 * 1024;
@@ -12,8 +11,6 @@ const SAFE_NAME = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,99}$/;
 
 export type Artifact = { name: string; path: string; size: number };
 
-// Lists the files the agent left in its output folder and checks each one before anything is sent.
-// Only plain files directly in the folder pass. A link, a folder, an odd name, a wrong extension, an empty file or a file Telegram refuses throws with a message the member can act on.
 export function collectArtifacts(home: string): Artifact[] {
   const dir = join(home, OUT_DIR, ARTIFACT_DIR);
   if (!lstatSync(dir, { throwIfNoEntry: false })) return [];
@@ -54,7 +51,6 @@ function sizeProblem(size: number): string | null {
 
 const isRealDir = (path: string): boolean => lstatSync(path, { throwIfNoEntry: false })?.isDirectory() ?? false;
 
-// Where validated files wait for delivery. It is under the factory home, never under the web root, and only the factory user can read it.
 export const heldDir = (home: string, issue: number): string => join(home, 'adhoc-artifacts', `issue-${issue}`);
 
 export function holdArtifacts(home: string, issue: number, artifacts: Artifact[]): Artifact[] {

@@ -10,14 +10,14 @@ import { planNpcOrders } from './ai';
 import { advanceFar } from './far';
 import { goodsCount } from './grid';
 import { topGoal } from './npc-activities';
-import { nearestRoadPoint, oldSpotOf, oldSpotPicks, oldStockId, type OldSpotPick } from './old-places';
-import { canReachSalvage } from './salvage';
+import { nearestRoadPoint, oldSpotOf, oldSpotPicks, oldStockId, type OldSpotPick, canReachSalvage, isRoadWreck } from './salvage';
 import { beginSearch } from './search';
 import { isFree } from './spawn';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
 import type { SalvageStock, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
+import { defaultSetup } from './settings';
 import { endTurn, newWorld } from './world';
 
 const picks = oldSpotPicks(TEST_MAP);
@@ -36,7 +36,7 @@ function setShare(share: number): void {
 
 // The real map with no other NPCs and no spawns, the player parked at its start, far from the old spots under test.
 function roadWorld(pick: OldSpotPick): { w: World; npc: Vehicle; stock: SalvageStock } {
-  const w = newWorld(1337, START_KITS.standard, TEST_MAP);
+  const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
   w.vehicles = w.vehicles.filter((v) => v.faction === 'player');
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
   const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], freeNear(w, nearestRoadPoint(pick.pos)));
@@ -65,7 +65,7 @@ const scavengeGoal = (pick: OldSpotPick) => ({ kind: 'scavenge' as const, target
 function held(w: World, stockId: string): number {
   const stock = w.salvage.find((s) => s.id === stockId)!;
   const trucks = w.vehicles.reduce((n, v) => n + (goodsCount(v).scrap ?? 0) + (goodsCount(v).parts ?? 0), 0);
-  return (stock.goods.scrap ?? 0) + (stock.goods.parts ?? 0) + trucks;
+  return (stock.goods.scrap ?? 0) + (stock.goods.parts ?? 0) + (stock.hidden.goods.scrap ?? 0) + (stock.hidden.goods.parts ?? 0) + trucks;
 }
 
 function vehicle(w: World, id: string): Vehicle {
@@ -95,6 +95,8 @@ describe('scavengers pick old-world loot spots', () => {
     const npc = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], pos);
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
     forceOption('idle', 'scavenge');
+    forceOption('salvageSeen', 'keep');
+    w.salvage = w.salvage.filter((stock) => !isRoadWreck(stock));
     return { w, npc };
   }
 

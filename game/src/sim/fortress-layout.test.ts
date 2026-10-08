@@ -17,10 +17,8 @@ const isFlush = (s: Site) => FORTRESS_STYLES[FORTRESS_SITES[s.id].style].flush;
 const FLUSH = FORTS.filter(isFlush);
 const CASTLES = FORTS.filter((s) => !isFlush(s));
 const siteOf = (id: string): Site => FORTS.find((s) => s.id === id)!;
-// The five sites whose layout stays as it was at 42b6c9fe (IV16).
 const KEPT = ['green-pit', 'pump-station', 'south-lock', 'scrapjaw', 'kiln'];
 
-// Whether p lies on or inside the convex footprint of a piece.
 function covers(site: Site, piece: FortressPiece, p: Vec): boolean {
   const c = fortressFootprint(site, piece);
   return c.every((a, i) => {
@@ -29,10 +27,8 @@ function covers(site: Site, piece: FortressPiece, p: Vec): boolean {
   });
 }
 
-// The boxes of a site's rock masses that block a truck. Nose's mountain closes its curtain where no wall stands.
 const ROCK_BOXES = new Map<string, PosedBox[]>([['nose', noseRocks(siteOf('nose')).flatMap((p, k) => propBoxes(propObstacle(p, k)).filter((b) => b.z0 < PHYSICS.truckClearance))]]);
 
-// Whether a piece or a blocking rock box stands on p.
 function closed(site: Site, pieces: FortressPiece[], p: Vec): boolean {
   return pieces.some((piece) => covers(site, piece, p)) || (ROCK_BOXES.get(site.id) ?? []).some((b) => boxDistance(b, p) === 0);
 }
@@ -71,9 +67,7 @@ describe('fortress layout', () => {
       const { depth } = FORTRESS_STYLES[FORTRESS_SITES[site.id].style].gate;
       const house = gates.find((p) => dist(g, { x: p.pos.x + (out.x * depth) / 2, y: p.pos.y + (out.y * depth) / 2 }) < EPS);
       expect(house).toBeDefined();
-      // The model's +y side, the outer face, looks out of the site.
       expect(Math.sin(house!.yaw) * out.x - Math.cos(house!.yaw) * out.y).toBeCloseTo(1, 9);
-      // The whole outer face lies on the tangent at the gate, the inner edge of the pad.
       for (const c of fortressFootprint(site, house!)) expect((c.x - g.x) * out.x + (c.y - g.y) * out.y).toBeLessThanOrEqual(EPS);
     }
   });
@@ -86,14 +80,11 @@ describe('fortress layout', () => {
     expect(houses).toHaveLength(siteGates(site).length);
     expect(gates.map((g) => g.gate)).toEqual(siteGates(site));
     for (const g of gates) {
-      // The face lies on the gate's bearing from the center, and on the curtain line.
       const bearingOf = (p: Vec) => Math.atan2(p.y - site.pos.y, p.x - site.pos.x);
       expect(bearingOf(g.face)).toBeCloseTo(bearingOf(g.gate), 9);
       expect(Math.min(...outline.map((a, i) => segmentDist(g.face, a, outline[(i + 1) % outline.length])))).toBeLessThan(EPS);
-      // A gatehouse stands behind the face: the face is the middle of its outer side.
       const house = houses.find((h) => {
         const c = fortressFootprint(site, h);
-        // The first two footprint corners lie on the side to the right of the yaw, the outer face.
         return dist(g.face, { x: (c[0].x + c[1].x) / 2, y: (c[0].y + c[1].y) / 2 }) < EPS;
       });
       expect(house, `${site.id} gate at ${g.gate.x},${g.gate.y}`).toBeDefined();
@@ -247,7 +238,6 @@ describe('fortress layout', () => {
     const site = CASTLES.find((s) => FORTRESS_SITES[s.id].shape === 'square')!;
     const g = siteGates(site)[0];
     const toGate = Math.atan2(g.y - site.pos.y, g.x - site.pos.x);
-    // A square corner on the side face of the gatehouse.
     const toSide = Math.asin(FORTRESS_STYLES[FORTRESS_SITES[site.id].style].gate.width / 2 / (site.radius - FORTRESS.inset));
     const cornered = { ...site, id: 'test-cornered', pos: { ...site.pos } };
     FORTRESS_SITES['test-cornered'] = { ...FORTRESS_SITES[site.id], turn: (toGate + toSide) / DEG };
@@ -275,7 +265,6 @@ describe('fortress layout', () => {
     it('throws when a gate lies by a gorge', () => {
       const g = siteGates(bowl())[0];
       const toGate = Math.atan2(g.y - bowl().pos.y, g.x - bowl().pos.x) / DEG;
-      // The left gorge of the bastion at -44.52 degrees moves in along the curtain: widen the gorge to the gate.
       test({ ...FORTRESS_SITES.bowl, bastions: { ...bastions, gorge: 6.5, capitals: bastions.capitals.map((c) => (c === -44.52 ? toGate + 4 : c)) } }, (site) => expect(() => fortressPieces(site)).toThrow(/corner|short/));
     });
 
@@ -295,7 +284,6 @@ describe('fortress layout', () => {
   it('throws when a style lacks a piece its outline needs (IV19)', () => {
     const site = siteOf('granary');
     const squared = { ...site, id: 'test-squared', pos: { ...site.pos } };
-    // The ring style builds no tower, so a square with towers at its corners cannot use it.
     FORTRESS_SITES['test-squared'] = { shape: 'square', turn: 45, style: 'ring' };
 
     try {
@@ -312,8 +300,6 @@ describe('fortress layout', () => {
   });
 });
 
-// IV25. Whether every foot point of every wall and gatehouse face is seen by a tower standing at least FORTRESS.flankMin
-// out past that wall, along a straight line that stays out of the outline's interior.
 function unflanked(site: Site): Vec[] {
   const outline = fortressOutline(site);
   const towers = fortressPieces(site).filter((p) => p.kind === 'tower').map((p) => p.pos);
@@ -324,11 +310,9 @@ function unflanked(site: Site): Vec[] {
     const [a, b] = fortressFootprint(site, piece);
     const length = dist(a, b);
     const u = { x: (b.x - a.x) / length, y: (b.y - a.y) / length };
-    // The footprint runs counterclockwise from its outer face, so the outer normal is to the right of a to b.
     const n = { x: u.y, y: -u.x };
     for (let d = 0; d <= length + EPS; d += 0.5) {
       const foot = { x: a.x + u.x * d + n.x * 0.5, y: a.y + u.y * d + n.y * 0.5 };
-      // A joint overlaps its neighbor, so a foot point that lies in another piece is no foot.
       if (pieces.some((o) => o !== piece && covers(site, o, foot))) continue;
       const seen = towers.some((t) => {
         const out = (t.x - a.x) * n.x + (t.y - a.y) * n.y;
@@ -375,7 +359,6 @@ describe('Nose towers (IV30)', () => {
       expect(dist(t, next) * 4, `tower ${i}`).toBeLessThanOrEqual(26);
       checked++;
     });
-    // The mountain closes about a third of the ring, and the walls hold the rest.
     expect(checked).toBeGreaterThan(12);
   });
 });

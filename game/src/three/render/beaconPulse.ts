@@ -1,8 +1,6 @@
 // The player's emergency beacon, made visible: while it calls, red full rings spread out from the truck.
 // Sound arcs show what the player hears, from one bearing. These show what the player sends, in all
 // directions, so they are circles in their own color and draw under the sound arcs.
-// Timing runs on the wall clock, so pulses stay sparing while turns run on their own and keep going
-// while turns are stopped. Render only: nothing here reads or changes the rules.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
@@ -11,21 +9,20 @@ import { heightAt, type Terrain } from '../../sim/terrain';
 import type { Vec } from '../../sim/vec';
 
 const S = PHYSICS.metersPerTile;
-const RENDER_ORDER = 904; // above the fog and shade, below the contact markers and the sound arcs
-const LIFT = 0.1; // meters above the ground under the truck
+const RENDER_ORDER = 904;
+const LIFT = 0.1;
 const PULSE = {
-  period: 6, // seconds from one pulse start to the next
-  rings: 2, // rings in one pulse
-  stagger: 0.35, // seconds between rings
-  seconds: 2, // time for one ring to spread and fade
-  start: 1.5, // tiles from the truck center where a ring begins
-  reach: 10, // tiles where a ring ends
-  thickness: 0.18, // tiles, the same at every size
-  opacity: 0.7, // of a fresh ring
+  period: 6,
+  rings: 2,
+  stagger: 0.35,
+  seconds: 2,
+  start: 1.5,
+  reach: 10,
+  thickness: 0.18,
+  opacity: 0.7,
   segments: 64,
 };
 
-// Phase in [0, 1) of each ring in flight, first ring first. Pure in (onSinceMs, nowMs).
 export function beaconPulseRings(onSinceMs: number | null, nowMs: number): number[] {
   if (onSinceMs === null) return [];
   const periodMs = PULSE.period * 1000;
@@ -51,14 +48,13 @@ export class BeaconPulseView {
       );
       mesh.rotation.x = -Math.PI / 2;
       mesh.renderOrder = RENDER_ORDER;
-      mesh.frustumCulled = false; // the vertices move, so the bounding sphere from the first radii would cull a spread ring
+      mesh.frustumCulled = false;
       mesh.visible = false;
       this.root.add(mesh);
       return mesh;
     });
   }
 
-  // at: the player's truck as drawn this frame, in map tiles.
   update(terrain: Terrain, on: boolean, at: Vec, nowMs: number): void {
     if (!on) this.onSinceMs = null;
     else if (this.onSinceMs === null) this.onSinceMs = nowMs;
@@ -80,7 +76,6 @@ const UNIT = Array.from({ length: PULSE.segments + 1 }, (_, i) => {
   return { c: Math.cos(a), s: Math.sin(a) };
 });
 
-// RingGeometry lists the inner circle's vertices first, then the outer circle's.
 function setRadii(mesh: THREE.Mesh, inner: number, outer: number): void {
   const pos = mesh.geometry.getAttribute('position') as THREE.BufferAttribute;
   const n = pos.count / 2;

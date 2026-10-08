@@ -5,11 +5,9 @@ import { perfSnapshot } from "../perf";
 import { el } from "./dom";
 
 const REFRESH_MS = 500;
-const WINDOW_FRAMES = 120; // about 2 s at 60 FPS, long enough for a stable p95
+const WINDOW_FRAMES = 120;
 const TIMERS = ["turn", "preview", "route", "fog"];
 
-// Matches the #ui .panel look. The overlay sits outside #ui, so the style is inline.
-// It sits top left, beside the help button, because the sound controls hold the top right.
 const STYLE = [
   "position: absolute",
   "left: 56px",

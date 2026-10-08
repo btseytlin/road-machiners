@@ -23,7 +23,6 @@ describe('gear toughness', () => {
     expect(plated[side('rear')]).toBeCloseTo(bare[side('rear')]);
   });
 
-  // Flank plates sit in corner cells that front lanes also cross. Their wear must not count as the front armor's.
   it('never makes the front weaker when the flanks get plates', () => {
     const front = (v: ReturnType<typeof vanWith>) => toughness(v)[side('front')];
     const plated = vanWith([{ id: 'plates', side: 'F', count: 1 }]);

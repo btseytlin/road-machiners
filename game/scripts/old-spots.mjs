@@ -1,7 +1,7 @@
 // Writes the old-world loot spot picks of the committed map to src/data/old-spots.json. Run it after a change to the
 // map file or to OLD_PLACES. A test fails when the file is stale.
 import { writeFileSync } from 'node:fs';
-import { makeOldSpotPicks } from '../src/sim/old-places.ts';
+import { makeOldSpotPicks } from '../src/sim/salvage.ts';
 import { TEST_MAP } from '../src/test/map.ts';
 
 const FILE = 'src/data/old-spots.json';

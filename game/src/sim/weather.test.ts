@@ -12,14 +12,12 @@ import { advanceExposure, advanceWeather, makeWeather, stormDepth, stormShare, s
 const FADE = WEATHER.sim.stormFadeTurns;
 type Storm = Extract<WeatherEvent, { kind: 'storm' }>;
 
-// A still storm of `turns` turns spawned this turn over pos, as advanceWeather would leave it.
 function stormOver(w: World, id: string, pos: { x: number; y: number }, radius: number, turns: number): Storm {
   const s: Storm = { id, kind: 'storm', pos: { ...pos }, radius, vel: { x: 0, y: 0 }, turnsLeft: turns, born: w.turn };
   w.weather.push(s);
   return s;
 }
 
-// Plays one turn of a storm's life the way the turn pipeline does: the turn advances, then the weather.
 function nextTurn(w: World, s: Storm): void {
   w.turn++;
   s.turnsLeft--;
@@ -45,7 +43,6 @@ describe('advanceWeather', () => {
     const w = emptyWorld();
     w.weather = [{ id: 'w1', kind: 'storm', pos: { x: 10, y: 10 }, radius: 5, vel: { x: 1, y: 0 }, turnsLeft: 1, born: w.turn }];
     advanceWeather(w);
-    // A new event may start the same turn, so check for this one.
     expect(w.weather.some((e) => e.id === 'w1')).toBe(false);
     expect(w.events.some((e) => e.t === 'weather' && e.outcome === 'ended' && e.event.id === 'w1')).toBe(true);
   });
@@ -177,7 +174,6 @@ describe('weatherAt over a storm\'s life', () => {
     expect(mid.speed).toBeCloseTo(lerp(full.speed, k));
     expect(mid.wear).toBeCloseTo(lerp(full.wear, k));
     expect(mid.spread).toBeCloseTo(full.spread * k);
-    // At half the edge depth the time strength multiplies the edge falloff.
     const edge = weatherAt(w, { x: 100 + 60 - WEATHER.sim.stormEdge / 2, y: 100 });
     expect(edge.speed).toBeCloseTo(lerp(full.speed, k / 2));
     while (stormStrength(w, s) < 1) nextTurn(w, s);
@@ -229,14 +225,12 @@ describe('storm exposure', () => {
   const STEP = 1 / WEATHER.sim.stormExposeTurns;
   const full = WEATHER.sim.effects.storm;
 
-  // A still storm at full strength over pos, with plenty of turns left.
   function fullStorm(w: World, id: string, pos: { x: number; y: number }, radius = 60): Storm {
     const s = stormOver(w, id, pos, radius, 400);
     s.born = w.turn - FADE;
     return s;
   }
 
-  // One turn as the pipeline plays it: the turn advances, the storms count down, then exposure steps.
   function turn(w: World): void {
     w.turn++;
     for (const e of w.weather) e.turnsLeft--;

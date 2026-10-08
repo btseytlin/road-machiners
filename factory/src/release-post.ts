@@ -6,7 +6,6 @@ import { CAPTION_LIMIT } from './stages/checks';
 import { readState, updateState } from './state';
 import type { Ctx, ReleasePost } from './types';
 
-// The draft post in the committee chat carries this button. Its issue is the release tracking issue.
 export function publishButton(issue: number): { text: string; data: string } {
   return { text: 'Publish', data: `factory:publish:${issue}` };
 }
@@ -21,9 +20,6 @@ function requireReleasePost(ctx: Ctx): ReleasePost {
   return post;
 }
 
-// Posts Hermes's draft to the committee chat with a Publish button. A new draft replaces the last one, whose button goes.
-// `image` is a file the plugin copied under the inbox media folder. It replaces the screenshot that goes out with the post.
-// The first draft and a draft with a new image show the picture above the text.
 export async function postDraft(ctx: Ctx, text: string, image: string | null | undefined): Promise<string> {
   const post = requireReleasePost(ctx);
   const draft = text.trim();
@@ -37,7 +33,6 @@ export async function postDraft(ctx: Ctx, text: string, image: string | null | u
   return `Draft of the release ${post.day} post is in the committee chat.`;
 }
 
-// Moves the picture out of the inbox into the release post folder, after the same checks as any photo the factory sends.
 function takeImage(home: string, day: string, image: string): string {
   const media = join(home, 'inbox', 'media');
   const source = resolve(media, image);
@@ -49,7 +44,6 @@ function takeImage(home: string, day: string, image: string): string {
   return target;
 }
 
-// Drops the buttons of the draft a new one replaced. The old draft cannot publish anyway, since only the current post id publishes.
 async function retireDraft(ctx: Ctx, post: ReleasePost): Promise<void> {
   if (post.postId === null || post.draft === null) return;
   try {
@@ -59,7 +53,6 @@ async function retireDraft(ctx: Ctx, post: ReleasePost): Promise<void> {
   }
 }
 
-// The draft's caption is recorded like an approval post's, so Publish can add its status line.
 function recordDraft(ctx: Ctx, post: ReleasePost, id: number, draft: string, screenshot: string): void {
   const old = post.postId === null ? null : String(post.postId);
   updateState(ctx.statePath, (state) => {
@@ -73,13 +66,11 @@ function recordDraft(ctx: Ctx, post: ReleasePost, id: number, draft: string, scr
   });
 }
 
-// Posts the current draft to the public channel as it is. A press on an older draft publishes nothing.
 export async function publishPost(ctx: Ctx, postId: number): Promise<string> {
   const post = requireReleasePost(ctx);
   if (post.postId !== postId || post.draft === null) throw new Error('This release post draft is out of date.');
   const channel = ctx.cfg.publicChannel;
   const draft = post.draft;
-  // A caption holds at most CAPTION_LIMIT characters, so a longer post goes as the screenshot and a text under it.
   const id = draft.length <= CAPTION_LIMIT
     ? await ctx.telegram.sendPhoto(channel, post.screenshot, draft)
     : (await ctx.telegram.sendPhoto(channel, post.screenshot, ''), await ctx.telegram.sendMessage(channel, draft));

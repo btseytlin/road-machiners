@@ -7,24 +7,23 @@ import { START_KITS } from '../data/start';
 import { TEST_MAP } from '../test/map';
 import { clearOfSites, mapObstacles, propReach } from './mapgen';
 import { navLayer } from './nav/layer';
-import { makeOldSpotPicks, MAX_RADIUS, oldPlaces, oldSpotOf, oldSpotPicks, oldStockId, offRoad, placeSpot, reachable } from './old-places';
-import { siteLootTable } from './salvage';
+import { makeOldSpotPicks, MAX_RADIUS, oldPlaces, oldSpotOf, oldSpotPicks, oldStockId, offRoad, placeSpot, reachable, siteLootTable } from './salvage';
 import { isLootSpot, spotTable, territoryAt } from './territory';
 import type { PropKind } from './terrain';
 import type { Obstacle, SalvageStock } from './types';
 import { partValue } from './wear';
+import { defaultSetup } from './settings';
 import { newWorld } from './world';
 import type { Vec } from './vec';
 
 const baked = mapObstacles(TEST_MAP);
 const layer = navLayer(TEST_MAP.terrain, baked, MAX_RADIUS);
 
-// The first point on a 10-tile grid outside territories and well clear of sites and every baked prop.
 function openGround(): Vec {
-  for (let y = 50; y < TEST_MAP.terrain.size - 50; y += 10)
-    for (let x = 50; x < TEST_MAP.terrain.size - 50; x += 10) {
+  for (let y = 50; y < TEST_MAP.terrain.size - 50; y += 5)
+    for (let x = 50; x < TEST_MAP.terrain.size - 50; x += 5) {
       const pos = { x, y };
-      if (territoryAt(pos) === null && clearOfSites(pos, 30) && offRoad(landmark('ruin', pos, 0)) && baked.every((o) => Math.hypot(o.pos.x - x, o.pos.y - y) > 30)) return pos;
+      if (territoryAt(pos) === null && clearOfSites(pos, 30) && offRoad(landmark('ruin', pos, 0)) && reachable(layer, landmark('ruin', pos, 0)) && baked.every((o) => Math.hypot(o.pos.x - x, o.pos.y - y) > 20)) return pos;
     }
   throw new Error('No open ground on the map');
 }
@@ -145,7 +144,7 @@ describe('old-world loot spot economy', () => {
         (l.supplies ?? 0) * ECONOMY.supplyPrice.supplies,
       0,
     );
-  const worlds = Array.from({ length: SEEDS }, (_, k) => newWorld(k + 1, START_KITS.standard, TEST_MAP, false));
+  const worlds = Array.from({ length: SEEDS }, (_, k) => newWorld(k + 1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'), false));
   const isRare = (stock: SalvageStock) => stock.hidden.parts.some((p) => OLD_TABLES[oldSpotOf(stock)!.type].rare!.parts.includes(p.defId));
   const olds = worlds.flatMap((w) => w.salvage.filter((s) => oldSpotOf(s)));
   const others = worlds.flatMap((w) => w.salvage.filter((s) => !oldSpotOf(s)));

@@ -5,7 +5,6 @@ import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import type { MemoryFact, Vehicle, World } from './types';
 import { endTurn } from './world';
 
-// Source files of src/ keyed by path.
 const SOURCES = import.meta.glob<string>('../**/*.ts', { query: '?raw', import: 'default', eager: true });
 
 function driver(w: World): Vehicle {
@@ -89,7 +88,6 @@ describe('driver memory', () => {
   it('lets no file but memory.ts write driver memories', () => {
     const write = /\.memories\s*(?:=(?!=)|\.(?:push|splice|unshift|pop|shift|sort|reverse)\()/;
     const writers = Object.entries(SOURCES)
-      // A save step writes the saved JSON of old brains, not a live brain.
       .filter(([path]) => !path.endsWith('.test.ts') && path !== './memory.ts' && path !== '../three/save-migrations.ts')
       .filter(([, source]) => write.test(source))
       .map(([path]) => path);

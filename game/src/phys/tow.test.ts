@@ -1,7 +1,6 @@
 // Tow approaches and hitched towers (src/sim/tow.ts), played through real physics.
 // These race a driving approach against the NPC's own threat and detection checks, or check that trucks get
 // past each other without a crash, so they need the game's real driving, not the generic test stand-in in
-// src/sim/testkit.ts.
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { canVehicleSee } from '../sim/vision';
@@ -28,7 +27,6 @@ beforeAll(async () => {
   await initPhysics();
 });
 
-// Plays n turns through the real turn pipeline with physics movement.
 function play(w: World, n: number): { w: World } {
   let d = buildDrive(w);
   for (let i = 0; i < n; i++) {
@@ -49,8 +47,6 @@ function withTower(w: World, templateId: string, faction: Vehicle['faction'], ch
 
 const onlyCore = (v: Vehicle) => { v.items = v.items.filter((it) => it.kind === 'part' && partDef(it.part.defId).kind === 'core'); };
 
-// A stranded, unarmed player with an empty tank and a trader in sight: unarmed, so a towing trait
-// never flees it as a threat before it can offer to help.
 function stranded(playerPos: Vec = { x: 30, y: 30 }, traderPos: Vec = { x: 40, y: 30 }) {
   const w = emptyWorld(playerPos);
   w.player.fuel = 0;
@@ -72,8 +68,6 @@ function runUntil(w: World, max: number, done: (w: World) => boolean): { w: Worl
 const find = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
 
 describe('hitched tower traffic', () => {
-  // A hitched tower on its way to town, a point `ahead` tiles along its way and `side` tiles to its left, and how
-  // far along its way a point lies.
   function underWay(): { w: World; tower: Vehicle; along: (ahead: number, side: number) => Vec; progress: (p: Vec) => number } {
     const s = stranded();
     forceOption('strandedSeen', 'tow');
@@ -100,7 +94,7 @@ describe('hitched tower traffic', () => {
     const r = runUntil(w, 20, () => false);
     expect(crashes(r.events, tower.id)).toEqual([]);
     expect(dist(find(r.w, tower.id).pos, parked.pos)).toBeGreaterThan(10);
-  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
+  }, 90_000);
 
   it('a hitched tower and a truck meeting it head-on both get past without a collision', () => {
     const { w, tower, along, progress } = underWay();
@@ -119,7 +113,6 @@ describe('hitched tower traffic', () => {
 describe('tow approach traffic', () => {
   const crashes = (events: GameEvent[], id: string) => events.filter((e) => e.t === 'collision' && (e.a === id || e.b === id));
   const feuds = (events: GameEvent[]) => events.filter((e) => e.t === 'hostile');
-  // The tower ends the job hitched, or its claim lapsed.
   const settled = (w: World) => playerTow(w) !== null || !w.states.some((st) => st.kind === 'answering');
 
   function patrolled(place: (client: Vec) => Vec): { w: World; tower: Vehicle; patrol: Vehicle } {
@@ -133,7 +126,6 @@ describe('tow approach traffic', () => {
   it('a tower parks beside a stranded truck without ramming a patrol parked at its approach spot', () => {
     forceOption('strandedSeen', 'tow');
     forceOption('idle', 'wait');
-    // The tower comes from the east, so the approach-side spot lies a few tiles east of the client.
     const reach = chassisDef('hauler').radius * 2 + RULES.arriveRadius;
     const { w, tower, patrol } = patrolled((c) => ({ x: c.x + reach, y: c.y }));
     const r = runUntil(w, 40, settled);
@@ -168,7 +160,6 @@ describe('emergency beacon', () => {
 
   it('a trader out of sight but in range drives over and offers', () => {
     const s = stranded(player, { x: 130, y: 30 });
-    // The trader's first goal is the answer, not an idle roll of its own.
     forceOption('idle', 'wait');
     forceOption('strandedSeen', 'tow');
     const w = setBeacon(s.w, true);
@@ -182,7 +173,6 @@ describe('emergency beacon', () => {
   it('a raider comes to a beaconing truck with cargo', () => {
     const w = emptyWorld(player);
     w.player.fuel = 0;
-    // An armed raider: one with no gun is unfit to hunt and heads for its camp.
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 130, y: 30 }, Math.PI);
     raider.brain = npcBrain('buggy', raider.pos, NPCS.buggy.traits);
     forceOption('contactHeard', 'investigate');

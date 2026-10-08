@@ -1,3 +1,4 @@
+import { defaultSetup } from './settings';
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { REGION, type TerritoryDef } from '../data/region';
@@ -13,19 +14,16 @@ import type { Obstacle } from './types';
 import { dist, lerp, type Vec } from './vec';
 import { newWorld } from './world';
 
-// Reach through Old Orchard on the committed map, measured on the same nav layer routes search.
 const orchard = REGION.locations.find((l) => l.id === 'orchard') as TerritoryDef;
 const farm = TERRITORIES.orchard.farm!;
 const abs = (at: Vec): Vec => ({ x: orchard.pos.x + at.x, y: orchard.pos.y + at.y });
-// The five main roads come first in the farm's list, each ending on the outline. R1, the old highway, starts at the
-// south entry and leaves by the north.
 const MAIN_ROADS = farm.roads.slice(0, 5);
 const [R1, R2, , R4] = MAIN_ROADS;
-const ROUTE_RATIO = 1.5; // longest route from the south entry to a spot's parking ring, per tile of straight line
-const NEAR = 2; // tiles past a parking ring, or from a point, where a free cell still counts
+const ROUTE_RATIO = 1.5;
+const NEAR = 2;
 
 const radius = CHASSIS[START_KITS.standard.chassis].radius;
-const world = newWorld(1337, START_KITS.standard, TEST_MAP);
+const world = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
 const layer = navLayer(world.terrain, world.obstacles, radius);
 const overlay = stampOverlay(layer, [], radius);
 const cellOf = (p: Vec): number => Math.floor(p.y / CELL) * layer.n + Math.floor(p.x / CELL);
@@ -39,15 +37,12 @@ function nearest(points: readonly Vec[], to: Vec): Vec {
   return points.reduce((a, b) => (dist(b, to) < dist(a, to) ? b : a));
 }
 
-// Tiles along a cell path.
 function pathLength(cells: Int32Array): number {
   let length = 0;
   for (let i = 1; i < cells.length; i++) length += dist(centreOf(cells[i - 1]), centreOf(cells[i]));
   return length;
 }
 
-// The lowest ratio of route length to straight line from `from` to a free cell on the spot's parking ring, where a
-// truck's edge meets the spot's, or up to NEAR tiles past it. Infinity when no such cell is reachable.
 function bestRingRatio(from: Vec, spot: Obstacle): number {
   const start = cellOf(from);
   const component = startComponent(layer, start);
@@ -65,13 +60,10 @@ function bestRingRatio(from: Vec, spot: Obstacle): number {
   return best;
 }
 
-// Whether a free cell of the south entry's component lies within NEAR tiles of the point.
 function reachableNear(p: Vec): boolean {
   return nearestFreeCell(layer, overlay, cellOf(p), southComponent, NEAR / CELL) !== null;
 }
 
-// The authored openings of the perimeter: between two polylines of one side, the ends within 15 tiles of each other.
-// Each gives a point BREACH tiles outside its middle, toward the outline, and one as far inside.
 const BREACH = 2.5;
 function breaches(): { outside: Vec; inside: Vec }[] {
   const isPerimeter = (run: Run): boolean => run.look === PERIMETER.look && run.broken === PERIMETER.broken && run.knocked.share === PERIMETER.knocked.share;
@@ -88,8 +80,6 @@ function breaches(): { outside: Vec; inside: Vec }[] {
   return out;
 }
 
-// Where trucks drive into the orchard: both ends of the old highway, the outer ends of the other main roads and the
-// perimeter's authored openings.
 function entryPoints(): Vec[] {
   return [abs(R1.points[0]), ...MAIN_ROADS.map((road) => abs(road.points.at(-1)!)), ...breaches().map((b) => b.outside)];
 }

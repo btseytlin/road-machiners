@@ -16,6 +16,8 @@ import type { Vehicle, World } from '../sim/types';
 import { partValue } from '../sim/wear';
 import { newWorld } from '../sim/world';
 import { TEST_MAP } from './map';
+import { defaultSetup } from '../sim/settings';
+import { moneyAmount } from '../ui/units';
 
 type CabSide = 'front' | 'rear' | 'left' | 'right';
 const CAB_SIDES: readonly CabSide[] = ['front', 'rear', 'left', 'right'];
@@ -23,25 +25,24 @@ const CAB_SIDES: readonly CabSide[] = ['front', 'rear', 'left', 'right'];
 export type TemplateStats = {
   id: string;
   rolls: number;
-  levels: Record<GearLevel, number>; // share of rolls at each level
-  guns: number; // per truck
-  armor: number; // share of chassis edge cells armored
-  cab: Record<CabSide, number>; // share of cab lanes on each side with armor between the edge and the cab
-  value: number; // chassis and gear, wear counted
-  mass: number; // share of rated mass
-  drag: number; // share of top speed the guns' power draw takes
-  speed: number; // top speed as a share of the chassis top speed
-  cargo: number; // value of goods and loose spares
-  utility: number; // share of trucks with any utility mounted
-  activeUtility: number; // share of trucks with a utility that acts on an order mounted
-  emitter: number; // share of trucks with the emitter mounted
+  levels: Record<GearLevel, number>;
+  guns: number;
+  armor: number;
+  cab: Record<CabSide, number>;
+  value: number;
+  mass: number;
+  drag: number;
+  speed: number;
+  cargo: number;
+  utility: number;
+  activeUtility: number;
+  emitter: number;
 };
 
 let base: World | undefined;
 
-// One world to draw ids from, with its randomness reset per roll.
 function worldFor(seed: number): World {
-  base ??= newWorld(1, START_KITS.standard, TEST_MAP);
+  base ??= newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
   return { ...base, vehicles: [], rngState: seed * 7919 + 1, marketRng: { rngState: seed * 104729 + 1 } };
 }
 
@@ -84,7 +85,6 @@ function gearValue(v: Vehicle): number {
   return chassisDef(v.chassisId).value + mountedItems(v).reduce((sum, item) => (partDef(item.part.defId).kind === 'core' ? sum : sum + partValue(item.part)), 0);
 }
 
-// For each side, the share of lanes crossing the cab with an armor cell between the edge and the cab.
 function cabCover(v: Vehicle): Record<CabSide, number> {
   const g = gridOf(v);
   const armor = new Set(mountedItems(v, 'armor').flatMap(itemCells).map((c) => `${c.x},${c.y}`));
@@ -112,13 +112,13 @@ export function formatLoadoutReport(stats: TemplateStats[]): string {
     '',
     `${stats[0]?.rolls ?? 0} rolls per template. Levels are poor, light, standard, heavy, loaded. Armor is the share of edge cells armored. Gun drag is the top speed the guns take. Speed is the top speed against the chassis top speed. Cab is the share of cab lanes shielded per side: front, rear, left, right. Utility, active and emitter are the shares of trucks with any utility, a utility that acts on an order and the emitter mounted.`,
     '',
-    '| template | levels | guns | armor | cab F/B/L/R | gear value | mass | gun drag | speed | cargo value | utility | active | emitter |',
+    '| template | levels | guns | armor | cab F/B/L/R | gear value M | mass | gun drag | speed | cargo value M | utility | active | emitter |',
     '|---|---|---|---|---|---|---|---|---|---|---|---|---|',
   ];
   for (const s of stats) {
     const levels = GEAR_LEVEL_IDS.map((l) => pct(s.levels[l])).join(' ');
     const cab = CAB_SIDES.map((side) => pct(s.cab[side])).join(' ');
-    lines.push(`| ${s.id} | ${levels} | ${s.guns.toFixed(2)} | ${pct(s.armor)} | ${cab} | ${Math.round(s.value)} | ${pct(s.mass)} | ${pct(s.drag)} | ${pct(s.speed)} | ${Math.round(s.cargo)} | ${pct(s.utility)} | ${pct(s.activeUtility)} | ${pct(s.emitter)} |`);
+    lines.push(`| ${s.id} | ${levels} | ${s.guns.toFixed(2)} | ${pct(s.armor)} | ${cab} | ${moneyAmount(s.value)} | ${pct(s.mass)} | ${pct(s.drag)} | ${pct(s.speed)} | ${moneyAmount(s.cargo)} | ${pct(s.utility)} | ${pct(s.activeUtility)} | ${pct(s.emitter)} |`);
   }
   return lines.join('\n') + '\n';
 }

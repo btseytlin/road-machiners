@@ -11,22 +11,20 @@ import { addGoods, mountPart, stowPart } from './inventory';
 import type { Faction, GridItem, NpcBrain, PartInstance, Vehicle, World } from './types';
 import type { Vec } from './vec';
 
-// A part to create, with its wear step. `at` places it on that grid spot instead of the first fitting mount.
 export type PartSpec = { defId: string; wear: number; at?: Pick<GridItem, 'x' | 'y' | 'rot'> };
 
 export type VehicleSpec = {
   name: string;
   faction: Faction;
   chassisId: string;
-  parts: PartSpec[]; // mounted in order on the first free fitting mount
-  spares: PartSpec[]; // loose parts stowed in the grid after the cargo
+  parts: PartSpec[];
+  spares: PartSpec[];
   cargo: Record<string, number>;
   pos: Vec;
   heading: number;
   brain: NpcBrain | null;
 };
 
-// What makes ids: a world, or a counter of its own for a truck that never joins one.
 export type IdSource = Pick<World, 'nextId'>;
 
 export function newId(world: IdSource, prefix: string): string {
@@ -34,27 +32,23 @@ export function newId(world: IdSource, prefix: string): string {
   return `${prefix}${world.nextId}`;
 }
 
-// A part at the given wear step, at full HP for that step.
 export function makePart(world: IdSource, defId: string, wear: number): PartInstance {
   if (!Number.isInteger(wear) || wear < 0 || wear > CONDITION.maxWear) throw new Error(`Bad wear ${wear} for a new ${defId}`);
   const part: PartInstance = { id: newId(world, 'p'), defId, hp: 0, wear, ...gunFor(defId), ...chargeFor(defId) };
   return { ...part, hp: maxHp(part) };
 }
 
-// A weapon starts with a full magazine. Other parts carry no gun state.
 export function gunFor(defId: string): Pick<PartInstance, 'gun'> {
   const def = partDef(defId);
   return def.kind === 'weapon' ? { gun: { cooldown: 0, ammo: def.magazine, reloadWork: 0 } } : {};
 }
 
-// An active utility and a claymore ram start ready. Other parts carry no charge.
 export function chargeFor(defId: string): Pick<PartInstance, 'charge'> {
   const def = partDef(defId);
   const active = (def.kind === 'utility' && def.reload !== null) || (def.kind === 'armor' && def.claymore !== undefined);
   return active ? { charge: { reload: 0 } } : {};
 }
 
-// Places the chassis's built-in parts at their fixed cells. Throws if a spot is taken or is not built-in cells.
 export function addCoreParts(world: IdSource, v: Vehicle): void {
   for (const c of chassisDef(v.chassisId).core) {
     const def = partDef(c.defId);
@@ -73,7 +67,6 @@ export function makeVehicle(world: World, spec: VehicleSpec): Vehicle {
   return v;
 }
 
-// A truck with only its chassis's built-in parts: cab, wheels and cores.
 export function bareVehicle(world: IdSource, spec: Omit<VehicleSpec, 'parts' | 'spares' | 'cargo'>): Vehicle {
   chassisDef(spec.chassisId);
   const v: Vehicle = {
@@ -100,7 +93,6 @@ export function bareVehicle(world: IdSource, spec: Omit<VehicleSpec, 'parts' | '
   return v;
 }
 
-// Mounts the parts, then adds cargo, then stows the spares. Throws when any of them does not fit.
 function loadVehicle(world: World, v: Vehicle, spec: VehicleSpec): void {
   for (const { defId, wear, at } of spec.parts) {
     const part = makePart(world, defId, wear);

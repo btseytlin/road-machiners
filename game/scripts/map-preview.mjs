@@ -8,10 +8,6 @@ import { TYPE_IDS } from '../src/sim/terrain.ts';
 
 const OUTSIDE = 0x202020;
 const SITE_EDGE = 0x8a1e14;
-// Round props are discs of their radius. Long props are boxes along their facing, half as wide as long.
-// Road bridge decks are as wide as the road. Billboards are boards across their facing. Fence segments are
-// one-pixel lines along their facing, r to each side of the center. Road bridges go first, since other props never overlap them.
-// Nose's rock masses are discs of their reach and go under everything else.
 const PROP_LOOKS = {
   noseRise: { color: 0x9d6642, shape: 'disc' },
   noseCrag: { color: 0x9d6642, shape: 'disc' },
@@ -80,6 +76,13 @@ const PROP_LOOKS = {
   barrier: { color: 0x8aa0b0, shape: 'rail' },
   drums: { color: 0xc04820, shape: 'disc' },
   woodpile: { color: 0xa07040, shape: 'box' },
+  engineNozzle: { color: 0x8a4a2a, shape: 'long' },
+  engineFrame: { color: 0xb0603a, shape: 'long' },
+  watchtower: { color: 0x3a2818, shape: 'disc' },
+  ruinCompound: { color: 0xe0d8c0, shape: 'box' },
+  deadTruck: { color: 0x7040a0, shape: 'long' },
+  glassSpire: { color: 0x2f8f88, shape: 'disc' },
+  scrapWall: { color: 0xa8a090, shape: 'rail' },
   tankTrap: { color: 0x5e3420, shape: 'disc' },
   escapePod: { color: 0xe0e0ff, shape: 'disc' },
   habitat: { color: 0xffa0ff, shape: 'long' },
@@ -106,7 +109,6 @@ export function paintMap(d, area, pxPerTile) {
   return pic;
 }
 
-// Half extents along and across a box-shaped prop's facing, from its radius and the size of half a pixel.
 const BOX_SHAPES = {
   box: (r) => [r * Math.SQRT1_2, r * Math.SQRT1_2],
   long: (r) => [r, r / 2],
@@ -118,7 +120,6 @@ const BOX_SHAPES = {
 function paintProp(pic, area, pxPerTile, prop) {
   const look = PROP_LOOKS[prop.kind];
   if (!look) throw new Error(`No preview look for prop kind ${prop.kind}`);
-  // Half a pixel at least, so a thin pole still covers one pixel.
   const halfPixel = 0.5 / pxPerTile;
   const r = Math.max(prop.r, halfPixel);
   if (look.shape === 'disc') return paintDisc(pic, area, pxPerTile, prop.pos, r, look.color, 0);
@@ -135,14 +136,12 @@ function groundColor(d, x, y) {
   const b = d.heights[j * w + i + 1];
   const c = d.heights[(j + 1) * w + i];
   const e = d.heights[(j + 1) * w + i + 1];
-  // Slope of the blended ground at the point, not the tile average, so close-ups shade smoothly.
   const gx = b - a + (a - b - c + e) * (y - j);
   const gy = c - a + (a - b - c + e) * (x - i);
   const light = 1 + (gx * TERRAIN.light.x + gy * TERRAIN.light.y) * TERRAIN.slopeShade;
   return shade(COLORS[d.types[j * d.size + i]], light);
 }
 
-// Fills the pixels whose centers lie within radius of center and at least inner from it.
 function paintDisc(pic, area, pxPerTile, center, radius, color, inner) {
   const x0 = Math.max(0, Math.floor((center.x - radius - area.x) * pxPerTile));
   const x1 = Math.min(pic.width - 1, Math.ceil((center.x + radius - area.x) * pxPerTile));
@@ -154,9 +153,6 @@ function paintDisc(pic, area, pxPerTile, center, radius, color, inner) {
   }
 }
 
-// Fills the pixels whose centers lie in the box around center, halfAlong tiles along the facing yaw and
-// halfAcross tiles across it.
-// A one-pixel line round a closed polygon of map points.
 function paintOutline(pic, area, pxPerTile, poly, color) {
   poly.forEach((a, i) => {
     const b = poly[(i + 1) % poly.length];

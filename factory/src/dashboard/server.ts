@@ -5,7 +5,6 @@ import { fileURLToPath } from 'node:url';
 import { buildBadge } from './badges';
 import type { SnapshotCollector } from './snapshot';
 
-// Chart.js ships its browser bundle under a path its package exports do not expose, so it is read from the factory's node_modules.
 const CHART_BUNDLE = fileURLToPath(new URL('../../node_modules/chart.js/dist/chart.umd.min.js', import.meta.url));
 
 const ASSETS: Record<string, [string, string]> = {
@@ -58,7 +57,6 @@ export class DashboardServer {
   }
   private broadcast(): void {
     const event = `event: snapshot\ndata: ${JSON.stringify(this.collector.getSnapshot())}\n\n`;
-    // A full snapshot can exceed the writable high-water mark; skip updates until the client drains instead of treating backpressure as a disconnect.
     for (const client of this.clients) {
       if (client.writableLength > 0) continue;
       client.write(event);

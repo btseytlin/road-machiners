@@ -3,13 +3,13 @@ import { PARTS } from '../data/parts';
 import { RULES } from '../data/rules';
 import { mountedParts } from '../sim/grid';
 import { initPhysics } from '../phys/drive';
-import { runFight, setNumber, type Fight } from './combat-harness';
+import { parseLineup, parseTruck, runFight, setNumber, type Fight } from './combat-harness';
 
 beforeAll(async () => {
   await initPhysics();
 });
 
-const FIGHT: Fight = { kit: 'standard', me: null, enemies: ['buggy'], level: null, foe: null, policy: 'stand', seed: 3, gap: 8, orbit: 6, maxTurns: 4 };
+const FIGHT: Fight = { a: parseLineup('stand'), b: parseLineup('buggy'), seed: 3, gap: 8, orbit: 6, maxTurns: 4, arena: null };
 
 describe('combat harness', () => {
   it('gives the same report for the same fight', () => {
@@ -28,13 +28,45 @@ describe('combat harness', () => {
 
   it('counts the rounds both sides fire', () => {
     const r = runFight(FIGHT);
-    expect(r.me.rounds).toBeGreaterThan(0);
-    expect(r.them.rounds).toBeGreaterThan(0);
-    expect(r.me.hits).toBeLessThanOrEqual(r.me.rounds);
+    expect(r.a.rounds).toBeGreaterThan(0);
+    expect(r.b.rounds).toBeGreaterThan(0);
+    expect(r.a.hits).toBeLessThanOrEqual(r.a.rounds);
   });
 
   it('a standing player never moves', () => {
-    expect(runFight(FIGHT).me.speed).toBe(0);
+    expect(runFight(FIGHT).a.speed).toBe(0);
+  });
+
+  it('has two brains of one faction fight each other', () => {
+    const r = runFight({ ...FIGHT, a: parseLineup('buggy:buggy@standard'), b: parseLineup('buggy:buggy@standard'), maxTurns: 12 });
+    expect(r.a.rounds).toBeGreaterThan(0);
+    expect(r.b.rounds).toBeGreaterThan(0);
+    expect(r.a.speed).toBeGreaterThan(0);
+  });
+
+  it('names the courier side when it flees a stronger truck', () => {
+    const r = runFight({ ...FIGHT, a: parseLineup('merc:snowball'), b: parseLineup('courier:standard'), seed: 6, maxTurns: 40 });
+    expect(r.outcome).toBe('b fled');
+  });
+
+  it('fights to a knockout inside the arena rather than stopping at a truce', () => {
+    const fight = { ...FIGHT, a: parseLineup('merc:snowball'), b: parseLineup('buggy:standard'), seed: 1, maxTurns: 140, arena: 9 };
+    expect(runFight(fight).outcome).toBe('won');
+  });
+
+  it('a damaged arena fighter turns back when it cannot escape for repairs', () => {
+    const fight = { ...FIGHT, a: parseLineup('buggy'), b: parseLineup('buggy'), seed: 3, maxTurns: 200, arena: 9 };
+    expect(['won', 'lost']).toContain(runFight(fight).outcome);
+  });
+
+  it('keeps every truck inside the arena ring', () => {
+    const arena = 9;
+    let farthest = 0;
+    runFight({ ...FIGHT, a: parseLineup('merc:snowball'), b: parseLineup('buggy'), seed: 1, maxTurns: 30, arena }, (w) => {
+      const center = w.obstacles.reduce((s, o) => ({ x: s.x + o.pos.x / w.obstacles.length, y: s.y + o.pos.y / w.obstacles.length }), { x: 0, y: 0 });
+      for (const v of w.vehicles.filter((x) => x.id !== w.player.vehicleId)) farthest = Math.max(farthest, Math.hypot(v.pos.x - center.x, v.pos.y - center.y));
+    });
+    expect(farthest).toBeLessThan(arena);
   });
 
   it('sets an existing balance number', () => {
@@ -67,16 +99,37 @@ describe('combat harness', () => {
   });
 });
 
-describe('foe hp left', () => {
+describe('truck specs', () => {
+  it('reads a driver and each kind of gear', () => {
+    expect(parseTruck('merc').gear).toEqual({ kind: 'npc', template: 'merc', level: null });
+    expect(parseTruck('stand').gear).toEqual({ kind: 'kit', id: 'standard' });
+    expect(parseTruck('merc:snowball').gear).toEqual({ kind: 'kit', id: 'snowball' });
+    expect(parseTruck('merc:buggy@heavy').gear).toEqual({ kind: 'npc', template: 'buggy', level: 'heavy' });
+    expect(parseTruck('kite:mg/plates+ram').gear).toEqual({ kind: 'outfit', outfit: { gun: 'mg', armor: 'plates', ram: 'ram' } });
+    expect(parseTruck('merc:mg/bare').gear).toEqual({ kind: 'outfit', outfit: { gun: 'mg', armor: null } });
+  });
+
+  it('refuses an unknown driver, gear or level', () => {
+    expect(() => parseTruck('nobody')).toThrow('Unknown driver');
+    expect(() => parseTruck('merc:nothing')).toThrow('Unknown gear');
+    expect(() => parseTruck('merc:buggy@rich')).toThrow('Unknown gear level');
+  });
+
+  it('refuses a scripted driver on side b or beside another truck', () => {
+    expect(() => runFight({ ...FIGHT, b: parseLineup('stand') })).toThrow('alone on side a');
+    expect(() => runFight({ ...FIGHT, a: parseLineup('stand+merc') })).toThrow('alone on side a');
+  });
+});
+
+describe('side b hp left', () => {
   it('reports a share between 0 and 1 for a won fight', () => {
-    // Fixed outfits keep this fight off NPC gear rolls: the combat kit against a bare hauler with one mg.
-    const r = runFight({ ...FIGHT, kit: 'combat', foe: { gun: 'mg', armor: null }, policy: 'charge', seed: 1, maxTurns: 60 });
+    const r = runFight({ ...FIGHT, a: parseLineup('charge:autocannon/plates'), b: parseLineup('buggy:mg/bare'), seed: 1, maxTurns: 60 });
     expect(r.outcome).toBe('won');
-    expect(r.theirHpLeft).toBeGreaterThan(0);
-    expect(r.theirHpLeft).toBeLessThan(1);
-  }, 90_000); // takes 10-25s alone and over 30s when the whole suite shares the cores
+    expect(r.bHpLeft).toBeGreaterThan(0);
+    expect(r.bHpLeft).toBeLessThan(1);
+  }, 90_000);
 
   it('is null for a fight that is not won', () => {
-    expect(runFight({ ...FIGHT, maxTurns: 1 }).theirHpLeft).toBeNull();
+    expect(runFight({ ...FIGHT, maxTurns: 1 }).bHpLeft).toBeNull();
   });
 });

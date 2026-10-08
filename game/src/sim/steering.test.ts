@@ -2,9 +2,11 @@ import { RULES } from "../data/rules";
 import { describe, expect, it } from "vitest";
 import { vehicleStats } from "./stats";
 import { chassisDef } from "../data/chassis";
-import { backsToDestination, clickOrder, setDownSpot, throttleFor, zoneEdges, zoneSpeed } from "./steering";
+import { backsToDestination, clickOrder, parkedVehicles, setDownSpot, throttleFor, zoneEdges, zoneSpeed } from "./steering";
 import { DEG, dist } from "./vec";
 import { addVehicle, emptyWorld, npcBrain } from "./testkit";
+import { addState } from "./states";
+import { getHitchedTowIds } from "./tow";
 
 function setup(speed: number) {
   const w = emptyWorld();
@@ -30,7 +32,6 @@ describe("throttle by click distance", () => {
     expect(at((z.brakeEnd + z.holdEnd) / 2)).toBe(4);
     expect(at(z.reach + 5)).toBe(Math.min(s.maxSpeed, 4 + s.accel));
     expect(throttleFor(1, 4)).toBe("brake");
-    // Braking for a close point stops at the speed from rest.
     expect(zoneSpeed(s, 0.5, 1)).toBeCloseTo(zoneSpeed(s, 0, 1), 5);
     expect(throttleFor(5, 4)).toBe("hold");
     expect(throttleFor(20, 4)).toBe("accelerate");
@@ -81,6 +82,17 @@ describe("backing up", () => {
     expect(backsToDestination(npc, 5, 0)).toBe(false);
     npc.brain.recovery = 1;
     expect(backsToDestination(npc, 5, Math.PI / 2)).toBe(true);
+  });
+});
+
+describe("parked blockers", () => {
+  it("leaves a truck on a tow rope out of the tower's route", () => {
+    const w = emptyWorld();
+    const tower = addVehicle(w, "traders", "scout", ["stockEngine"], { x: 30, y: 30 });
+    const towed = addVehicle(w, "traders", "scout", ["stockEngine"], { x: 32, y: 30 });
+    addState(w, "tow", tower.id, towed.id, { kind: "tow", site: "bowl", fee: 0, waived: 0, hitched: true });
+
+    expect(parkedVehicles(w, tower.id, getHitchedTowIds(w))).not.toContainEqual({ pos: towed.pos, r: chassisDef(towed.chassisId).radius });
   });
 });
 
