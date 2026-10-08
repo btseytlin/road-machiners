@@ -31,7 +31,9 @@ const PLAYER_KINDS = new Set<GameEvent['t']>(['death', 'knockout', 'wake', 'mone
 // withEvents is false when the log has seen next's events already, in an earlier world that shared them.
 export function logEntries(prev: World | null, next: World, withEvents: boolean): LogEntry[] {
   const at = { turn: next.turn, day: clockOf(next.turn).day };
-  const events = withEvents ? next.events.filter((e) => keeps(next, e)).map((e) => eventEntry(prev, next, e)) : [];
+  const kept = withEvents ? next.events.filter((e) => keeps(next, e)) : [];
+  const known = kept.length > 0 ? [...next.vehicles, ...next.removed, ...(prev?.vehicles ?? [])] : [];
+  const events = kept.map((e) => eventEntry(known, e));
   const bodies = [...events, changeEntry(prev, next), dayEntry(prev, next)];
   return bodies.flatMap((body) => body ? [{ ...at, ...body }] : []);
 }
@@ -51,8 +53,7 @@ function vehicleIds(e: GameEvent): string[] {
 }
 
 // The event with the name, faction and chassis of every truck it names. A truck gone from both worlds is unknown.
-function eventEntry(prev: World | null, next: World, e: GameEvent): Body {
-  const known = [...next.vehicles, ...next.removed, ...(prev?.vehicles ?? [])];
+function eventEntry(known: readonly Vehicle[], e: GameEvent): Body {
   const trucks = Object.fromEntries(vehicleIds(e).map((id) => [id, truckOf(known.find((v) => v.id === id))]));
   const { t, ...rest } = e;
   return { kind: 'event', event: t, ...rest, trucks };
