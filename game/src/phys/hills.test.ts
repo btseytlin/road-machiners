@@ -13,6 +13,7 @@ import { TEST_MAP } from '../test/map';
 import { budget } from '../test/budget';
 import { PLAIN_KIT } from '../sim/testkit';
 import { defaultSetup } from '../sim/settings';
+import { ICARUS_DECKS } from '../sim/bridge';
 
 beforeAll(async () => {
   await initPhysics();
@@ -35,7 +36,7 @@ function driveRoute(start: Vec, target: Vec): { maxTilt: number; remaining: numb
       const q = frame.rot;
       maxTilt = Math.max(maxTilt, Math.acos(Math.min(1, 1 - 2 * (q.x * q.x + q.z * q.z))));
       const p = toMap(frame.pos);
-      if (deckAt(p.x, p.y) !== null) minDeckRise = Math.min(minDeckRise, frame.pos.y - heightAt(w.terrain, p.x, p.y) * PHYSICS.metersPerTile);
+      if (deckAt(ICARUS_DECKS, p.x, p.y) !== null) minDeckRise = Math.min(minDeckRise, frame.pos.y - heightAt(w.terrain, p.x, p.y) * PHYSICS.metersPerTile);
     }
     freeDrive(drive);
     drive = result!.next;

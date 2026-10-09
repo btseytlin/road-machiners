@@ -1,6 +1,3 @@
-// Tire marks a seen truck leaves on soft ground. Each rear wheel on the ground, the pair that follows the truck's
-// path, extends its own strip by one quad each RUT.step meters of travel, draped on the ground and as wide as the tire, and darker on ground with a higher
-// rut in TERRAIN_TYPES. Marks fade over a day of turns. All strips share one instanced ring buffer: past RUT.max
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
@@ -9,6 +6,7 @@ import { wheelMounts } from '../../phys/body';
 import { TIME } from '../../data/time';
 import { groundPoint, headingOf, toMap, type V3, type VehicleFrame } from '../../phys/frames';
 import { bodyOf } from '../../sim/body';
+import { atlasOf } from '../../sim/atlas';
 import { deckAt } from '../../sim/bridge';
 import { tileAt, type Terrain } from '../../sim/terrain';
 import type { Vehicle, World } from '../../sim/types';
@@ -131,7 +129,7 @@ export class Ruts {
 
 function rutAt(t: Terrain, p: V3): number {
   const at = toMap(p);
-  if (deckAt(at.x, at.y) !== null) return 0;
+  if (deckAt(atlasOf(t).decks, at.x, at.y) !== null) return 0;
   return TERRAIN_TYPES[t.types[tileAt(t, at)]].rut;
 }
 

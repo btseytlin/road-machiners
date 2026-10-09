@@ -1,12 +1,10 @@
-// Roads and site pads are drawn by the ground shader, so they lie exactly on the ground that wheels touch.
-// The shader splits the ground into road pixels a third the size of the ground paint pixels. A road pixel
-// takes the road look where the road mask covers its center, and the slow tone and a per-pixel dither fray
 
 import * as THREE from "three";
 import { PHYSICS } from "../../data/physics";
 import { REGION } from "../../data/region";
 import { TERRAIN_TYPES } from "../../data/terrain";
 import { desertWeight, glassField, lookTypes, ROAD_PLAIN, ROAD_SAND, type PaintCanvas } from "../../render/groundPaint";
+import { atlasOf, atlasSites, type Atlas } from "../../sim/atlas";
 import { sitePads } from "../../sim/sites";
 import type { Terrain } from "../../sim/terrain";
 import { mix, PAL } from "../../render/palette";
@@ -41,7 +39,7 @@ const GLASS_DUST = mix(PAL.glass.top, 0xb9a47c, 0.6);
 const GLASS_SEAM_COLOR = mix(PAL.glass.top, 0xffffff, 0.45);
 
 export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas, t: Terrain): void {
-  paintRoadMask(mask);
+  paintRoadMask(mask, atlasOf(t));
   const pixel = S / mask.res / PIXEL_SPLIT;
   const uniforms = {
     roadMask: { value: maskTexture(mask) },
@@ -73,7 +71,7 @@ export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas
     glassSeam: { value: GLASS_SEAM },
     glassSeamColor: { value: new THREE.Color(GLASS_SEAM_COLOR) },
     glassDust: { value: new THREE.Color(GLASS_DUST) },
-    ...padUniforms(pixel),
+    ...padUniforms(atlasOf(t), pixel),
   };
   const before = material.onBeforeCompile.bind(material);
   const key = material.customProgramCacheKey.bind(material);
@@ -121,8 +119,10 @@ uniform float glassTint;
 uniform float glassSeam;
 uniform vec3 glassSeamColor;
 uniform vec3 glassDust;
+#if PAD_COUNT > 0
 uniform vec2 padCenters[PAD_COUNT];
 uniform vec2 padAxes[PAD_COUNT];
+#endif
 uniform vec2 padHalf;
 uniform float padBorder;
 uniform vec3 padDust;
@@ -194,6 +194,7 @@ const ROAD_FRAGMENT = `{
     float dirtShade = mix(${DIRT_SHOULDER}, 1.0, smoothstep(dirtEdge, dirtEdge + ${DIRT_SOFT}, dirtCover));
     diffuseColor.rgb = mix(diffuseColor.rgb, dirtColor * dirtShade, dirtIn);
   }
+#if PAD_COUNT > 0
   for (int i = 0; i < PAD_COUNT; i++) {
     vec2 padOff = roadAt - padCenters[i];
     vec2 padIn = padHalf - abs(vec2(dot(padOff, padAxes[i]), dot(padOff, vec2(-padAxes[i].y, padAxes[i].x))));
@@ -202,12 +203,13 @@ const ROAD_FRAGMENT = `{
     diffuseColor.rgb = mix(roadColor, padDust * groundShade, 0.35);
     if (padDepth < padBorder && roadLook.a > 0.12) diffuseColor.rgb = padMark * groundShade;
   }
+#endif
 }`;
 
-function padUniforms(pixel: number) {
+function padUniforms(atlas: Atlas, pixel: number) {
   const centers: THREE.Vector2[] = [];
   const axes: THREE.Vector2[] = [];
-  for (const site of [...REGION.towns, ...REGION.locations])
+  for (const site of atlasSites(atlas))
     for (const pad of sitePads(site)) {
       centers.push(new THREE.Vector2(pad.x * S, pad.y * S));
       axes.push(new THREE.Vector2(pad.x - site.pos.x, pad.y - site.pos.y).normalize());

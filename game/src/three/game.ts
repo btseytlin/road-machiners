@@ -1,5 +1,3 @@
-// The 3D game: wires input to the sim, the sim and physics to the Three.js view, and the HTML UI.
-// Sim time only moves while a turn plays. The path preview runs the same physics the turn will run.
 
 import * as THREE from "three";
 import { CONFIG } from "../config";
@@ -579,7 +577,7 @@ export class Game {
         return;
       case "ground": {
         const p = this.rig.groundUnder(e.clientX, e.clientY, this.ground);
-        if (p) this.apply(setMoveOrder(this.world, clickOrder(p, e.shiftKey, playerVehicle(this.world))));
+        if (p) this.apply(setMoveOrder(this.world, clickOrder(this.world.terrain, p, e.shiftKey, playerVehicle(this.world))));
         return;
       }
       default:
@@ -599,7 +597,6 @@ export class Game {
     return this.utilityAim.click(this.rig.groundUnder(e.clientX, e.clientY, this.ground));
   }
 
-  // A click on a truck pins its card, and with a gun picked also aims that gun at its body. With none it only inspects.
   private clickVehicle(id: string): void {
     this.pin.click(id);
     if (this.selected !== null && this.canClick()) this.apply(toggleBodyAim(this.world, weaponsForClick(this.world, this.selected), vehicleById(this.world, id)));
@@ -835,7 +832,7 @@ export class Game {
     const me = playerVehicle(this.world);
     const at = this.frames[me.id] ? toMap(this.frames[me.id].pos) : me.pos;
     const signs = this.combatWatch.observe(this.world.turn, this.world.vehicles.filter((v) => hostileToPlayer(this.world, v) && this.isVehicleVisible(v)).map((v) => v.id));
-    this.loops.update({ stormShare: stormShare(me), inCombat: inCombat(this.world, me), place: musicPlaceAt(at), paused: !this.anim && performance.now() - this.idleSince > MIX.music.pauseDelayMs });
+    this.loops.update({ stormShare: stormShare(me), inCombat: inCombat(this.world, me), place: musicPlaceAt(this.world.terrain, at), paused: !this.anim && performance.now() - this.idleSince > MIX.music.pauseDelayMs });
     if (signs.sighted) this.sound.accent("accent-sighted", 0);
   }
 

@@ -1,10 +1,8 @@
-// Map-space ground painter: tile type colors, warm sand on open desert, and hillshade. Which ground each tile looks
-// like, roads included, comes from lookTypes(). The ground shader draws roads over the paint, see render/roadPaint.ts.
-// Stones, scrub and cacti are 3D, in three/render/scatter.ts. The 3D terrain (three/render/terrain.ts) uses the paint
 
 import { REGION } from "../data/region";
 import { TERRAIN, TERRAIN_TYPES, type Basin, type TerrainTypeId } from "../data/terrain";
 import { TERRITORIES } from "../data/territory";
+import { atlasOf } from "../sim/atlas";
 import { groundSlope, type Terrain } from "../sim/terrain";
 import { basinUnder, isTerritory } from "../sim/territory";
 import { type Vec } from "../sim/vec";
@@ -110,6 +108,10 @@ export function paintGroundCanvas(
   opts: PaintOptions = DEFAULT_OPTIONS,
 ): void {
   paintGround(c, t, opts.hillshade);
+  if (atlasOf(t).landforms) paintLandforms(c);
+}
+
+function paintLandforms(c: PaintCanvas): void {
   const { canyon, dryRiver } = TERRAIN.features;
   stroke(
     c,

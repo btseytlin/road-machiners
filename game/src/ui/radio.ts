@@ -1,11 +1,8 @@
-// Waste Of Time Radio. RadioStation decides what J.J. broadcasts from the worlds the HUD hears. It reads world
-// state and events and never writes them, so the radio changes no rule. RadioPanel streams each broadcast onto a
-// pager screen and holds the sound knobs on its faceplate. Lines and pacing live in src/data/radio.ts.
 
 import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { BASIN_DIRECTIONS, HEADINGS, RADIO, RADIO_HOURS, RADIO_LINES, type RadioTopic } from '../data/radio';
-import { REGION } from '../data/region';
+import { atlasOf, atlasSites } from '../sim/atlas';
 import { TIME } from '../data/time';
 import type { Contract } from '../sim/market';
 import { siteOf } from '../sim/market';
@@ -18,7 +15,6 @@ import { el, panel, rightDock } from './dom';
 export type Broadcast = { topic: RadioTopic; text: string; turn: number; rank: 'news' | 'time' | 'filler' };
 
 const RANKS: Broadcast['rank'][] = ['news', 'time', 'filler'];
-const SITES = [...REGION.towns, ...REGION.locations];
 
 const WEATHER_TOPICS: Record<WeatherEvent['kind'], Partial<Record<'started' | 'ended', RadioTopic>>> = {
   heatwave: { started: 'heatwaveStart', ended: 'heatwaveEnd' },
@@ -212,9 +208,9 @@ function hoursOf(turn: number): number {
 }
 
 function placeWord(world: World, pos: Vec): string {
-  const nearest = SITES.reduce((a, b) => (dist(b.pos, pos) < dist(a.pos, pos) ? b : a));
+  const nearest = atlasSites(atlasOf(world.terrain)).reduce((a, b) => (dist(b.pos, pos) < dist(a.pos, pos) ? b : a));
   if (dist(nearest.pos, pos) <= RADIO.nearTiles && world.player.discovered.includes(nearest.id)) return `near ${nearest.name}`;
-  const center = REGION.size / 2;
+  const center = world.size / 2;
   return compass({ x: pos.x - center, y: pos.y - center }, BASIN_DIRECTIONS);
 }
 

@@ -14,6 +14,8 @@ import { isFortress, siteGates } from '../../sim/sites';
 import { deckAt, deckById } from '../../sim/bridge';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import { TEST_MAP } from '../../test/map';
+import { ICARUS_DECKS } from '../../sim/bridge';
+import { ICARUS_KEY } from '../../sim/atlas';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
 await loadModels(async (name) => {
@@ -21,7 +23,7 @@ await loadModels(async (name) => {
   if (!url) throw new Error(`Missing model file for ${name}`);
   return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0)).buffer;
 });
-const { root: sites, movers } = buildSites({ size: 1, heights: [0, 0, 0, 0], types: ['hardpan'] });
+const { root: sites, movers } = buildSites({ size: 1, heights: [0, 0, 0, 0], types: ['hardpan'], atlas: ICARUS_KEY });
 
 const FORTRESS_WALL_TILES = 4;
 const ALL = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
@@ -98,7 +100,7 @@ describe('landmark scale', () => {
   it('keeps every pulled-in interior piece at its height over the ground on a slope', () => {
     const size = 800;
     const heights = Array.from({ length: (size + 1) ** 2 }, (_, k) => 0.004 * (k % (size + 1)) + 0.003 * Math.floor(k / (size + 1)));
-    const slope: Terrain = { size, heights, types: Array.from({ length: size * size }, () => 'hardpan' as const) };
+    const slope: Terrain = { size, heights, types: Array.from({ length: size * size }, () => 'hardpan' as const), atlas: ICARUS_KEY };
     const sloped = buildSites(slope).root;
     for (const site of ALL.filter(isFortress)) {
       const flat = sites.getObjectByName(`landmark-${site.id}`)!.children;
@@ -610,7 +612,7 @@ describe('deck models', () => {
           expect(Math.abs(across)).toBeLessThan(1e-3);
           expect(along).toBeGreaterThanOrEqual(Math.SQRT1_2 - 1e-3);
           expect(along).toBeLessThanOrEqual(deck.length - Math.SQRT1_2 + 1e-3);
-          expect(deckAt(Math.floor(x) + 0.5, Math.floor(y) + 0.5)?.deck).toBe(deck);
+          expect(deckAt(ICARUS_DECKS, Math.floor(x) + 0.5, Math.floor(y) + 0.5)?.deck).toBe(deck);
         }
       }
     }

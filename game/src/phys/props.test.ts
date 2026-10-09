@@ -26,6 +26,7 @@ import { toMap } from './frames';
 import { physicsMove } from './turn';
 import { budget } from '../test/budget';
 import { defaultSetup } from '../sim/settings';
+import { ICARUS_DECKS } from '../sim/bridge';
 
 beforeAll(async () => {
   await initPhysics();
@@ -311,7 +312,7 @@ describe('Broken Wing', () => {
     expect(me(w).pos.x).toBeGreaterThan(end.x - 2);
     const b = bodyOf(me(w).chassisId);
     const rest = b.wheelRadius + PHYSICS.truck.suspensionRest - b.wheelY;
-    const onDeck = frames.filter((f) => deckAt(f.at.x, f.at.y)?.deck.id === deck.id);
+    const onDeck = frames.filter((f) => deckAt(ICARUS_DECKS, f.at.x, f.at.y)?.deck.id === deck.id);
     expect(onDeck.length).toBeGreaterThan(0);
     for (const f of onDeck) expect(Math.abs(f.y - heightAt(w.terrain, f.at.x, f.at.y) * S - rest)).toBeLessThan(0.5);
   }, budget(60_000));

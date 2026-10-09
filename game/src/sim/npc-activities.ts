@@ -1,5 +1,3 @@
-// NPC goals: the goal stack, the fixed survival rule, the decision points that push and pop goals, and each goal's
-// work. See src/sim/npc-decisions.ts for the weighted rolls.
 
 import { ECONOMY } from '../data/goods';
 import { NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, type DecisionOptions } from '../data/npcs';
@@ -251,7 +249,7 @@ function siteGoal(world: World, vehicle: Vehicle): NpcActivity {
 }
 
 function oldSpotGoal(world: World, vehicle: Vehicle): NpcActivity | null {
-  const near = oldSpotsNear(world.mapHash, vehicle.pos, OLD_PLACES.npcRange);
+  const near = oldSpotsNear(world, vehicle.pos, OLD_PLACES.npcRange);
   if (near.length === 0 || !chance(world, OLD_PLACES.npcShare)) return null;
   const pick = near[randInt(world, 0, near.length - 1)];
   return createActivity('scavenge', oldStockId(pick), { ...pick.pos }, pick.type === 'hulks' ? 'search old tank hulks' : 'search an old ruin');
@@ -878,7 +876,7 @@ function defeatedActivity(world: World, vehicle: Vehicle, profile: NpcProfile, c
 function retreatHome(world: World, vehicle: Vehicle): NpcActivity {
   const top = topGoal(vehicle)?.kind;
   if (top !== 'retreat' && top !== 'rearm') {
-    const home = npcHomeSite(vehicle);
+    const home = npcHomeSite(world, vehicle);
     if (!home) throw new Error(`${vehicle.id} knows no home to retreat to`);
     pushGoal(world, vehicle, createSiteActivity('retreat', home.id, 'retreat home after a defeat'));
   }

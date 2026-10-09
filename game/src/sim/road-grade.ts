@@ -1,10 +1,7 @@
-// Road grading. The ground on and beside every road is set so no step across the road surface is
-// steeper than TERRAIN.roadGrade per tile, and no step beside it steeper than TERRAIN.bankGrade,
-// while staying as close to the ungraded ground as that allows. Ground in the road margin blends
 
 import { REGION } from '../data/region';
 import { TERRAIN } from '../data/terrain';
-import { bridgeCut } from './bridge';
+import { bridgeCut, ICARUS_DECKS } from './bridge';
 import { flattenFalloff } from './elevation';
 import { ROAD_INDEX } from './road-index';
 import { siteGap } from './sites';
@@ -28,7 +25,7 @@ export type GradedPad = { pos: Vec; r: number; height: number; margin: number; g
 type GradedPath = { points: Vec[]; width: number; grade: number };
 
 export function gradeRoads(raw: Terrain): number[] {
-  return gradeCorners(raw, roadCorners(raw), bridgeCut);
+  return gradeCorners(raw, roadCorners(raw), (x, y) => bridgeCut(ICARUS_DECKS, x, y));
 }
 
 export function gradePaths(raw: Terrain, paths: readonly GradedPath[], margin: number, pads: readonly GradedPad[] = []): number[] {
@@ -156,7 +153,7 @@ function padAt(pads: readonly GradedPad[], p: Vec): PadAt {
 
 function isSurface(x: number, y: number, roadDist: number): boolean {
   if (SITES.some((s) => siteGap(s, { x, y }) < 0)) return true;
-  return roadDist <= SURFACE && bridgeCut(x, y) === 0;
+  return roadDist <= SURFACE && bridgeCut(ICARUS_DECKS, x, y) === 0;
 }
 
 function envelope(c: Corners, given: readonly (number | null)[], side: 1 | -1): Float64Array {

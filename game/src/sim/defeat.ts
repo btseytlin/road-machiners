@@ -1,7 +1,3 @@
-// A lost fight knocks a driver out, the player or an NPC alike. The truck keeps every item, trucks parked beside
-// it strip it, and nobody is its foe while it lies out. It wakes once the trucks that fought it look away. Health
-// at 0 ends the player's run. A woken NPC retreats home and lies up there, and nobody is its foe until it refits at
-// the end of the lie-up.
 
 import { NPC_BEHAVIOR, NPCS } from "../data/npcs";
 import { chassisDef } from "../data/chassis";
@@ -214,14 +210,14 @@ function inPlayerView(world: World, pos: Vec): boolean {
 }
 
 function hiddenHomeSpot(world: World, v: Vehicle): Vec | null {
-  const home = homeOf(v);
+  const home = homeOf(world, v);
   const radius = chassisDef(v.chassisId).radius;
   const pads = [...sitePads(home)].sort((a, b) => dist(v.pos, a) - dist(v.pos, b));
   return pads.find((pad) => !inPlayerView(world, pad) && isFree(world, pad, radius, v.id)) ?? null;
 }
 
-function homeOf(v: Vehicle): Site {
-  const home = npcHomeSite(v);
+function homeOf(world: World, v: Vehicle): Site {
+  const home = npcHomeSite(world, v);
   if (!home) throw new Error(`${v.id} knows no home to retreat to`);
   return home;
 }

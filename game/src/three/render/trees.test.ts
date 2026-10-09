@@ -7,6 +7,7 @@ import { loadModels } from './models';
 import { ObstacleViews } from './obstacles';
 import { RenderScope, SightLimit } from './scope';
 import { TreeInstances } from './trees';
+import { ICARUS_KEY } from '../../sim/atlas';
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
@@ -21,7 +22,7 @@ await initPhysics();
 const SIZE = 64;
 
 function flat(): Terrain {
-  return { size: SIZE, heights: new Array<number>((SIZE + 1) * (SIZE + 1)).fill(0), types: new Array(SIZE * SIZE).fill('hardpan') };
+  return { size: SIZE, heights: new Array<number>((SIZE + 1) * (SIZE + 1)).fill(0), types: new Array(SIZE * SIZE).fill('hardpan'), atlas: ICARUS_KEY };
 }
 
 function tree(id: string, x: number, y: number): Landmark {

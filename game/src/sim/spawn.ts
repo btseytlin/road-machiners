@@ -1,5 +1,3 @@
-// NPC spawning up to per-template caps. Raiders appear at their camp gates, neutrals at the gates of any
-// town or other location.
 
 import { FIRST_NAMES, NPCS, OPPOSED_TRAITS, SPAWN, SURNAMES, type NpcTemplate, type TraitId } from "../data/npcs";
 import { chassisDef } from "../data/chassis";
@@ -15,6 +13,7 @@ import { modeRules } from "./settings";
 import { startEscort } from "./tow";
 import type { Vehicle, World } from "./types";
 import { dist, type Vec } from "./vec";
+import { atlasOf } from "./atlas";
 
 export function spawnNpcs(world: World): void {
   if (!modeRules(world).traffic) return;
@@ -210,13 +209,13 @@ function onMap(world: World, pos: Vec, radius: number): boolean {
   return pos.x >= radius && pos.y >= radius && pos.x <= world.size - radius && pos.y <= world.size - radius;
 }
 
-function insideFortress(pos: Vec): boolean {
-  const site = siteUnder(pos);
+function insideFortress(world: World, pos: Vec): boolean {
+  const site = siteUnder(atlasOf(world.terrain), pos);
   return site !== null && isFortress(site);
 }
 
 export function isFree(world: World, pos: Vec, radius: number, ignoreId: string | null): boolean {
-  if (!onMap(world, pos, radius) || insideFortress(pos)) return false;
+  if (!onMap(world, pos, radius) || insideFortress(world, pos)) return false;
   const margin = 0.3;
   if (world.obstacles.filter(isDriveObstacle).some((o) => touchesObstacle(o, world.terrain, pos, radius, margin))) return false;
   return world.vehicles.every(

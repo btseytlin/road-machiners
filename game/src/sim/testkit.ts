@@ -12,6 +12,7 @@ import { onTestFinished } from 'vitest';
 import { DECISIONS, STATE_WEIGHTS, TRAITS, type DecisionId, type DecisionOptions, type TraitId } from '../data/npcs';
 import { addState } from './states';
 import type { Faction, GameEvent, NpcBrain, Vehicle, World, XpSource } from './types';
+import { ICARUS_KEY } from './atlas';
 import { dist, type Vec } from './vec';
 import { refreshVision } from './vision';
 import { openingStockOf } from './opening';
@@ -21,7 +22,7 @@ import { cloneWorld, newWorld } from './world';
 import { defaultSetup } from './settings';
 
 export function flatTerrain(size: number): Terrain {
-  return { size, heights: new Array((size + 1) * (size + 1)).fill(0), types: new Array(size * size).fill('road') };
+  return { size, heights: new Array((size + 1) * (size + 1)).fill(0), types: new Array(size * size).fill('road'), atlas: ICARUS_KEY };
 }
 
 export function editableTerrain(w: World): Terrain {

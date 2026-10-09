@@ -1,6 +1,3 @@
-// Weighted NPC decisions. A decision point offers options. An option is available when the driver physically can
-// take it now. Each available option's final weight is (base + adds) x muls x situation factor. Bases live in
-// DECISIONS. Adds and muls come from the NPC's traits, and from the states it holds toward the decision's subject.
 
 import { dealAvailable } from './patch';
 import { canSpareFor } from './aid';
@@ -40,6 +37,7 @@ import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
 import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
+import { icarusAtlas } from './atlas';
 import { canVehicleSee } from './vision';
 import { isWatching, postsOf } from './watch-posts';
 
@@ -473,7 +471,7 @@ function roadStops(site: Site, spacing: number): readonly Vec[] {
   if (cached) return cached;
   const gates = siteGates(site);
   const near = (p: Vec) => gates.some((gate) => dist(gate, p) <= NPC_BEHAVIOR.patrolRadius);
-  const points = REGION.roads.flatMap((road) => pointsAlong(road, spacing)).filter((p) => near(p) && siteUnder(p) === null);
+  const points = REGION.roads.flatMap((road) => pointsAlong(road, spacing)).filter((p) => near(p) && siteUnder(icarusAtlas(), p) === null);
   patrolStops.set(key, points);
   return points;
 }

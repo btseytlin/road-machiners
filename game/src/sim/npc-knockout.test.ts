@@ -19,6 +19,7 @@ import { NPC_BEHAVIOR } from '../data/npcs';
 import { vehicleStats } from './stats';
 import { canTowNpc, npcHomeSite } from './tow';
 import { dist } from './vec';
+import { TEST_MAP } from '../test/map';
 
 function beside(): { w: World; me: Vehicle; buggy: Vehicle } {
   const w = emptyWorld();
@@ -162,13 +163,13 @@ describe('the retreat home', () => {
 
   it('heads for its home site and makes no other decision', () => {
     const { w, buggy } = retreating();
-    const home = npcHomeSite(buggy)!;
+    const home = npcHomeSite(TEST_MAP, buggy)!;
     expect(thinkNpc(w, buggy)).toMatchObject({ kind: 'retreat', targetId: home.id });
   });
 
   it('appears at a home pad after enough turns beyond the player\'s gray vision, and lies up there still defeated', () => {
     const { w, buggy } = retreating();
-    const home = npcHomeSite(buggy)!;
+    const home = npcHomeSite(TEST_MAP, buggy)!;
     for (let turn = 1; turn < RULES.retreatTeleportTurns; turn++) advanceNpcKnockouts(w);
     expect(buggy.defeat?.unseen).toBe(RULES.retreatTeleportTurns - 1);
     advanceNpcKnockouts(w);
@@ -182,7 +183,7 @@ describe('the retreat home', () => {
 
   it('refits on the same chassis and keeps its money when its lie-up at home ends', () => {
     const { w, buggy } = retreating();
-    buggy.pos = { ...sitePads(npcHomeSite(buggy)!)[0] };
+    buggy.pos = { ...sitePads(npcHomeSite(TEST_MAP, buggy)!)[0] };
     const money = getResources(w, buggy).money;
     thinkNpc(w, buggy);
     resolveNpcActivities(w);
@@ -205,7 +206,7 @@ describe('the retreat home', () => {
   it('stays on a tow rope instead of appearing at home', () => {
     const { w, buggy } = retreating();
     const tower = addVehicle(w, 'raiders', 'buggy', ['stockEngine'], { x: 152, y: 150 });
-    addState(w, 'tow', tower.id, buggy.id, { kind: 'tow', site: npcHomeSite(buggy)!.id, fee: 0, hitched: true, waived: 0 });
+    addState(w, 'tow', tower.id, buggy.id, { kind: 'tow', site: npcHomeSite(TEST_MAP, buggy)!.id, fee: 0, hitched: true, waived: 0 });
     for (let turn = 0; turn < RULES.retreatTeleportTurns; turn++) advanceNpcKnockouts(w);
     expect(buggy.defeat?.phase).toBe('retreat');
     expect(buggy.pos).toEqual({ x: 150, y: 150 });
@@ -213,7 +214,7 @@ describe('the retreat home', () => {
 
   it('lies up when it drives up to its home pad, without a refit yet', () => {
     const { w, buggy } = retreating();
-    buggy.pos = { ...sitePads(npcHomeSite(buggy)!)[0] };
+    buggy.pos = { ...sitePads(npcHomeSite(TEST_MAP, buggy)!)[0] };
     thinkNpc(w, buggy);
     resolveNpcActivities(w);
     expect(buggy.defeat).toBeDefined();

@@ -29,6 +29,7 @@ import {
   tankHulks,
   type OldSettlement,
 } from './oldworld';
+import { ICARUS_DECKS } from '../sim/bridge';
 
 const SIZE = REGION.size;
 const HALF = REGION.roadWidth / 2;
@@ -506,7 +507,7 @@ describe('old-world layer', () => {
     expect(tilesMarked(d, BUILT_FIELD).length).toBeGreaterThan(0);
     for (const c of marked) {
       expect(ROAD_INDEX.nearestWithin(c.x, c.y, Infinity)).toBeGreaterThanOrEqual(HALF);
-      expect(deckAt(c.x, c.y)).toBeNull();
+      expect(deckAt(ICARUS_DECKS, c.x, c.y)).toBeNull();
       for (const site of SITES) expect(siteGap(site, c)).toBeGreaterThan(padReach(site));
     }
     expect(d.built.every((b) => b === BUILT_NONE || b === BUILT_OLD_ROAD || b === BUILT_FIELD)).toBe(true);

@@ -5,7 +5,8 @@ import {
   TERRAIN_MARGIN,
   type PaintCanvas,
 } from "../../render/groundPaint";
-import { deckAt, DECKS, railOffset, type Deck } from "../../sim/bridge";
+import { atlasOf } from "../../sim/atlas";
+import { deckAt, railOffset, type Deck } from "../../sim/bridge";
 import { deckHeight, deckSegments, type DeckSegment, type Terrain } from "../../sim/terrain";
 import type { World } from "../../sim/types";
 import { drawRoads } from "./roads";
@@ -68,7 +69,7 @@ export type TerrainChunk = {
 const DECK_FLOOR_GAP = 0.5;
 
 export function deckFloorCap(t: Terrain, x: number, y: number): number | null {
-  const on = deckAt(x, y);
+  const on = deckAt(atlasOf(t).decks, x, y);
   return on === null ? null : deckHeight(t, on.deck, on.along) - DECK_FLOOR_GAP / S;
 }
 
@@ -115,7 +116,7 @@ export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
       );
       chunks.push({ x, y, width, depth, mesh });
     }
-  for (const deck of DECKS) deckPick(w.terrain, deck, scope);
+  for (const deck of atlasOf(w.terrain).decks.decks) deckPick(w.terrain, deck, scope);
   return chunks;
 }
 

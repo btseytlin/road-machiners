@@ -7,6 +7,8 @@ import { isTerritory, territoryRoads } from '../sim/territory';
 import { dist, polylineDist, type Vec } from '../sim/vec';
 import { TERRAIN_MARGIN, type PaintCanvas } from './groundPaint';
 import { DIRT_ROAD_STYLE, paintRoadMask, REGION_ROAD_STYLE } from './roadPaint';
+import { ICARUS_DECKS } from '../sim/bridge';
+import { icarusAtlas } from '../sim/atlas';
 
 const sun = REGION.locations.filter(isTerritory).find((l) => l.id === 'fallen-sun')!;
 const SPUR_FADE = TERRITORIES['fallen-sun'].wreck!.spurFade;
@@ -53,7 +55,7 @@ function paintedMask(): { canvas: PaintCanvas; strokes: Stroke[] } {
     from,
     toPx: (tiles) => (tiles - from) * res,
   };
-  paintRoadMask(canvas);
+  paintRoadMask(canvas, icarusAtlas());
   return { canvas, strokes: ctx.strokes };
 }
 
@@ -85,7 +87,7 @@ describe('road mask', () => {
   const GREEN = DIRT_ROAD_STYLE;
 
   it('paints a Fallen Sun dirt road green, not red', () => {
-    const road = roads.find((r) => r.points.length > 1 && deckAt((r.points[0].x + r.points[1].x) / 2, (r.points[0].y + r.points[1].y) / 2) === null)!;
+    const road = roads.find((r) => r.points.length > 1 && deckAt(ICARUS_DECKS, (r.points[0].x + r.points[1].x) / 2, (r.points[0].y + r.points[1].y) / 2) === null)!;
     const p = { x: (road.points[0].x + road.points[1].x) / 2, y: (road.points[0].y + road.points[1].y) / 2 };
     expect(channelAt(mask, GREEN, p)).toBe(1);
     expect(channelAt(mask, RED, p)).toBe(0);
@@ -124,7 +126,7 @@ describe('road mask', () => {
     const p = road
       .slice(1)
       .map((b, i) => ({ x: (road[i].x + b.x) / 2, y: (road[i].y + b.y) / 2 }))
-      .find((m) => deckAt(m.x, m.y) === null && [...REGION.towns, ...REGION.locations].every((s) => siteGap(s, m) > 2))!;
+      .find((m) => deckAt(ICARUS_DECKS, m.x, m.y) === null && [...REGION.towns, ...REGION.locations].every((s) => siteGap(s, m) > 2))!;
     expect(channelAt(mask, RED, p)).toBe(1);
     expect(channelAt(mask, GREEN, p)).toBe(0);
   });

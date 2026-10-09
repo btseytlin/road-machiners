@@ -23,6 +23,9 @@ import { BUILT_FIELD, BUILT_OLD_ROAD, ruleRng, tileCenter, tileOf, tilesWithin }
 import { TERRITORY_SEED_OFFSET, territoryLayer } from './territory';
 import { budget } from '../test/budget';
 import { defaultSetup } from '../sim/settings';
+import { ICARUS_DECKS } from '../sim/bridge';
+import { icarusAtlas } from '../sim/atlas';
+import { ICARUS_KEY } from '../sim/atlas';
 
 const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
 const t = fallenSun as never;
@@ -46,7 +49,7 @@ function rollingDraft(): MapDraft {
 }
 
 function terrainOf(size: number, heights: ArrayLike<number>): Terrain {
-  return { size, heights: Array.from(heights), types: [] };
+  return { size, heights: Array.from(heights), types: [], atlas: ICARUS_KEY };
 }
 
 function lowBoxes(p: BakedPiece, k: number) {
@@ -258,7 +261,7 @@ describe("the Fallen Sun's dirt roads, decks and lanes on the baked map", () => 
     for (const road of web) {
       for (const tile of roadTiles(road)) {
         const c = { x: (tile % terrain.size) + 0.5, y: Math.floor(tile / terrain.size) + 0.5 };
-        const want = deckAt(c.x, c.y) !== null || onRegionRoad(c) ? 'road' : 'track';
+        const want = deckAt(ICARUS_DECKS, c.x, c.y) !== null || onRegionRoad(c) ? 'road' : 'track';
         expect(terrain.types[tile], `${c.x},${c.y}`).toBe(want);
       }
     }
@@ -288,7 +291,7 @@ describe("the Fallen Sun's dirt roads, decks and lanes on the baked map", () => 
       for (let k = 0.25; k <= dist(s.a, s.b); k += 0.5) {
         for (let c = -s.width / 2; c <= s.width / 2; c += 0.5) {
           const at = { x: s.a.x + box.axis.x * k - box.axis.y * c, y: s.a.y + box.axis.y * k + box.axis.x * c };
-          expect(deckAt(at.x, at.y)?.deck.id ?? null, `a deck on the strip at ${at.x},${at.y}`).toBeNull();
+          expect(deckAt(ICARUS_DECKS, at.x, at.y)?.deck.id ?? null, `a deck on the strip at ${at.x},${at.y}`).toBeNull();
         }
       }
     }
@@ -300,7 +303,7 @@ describe("the Fallen Sun's dirt roads, decks and lanes on the baked map", () => 
     for (const p of near) {
       const where = `${p.kind} at ${p.pos.x.toFixed(1)},${p.pos.y.toFixed(1)}`;
       expect(touched(p.pos, p.r).filter((tile) => dirtTiles.has(tile)), where).toEqual([]);
-      expect(onDeck(p.pos, p.r), where).toBe(false);
+      expect(onDeck(icarusAtlas(), p.pos, p.r), where).toBe(false);
       for (const s of strips) expect(boxDistance(stripBox(s), p.pos), where).toBeGreaterThan(p.r);
     }
   });

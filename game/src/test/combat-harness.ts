@@ -1,6 +1,3 @@
-// Combat harness: plays fights through the real turn pipeline and Rapier physics on flat open ground. Two sides fight,
-// and each truck names its driver and its gear apart, so a run can hold the driver and vary the gear to tune gear, or
-// hold the gear and vary the driver to tune behavior. It measures hit rates, damage and outcomes, so a balance change
 
 import { CHASSIS } from '../data/chassis';
 import { DECISIONS, GEAR_LEVEL_IDS, NPC_BEHAVIOR, NPCS, TRAITS, type GearLevel } from '../data/npcs';
@@ -31,6 +28,7 @@ import { refreshVision } from '../sim/vision';
 import { cloneWorld, endTurn, newWorld, seedStreams, setAutoFire, setMoveOrder } from '../sim/world';
 import { TEST_MAP } from './map';
 import { defaultSetup } from '../sim/settings';
+import { ICARUS_KEY } from '../sim/atlas';
 
 export type Policy = 'stand' | 'orbit' | 'charge' | 'kite';
 export const POLICIES: Policy[] = ['stand', 'orbit', 'charge', 'kite'];
@@ -131,7 +129,7 @@ function baseWorld(kit: string, arena: number | null): World {
   const cached = BASES.get(key);
   if (cached) return cached;
   const w = newWorld(0, START_KITS[kit] ?? missing('kit', kit), TEST_MAP, defaultSetup('roaming'), false);
-  const terrain = { size: w.size, heights: new Array((w.size + 1) * (w.size + 1)).fill(0), types: new Array(w.size * w.size).fill('road') };
+  const terrain = { size: w.size, heights: new Array((w.size + 1) * (w.size + 1)).fill(0), types: new Array(w.size * w.size).fill('road'), atlas: ICARUS_KEY };
   Object.freeze(terrain.heights);
   Object.freeze(terrain.types);
   w.terrain = Object.freeze(terrain);

@@ -1,5 +1,3 @@
-// Town and location models. Buildings that block movement are obstacles already (see obstacles.ts),
-// so nothing here blocks. Blender models come from tools/blender/; each script's docstring gives its size.
 
 import * as THREE from 'three';
 import { REGION, type SiteLocationDef, type SiteEdge, type TownDef } from '../../data/region';
@@ -9,6 +7,7 @@ import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
 import { isFortress, siteGates } from '../../sim/sites';
+import { atlasOf } from '../../sim/atlas';
 import { deckById, deckCenterAt, type Deck } from '../../sim/bridge';
 import { deckSegments, heightAt, type DeckSegment, type Terrain } from '../../sim/terrain';
 import { angleDiff, segmentDist } from '../../sim/vec';
@@ -490,23 +489,30 @@ function buildSite(t: Terrain, site: Site): BuiltSite {
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
-const SITES = [...REGION.towns, ...REGION.locations.filter((l): l is SiteLocationDef => l.kind !== 'territory')];
+function sitesOf(t: Terrain): (TownDef | SiteLocationDef)[] {
+  const atlas = atlasOf(t);
+  return [...atlas.towns, ...atlas.locations.filter((l): l is SiteLocationDef => l.kind !== 'territory')];
+}
+
+function wingDeckOf(t: Terrain): Deck | null {
+  return atlasOf(t).decks.decks.find((d) => d.id === 'broken-wing') ?? null;
+}
 
 export function buildSites(t: Terrain): BuiltSite {
   const root = new THREE.Group();
   const movers: Mover[] = [];
-  for (const site of SITES) {
+  for (const site of sitesOf(t)) {
     const built = buildSite(t, site);
     root.add(built.root);
     movers.push(...built.movers);
   }
-  root.add(buildWingDeck(t));
+  if (wingDeckOf(t)) root.add(buildWingDeck(t));
   return { root, movers };
 }
 
 export function addSites(t: Terrain, scope: RenderScope): void {
   const motion = new SiteMotion();
-  for (const site of SITES) {
+  for (const site of sitesOf(t)) {
     const built = buildSite(t, site);
     scope.add(built.root, site.pos, site.radius);
     const phase = hash2(site.pos.x, site.pos.y) * MOTION_PHASE_SPAN;
@@ -518,8 +524,8 @@ export function addSites(t: Terrain, scope: RenderScope): void {
     motion.tick((now - last) / 1000);
     last = now;
   });
-  const deck = deckById('broken-wing');
-  scope.add(buildWingDeck(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
+  const deck = wingDeckOf(t);
+  if (deck) scope.add(buildWingDeck(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
 }
 
 export function poseOnDeck(obj: THREE.Object3D, deck: Deck, seg: DeckSegment, top: number): void {

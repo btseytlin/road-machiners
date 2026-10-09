@@ -1,4 +1,3 @@
-// Obstacle placement: the baked map's props, then seeded site props and road wrecks.
 
 import { FORTRESS } from '../data/fortress';
 import { FORT_MODELS, type FortModel } from './fortress';
@@ -11,18 +10,20 @@ import { isFortress, siteGap } from './sites';
 import { TERRAIN } from '../data/terrain';
 import { randInt, randRange } from './rng';
 import { hulkBoxes } from './body';
-import { DECKS, propBase, underDeck } from './bridge';
+import { propBase, underDeck } from './bridge';
+import { atlasOf, atlasSites, type Atlas } from './atlas';
 import { modeRules } from './settings';
 import type { LandmarkLook, Obstacle, World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 
 const O = REGION.obstacles;
 export function generateObstacles(world: World, map: BakedMap, fixed: Obstacle[]): Obstacle[] {
+  const atlas = atlasOf(map.terrain);
   const baked = mapObstacles(map);
-  const sites = placeSites();
+  const sites = placeSites(atlas);
   const out = [...baked, ...sites];
   for (const o of fixed) {
-    if (overlapsAny(out, o.pos, o.r) || !clearOfSites(o.pos, o.r) || !clearOfDecks(o.pos, o.r))
+    if (overlapsAny(out, o.pos, o.r) || !clearOfSites(atlas, o.pos, o.r) || !clearOfDecks(atlas, o.pos, o.r))
       throw new Error(`Obstacle ${o.id} at ${o.pos.x.toFixed(1)}, ${o.pos.y.toFixed(1)} overlaps a prop, a site or a deck`);
     out.push(o);
   }
@@ -52,10 +53,10 @@ export function isBakedObstacle(o: Obstacle): boolean {
   return BAKED_ID.test(o.id);
 }
 
-function placeSites(): Obstacle[] {
+function placeSites(atlas: Atlas): Obstacle[] {
   const S = REGION.sites;
-  const out: Obstacle[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')].filter((s) => !isFortress(s)).map((s) => ({ id: `site-${s.id}`, pos: { ...s.pos }, r: s.radius, kind: 'site' }));
-  for (const loc of REGION.locations) {
+  const out: Obstacle[] = [...atlas.towns, ...atlas.locations.filter((l) => l.kind !== 'territory')].filter((s) => !isFortress(s)).map((s) => ({ id: `site-${s.id}`, pos: { ...s.pos }, r: s.radius, kind: 'site' }));
+  for (const loc of atlas.locations) {
     if (loc.kind === 'oasis' && !isFortress(loc)) out.push({ id: `pond-${loc.id}`, pos: { ...loc.pos }, r: S.pondRadius, kind: 'water' });
     if (loc.kind === 'convoy' && !isFortress(loc))
       S.convoyWrecks.forEach((o, i) => out.push({ id: `cw-${loc.id}-${i}`, pos: { x: loc.pos.x + o.x, y: loc.pos.y + o.y }, r: 0.65, kind: 'wreck' }));
@@ -81,7 +82,8 @@ export function findRoadWreckSpot(world: World, obstacles: Obstacle[], allowed: 
     const len = dist(a, b);
     const pos = { x: a.x + (b.x - a.x) * t - ((b.y - a.y) / len) * side, y: a.y + (b.y - a.y) * t + ((b.x - a.x) / len) * side };
     const r = randRange(world, 0.55, 0.8);
-    if (clearOfSites(pos, r) && !overlapsAny(obstacles, pos, r) && clearOfDecks(pos, r) && allowed(pos, r)) return { pos, r };
+    const atlas = atlasOf(world.terrain);
+    if (clearOfSites(atlas, pos, r) && !overlapsAny(obstacles, pos, r) && clearOfDecks(atlas, pos, r) && allowed(pos, r)) return { pos, r };
   }
   throw new Error('Road wreck placement ran out of tries');
 }
@@ -98,16 +100,16 @@ export function isBreakable(o: Obstacle): boolean {
   return o.kind === 'landmark' && BREAKABLE.kinds.includes(o.look);
 }
 
-export function onDeck(pos: Vec, r: number): boolean {
-  return DECKS.some((deck) => segmentDist(pos, deck.from, deck.to) < deck.width / 2 + r);
+export function onDeck(atlas: Atlas, pos: Vec, r: number): boolean {
+  return atlas.decks.decks.some((deck) => segmentDist(pos, deck.from, deck.to) < deck.width / 2 + r);
 }
 
-export function clearOfDecks(pos: Vec, r: number): boolean {
-  return !onDeck(pos, r) && TERRAIN.features.mounds.every((m) => dist(pos, m.center) >= m.radius + m.bank + r);
+export function clearOfDecks(atlas: Atlas, pos: Vec, r: number): boolean {
+  return !onDeck(atlas, pos, r) && (!atlas.landforms || TERRAIN.features.mounds.every((m) => dist(pos, m.center) >= m.radius + m.bank + r));
 }
 
-export function clearOfSites(pos: Vec, r: number): boolean {
-  return [...REGION.towns, ...REGION.locations].every((s) => siteGap(s, pos) > O.siteClearance + r);
+export function clearOfSites(atlas: Atlas, pos: Vec, r: number): boolean {
+  return atlasSites(atlas).every((s) => siteGap(s, pos) > O.siteClearance + r);
 }
 
 export type PropScale = { x: number; y: number; z: number };

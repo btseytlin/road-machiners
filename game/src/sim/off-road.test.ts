@@ -11,6 +11,7 @@ import type { Faction, NpcActivity, Vehicle, World } from './types';
 import { dist } from './vec';
 import { endTurn } from './world';
 import { worldLine } from './progression/turn-log';
+import { TEST_MAP } from '../test/map';
 
 function driver(w: World, faction: Faction, goal: NpcActivity['kind'] | null): Vehicle {
   const v = addVehicle(w, faction, 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
@@ -110,7 +111,7 @@ describe('raiders keeping off roads in the turn pipeline', () => {
     const id = raider(w, { x: 325, y: 345 }).id;
     const start = byId(w, id);
     start.defeat = { phase: 'retreat', turns: 3, unseen: 0, foes: [], gaveUp: true };
-    const pad = sitePads(npcHomeSite(start)!)[0];
+    const pad = sitePads(npcHomeSite(TEST_MAP, start)!)[0];
     const road: number[] = [];
     let turn = 0;
     w = play(w, 14, (w) => {

@@ -9,6 +9,7 @@ import { TIME } from '../data/time';
 import { CHASSIS, chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
 import { makePart, newId } from './factory';
+import { atlasOf, icarusAtlas, type AtlasKey } from './atlas';
 import { clearOfSites, findRoadWreckSpot, isBreakable, mapObstacles, propReach } from './mapgen';
 import { startComponent } from './nav/astar';
 import { CELL, CLEARANCE, componentOf, navLayer, type NavLayer } from './nav/layer';
@@ -420,7 +421,7 @@ export function renewSalvage(world: World): void {
     if (table) restockSite(world, siteStock(world, site.id), table);
   }
   for (const o of world.obstacles.filter(isLootSpot)) restockSite(world, siteStock(world, o.id), spotTable(o));
-  for (const p of oldSpotPicks({ hash: world.mapHash })) restockSite(world, siteStock(world, oldStockId(p)), OLD_TABLES[p.type]);
+  for (const p of oldSpotPicks({ hash: world.mapHash, terrain: world.terrain })) restockSite(world, siteStock(world, oldStockId(p)), OLD_TABLES[p.type]);
   turnOverRoadWrecks(world);
   regrowBroken(world);
 }
@@ -692,7 +693,7 @@ export const MAX_RADIUS = Math.max(...Object.values(CHASSIS).map((c) => c.radius
 const OLD_SPOTS = OLD_SPOTS_FILE as { mapHash: string; picks: OldSpotPick[] };
 
 export function oldPlaces(baked: readonly Obstacle[]): OldPlace[] {
-  const candidates = baked.filter((o) => o.kind === 'landmark' && territoryAt(o.pos) === null && clearOfSites(o.pos, o.r));
+  const candidates = baked.filter((o) => o.kind === 'landmark' && territoryAt(o.pos) === null && clearOfSites(icarusAtlas(), o.pos, o.r));
   const buildings = linked(candidates.filter((o) => o.kind === 'landmark' && BUILDINGS.includes(o.look)), OLD_PLACES.buildingGap);
   const tanks = linked(candidates.filter((o) => o.kind === 'landmark' && o.look === 'tank'), OLD_PLACES.tankGap);
   return [...buildings.map((props) => place(buildingType(props), props)), ...tanks.map((props) => place('hulks', props))];
@@ -718,7 +719,8 @@ function linked(props: Obstacle[], gap: number): Obstacle[][] {
   return [...groups.values()];
 }
 
-export function oldSpotPicks(map: { hash: string }): OldSpotPick[] {
+export function oldSpotPicks(map: { hash: string; terrain: { atlas: AtlasKey } }): OldSpotPick[] {
+  if (!atlasOf(map.terrain).oldSpots) return [];
   if (OLD_SPOTS.mapHash !== map.hash) throw new Error(`Old spots were picked for map ${OLD_SPOTS.mapHash}, not ${map.hash}. Run npm run old-spots.`);
   return OLD_SPOTS.picks;
 }
@@ -807,6 +809,6 @@ export function oldSpotOf(stock: { id: string }): { type: OldPlaceType; propId: 
   return { type, propId: rest.slice(type.length + 1) };
 }
 
-export function oldSpotsNear(mapHash: string, pos: Vec, range: number): OldSpotPick[] {
-  return oldSpotPicks({ hash: mapHash }).filter((p) => dist(p.pos, pos) <= range);
+export function oldSpotsNear(world: World, pos: Vec, range: number): OldSpotPick[] {
+  return oldSpotPicks({ hash: world.mapHash, terrain: world.terrain }).filter((p) => dist(p.pos, pos) <= range);
 }

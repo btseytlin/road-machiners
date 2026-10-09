@@ -1,22 +1,20 @@
-// Which town or location the player is at. Trucks never enter a site: each is used from a pad outside one of its gates.
 
 import { FORTRESS_SITES } from '../data/fortress';
 import { STALL_MARKETS } from '../data/market';
 import { REGION, type LocationDef, type TerritoryDef, type TownDef } from '../data/region';
 import { RULES } from '../data/rules';
+import { atlasOf, type Atlas } from './atlas';
 import { playerVehicle } from './damage';
 import type { World } from './types';
 import { dist, pointInPolygon, polygonEdgeDist, type Vec } from './vec';
 
 export type Site = TownDef | LocationDef;
 
-const SITES: readonly Site[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 export const OUTPOSTS: readonly LocationDef[] = STALL_MARKETS.map((id) => {
   const site = REGION.locations.find((l) => l.id === id);
   if (!site) throw new Error(`Stall ${id} has no location`);
   return site;
 });
-const TERRITORIES: readonly LocationDef[] = REGION.locations.filter(isTerritory);
 const GATES = new Map<string, Vec[]>();
 const PADS = new Map<string, Vec[]>();
 
@@ -83,8 +81,8 @@ function onPad(pos: Vec, pad: Vec, center: Vec): boolean {
   return Math.abs(along) <= REGION.sites.pad.length / 2 && Math.abs(across) <= REGION.sites.pad.width / 2;
 }
 
-export function siteUnder(pos: Vec): Site | null {
-  return SITES.find((s) => siteGap(s, pos) < 0) ?? null;
+export function siteUnder(atlas: Atlas, pos: Vec): Site | null {
+  return atlas.towns.find((s) => siteGap(s, pos) < 0) ?? atlas.locations.find((s) => !isTerritory(s) && siteGap(s, pos) < 0) ?? null;
 }
 
 export function townAt(world: World): TownDef | null {
@@ -93,24 +91,24 @@ export function townAt(world: World): TownDef | null {
 
 export function townNear(world: World): TownDef | null {
   const pos = playerVehicle(world).pos;
-  return REGION.towns.find((t) => canUseSite(pos, t)) ?? null;
+  return atlasOf(world.terrain).towns.find((t) => canUseSite(pos, t)) ?? null;
 }
 
-export function isInTerritory(pos: Vec): boolean {
-  return TERRITORIES.some((site) => dist(pos, site.pos) <= site.radius && siteGap(site, pos) < 0);
+export function isInTerritory(atlas: Atlas, pos: Vec): boolean {
+  return atlas.locations.filter(isTerritory).some((site) => dist(pos, site.pos) <= site.radius && siteGap(site, pos) < 0);
 }
 
-export function isNearTown(pos: Vec, reach: number): boolean {
-  return REGION.towns.some((site) => siteGates(site).some((gate) => dist(gate, pos) <= reach));
+export function isNearTown(atlas: Atlas, pos: Vec, reach: number): boolean {
+  return atlas.towns.some((site) => siteGates(site).some((gate) => dist(gate, pos) <= reach));
 }
 
-export function isNearOutpost(pos: Vec, reach: number): boolean {
-  return OUTPOSTS.some((site) => siteGates(site).some((gate) => dist(gate, pos) <= reach));
+export function isNearOutpost(atlas: Atlas, pos: Vec, reach: number): boolean {
+  return OUTPOSTS.filter((site) => atlas.locations.includes(site)).some((site) => siteGates(site).some((gate) => dist(gate, pos) <= reach));
 }
 
 export function locationAt(world: World): LocationDef | null {
   const pos = playerVehicle(world).pos;
-  return REGION.locations.find((l) => canUseSite(pos, l)) ?? null;
+  return atlasOf(world.terrain).locations.find((l) => canUseSite(pos, l)) ?? null;
 }
 
 export function requireTown(world: World): TownDef {

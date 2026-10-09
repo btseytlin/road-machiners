@@ -1,6 +1,3 @@
-// Old-world layer: what stood on the map before, placed by rules from terrain, flow and today's sites and
-// roads. It reads the draft after geology. It appends props and marks old-road and field tiles in d.built.
-// Numbers live in OLD_WORLD in src/data/terrain.ts. Every rule draws from the map seed and its own seed offset.
 
 import { REGION } from '../data/region';
 import {
@@ -19,8 +16,9 @@ import {
   type ShipDebrisRules,
   type TankRules,
 } from '../data/terrain';
-import { deckAt } from '../sim/bridge';
+import { deckAt, ICARUS_DECKS } from '../sim/bridge';
 import { clearOfSites, onDeck } from '../sim/mapgen';
+import { icarusAtlas } from '../sim/atlas';
 import { ROAD_INDEX } from '../sim/road-index';
 import { chance, hashRandom, randInt, randRange, type Rng } from '../sim/rng';
 import type { BakedProp, PropKind } from '../sim/terrain';
@@ -108,7 +106,7 @@ export function clearGround(size: number, pos: Vec, r: number, roadGap: number):
   if (Math.min(pos.x, pos.y, size - pos.x, size - pos.y) < O.edgeMargin + r) return false;
   const reach = HALF + roadGap + r;
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, reach) < reach) return false;
-  return clearOfSites(pos, r) && !onDeck(pos, HALF + r);
+  return clearOfSites(icarusAtlas(), pos, r) && !onDeck(icarusAtlas(), pos, HALF + r);
 }
 
 export function place(d: MapDraft, p: BakedProp, roadGap: number): boolean {
@@ -120,8 +118,8 @@ export function place(d: MapDraft, p: BakedProp, roadGap: number): boolean {
 }
 
 export function builtGround(c: Vec): boolean {
-  if (deckAt(c.x, c.y) !== null) return true;
-  return ROAD_INDEX.nearestWithin(c.x, c.y, HALF) < HALF || !clearOfSites(c, 0);
+  if (deckAt(ICARUS_DECKS, c.x, c.y) !== null) return true;
+  return ROAD_INDEX.nearestWithin(c.x, c.y, HALF) < HALF || !clearOfSites(icarusAtlas(), c, 0);
 }
 
 export function isCutTile(d: MapDraft, tile: number): boolean {

@@ -15,6 +15,7 @@ import { partValue } from './wear';
 import { defaultSetup } from './settings';
 import { newWorld } from './world';
 import type { Vec } from './vec';
+import { icarusAtlas } from './atlas';
 
 const baked = mapObstacles(TEST_MAP);
 const layer = navLayer(TEST_MAP.terrain, baked, MAX_RADIUS);
@@ -23,7 +24,7 @@ function openGround(): Vec {
   for (let y = 50; y < TEST_MAP.terrain.size - 50; y += 5)
     for (let x = 50; x < TEST_MAP.terrain.size - 50; x += 5) {
       const pos = { x, y };
-      if (territoryAt(pos) === null && clearOfSites(pos, 30) && offRoad(landmark('ruin', pos, 0)) && reachable(layer, landmark('ruin', pos, 0)) && baked.every((o) => Math.hypot(o.pos.x - x, o.pos.y - y) > 20)) return pos;
+      if (territoryAt(pos) === null && clearOfSites(icarusAtlas(), pos, 30) && offRoad(landmark('ruin', pos, 0)) && reachable(layer, landmark('ruin', pos, 0)) && baked.every((o) => Math.hypot(o.pos.x - x, o.pos.y - y) > 20)) return pos;
     }
   throw new Error('No open ground on the map');
 }
@@ -49,7 +50,7 @@ describe('old-world places', () => {
       landmark('tank', at(o, 4, 0), 7),
       landmark('tank', at(o, 8, 0), 8),
       landmark('tank', at(o, 12, 0), 9),
-    ].filter((p) => territoryAt(p.pos) === null && clearOfSites(p.pos, p.r));
+    ].filter((p) => territoryAt(p.pos) === null && clearOfSites(icarusAtlas(), p.pos, p.r));
     expect(props).toHaveLength(9);
     const places = oldPlaces(props).map((p) => ({ type: p.type, ids: p.props.map((q) => q.id).sort() }));
     expect(places).toEqual([
@@ -91,7 +92,7 @@ describe('old-world loot spot picks on the committed map', () => {
     const made = makeOldSpotPicks(TEST_MAP);
     expect(picks, 'old-spots.json is stale. Run npm run old-spots.').toEqual(made);
     expect(makeOldSpotPicks({ ...TEST_MAP, props: TEST_MAP.props.map((p) => ({ ...p, pos: { ...p.pos } })) })).toEqual(made);
-    expect(() => oldSpotPicks({ hash: 'another-map' })).toThrow(/npm run old-spots/);
+    expect(() => oldSpotPicks({ hash: 'another-map', terrain: TEST_MAP.terrain })).toThrow(/npm run old-spots/);
   });
 
   it('keeps every pick off the roads, outside territories and sites, and reachable', () => {
@@ -101,7 +102,7 @@ describe('old-world loot spot picks on the committed map', () => {
       expect(o, p.propId).toBeDefined();
       expect(offRoad(o), p.propId).toBe(true);
       expect(territoryAt(o.pos), p.propId).toBeNull();
-      expect(clearOfSites(o.pos, o.r), p.propId).toBe(true);
+      expect(clearOfSites(icarusAtlas(), o.pos, o.r), p.propId).toBe(true);
       expect(reachable(layer, o), p.propId).toBe(true);
       expect(p.reach).toBe(propReach(o));
     }
@@ -130,10 +131,8 @@ describe('old-world loot spot picks on the committed map', () => {
   });
 });
 
-// What old spots add to the economy over 30 new games, against the rest of the map's salvage.
 describe('old-world loot spot economy', () => {
   const SEEDS = 30;
-  // Rolled loot lies in `hidden` until searched.
   const stockValue = (stock: SalvageStock): number =>
     [stock, stock.hidden].reduce(
       (total, l) =>
@@ -173,14 +172,12 @@ describe('old-world loot spot economy', () => {
   });
 });
 
-// What a fresh roll of the table sells for at the middle of every range, spare part aside.
 function midValue(table: LootTable): number {
   const mid = ([lo, hi]: [number, number]) => (lo + hi) / 2;
   const goods = Object.entries(table.goods).reduce((sum, [id, range]) => sum + mid(range) * GOODS[id].value, 0);
   return goods + mid(table.parts) * GOODS.parts.value + mid(table.fuel) * ECONOMY.supplyPrice.fuel + mid(table.supplies) * ECONOMY.supplyPrice.supplies;
 }
 
-// The mean pristine value of the table's spare part, rare pool included.
 function meanSpareValue(table: LootTable): number {
   const mean = (ids: string[]) => ids.reduce((sum, id) => sum + partDef(id).value, 0) / ids.length;
   return table.rare ? (1 - table.rare.share) * mean(table.spareParts) + table.rare.share * mean(table.rare.parts) : mean(table.spareParts);

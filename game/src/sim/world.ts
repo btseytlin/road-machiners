@@ -1,10 +1,9 @@
-// World creation and the turn pipeline. No rendering or physics imports: this runs in Node tests.
-// Public functions take a world and return a new one. Inside, a cloned draft is mutated.
 
 import { CHASSIS } from '../data/chassis';
 import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
+import { GAME_MODES } from '../data/modes';
 import { MAX_RANK, PERKS, SKILL_IDS, XP_SOURCES } from '../data/skills';
 import { CONDITION } from '../data/wear';
 import { RULES } from '../data/rules';
@@ -16,6 +15,7 @@ import { addGoods } from './inventory';
 import { isPerkId, pickedFromPair, skillLevel } from './progress';
 import { fitStores } from './resources';
 import { generateObstacles, touchesObstacle } from './mapgen';
+import { atlasOf, icarusAtlas } from './atlas';
 import type { BakedMap } from './terrain';
 import { planNpcOrders } from './ai';
 import { assignUtilityOrders } from './npc-utility';
@@ -67,12 +67,12 @@ export function seedStreams(seed: number): Pick<World, 'seed' | 'rngState' | 'ma
 }
 
 export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: WorldSetup, populate = true, start: { pos: Vec; heading: number } = startOf(seed, setup)): World {
-  if (map.terrain.size !== REGION.size)
-    throw new Error(`Map size ${map.terrain.size} does not match region size ${REGION.size}`);
+  requireMapFits(map, setup);
+  const size = map.terrain.size;
   const world: World = {
     ...seedStreams(seed),
     turn: 1,
-    size: REGION.size,
+    size,
     nextId: 0,
     vehicles: [],
     obstacles: [],
@@ -124,7 +124,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
       god: false,
       fullLog: false,
       frozen: false,
-      explored: new Uint8Array(REGION.size * REGION.size),
+      explored: new Uint8Array(size * size),
       visible: [],
       contacts: [],
       clouds: [],
@@ -167,6 +167,13 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
   refreshVision(world);
   world.events = [];
   return world;
+}
+
+function requireMapFits(map: BakedMap, setup: WorldSetup): void {
+  const atlas = atlasOf(map.terrain);
+  if (atlas === icarusAtlas() && map.terrain.size !== REGION.size) throw new Error(`Map size ${map.terrain.size} does not match region size ${REGION.size}`);
+  const rules = GAME_MODES[setup.mode].rules;
+  if ((rules.traffic || rules.rescue) && atlas.towns.length === 0) throw new Error(`Mode ${setup.mode} needs towns, and map ${map.hash} has none`);
 }
 
 function setUpWorldStock(world: World, map: BakedMap, truck: Vehicle, kit: StartKit, populate: boolean): void {

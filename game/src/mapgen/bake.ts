@@ -1,10 +1,8 @@
-// The map bake: a fixed order of layers over one draft, from base relief to rocks and crags. Heights, sand, flow and
-// slumped marks live on tile corners, (size + 1) x (size + 1), corner (i, j) at j * (size + 1) + i. Types
-// live on tiles, tile (x, y) at y * size + x, as an index into TYPE_IDS.
 
 import { REGION } from '../data/region';
 import { GEOLOGY, MAPGEN, TERRAIN, type TerrainTypeId } from '../data/terrain';
-import { bridgeCut, deckAt } from '../sim/bridge';
+import { bridgeCut, deckAt, ICARUS_DECKS } from '../sim/bridge';
+import { ICARUS_KEY, icarusAtlas } from '../sim/atlas';
 import { broadAt, flattenFactor, reliefAt } from '../sim/elevation';
 import { gradeRoads } from '../sim/road-grade';
 import { ROAD_INDEX } from '../sim/road-index';
@@ -101,12 +99,12 @@ export function baseLayer(seed: number, size: number): MapDraft {
 export function finishLayer(seed: number, d: MapDraft): MapDraft {
   const w = d.size + 1;
   for (let j = 0; j <= d.size; j++) for (let i = 0; i <= d.size; i++) {
-    const flatten = flattenFactor(i, j) * (1 - bridgeCut(i, j));
+    const flatten = flattenFactor(i, j) * (1 - bridgeCut(ICARUS_DECKS, i, j));
     if (flatten === 0) continue;
     const k = j * w + i;
     d.heights[k] += (heightFromElevation(broadAt(seed, i, j)) - d.heights[k]) * flatten;
   }
-  d.heights.set(gradeRoads({ size: d.size, heights: Array.from(d.heights), types: [] }));
+  d.heights.set(gradeRoads({ size: d.size, heights: Array.from(d.heights), types: [], atlas: ICARUS_KEY }));
   return d;
 }
 
@@ -163,7 +161,7 @@ function drainChannels(pond: Float32Array, size: number): Float32Array {
 }
 
 function builtType(c: Vec): TerrainTypeId | null {
-  if (deckAt(c.x, c.y) !== null) return 'road';
+  if (deckAt(ICARUS_DECKS, c.x, c.y) !== null) return 'road';
   if (ROAD_INDEX.nearestWithin(c.x, c.y, REGION.roadWidth / 2) < REGION.roadWidth / 2) return 'road';
   return SITES.some((s) => siteGap(s, c) < T.siteMargin) ? 'hardpan' : null;
 }
@@ -264,7 +262,7 @@ function fitsOffRoad(size: number, heights: ArrayLike<number>, built: Uint8Array
   if (Math.min(pos.x, pos.y, size - pos.x, size - pos.y) < O.edgeMargin) return false;
   const roadGap = REGION.roadWidth / 2 + O.roadClearance + r;
   if (ROAD_INDEX.nearestWithin(pos.x, pos.y, roadGap) < roadGap) return false;
-  return fitsGround(size, heights, built, pos, r) && !onDeck(pos, r) && clearOfSites(pos, r) && placed.every((o) => dist(pos, o.pos) >= o.r + r + O.gap);
+  return fitsGround(size, heights, built, pos, r) && !onDeck(icarusAtlas(), pos, r) && clearOfSites(icarusAtlas(), pos, r) && placed.every((o) => dist(pos, o.pos) >= o.r + r + O.gap);
 }
 
 function fitsGround(size: number, heights: ArrayLike<number>, built: Uint8Array, pos: Vec, r: number): boolean {

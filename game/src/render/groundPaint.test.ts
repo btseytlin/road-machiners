@@ -10,6 +10,7 @@ import { pointInPolygon, polylineDist, type Vec } from '../sim/vec';
 import { newWorld } from '../sim/world';
 import { TEST_MAP } from '../test/map';
 import { desertWeight, glassField, lookTypes, paintGroundCanvas, TERRAIN_MARGIN, type LookType, type PaintCanvas } from './groundPaint';
+import { ICARUS_KEY } from '../sim/atlas';
 
 const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
 const sunBasin = TERRAIN.features.basins.find((b) => b.center.x === sun.pos.x && b.center.y === sun.pos.y)!;
@@ -25,7 +26,7 @@ function bandMap(): Terrain {
   const size = 12;
   const types: TerrainTypeId[] = [];
   for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) types.push(x < 3 ? 'hardpan' : x < 9 ? 'road' : 'saltCrust');
-  return { size, heights: new Array<number>((size + 1) ** 2).fill(0), types };
+  return { size, heights: new Array<number>((size + 1) ** 2).fill(0), types, atlas: ICARUS_KEY };
 }
 
 describe('lookTypes', () => {
@@ -254,7 +255,7 @@ describe('ground paint under fused glass', () => {
   it('paints glass tiles as hardpan, so the shader can draw glass with its own smooth edge', () => {
     const size = 12;
     const flat = new Array<number>((size + 1) ** 2).fill(0);
-    const map = (type: (x: number) => TerrainTypeId): Terrain => ({ size, heights: flat, types: Array.from({ length: size * size }, (_, i) => type(i % size)) });
+    const map = (type: (x: number) => TerrainTypeId): Terrain => ({ size, heights: flat, types: Array.from({ length: size * size }, (_, i) => type(i % size)), atlas: ICARUS_KEY });
     const glass = paintedImage(map((x) => (x < 6 ? 'glass' : 'hardpan')));
     const hardpan = paintedImage(map(() => 'hardpan'));
     expect(glass).toEqual(hardpan);
@@ -263,7 +264,7 @@ describe('ground paint under fused glass', () => {
 
 function glassMap(size: number, glass: (x: number, y: number) => boolean): Terrain {
   const types: TerrainTypeId[] = Array.from({ length: size * size }, (_, i) => (glass(i % size, Math.floor(i / size)) ? 'glass' : 'sand'));
-  return { size, heights: new Array<number>((size + 1) ** 2).fill(0), types };
+  return { size, heights: new Array<number>((size + 1) ** 2).fill(0), types, atlas: ICARUS_KEY };
 }
 
 const HALF = 128;

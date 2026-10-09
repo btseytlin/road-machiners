@@ -1,12 +1,10 @@
-// Farm layout of a territory, from its FarmRules in TERRITORIES: an old asphalt road, dirt roads and tracks, concrete
-// pads, irrigation canals, buildings that are loot spots, runs of segment props, sandbag emplacements with tank traps
-// ahead of them, clutter round the buildings, and blocks of dead trees in rows with strays between them. The skeleton
 
 import { PHYSICS } from '../data/physics';
 import { REGION, type TerritoryDef } from '../data/region';
 import { EMPLACEMENT, type BuildingGroup, type ClutterRule, type Emplacement, type FarmRoad, type FarmRules, type GroveBlock, type GroveRule, type Pad, type Run, type TerritoryRules } from '../data/territory';
 import { TERRAIN } from '../data/terrain';
 import { flattenFalloff } from '../sim/elevation';
+import { ICARUS_KEY } from '../sim/atlas';
 import { boxDistance, propBoxes, type PosedBox } from '../sim/mapgen';
 import { gradePaths, type GradedPad } from '../sim/road-grade';
 import { ROAD_INDEX } from '../sim/road-index';
@@ -170,7 +168,7 @@ function gradeFarmRoads(d: MapDraft, t: TerritoryDef, roads: readonly FarmRoad[]
   const pads = levelPads(d, buildings);
   const before = Float32Array.from(d.heights);
   const paths = roads.map((road) => ({ points: road.points.map((p) => shift(t, p)), width: road.width, grade: road.grade ?? TERRAIN.roadGrade }));
-  const graded = gradePaths({ size: d.size, heights: Array.from(d.heights), types: [] }, paths, TERRAIN.farmGradeMargin, pads);
+  const graded = gradePaths({ size: d.size, heights: Array.from(d.heights), types: [], atlas: ICARUS_KEY }, paths, TERRAIN.farmGradeMargin, pads);
   const reach = Math.max(ROAD_END_SLACK + Math.max(...roads.map((road) => road.width / 2)) + TERRAIN.farmGradeMargin, Math.SQRT2 + TERRAIN.levelMargin);
   graded.forEach((h, k) => {
     if (h === d.heights[k]) return;

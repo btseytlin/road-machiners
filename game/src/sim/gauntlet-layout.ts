@@ -1,6 +1,7 @@
 import { GAUNTLET, type RowLook } from '../data/gauntlet';
 import { GARAGE_STOCK } from '../data/market';
 import { REGION } from '../data/region';
+import { atlasOf } from './atlas';
 import { clearOfDecks, clearOfSites, overlapsAny } from './mapgen';
 import { rollPartStock } from './market';
 import { nearCliff, terrainNav } from './nav/layer';
@@ -162,7 +163,7 @@ function outpostProps(line: CourseLine, at: number, side: 1 | -1, k: number): Ob
 }
 
 function clearSpot(world: World, pos: Vec, r: number): boolean {
-  return onMap(world, pos, r) && clearOfSites(pos, r) && !overlapsAny(world.obstacles, pos, r) && clearOfGround(world, pos, r);
+  return onMap(world, pos, r) && clearOfSites(atlasOf(world.terrain), pos, r) && !overlapsAny(world.obstacles, pos, r) && clearOfGround(world, pos, r);
 }
 
 function onMap(world: World, pos: Vec, r: number): boolean {
@@ -170,7 +171,7 @@ function onMap(world: World, pos: Vec, r: number): boolean {
 }
 
 function clearOfGround(world: World, pos: Vec, r: number): boolean {
-  return clearOfDecks(pos, r) && !nearCliff(terrainNav(world.terrain), pos.x, pos.y, r);
+  return clearOfDecks(atlasOf(world.terrain), pos, r) && !nearCliff(terrainNav(world.terrain), pos.x, pos.y, r);
 }
 
 function placeRows(world: World, rng: Rng, line: CourseLine, k: number, span: Span, taken: number[]): void {

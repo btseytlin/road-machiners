@@ -5,6 +5,7 @@ import { deckHeight } from '../../sim/terrain';
 import { TEST_MAP } from '../../test/map';
 import { scatterPlacements } from './scatter';
 import { chunkGeometry, deckFloorCap, TERRAIN_CHUNK } from './terrain';
+import { ICARUS_DECKS } from '../../sim/bridge';
 
 const S = PHYSICS.metersPerTile;
 const t = TEST_MAP.terrain;
@@ -58,7 +59,7 @@ describe('terrain under decks', () => {
           for (let i = 0; i <= w; i++) {
             const x = cx + i;
             const y = cy + j;
-            if (deckAt(x, y)) continue;
+            if (deckAt(ICARUS_DECKS, x, y)) continue;
             expect(pos.getY(j * (w + 1) + i)).toBe(Math.fround(t.heights[y * (t.size + 1) + x] * S));
           }
       }

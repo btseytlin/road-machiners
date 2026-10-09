@@ -1,8 +1,5 @@
-// HTML labels floating over the map: site labels for towns and locations, and vehicle markers. Site labels
-// follow the old 2D WorldScene rules: sites under never-explored fog or past gray vision show nothing, explored but
-// undiscovered sites show ???, discovered sites show their name. A wreck a driver told of shows a rumor label,
 
-import { REGION } from '../../data/region';
+import { atlasOf, atlasSites } from '../../sim/atlas';
 import { groundPoint, type VehicleFrame } from '../../phys/frames';
 import type { World } from '../../sim/types';
 import type { Vec } from '../../sim/vec';
@@ -16,7 +13,6 @@ import type { SightLimit } from './scope';
 const LABEL_LIFT_PX = 90;
 const RUMOR_TEXT = 'Wreck (rumor)';
 
-type Site = { id: string; name: string; pos: { x: number; y: number } };
 
 function labelEl(container: HTMLElement): HTMLDivElement {
   const el = document.createElement('div');
@@ -40,18 +36,24 @@ export class Labels {
   private rumors = new Map<string, HTMLDivElement>();
   private outposts = new Map<string, HTMLDivElement>();
 
-  constructor(private readonly container: HTMLElement) {
-    for (const s of sites()) this.els.set(s.id, labelEl(container));
-  }
+  constructor(private readonly container: HTMLElement) {}
 
   update(world: World, rig: CameraRig, limit: SightLimit): void {
-    for (const s of sites()) {
-      const el = this.els.get(s.id)!;
+    for (const s of atlasSites(atlasOf(world.terrain))) {
+      const el = this.siteLabel(s.id);
       el.textContent = world.player.discovered.includes(s.id) ? s.name : '???';
       place(el, world, s.pos, rig, limit, playerExplored(world, s.pos));
     }
     this.updateRumors(world, rig, limit);
     this.updateOutposts(world, rig, limit);
+  }
+
+  private siteLabel(id: string): HTMLDivElement {
+    const known = this.els.get(id);
+    if (known) return known;
+    const made = labelEl(this.container);
+    this.els.set(id, made);
+    return made;
   }
 
   private updateOutposts(world: World, rig: CameraRig, limit: SightLimit): void {
@@ -92,10 +94,6 @@ export class Labels {
       place(el, world, stock.pos, rig, limit, true);
     }
   }
-}
-
-function sites(): Site[] {
-  return [...REGION.towns, ...REGION.locations];
 }
 
 function weaponChip(mark: WeaponMark): HTMLElement {

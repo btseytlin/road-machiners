@@ -1,9 +1,7 @@
-// Road look for the ground shader. The mask marks where region roads (red) and territory dirt roads (green) lie on
-// the map, and where fused glass (blue) lies. The detail is a small tiling image of packed dirt with gravel, cracked
-// patches and potholes, drawn in pixels a third the size of the ground paint pixels. The tone is slow noise that varies the road and wanders its
 
 import { REGION, type TerritoryDef } from "../data/region";
 import { TERRITORIES, type FarmRoad, type WreckRules } from "../data/territory";
+import { atlasSites, type Atlas } from "../sim/atlas";
 import { bridgeCut, deckAt } from "../sim/bridge";
 import { isTerritory, siteGap } from "../sim/sites";
 import { territoryRoads } from "../sim/territory";
@@ -15,7 +13,6 @@ import { PAL, mix, shade } from "./palette";
 export const ROAD_DETAIL_SIDE = 256;
 export const ROAD_TONE_SIDE = 64;
 export const ROAD_TONE_PIXELS = 12;
-const SITES = [...REGION.towns, ...REGION.locations];
 const WRECKS: { territory: TerritoryDef; wreck: WreckRules }[] = REGION.locations.filter(isTerritory).flatMap((territory) => {
   const wreck = TERRITORIES[territory.id].wreck;
   return wreck === null ? [] : [{ territory, wreck }];
@@ -34,24 +31,26 @@ export type RoadImage = { side: number; pixels: Uint8ClampedArray };
 export const REGION_ROAD_STYLE = "#f00";
 export const DIRT_ROAD_STYLE = "#0f0";
 
-export function paintRoadMask(c: PaintCanvas): void {
+export function paintRoadMask(c: PaintCanvas, atlas: Atlas): void {
   const ctx = c.ctx;
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, c.size, c.size);
   ctx.lineJoin = "round";
   ctx.strokeStyle = REGION_ROAD_STYLE;
-  strokeRuns(c, REGION.roads.flatMap((road) => runsWhere(evenPoints(road), drawn)), WIDTH);
+  const dirt = atlas.roads.filter((road) => road.lanes === 0);
+  strokeRuns(c, dirt.flatMap((road) => runsWhere(evenPoints(road.points), (p) => drawn(atlas, p))), WIDTH);
   ctx.filter = `blur(${BLUR * c.res}px)`;
   ctx.globalCompositeOperation = "copy";
   ctx.drawImage(ctx.canvas, 0, 0);
   ctx.filter = `blur(${DIRT_BLUR * c.res}px)`;
   ctx.globalCompositeOperation = "lighten";
   ctx.strokeStyle = DIRT_ROAD_STYLE;
-  for (const { territory, wreck } of WRECKS) {
+  const offDeck = (p: Vec) => deckAt(atlas.decks, p.x, p.y) === null;
+  for (const { territory, wreck } of atlas.landforms ? WRECKS : []) {
     const { roads, spurs } = territoryRoads(territory);
     const fade = wreck.spurFade;
     for (const road of roads) strokeRuns(c, runsWhere(evenPoints(road.points), offDeck), road.width * 0.9);
-    for (const spur of spurs) strokeSpur(c, spur, fade);
+    for (const spur of spurs) strokeSpur(c, spur, fade, offDeck);
   }
   ctx.filter = "none";
   ctx.globalCompositeOperation = "source-over";
@@ -67,7 +66,7 @@ function strokeRuns(c: PaintCanvas, runs: Vec[][], width: number): void {
   ctx.stroke();
 }
 
-function strokeSpur(c: PaintCanvas, spur: FarmRoad, fade: number): void {
+function strokeSpur(c: PaintCanvas, spur: FarmRoad, fade: number, offDeck: (p: Vec) => boolean): void {
   const points = evenPoints(spur.points);
   const left = tilesToEnd(points);
   const width = spur.width * 0.9;
@@ -102,13 +101,9 @@ function runsWhere(points: Vec[], keep: (p: Vec) => boolean): Vec[][] {
   return runs.filter((run) => run.length > 1);
 }
 
-function offDeck(p: Vec): boolean {
-  return deckAt(p.x, p.y) === null;
-}
-
-function drawn(p: Vec): boolean {
-  if (!offDeck(p) || bridgeCut(p.x, p.y) > 0) return false;
-  return !SITES.some((site) => siteGap(site, p) < 0);
+function drawn(atlas: Atlas, p: Vec): boolean {
+  if (deckAt(atlas.decks, p.x, p.y) !== null || bridgeCut(atlas.decks, p.x, p.y) > 0) return false;
+  return !atlasSites(atlas).some((site) => siteGap(site, p) < 0);
 }
 
 function evenPoints(road: readonly Vec[]): Vec[] {

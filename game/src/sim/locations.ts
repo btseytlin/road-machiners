@@ -1,8 +1,8 @@
-// Discovery, the oasis and scavenging.
 
 import { SALVAGE } from '../data/salvage';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
+import { atlasOf, atlasSites } from './atlas';
 import { playerVehicle } from './damage';
 import { isKnockedOut } from './defeat';
 import { inTowReach } from './tow';
@@ -24,7 +24,7 @@ import { playerCommand } from './world';
 import { suppliesCap } from './stats';
 
 export function discoverSites(world: World): void {
-  for (const s of [...REGION.towns, ...REGION.locations]) {
+  for (const s of atlasSites(atlasOf(world.terrain))) {
     if (
       world.player.discovered.includes(s.id) ||
       !seesArea(world, s)

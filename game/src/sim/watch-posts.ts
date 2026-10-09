@@ -1,6 +1,3 @@
-// Watch posts and the watch. A raid ends at a post beside its hunting ground: off the road, outside sites, hazards and
-// lawman reach, clear for any raider's truck and in sight of the ground. There the raider watches HUNT.watchTurns
-// turns, parked and silent, for prey that comes into sight. Posts are pure geometry over the terrain and the map's
 
 import { chassisDef } from '../data/chassis';
 import { HUNT, NPCS } from '../data/npcs';
@@ -17,6 +14,7 @@ import type { Terrain } from './terrain';
 import { hazardZones, type HazardZone } from './territory';
 import type { NpcActivity, Obstacle, Vehicle, World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
+import { icarusAtlas } from './atlas';
 import { clearOverTerrain, hasLineOfSight, sightLine } from './vision';
 
 function postReach(): number {
@@ -103,7 +101,7 @@ function clearOfRoads(p: Vec): boolean {
 }
 
 function clearOfPlaces(map: PostMap, p: Vec): boolean {
-  if (siteUnder(p) !== null) return false;
+  if (siteUnder(icarusAtlas(), p) !== null) return false;
   return map.hazards.every((z) => dist(p, z.pos) > z.radius + map.reach) && map.gates.every((gate) => dist(gate, p) > HUNT.lawReach);
 }
 
