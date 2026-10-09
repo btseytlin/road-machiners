@@ -1,35 +1,120 @@
-import { GAUNTLET } from '../data/gauntlet';
+import { GAUNTLET, type Curve } from '../data/gauntlet';
+import { GARAGE_STOCK } from '../data/market';
 import { NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';
+import { chassisDef } from '../data/chassis';
 import { inCombat } from './combat';
 import { playerVehicle } from './damage';
-import { courseLine, pointAt, progressOf, type CourseLine } from './gauntlet-layout';
+import { highwayMap, milestoneAt, outpostSite, roadPoint, STRIDE, stretchStream, toAbsolute, toLocal } from './highway';
+import { mapObstacles } from './mapgen';
+import { rollPartStock } from './market';
 import { fightCornered, topGoal } from './npc-activities';
 import { generateNpcLoadout } from './npc-loadout';
+import { randRange } from './rng';
 import { modeRules } from './settings';
 import { isFree, spawnAt } from './spawn';
 import { declareFeud } from './states';
 import { getResources } from './resources';
 import { fuelCap, isStranded } from './stats';
 import { refreshTrack } from './tracks';
-import { chassisDef } from '../data/chassis';
-import type { GauntletRun, Outpost, RunLossCause, Vehicle, WaveGroup, World } from './types';
+import type { GauntletRun, OutpostFacts, PartInstance, RunLossCause, Vehicle, WaveGroup, World } from './types';
+import { refreshVision } from './vision';
 import { dist, type Vec } from './vec';
 import { playerCommand } from './world';
 
 export const OUTPOST_PAY = 'outpostPay';
 
-export type GauntletReadout = { stretch: number; total: number; toOutpost: number; complete: boolean };
+export type Outpost = OutpostFacts & { name: string; pad: Vec };
+export type GauntletReadout = { stretch: number; toOutpost: number; outpost: string };
+
+export function outpostName(milestone: number): string {
+  return `Outpost ${milestone}`;
+}
+
+function curveAt(c: Curve, j: number): number {
+  return Math.min(c.max, c.first + c.step * (j - 1));
+}
+
+export function payOf(j: number, wrecks: number): number {
+  return curveAt(GAUNTLET.pay.base, j) + curveAt(GAUNTLET.pay.perWreck, j) * wrecks;
+}
+
+export function stockSizeOf(j: number): number {
+  const s = GAUNTLET.stock;
+  return Math.min(s.max, s.base + Math.floor(j / s.every));
+}
+
+export function waveOf(j: number): (typeof GAUNTLET.waves)[number] {
+  if (!Number.isInteger(j) || j < 1) throw new Error(`Stretch ${j} has no wave`);
+  return GAUNTLET.waves[Math.min(j, GAUNTLET.waves.length) - 1];
+}
+
+export function planStretch(seed: number, j: number): WaveGroup[] {
+  const rng = stretchStream(seed, j, 'groups');
+  const from = milestoneAt(j - 1);
+  const span = milestoneAt(j) - from;
+  const [lo, hi] = GAUNTLET.groupSpread;
+  const wave = waveOf(j);
+  const anchors = wave.map(() => from + span * randRange(rng, lo, hi)).sort((a, b) => a - b);
+  return wave.map((plan, i) => ({
+    id: `g${j}-${i}`,
+    stretch: j,
+    at: anchors[i],
+    from: plan.from,
+    templates: [...plan.templates],
+    level: plan.level,
+    spawned: false,
+    vehicles: [],
+    wrecked: 0,
+    retryUntil: null,
+  }));
+}
+
+function outpostFacts(world: World, j: number): OutpostFacts {
+  const stock: PartInstance[] = rollPartStock(world, stretchStream(world.seed, j, 'stock'), GARAGE_STOCK, stockSizeOf(j), outpostName(j));
+  return { milestone: j, stock, paid: false };
+}
+
+export function startRun(world: World): void {
+  if (world.terrain.atlas.kind !== 'highway' || world.terrain.atlas.window !== 0) throw new Error(`A Gauntlet run starts on highway window 0, not map ${world.mapHash}`);
+  world.gauntlet = { window: 0, outposts: [outpostFacts(world, 1)], groups: planStretch(world.seed, 1), earned: 0, wrecks: 0 };
+}
+
+function runOf(world: World): GauntletRun {
+  if (!world.gauntlet) throw new Error('No Gauntlet run in this world');
+  return world.gauntlet;
+}
+
+export function outpostPad(world: World, milestone: number): Vec {
+  const pad = outpostSite(world.seed, milestone).pad;
+  return { x: pad.x, y: toLocal(runOf(world).window, pad.n) };
+}
+
+function outpostOf(world: World, facts: OutpostFacts): Outpost {
+  return { ...facts, name: outpostName(facts.milestone), pad: outpostPad(world, facts.milestone) };
+}
+
+export function outpostFactsAt(world: World, milestone: number): OutpostFacts {
+  return factsOf(runOf(world), milestone);
+}
+
+function factsOf(run: GauntletRun, milestone: number): OutpostFacts {
+  const facts = run.outposts.find((o) => o.milestone === milestone);
+  if (!facts) throw new Error(`The run holds no outpost ${milestone} in window ${run.window}`);
+  return facts;
+}
 
 export function advanceGauntlet(world: World): void {
   const run = world.gauntlet;
   if (!run || world.player.state !== 'active') return;
   countWrecks(world, run);
-  if (run.complete) return;
-  const line = courseLine(run.course);
   huntPlayer(world, run);
   if (arrivedAtNext(world, run)) completeStretch(world, run);
-  else spawnDueGroups(world, run, line, progressOf(line, playerVehicle(world).pos));
+  else spawnDueGroups(world, run, playerProgress(world, run));
+}
+
+function playerProgress(world: World, run: GauntletRun): number {
+  return toAbsolute(run.window, playerVehicle(world).pos.y);
 }
 
 function countWrecks(world: World, run: GauntletRun): void {
@@ -50,7 +135,7 @@ function aliveCount(world: World, run: GauntletRun): number {
 
 function huntPlayer(world: World, run: GauntletRun): void {
   const me = playerVehicle(world);
-  for (const group of run.groups.filter((g) => g.stretch === run.stretch)) {
+  for (const group of run.groups) {
     for (const v of liveTrucks(world, group)) {
       declareFeud(world, v, me.id);
       if (huntsPlayer(world, v)) refreshTrack(world, v, me.id, me.pos);
@@ -64,10 +149,10 @@ function huntsPlayer(world: World, v: Vehicle): boolean {
   return top?.kind === 'fight' && top.targetId === world.player.vehicleId;
 }
 
-function spawnDueGroups(world: World, run: GauntletRun, line: CourseLine, progress: number): void {
-  for (const group of run.groups.filter((g) => g.stretch === run.stretch && !g.spawned && isDue(g, progress))) {
+function spawnDueGroups(world: World, run: GauntletRun, progress: number): void {
+  for (const group of run.groups.filter((g) => !g.spawned && isDue(g, progress))) {
     if (aliveCount(world, run) + group.templates.length > GAUNTLET.maxAlive) return;
-    spawnGroup(world, run, line, group, progress);
+    spawnGroup(world, run, group, progress);
   }
 }
 
@@ -77,13 +162,13 @@ function isDue(group: WaveGroup, progress: number): boolean {
 
 function spawnAlong(run: GauntletRun, group: WaveGroup, progress: number): number {
   const along = group.from === 'ahead' ? Math.max(group.at, progress + GAUNTLET.aheadGap) : progress - GAUNTLET.behindGap;
-  return Math.min(Math.max(along, run.course.start), run.course.end);
+  return Math.min(Math.max(along, milestoneAt(run.window)), milestoneAt(run.window + 1));
 }
 
-export function spawnGroup(world: World, run: GauntletRun, line: CourseLine, group: WaveGroup, progress: number): void {
+export function spawnGroup(world: World, run: GauntletRun, group: WaveGroup, progress: number): void {
   const along = spawnAlong(run, group, progress);
   const loadouts = group.templates.map((id) => ({ tpl: NPCS[id], loadout: { ...generateNpcLoadout(world, NPCS[id], null, group.level), cargo: {} } }));
-  const spots = groupSpots(world, line, along, loadouts.map((l) => chassisDef(l.loadout.chassisId).radius));
+  const spots = groupSpots(world, run, along, loadouts.map((l) => chassisDef(l.loadout.chassisId).radius));
   if (!spots) return retryLater(world, group);
   const me = playerVehicle(world);
   loadouts.forEach(({ tpl, loadout }, i) => {
@@ -98,21 +183,21 @@ export function spawnGroup(world: World, run: GauntletRun, line: CourseLine, gro
   group.retryUntil = null;
 }
 
-function groupSpots(world: World, line: CourseLine, along: number, radii: number[]): Vec[] | null {
+function groupSpots(world: World, run: GauntletRun, along: number, radii: number[]): Vec[] | null {
   const spots: Vec[] = [];
   for (const radius of radii) {
-    const spot = laneSpot(world, line, along, radius, spots);
+    const spot = laneSpot(world, run, along, radius, spots);
     if (!spot) return null;
     spots.push(spot);
   }
   return spots;
 }
 
-function laneSpot(world: World, line: CourseLine, along: number, radius: number, taken: Vec[]): Vec | null {
+function laneSpot(world: World, run: GauntletRun, along: number, radius: number, taken: Vec[]): Vec | null {
   for (let step = 0; step < GAUNTLET.maxTries / 10; step++) {
     const lane = GAUNTLET.laneOffsets[step % GAUNTLET.laneOffsets.length];
     const offset = Math.floor(step / GAUNTLET.laneOffsets.length) * GAUNTLET.spawnStagger;
-    const pos = pointAt(line, along + (step % 2 === 0 ? offset : -offset), lane);
+    const pos = roadPoint(world.seed, run.window, along + (step % 2 === 0 ? offset : -offset), lane);
     if (isFree(world, pos, radius, null) && taken.every((t) => dist(t, pos) > radius * 2 + 0.5)) return pos;
   }
   return null;
@@ -123,31 +208,28 @@ function retryLater(world: World, group: WaveGroup): void {
   else if (world.turn > group.retryUntil) throw new Error(`Gauntlet group ${group.id} found no free lane spot for ${GAUNTLET.spawnRetryTurns} turns`);
 }
 
-function arrivedAtNext(world: World, run: GauntletRun): boolean {
-  const post = run.outposts[run.stretch];
+function parkedOnPad(world: World, milestone: number): boolean {
   const me = playerVehicle(world);
-  return onPad(post, me) && !inCombat(world, me);
+  return me.speed <= RULES.parkedSpeed && dist(me.pos, outpostPad(world, milestone)) <= GAUNTLET.outpost.padRadius;
 }
 
-function onPad(post: Outpost, v: Vehicle): boolean {
-  return v.speed <= RULES.parkedSpeed && dist(v.pos, post.pad) <= GAUNTLET.outpost.padRadius;
+function arrivedAtNext(world: World, run: GauntletRun): boolean {
+  return parkedOnPad(world, run.window + 1) && !inCombat(world, playerVehicle(world));
 }
 
 function completeStretch(world: World, run: GauntletRun): void {
-  const k = run.stretch;
-  const post = run.outposts[k];
-  const groups = run.groups.filter((g) => g.stretch === k);
-  const wrecks = groups.reduce((n, g) => n + g.wrecked, 0);
-  const pay = GAUNTLET.pay.base[k] + GAUNTLET.pay.perWreck[k] * wrecks;
+  const j = run.window + 1;
+  const post = factsOf(run, j);
+  const wrecks = run.groups.reduce((n, g) => n + g.wrecked, 0);
+  const pay = payOf(j, wrecks);
   world.player.money += pay;
   world.events.push({ t: 'money', amount: pay, reason: OUTPOST_PAY });
   post.paid = true;
-  removeSurvivors(world, groups);
-  run.stretch++;
-  world.events.push({ t: 'outpostReached', outpost: post.id, stretch: k + 1, pay, wrecks });
-  if (run.stretch < run.outposts.length) return;
-  run.complete = true;
-  world.events.push({ t: 'runComplete', stretches: run.outposts.length });
+  run.earned += pay;
+  run.wrecks += wrecks;
+  removeSurvivors(world, run.groups);
+  world.events.push({ t: 'outpostReached', milestone: j, pay, wrecks });
+  moveWindow(world);
 }
 
 function removeSurvivors(world: World, groups: WaveGroup[]): void {
@@ -156,12 +238,105 @@ function removeSurvivors(world: World, groups: WaveGroup[]): void {
   world.vehicles = world.vehicles.filter((v) => !gone.has(v.id));
 }
 
+type Move = 'shift' | 'rebuild' | 'drop' | 'keep';
+
+export const WINDOW_MOVE = {
+  seed: 'keep',
+  rngState: 'keep',
+  marketRng: 'keep',
+  nameRng: 'keep',
+  searchRng: 'keep',
+  turn: 'keep',
+  size: 'keep',
+  nextId: 'keep',
+  setup: 'keep',
+  events: 'keep',
+  removed: 'keep',
+  spawnTimer: 'keep',
+  shops: 'keep',
+  salvage: 'keep',
+  player: 'shift',
+  vehicles: 'shift',
+  weather: 'shift',
+  terrain: 'rebuild',
+  mapHash: 'rebuild',
+  obstacles: 'rebuild',
+  gauntlet: 'rebuild',
+  broken: 'drop',
+  craters: 'drop',
+  dustClouds: 'drop',
+  states: 'drop',
+  smoke: 'drop',
+  fields: 'drop',
+  flares: 'drop',
+  lines: 'drop',
+} as const satisfies { [K in keyof World]-?: Move };
+
+const DROPPED: { [K in keyof World as (typeof WINDOW_MOVE)[K] extends 'drop' ? K : never]: () => World[K] } = {
+  broken: () => [],
+  craters: () => [],
+  dustClouds: () => [],
+  states: () => [],
+  smoke: () => [],
+  fields: () => [],
+  flares: () => [],
+  lines: () => [],
+};
+
+function requireMovable(world: World, run: GauntletRun): void {
+  if (aliveCount(world, run) > 0) throw new Error('The window cannot move while a group truck is alive');
+  if (!parkedOnPad(world, run.window + 1)) throw new Error(`The window moves only with the player parked at ${outpostName(run.window + 1)}`);
+  if (world.salvage.length > 0 || Object.keys(world.shops).length > 0) throw new Error('A Gauntlet window holds no salvage and no shops');
+}
+
+export function moveWindow(world: World): void {
+  const run = runOf(world);
+  requireMovable(world, run);
+  const next = run.window + 1;
+  const map = highwayMap(world.seed, next);
+  for (const key of Object.keys(DROPPED) as (keyof typeof DROPPED)[]) (world as Record<string, unknown>)[key] = DROPPED[key]();
+  shiftVehicles(world);
+  shiftPlayer(world);
+  shiftStorms(world);
+  world.terrain = map.terrain;
+  world.mapHash = map.hash;
+  world.obstacles = mapObstacles(map);
+  run.window = next;
+  run.outposts = [...run.outposts.filter((o) => o.milestone === next), outpostFacts(world, next + 1)];
+  run.groups = planStretch(world.seed, next + 1);
+  refreshVision(world);
+}
+
+function shiftStorms(world: World): void {
+  for (const storm of world.weather) if (storm.kind === 'storm') storm.pos = { x: storm.pos.x, y: storm.pos.y + STRIDE };
+}
+
+function shiftVehicles(world: World): void {
+  const me = playerVehicle(world);
+  world.removed.push(...world.vehicles.filter((v) => v !== me));
+  world.vehicles = [me];
+  me.pos = { x: me.pos.x, y: me.pos.y + STRIDE };
+  me.order = null;
+  me.trail = [];
+  me.weaponOrders = {};
+  me.utilityOrders = {};
+}
+
+function shiftPlayer(world: World): void {
+  const p = world.player;
+  const size = world.size;
+  const explored = new Uint8Array(size * size);
+  explored.set(p.explored.subarray(0, (size - STRIDE) * size), STRIDE * size);
+  p.explored = explored;
+  p.marked = [];
+  p.hostilesSeen = [];
+}
+
 export function endRun(world: World, cause: RunLossCause): void {
-  const run = world.gauntlet;
-  if (!run) throw new Error(`A run ends by ${cause} in a world with no run`);
+  const run = runOf(world);
   if (world.player.state === 'dead') throw new Error('The run has already ended');
   world.player.state = 'dead';
-  world.events.push({ t: 'runLost', stretch: Math.min(run.stretch + 1, run.outposts.length), cause });
+  world.events.push({ t: 'runLost', stretch: run.window + 1, cause });
 }
 
 export function canAbandonRun(world: World): boolean {
@@ -175,20 +350,19 @@ export function abandonRun(world: World): World {
   });
 }
 
-export function runEarnings(world: World): { pay: number; wrecks: number } {
-  const run = world.gauntlet;
-  if (!run) throw new Error('No run to count earnings for');
-  const paid = run.outposts.map((post, k) => ({ post, k })).filter(({ post }) => post.paid);
-  const wrecksOf = (k: number) => run.groups.filter((g) => g.stretch === k).reduce((n, g) => n + g.wrecked, 0);
+export function runEarnings(world: World): { pay: number; wrecks: number; reached: number; north: number } {
+  const run = runOf(world);
   return {
-    pay: paid.reduce((sum, { k }) => sum + GAUNTLET.pay.base[k] + GAUNTLET.pay.perWreck[k] * wrecksOf(k), 0),
-    wrecks: run.groups.reduce((n, g) => n + g.wrecked, 0),
+    pay: run.earned,
+    wrecks: run.wrecks + run.groups.reduce((n, g) => n + g.wrecked, 0),
+    reached: run.window,
+    north: Math.max(0, playerProgress(world, run) - milestoneAt(0)),
   };
 }
 
 export function nextOutpost(world: World): Outpost | null {
   const run = world.gauntlet;
-  return run && !run.complete ? run.outposts[run.stretch] : null;
+  return run ? outpostOf(world, factsOf(run, run.window + 1)) : null;
 }
 
 export function reachedOutpostAt(world: World): Outpost | null {
@@ -197,16 +371,21 @@ export function reachedOutpostAt(world: World): Outpost | null {
 }
 
 export function outpostNear(world: World): Outpost | null {
+  const run = world.gauntlet;
+  if (!run) return null;
   const me = playerVehicle(world);
-  return world.gauntlet?.outposts.find((post) => post.paid && dist(me.pos, post.pad) <= GAUNTLET.outpost.padRadius) ?? null;
+  const facts = run.outposts.find((post) => post.paid && dist(me.pos, outpostPad(world, post.milestone)) <= GAUNTLET.outpost.padRadius);
+  return facts ? outpostOf(world, facts) : null;
+}
+
+export function runOutposts(world: World): Outpost[] {
+  const run = world.gauntlet;
+  return run ? run.outposts.map((facts) => outpostOf(world, facts)) : [];
 }
 
 export function gauntletReadout(world: World): GauntletReadout | null {
   const run = world.gauntlet;
   if (!run) return null;
-  const total = run.outposts.length;
-  const next = nextOutpost(world);
-  const line = courseLine(run.course);
-  const toOutpost = next ? Math.max(0, next.at - progressOf(line, playerVehicle(world).pos)) : 0;
-  return { stretch: Math.min(run.stretch + 1, total), total, toOutpost, complete: run.complete };
+  const j = run.window + 1;
+  return { stretch: j, toOutpost: Math.max(0, outpostSite(world.seed, j).n - playerProgress(world, run)), outpost: outpostName(j) };
 }

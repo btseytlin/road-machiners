@@ -1,4 +1,3 @@
-// Boots the 3D game.
 
 import { loadBank } from '../audio/bank';
 import { Mixer } from '../audio/mixer';
@@ -29,7 +28,7 @@ import { RadioPanel, RadioStation } from '../ui/radio';
 import { bootStep, installCrashScreen, keepRunningOnErrors, onEveryError, onReport, reportError } from './crash';
 import { ErrorReporter } from './error-report';
 import { Game } from './game';
-import { clearGame, loadWorld, SAVE_KEY, SaveError, savedRunId, storedSave, writeSave } from './save';
+import { clearGame, loadWorld, newMapFor, SAVE_KEY, SaveError, savedRunId, storedSave, writeSave } from './save';
 import { idbBackend, SaveSlots } from './save-db';
 import { RunLog } from './run-log';
 import { allSlots, newestSlot, requestBoot, takeBootRequest, type SlotId } from './save-slots';
@@ -102,7 +101,8 @@ async function persistSaves(): Promise<void> {
 }
 
 function newGame(setup: WorldSetup): World {
-  return newWorld(CONFIG.seed ?? freshSeed(), startKit(modeKit(setup.mode, CONFIG.startKit)), map, setup);
+  const seed = CONFIG.seed ?? freshSeed();
+  return newWorld(seed, startKit(modeKit(setup.mode, CONFIG.startKit)), newMapFor(setup, seed, map), setup);
 }
 
 installCrashScreen();
@@ -127,7 +127,6 @@ const newGameActions: NewGameActions = {
   reload: () => void slots.flush().then(() => window.location.reload(), reportError),
   confirm: (text) => window.confirm(text),
 };
-// The world and its ground build while physics, models and sounds load, since those wait mostly on the network and decoders.
 bootStep('loading the save');
 const { world, runId, loadedFrom, fresh } = await bootWorld();
 const log = new RunLog(slots.backend, runId, (err) => slots.onError(err));

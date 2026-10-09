@@ -1,40 +1,39 @@
 import { describe, expect, it } from 'vitest';
-import { GAUNTLET } from '../data/gauntlet';
-import { startKit } from '../data/start';
-import { TEST_MAP } from '../test/map';
+import { GAUNTLET, HIGHWAY } from '../data/gauntlet';
 import { playerVehicle } from './damage';
-import { abandonRun, advanceGauntlet, canAbandonRun, gauntletReadout, reachedOutpostAt } from './gauntlet';
-import { courseLine, pointAt } from './gauntlet-layout';
+import { abandonRun, advanceGauntlet, canAbandonRun, gauntletReadout, moveWindow, outpostPad, payOf, reachedOutpostAt, runEarnings, stockSizeOf, waveOf, WINDOW_MOVE } from './gauntlet';
+import { highwayHash, milestoneAt, roadPoint, STRIDE } from './highway';
 import { topGoal } from './npc-activities';
-import { defaultSetup } from './settings';
 import { addState, stateOf } from './states';
+import { gauntletWorld } from './testkit';
 import type { GauntletRun, World } from './types';
-import { endTurn, newWorld } from './world';
-
-function gauntletWorld(seed = 3): World {
-  return newWorld(seed, startKit('gauntlet'), TEST_MAP, defaultSetup('gauntlet'));
-}
+import { endTurn } from './world';
 
 function runOf(w: World): GauntletRun {
   if (!w.gauntlet) throw new Error('No run');
   return w.gauntlet;
 }
 
-function moveAlong(w: World, along: number): void {
+function moveTo(w: World, n: number): void {
   const me = playerVehicle(w);
-  me.pos = pointAt(courseLine(runOf(w).course), along, GAUNTLET.laneOffsets[1]);
+  me.pos = roadPoint(w.seed, runOf(w).window, n, GAUNTLET.laneOffsets[1]);
   me.speed = 0;
 }
 
-function parkOnPad(w: World, k: number): void {
+function parkOnNext(w: World): void {
   const me = playerVehicle(w);
-  me.pos = { ...runOf(w).outposts[k].pad };
+  me.pos = outpostPad(w, runOf(w).window + 1);
   me.speed = 0;
   me.order = null;
 }
 
-function groupTrucks(w: World, k: number): string[] {
-  return runOf(w).groups.filter((g) => g.stretch === k).flatMap((g) => g.vehicles);
+function arrive(w: World): World {
+  parkOnNext(w);
+  return endTurn(w, still);
+}
+
+function groupTrucks(w: World): string[] {
+  return runOf(w).groups.flatMap((g) => g.vehicles);
 }
 
 const still = () => {};
@@ -44,20 +43,20 @@ describe('Gauntlet groups', () => {
     const w = gauntletWorld();
     const group = runOf(w).groups[0];
 
-    moveAlong(w, group.at - GAUNTLET.spawnLead - 4);
+    moveTo(w, group.at - GAUNTLET.spawnLead - 4);
     advanceGauntlet(w);
     expect(group.spawned).toBe(false);
 
-    moveAlong(w, group.at - GAUNTLET.spawnLead + 1);
+    moveTo(w, group.at - GAUNTLET.spawnLead + 1);
     advanceGauntlet(w);
     expect(group.spawned).toBe(true);
     expect(group.vehicles).toHaveLength(group.templates.length);
   });
 
-  it('spawn hostile, hunting the player', () => {
+  it('spawn hostile, hunting the player, inside the window', () => {
     const w = gauntletWorld();
     const group = runOf(w).groups[0];
-    moveAlong(w, group.at);
+    moveTo(w, group.at);
 
     advanceGauntlet(w);
 
@@ -65,26 +64,27 @@ describe('Gauntlet groups', () => {
       const v = w.vehicles.find((x) => x.id === id)!;
       expect(stateOf(w, 'feud', id, w.player.vehicleId)).not.toBeNull();
       expect(topGoal(v)).toMatchObject({ kind: 'fight', targetId: w.player.vehicleId });
+      expect(Math.min(v.pos.x, v.pos.y)).toBeGreaterThan(0);
+      expect(Math.max(v.pos.x, v.pos.y)).toBeLessThan(w.size);
     }
   });
 
   it('never put more than the cap of trucks on the road at once', () => {
-    const w = gauntletWorld();
+    let w = gauntletWorld();
+    for (let k = 0; k < 3; k++) w = arrive(w);
     const run = runOf(w);
-    run.stretch = 3;
-    const last = run.groups.filter((g) => g.stretch === 3);
-    moveAlong(w, last[last.length - 1].at + 1);
+    moveTo(w, run.groups[run.groups.length - 1].at + 1);
 
     advanceGauntlet(w);
 
-    expect(groupTrucks(w, 3).length).toBeLessThanOrEqual(GAUNTLET.maxAlive);
-    expect(last.some((g) => !g.spawned)).toBe(true);
+    expect(groupTrucks(w).length).toBeLessThanOrEqual(GAUNTLET.maxAlive);
+    expect(run.groups.some((g) => !g.spawned)).toBe(true);
   });
 
   it('keep hunting a player they meet long after they spawn', () => {
     let w = gauntletWorld();
     const group = runOf(w).groups[0];
-    moveAlong(w, group.at - GAUNTLET.spawnLead + 1);
+    moveTo(w, group.at - GAUNTLET.spawnLead + 1);
     advanceGauntlet(w);
     for (let i = 0; i < 15; i++) w = endTurn(w, still);
 
@@ -95,57 +95,75 @@ describe('Gauntlet groups', () => {
   });
 });
 
-describe('a Gauntlet stretch', () => {
-  it('completes when the player parks on the next pad out of combat', () => {
-    let w = gauntletWorld();
+describe('arriving at an outpost', () => {
+  it('pays once, moves the window north and keeps the player on the same pad and ground', () => {
+    const w = gauntletWorld();
     const money = w.player.money;
-    parkOnPad(w, 0);
+    parkOnNext(w);
+    const before = playerVehicle(w).pos;
+    const ground = w.terrain.types[Math.floor(before.y) * w.size + Math.floor(before.x)];
 
+    const after = endTurn(w, still);
+    const me = playerVehicle(after);
+
+    expect(runOf(after).window).toBe(1);
+    expect(after.mapHash).toBe(highwayHash(w.seed, 1));
+    expect(after.player.money).toBe(money + payOf(1, 0));
+    expect(after.events).toContainEqual({ t: 'outpostReached', milestone: 1, pay: payOf(1, 0), wrecks: 0 });
+    expect(me.pos).toEqual({ x: before.x, y: before.y + STRIDE });
+    expect(after.terrain.types[Math.floor(me.pos.y) * after.size + Math.floor(me.pos.x)]).toBe(ground);
+    expect(runOf(after).outposts.map((o) => [o.milestone, o.paid])).toEqual([[1, true], [2, false]]);
+    expect(runOf(after).groups.every((g) => g.stretch === 2)).toBe(true);
+    expect(reachedOutpostAt(after)?.name).toBe('Outpost 1');
+  });
+
+  it('pays nothing more on the next turns or after moving off and back', () => {
+    let w = arrive(gauntletWorld());
+    const money = w.player.money;
+    w = endTurn(w, still);
+    moveTo(w, milestoneAt(1) + 20);
+    w = endTurn(w, still);
+    playerVehicle(w).pos = outpostPad(w, 1);
     w = endTurn(w, still);
 
-    expect(runOf(w).stretch).toBe(1);
-    expect(runOf(w).outposts[0].paid).toBe(true);
-    expect(w.player.money).toBe(money + GAUNTLET.pay.base[0]);
-    expect(w.events).toContainEqual({ t: 'outpostReached', outpost: 'outpost-0', stretch: 1, pay: GAUNTLET.pay.base[0], wrecks: 0 });
+    expect(w.player.money).toBe(money);
+    expect(runOf(w).window).toBe(1);
   });
 
   it('does not complete on the move, off the pad or in combat', () => {
     const moving = gauntletWorld();
-    parkOnPad(moving, 0);
+    parkOnNext(moving);
     playerVehicle(moving).speed = 2;
     const off = gauntletWorld();
-    moveAlong(off, runOf(off).outposts[0].at);
+    moveTo(off, milestoneAt(1) - 20);
     const fighting = gauntletWorld();
-    parkOnPad(fighting, 0);
+    parkOnNext(fighting);
     const foe = { ...playerVehicle(fighting), id: 'v-foe' };
     fighting.vehicles.push(foe);
     addState(fighting, 'combat', foe.id, fighting.player.vehicleId, { kind: 'none' });
 
     for (const w of [moving, off, fighting]) advanceGauntlet(w);
 
-    expect([moving, off, fighting].map((w) => runOf(w).stretch)).toEqual([0, 0, 0]);
+    expect([moving, off, fighting].map((w) => runOf(w).window)).toEqual([0, 0, 0]);
   });
 
-  it('pays the base and a bonus for each wreck of the stretch, once', () => {
-    let w = gauntletWorld();
-    const group = runOf(w).groups[0];
-    group.wrecked = 2;
+  it('pays the base and a bonus for each wreck of the stretch, and keeps the run totals', () => {
+    const w = gauntletWorld();
+    runOf(w).groups[0].wrecked = 2;
     const money = w.player.money;
-    parkOnPad(w, 0);
 
-    w = endTurn(w, still);
-    const after = endTurn(w, still);
+    const after = arrive(w);
 
-    const pay = GAUNTLET.pay.base[0] + GAUNTLET.pay.perWreck[0] * 2;
-    expect(w.player.money).toBe(money + pay);
-    expect(after.player.money).toBe(money + pay);
-    expect(after.events.some((e) => e.t === 'outpostReached' || e.t === 'money')).toBe(false);
+    expect(after.player.money).toBe(money + payOf(1, 2));
+    expect(runOf(after).earned).toBe(payOf(1, 2));
+    expect(runOf(after).wrecks).toBe(2);
+    expect(runEarnings(after)).toMatchObject({ pay: payOf(1, 2), wrecks: 2, reached: 1 });
   });
 
   it('counts a wreck of a group truck toward the stretch', () => {
     const w = gauntletWorld();
     const group = runOf(w).groups[0];
-    moveAlong(w, group.at);
+    moveTo(w, group.at);
     advanceGauntlet(w);
     w.events = [{ t: 'destroyed', vehicle: group.vehicles[0], by: w.player.vehicleId }];
 
@@ -155,62 +173,98 @@ describe('a Gauntlet stretch', () => {
   });
 
   it('removes the trucks of a finished stretch and awards no XP for it', () => {
-    let w = gauntletWorld();
+    const w = gauntletWorld();
     const group = runOf(w).groups[0];
-    moveAlong(w, group.at);
+    moveTo(w, group.at);
     advanceGauntlet(w);
-    for (const v of w.vehicles) if (group.vehicles.includes(v.id)) v.pos = { x: v.pos.x + 200, y: v.pos.y };
+    for (const v of w.vehicles) if (group.vehicles.includes(v.id)) v.pos = { x: v.pos.x + 100, y: v.pos.y };
     w.states = w.states.filter((s) => s.kind !== 'combat');
-    parkOnPad(w, 0);
     const passing = structuredClone(w);
-    passing.gauntlet!.outposts[0].pad = { x: 1, y: 1 };
+    moveTo(passing, milestoneAt(1) - 10);
 
-    w = endTurn(w, still);
+    const after = arrive(w);
     const passed = endTurn(passing, still);
 
-    expect(w.vehicles.some((v) => group.vehicles.includes(v.id))).toBe(false);
+    expect(after.vehicles.map((v) => v.id)).toEqual([after.player.vehicleId]);
     expect(passed.vehicles.some((v) => group.vehicles.includes(v.id))).toBe(true);
-    expect(w.player.xp).toBe(passed.player.xp);
+    expect(after.player.xp).toBe(passed.player.xp);
   });
 
-  it('finishes the run after the last outpost and spawns no more groups', () => {
+  it('refuses to move the window with a group truck alive or the player off the pad', () => {
+    const off = gauntletWorld();
+    expect(() => moveWindow(off)).toThrow(/parked/);
+
+    const alive = gauntletWorld();
+    const group = runOf(alive).groups[0];
+    moveTo(alive, group.at);
+    advanceGauntlet(alive);
+    parkOnNext(alive);
+    expect(() => moveWindow(alive)).toThrow(/alive/);
+  });
+
+  it('names a move for every world field', () => {
+    expect(Object.keys(WINDOW_MOVE).sort()).toEqual(Object.keys(gauntletWorld()).sort());
+  });
+});
+
+describe('the endless run', () => {
+  it('stays bounded over thirty stretches', () => {
     let w = gauntletWorld();
-    for (let k = 0; k < GAUNTLET.stretches; k++) {
-      parkOnPad(w, k);
-      w = endTurn(w, still);
+    const sizes: number[] = [];
+    for (let k = 0; k < 30; k++) {
+      w = arrive(w);
+      sizes.push(JSON.stringify({ ...w, terrain: null, player: { ...w.player, explored: null } }).length);
     }
-    const vehicles = w.vehicles.length;
-    w = endTurn(w, still);
 
-    expect(runOf(w).complete).toBe(true);
-    expect(runOf(w).outposts.every((o) => o.paid)).toBe(true);
-    expect(w.vehicles).toHaveLength(vehicles);
-    expect(gauntletReadout(w)).toMatchObject({ stretch: GAUNTLET.stretches, total: GAUNTLET.stretches, complete: true });
+    expect(runOf(w).window).toBe(30);
+    expect(w.size).toBe(HIGHWAY.size);
+    expect(runOf(w).outposts).toHaveLength(2);
+    expect(runOf(w).groups).toHaveLength(waveOf(32).length);
+    expect(w.vehicles).toHaveLength(1);
+    expect(w.obstacles.every((o) => o.pos.x >= 0 && o.pos.y >= 0 && o.pos.x <= w.size && o.pos.y <= w.size)).toBe(true);
+    expect(Math.max(...sizes.slice(10))).toBeLessThan(Math.max(...sizes.slice(0, 10)) * 1.5);
   });
 
-  it('shows the reached outpost only while parked on its pad', () => {
-    let w = gauntletWorld();
-    parkOnPad(w, 0);
-    expect(reachedOutpostAt(w)).toBeNull();
-
-    w = endTurn(w, still);
-
-    expect(reachedOutpostAt(w)?.name).toBe('Outpost 1');
-    moveAlong(w, runOf(w).outposts[0].at + 10);
-    expect(reachedOutpostAt(w)).toBeNull();
+  it('escalates for eight stretches and then holds at the hardest row and the pay caps', () => {
+    expect(waveOf(9)).toBe(waveOf(8));
+    expect(waveOf(40)).toBe(GAUNTLET.waves[GAUNTLET.waves.length - 1]);
+    expect(payOf(1, 0)).toBe(GAUNTLET.pay.base.first);
+    expect(payOf(2, 1)).toBe(GAUNTLET.pay.base.first + GAUNTLET.pay.base.step + GAUNTLET.pay.perWreck.first + GAUNTLET.pay.perWreck.step);
+    expect(payOf(100, 0)).toBe(GAUNTLET.pay.base.max);
+    expect(payOf(100, 1) - payOf(100, 0)).toBe(GAUNTLET.pay.perWreck.max);
+    expect(stockSizeOf(1)).toBe(2);
+    expect(stockSizeOf(100)).toBe(GAUNTLET.stock.max);
+    expect(() => waveOf(0)).toThrow(/no wave/);
   });
 
-  it('reads the stretch and the distance to the next outpost', () => {
+  it('reads the stretch and the distance to the next outpost, with no total', () => {
     const w = gauntletWorld();
-    const run = runOf(w);
-    moveAlong(w, run.outposts[0].at - 50);
+    moveTo(w, milestoneAt(1) - 50);
 
     const readout = gauntletReadout(w)!;
 
-    expect(readout.stretch).toBe(1);
-    expect(readout.total).toBe(4);
+    expect(readout).toMatchObject({ stretch: 1, outpost: 'Outpost 1' });
     expect(readout.toOutpost).toBeCloseTo(50, 0);
   });
+});
+
+describe('a Gauntlet world on the highway', () => {
+  it('shows no Icarus place in three hundred turns of the run', () => {
+    let w = gauntletWorld(5);
+    const ids = w.obstacles.map((o) => o.id);
+    const events: string[] = [];
+    for (let i = 0; i < 300 && w.player.state === 'active'; i++) {
+      const me = playerVehicle(w);
+      if (me.order === null) me.order = { kind: 'stopAt', dest: outpostPad(w, runOf(w).window + 1) };
+      w = endTurn(w, still);
+      events.push(...w.events.map((e) => e.t));
+    }
+
+    expect(ids.some((id) => /^(site|pond|cw)-/.test(id))).toBe(false);
+    expect(events).not.toContain('discover');
+    expect(w.player.discovered).toEqual([]);
+    expect(w.salvage).toEqual([]);
+  }, 120_000);
 });
 
 describe('ending a Gauntlet run', () => {

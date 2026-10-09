@@ -3,6 +3,8 @@ import { GAME_MODES } from '../data/modes';
 import { startKit } from '../data/start';
 import { TEST_MAP } from '../test/map';
 import { defaultSetup, modeKit, modeRules } from './settings';
+import { highwayMap } from './highway';
+import { gauntletWorld } from './testkit';
 import { newWorld } from './world';
 import type { World } from './types';
 
@@ -24,7 +26,7 @@ describe('game mode rules', () => {
   });
 
   it('turns every open-world rule off in a Gauntlet world', () => {
-    const world = newWorld(7, startKit('gauntlet'), TEST_MAP, defaultSetup('gauntlet'));
+    const world = gauntletWorld(7);
 
     expect(Object.values(modeRules(world)).some((on) => on)).toBe(false);
   });
@@ -58,20 +60,30 @@ describe('a new world by mode', () => {
   });
 
   it('starts a Gauntlet world with no traffic, salvage, shops or road wrecks', () => {
-    const world = newWorld(7, startKit('gauntlet'), TEST_MAP, defaultSetup('gauntlet'));
+    const world = gauntletWorld(7);
 
     expect(world.vehicles.map((v) => v.faction)).toEqual(['player']);
     expect(world.salvage).toEqual([]);
     expect(world.shops).toEqual({});
     expect(world.obstacles.some((o) => /^wreck\d+$/.test(o.id))).toBe(false);
-    expect(world.gauntlet?.stretch).toBe(0);
+    expect(world.gauntlet?.window).toBe(0);
   });
 
   it('gives the Gauntlet player the Gauntlet kit with no opening', () => {
-    const world = newWorld(7, startKit('gauntlet'), TEST_MAP, defaultSetup('gauntlet'));
+    const world = gauntletWorld(7);
 
     expect(world.player.money).toBe(20000);
     expect(world.player.autoRepair).toBe(true);
     expect(world.vehicles[0].items.filter((it) => it.kind === 'good' && it.good === 'parts')).toHaveLength(4);
+  });
+});
+
+describe('a world and its map', () => {
+  it('refuses a Roaming world on a map with no towns', () => {
+    expect(() => newWorld(7, startKit('standard'), highwayMap(7, 0), defaultSetup('roaming'))).toThrow(/needs towns/);
+  });
+
+  it('refuses a Gauntlet world on Icarus', () => {
+    expect(() => newWorld(7, startKit('gauntlet'), TEST_MAP, defaultSetup('gauntlet'))).toThrow(/highway window 0/);
   });
 });

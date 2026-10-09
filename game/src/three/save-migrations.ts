@@ -1,5 +1,3 @@
-// The save format and the steps that carry an old save to it. A save loads only in its own major format. Within
-// it, load runs every step from the save's minor format on, so the minor format is the number of steps.
 
 import { CORES_2_1, CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 
@@ -519,6 +517,11 @@ function withCents_29_30(world: SavedJson): SavedJson {
   };
 }
 
+function withoutIcarusRun_37_38(world: SavedJson): SavedJson {
+  const run = world.gauntlet as SavedJson | null;
+  return run !== null && 'course' in run ? { ...world, gauntlet: null } : world;
+}
+
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, player: { ...(world.player as SavedJson), townPatched: false } }),
   (world) => {
@@ -601,6 +604,7 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => world,
   (world) => world,
   (world) => ({ ...world, gauntlet: null }),
+  withoutIcarusRun_37_38,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

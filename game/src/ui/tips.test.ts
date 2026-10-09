@@ -1,7 +1,7 @@
 import { defaultSetup } from '../sim/settings';
 import { describe, expect, it } from "vitest";
 import { playerVehicle } from "../sim/damage";
-import { addVehicle, emptyWorld, npcBrain, openingStopPoint, testDrive } from "../sim/testkit";
+import { addVehicle, emptyWorld, gauntletWorld, npcBrain, openingStopPoint, testDrive } from "../sim/testkit";
 import { vehicleStats } from "../sim/stats";
 import { refreshVision } from "../sim/vision";
 import { endTurn, newWorld, setMoveOrder, startPose } from "../sim/world";
@@ -273,7 +273,7 @@ describe("opening tips", () => {
 
 describe("tips in a Gauntlet run", () => {
   it("runs no opening and offers no horn", () => {
-    const w = newWorld(3, startKit("gauntlet"), TEST_MAP, defaultSetup("gauntlet"));
+    const w = gauntletWorld(3);
     addVehicle(w, "raiders", "wagon", ["mg"], { x: playerVehicle(w).pos.x + 4, y: playerVehicle(w).pos.y }).brain = npcBrain("buggy", playerVehicle(w).pos, ["raider"]);
     refreshVision(w);
     const seen = new Set<TipId>(["waypoint", "drive", "autoStop", "stop", "stopAt", "manual", "zones", "aim"]);

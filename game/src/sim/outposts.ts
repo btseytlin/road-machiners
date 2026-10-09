@@ -3,9 +3,9 @@ import { ECONOMY, GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { playerVehicle } from './damage';
 import { basicParts, basicsRepairCost, garageParts, garageRepair, partTradePrice, pay, repairCost, supplyRoom, type Supply } from './economy';
-import { reachedOutpostAt } from './gauntlet';
+import { outpostFactsAt, reachedOutpostAt, type Outpost } from './gauntlet';
 import { addGoods, canStowPart, cargoRoom, stowPart } from './inventory';
-import type { Outpost, PartInstance, Vehicle, World } from './types';
+import type { PartInstance, Vehicle, World } from './types';
 import { playerCommand } from './world';
 
 const REPAIR_GOOD = 'parts';
@@ -56,7 +56,8 @@ export function outpostBuyPart(world: World, partId: string): World {
     const me = playerVehicle(w);
     if (!canStowPart(me, part)) throw new Error(`No room on the truck for ${partDef(part.defId).name}`);
     pay(w, outpostPartPrice(w, part), partDef(part.defId).name);
-    post.stock = post.stock.filter((p) => p.id !== partId);
+    const facts = outpostFactsAt(w, post.milestone);
+    facts.stock = facts.stock.filter((p) => p.id !== partId);
     stowPart(w, me, part);
   });
 }

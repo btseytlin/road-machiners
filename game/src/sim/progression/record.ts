@@ -1,6 +1,3 @@
-// The progression recorder. It plays a bot in the player truck through the real turn pipeline, with every truck on
-// far travel, so no physics runs and nothing crashes. Each practice event becomes a trace line, and each in-game day
-// an economy row. The player starts with no XP, so the trace holds every XP the run gives. The bot buys the cheapest
 
 import { startKit } from '../../data/start';
 import { partDef } from '../../data/parts';
@@ -96,7 +93,7 @@ export function* playTurns(start: World, label: string, policy: Policy, turns: n
 }
 
 function runOver(world: World): boolean {
-  return world.player.state === 'dead' || world.gauntlet?.complete === true;
+  return world.player.state === 'dead';
 }
 
 function dayEnds(before: World, after: World, last: boolean): boolean {

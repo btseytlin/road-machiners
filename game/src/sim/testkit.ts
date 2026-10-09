@@ -1,4 +1,4 @@
-import { START_KITS, type StartKit } from '../data/start';
+import { START_KITS, startKit, type StartKit } from '../data/start';
 
 import { RULES } from '../data/rules';
 import { makeVehicle } from './factory';
@@ -13,6 +13,7 @@ import { DECISIONS, STATE_WEIGHTS, TRAITS, type DecisionId, type DecisionOptions
 import { addState } from './states';
 import type { Faction, GameEvent, NpcBrain, Vehicle, World, XpSource } from './types';
 import { ICARUS_KEY } from './atlas';
+import { highwayMap } from './highway';
 import { dist, type Vec } from './vec';
 import { refreshVision } from './vision';
 import { openingStockOf } from './opening';
@@ -23,6 +24,10 @@ import { defaultSetup } from './settings';
 
 export function flatTerrain(size: number): Terrain {
   return { size, heights: new Array((size + 1) * (size + 1)).fill(0), types: new Array(size * size).fill('road'), atlas: ICARUS_KEY };
+}
+
+export function gauntletWorld(seed = 3): World {
+  return newWorld(seed, startKit('gauntlet'), highwayMap(seed, 0), defaultSetup('gauntlet'));
 }
 
 export function editableTerrain(w: World): Terrain {

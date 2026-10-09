@@ -42,6 +42,7 @@ import FORMAT_2_31 from './save-fixtures/format-2-31.json';
 import FORMAT_2_32 from './save-fixtures/format-2-32.json';
 import FORMAT_2_33 from './save-fixtures/format-2-33.json';
 import FORMAT_2_35 from './save-fixtures/format-2-35.json';
+import FORMAT_2_37 from './save-fixtures/format-2-37.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -779,6 +780,21 @@ describe('save migration 34 to 35', () => {
 describe('save migration 35 to 36', () => {
   it('keeps the states and the open call as they are', () => {
     expect(MIGRATIONS[35](FORMAT_2_35)).toEqual(FORMAT_2_35);
+  });
+});
+
+describe('save migration 37 to 38', () => {
+  it('drops a Gauntlet run laid on Icarus roads and keeps the mode, for the load to rescue it', () => {
+    const next = MIGRATIONS[37](structuredClone(FORMAT_2_37));
+
+    expect(next).toEqual({ ...FORMAT_2_37, gauntlet: null });
+    expect((next.setup as { mode: string }).mode).toBe('gauntlet');
+  });
+
+  it('keeps a world with no run as it is', () => {
+    const roaming = { ...FORMAT_2_37, setup: { ...FORMAT_2_37.setup, mode: 'roaming' }, gauntlet: null };
+
+    expect(MIGRATIONS[37](structuredClone(roaming))).toEqual(roaming);
   });
 });
 

@@ -4,7 +4,8 @@ import { RULES } from "../data/rules";
 import { corePart, mountedParts } from "../sim/grid";
 import { knockOutNpc } from "../sim/defeat";
 import { STATE_TURNS } from "../data/npcs";
-import { addVehicle, emptyWorld, npcBrain, startCombat } from "../sim/testkit";
+import { addVehicle, emptyWorld, gauntletWorld, npcBrain, startCombat } from "../sim/testkit";
+import { outpostPad } from "../sim/gauntlet";
 import { npcName } from "../sim/spawn";
 import { maxHealthOf } from "../sim/health";
 import { addState, towData } from "../sim/states";
@@ -597,18 +598,18 @@ describe('overdrive switch', () => {
 });
 
 describe("Gauntlet readouts", () => {
-  const gauntlet = () => newWorld(3, startKit("gauntlet"), TEST_MAP, defaultSetup("gauntlet"));
-  const parkAt = (w: World, k: number) => {
+  const gauntlet = () => gauntletWorld();
+  const parkAt = (w: World, milestone: number) => {
     const me = playerVehicle(w);
-    me.pos = { ...w.gauntlet!.outposts[k].pad };
+    me.pos = outpostPad(w, milestone);
     me.speed = 0;
   };
 
   it("shows the stretch and the distance to the next outpost", () => {
     const run = getHudReadout(gauntlet()).resources.find((r) => r.label === "Run");
 
-    expect(run?.value).toMatch(/^1\/4 \d+(\.\d)? k?m$/);
-    expect(run && "tip" in run ? run.tip : "").toMatch(/^Stretch 1 of 4, .* to Outpost 1$/);
+    expect(run?.value).toMatch(/^1: \d+(\.\d)? k?m$/);
+    expect(run && "tip" in run ? run.tip : "").toMatch(/^Stretch 1: .* to Outpost 1$/);
   });
 
   it("shows no run readout in Roaming", () => {
@@ -619,7 +620,7 @@ describe("Gauntlet readouts", () => {
 
   it("offers to enter a reached outpost only while parked on its pad", () => {
     const w = gauntlet();
-    parkAt(w, 0);
+    parkAt(w, 1);
     expect(getContextActions(w, false).some((a) => a.target.kind === "outpost")).toBe(false);
 
     w.gauntlet!.outposts[0].paid = true;

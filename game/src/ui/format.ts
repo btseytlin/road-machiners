@@ -1,4 +1,3 @@
-// Event log lines.
 
 import { GOODS } from '../data/goods';
 import { CONTRACTS } from '../data/market';
@@ -87,7 +86,7 @@ export function workProgress(work: WorkLeft): number {
   return 1 - work.turnsLeft / work.total;
 }
 import { damage, fuelLiters, hp, kph, moneyDelta, moneyNumber, moneyText, turnsText as turnsLabel } from './units';
-import { OUTPOST_PAY } from '../sim/gauntlet';
+import { OUTPOST_PAY, outpostName } from '../sim/gauntlet';
 import { npcName } from '../sim/spawn';
 
 export function wearLabel(part: PartInstance): string {
@@ -662,12 +661,11 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   money: (_, e) => (e.reason === OUTPOST_PAY ? null : { text: `${moneyDelta(e.amount)}: ${e.reason}`, cls: e.amount > 0 ? 'good' : 'bad' }),
   outpostReached: outpostReachedText,
   runLost: (_, e) => ({ text: e.cause === 'wrecked' ? `Your truck is wrecked. The run ends on stretch ${e.stretch}.` : `You end the run on stretch ${e.stretch}.`, cls: 'bad' }),
-  runComplete: () => ({ text: 'The last outpost. The run is complete.', cls: 'good' }),
   lootArgument: lootArgumentText,
 };
 
 function outpostReachedText(world: World, e: Extract<GameEvent, { t: 'outpostReached' }>): LogLine {
-  const name = world.gauntlet?.outposts.find((o) => o.id === e.outpost)?.name ?? `Outpost ${e.stretch}`;
+  const name = outpostName(e.milestone);
   const wrecks = e.wrecks === 0 ? '' : ` and ${e.wrecks} ${e.wrecks === 1 ? 'wreck' : 'wrecks'}`;
   return { text: `${name}. Paid ${moneyText(e.pay)} for the road${wrecks}.`, cls: 'good' };
 }

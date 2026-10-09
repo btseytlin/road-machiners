@@ -20,7 +20,7 @@ import type { NpcState, SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { clockLabel, vehicleName } from "./format";
 import { celsius, distanceText, engineCelsius, fuelLiters, hp, kg, kph, moneyText } from "./units";
-import { canAbandonRun, gauntletReadout, nextOutpost, outpostNear, reachedOutpostAt } from "../sim/gauntlet";
+import { canAbandonRun, gauntletReadout, outpostNear, reachedOutpostAt } from "../sim/gauntlet";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
 import { contextKey, type ContextAction } from './hud';
@@ -410,10 +410,9 @@ export function getHudReadout(w: World) {
 function runResources(w: World) {
   const run = gauntletReadout(w);
   if (!run) return [];
-  const next = nextOutpost(w);
   const left = distanceText(run.toOutpost);
-  const value = next ? `${run.stretch}/${run.total} ${left}` : `${run.total}/${run.total}`;
-  const tip = next ? `Stretch ${run.stretch} of ${run.total}, ${left} to ${next.name}` : "Run complete";
+  const value = `${run.stretch}: ${left}`;
+  const tip = `Stretch ${run.stretch}: ${left} to ${run.outpost}`;
   return [{ label: "Run", value, warning: false, icon: "range" as const, tip }];
 }
 

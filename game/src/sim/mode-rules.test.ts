@@ -1,6 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { startKit } from '../data/start';
-import { TEST_MAP } from '../test/map';
 import { resolveDestroyed } from './combat';
 import { playerVehicle } from './damage';
 import { checkKnockout } from './defeat';
@@ -11,12 +9,11 @@ import { spillDeadRows } from './spill';
 import { fightCornered, thinkNpc, topGoal } from './npc-activities';
 import { optionWeights } from './npc-decisions';
 import { renewSalvage } from './salvage';
-import { defaultSetup } from './settings';
 import { addState, advanceStates, stateOf } from './states';
 import { setBeacon } from './tow';
-import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, forceOption, gauntletWorld, npcBrain } from './testkit';
 import type { GameModeId, Vehicle, World } from './types';
-import { newWorld } from './world';
+
 import { TIME } from '../data/time';
 
 function worldIn(mode: GameModeId): World {
@@ -175,7 +172,7 @@ describe('knockouts', () => {
   });
 
   it('ends the run when the player would be knocked out', () => {
-    const w = newWorld(4, startKit('gauntlet'), TEST_MAP, defaultSetup('gauntlet'));
+    const w = gauntletWorld(4);
     corePart(playerVehicle(w), 'cab').hp = 0;
 
     checkKnockout(w);

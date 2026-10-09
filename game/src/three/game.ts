@@ -756,7 +756,6 @@ export class Game {
     this.hud.pushEvents(this.world);
     const searched = this.world.events.find((e) => e.t === "searched");
     if (searched) this.inventory.openLoot(searched.stock);
-    this.death.noteTurn(this.world);
     this.uiStale = true;
     for (const b of this.breakCues.rest()) this.playBreak(b);
   }

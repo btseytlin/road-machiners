@@ -42,8 +42,8 @@ import { advancePatches } from './patch';
 import { advanceAid, readyAid } from './aid';
 import type { GridItem, MoveOrder, PartInstance, UtilityOrder, Vehicle, WeaponOrder, World, WorldSettings, WorldSetup, XpSource } from './types';
 import { defaultSetup, modeRules, parseSetup, repairSetup } from './settings';
-import { gauntletStart, layGauntlet } from './gauntlet-layout';
-import { advanceGauntlet } from './gauntlet';
+import { highwayStart } from './highway';
+import { advanceGauntlet, startRun } from './gauntlet';
 import { canOverdrive, vehicleStats } from './stats';
 import { playerSees, practiceContacts, refreshVision } from './vision';
 import { noteEscape } from './escape';
@@ -178,7 +178,7 @@ function requireMapFits(map: BakedMap, setup: WorldSetup): void {
 
 function setUpWorldStock(world: World, map: BakedMap, truck: Vehicle, kit: StartKit, populate: boolean): void {
   const rules = modeRules(world);
-  if (world.setup.mode === 'gauntlet') layGauntlet(world);
+  if (world.setup.mode === 'gauntlet') startRun(world);
   if (rules.salvage) initializeSalvage(world);
   setUpOpening(world, truck, kit.opening);
   world.player.storage = kit.storage.map((defId) => makePart(world, defId, 0));
@@ -188,7 +188,7 @@ function setUpWorldStock(world: World, map: BakedMap, truck: Vehicle, kit: Start
 }
 
 export function startOf(seed: number, setup: WorldSetup): { pos: Vec; heading: number } {
-  return setup.mode === 'gauntlet' ? gauntletStart(seed) : startPose();
+  return setup.mode === 'gauntlet' ? highwayStart(seed) : startPose();
 }
 
 export function startPose(): { pos: Vec; heading: number } {
@@ -480,12 +480,12 @@ export type CarryReport = {
 
 const KNOWN_SITES = new Set([...REGION.towns, ...REGION.locations].map((s) => s.id));
 
-export function carriedWorld(carried: Carried, kit: StartKit, map: BakedMap, freshSeed: () => number): { world: World; report: CarryReport } {
+export function carriedWorld(carried: Carried, kit: StartKit, mapOf: (setup: WorldSetup, seed: number) => BakedMap, freshSeed: () => number): { world: World; report: CarryReport } {
   const { setup, reset } = carriedSetup(carried.setup);
   const report: CarryReport = { toGarage: [], sold: [], lost: [], settingsReset: reset };
   const truckKit = carriedKit(carried, kit, report);
   const seed = pick(carried.seed, freshSeed());
-  const world = newWorld(seed, { ...truckKit, opening: null, autoRepair: true }, map, setup, true, setup.mode === 'roaming' ? townStart() : startOf(seed, setup));
+  const world = newWorld(seed, { ...truckKit, opening: null, autoRepair: true }, mapOf(setup, seed), setup, true, setup.mode === 'roaming' ? townStart() : startOf(seed, setup));
   carryPlayer(world, carried);
   carryTruck(world, carried, carried.truck !== null && truckKit !== kit, report);
   world.player.costBasis = heldBasis(playerVehicle(world), carried.costBasis);

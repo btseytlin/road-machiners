@@ -1,26 +1,25 @@
 import { describe, expect, it } from 'vitest';
 import { ECONOMY, GOODS } from '../data/goods';
 import { GAUNTLET } from '../data/gauntlet';
-import { startKit } from '../data/start';
 import { REPAIR } from '../data/wear';
-import { TEST_MAP } from '../test/map';
 import { playerVehicle } from './damage';
-import { courseLine, pointAt } from './gauntlet-layout';
+import { outpostPad } from './gauntlet';
+import { milestoneAt, roadPoint } from './highway';
+import { gauntletWorld } from './testkit';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { startRepair } from './jobs';
 import { repairPlan } from './repair';
 import { outpostBuyGood, outpostBuyPart, outpostBuySupply, outpostGoodPrice, outpostPartPrice, outpostRepairAll, outpostRepairBasics } from './outposts';
-import { defaultSetup } from './settings';
 import type { World } from './types';
 import { maxHp } from './wear';
-import { endTurn, newWorld } from './world';
+import { endTurn } from './world';
 
 const still = () => {};
 
 function atOutpost(): World {
-  const w = newWorld(3, startKit('gauntlet'), TEST_MAP, defaultSetup('gauntlet'));
+  const w = gauntletWorld();
   const me = playerVehicle(w);
-  me.pos = { ...w.gauntlet!.outposts[0].pad };
+  me.pos = outpostPad(w, 1);
   me.speed = 0;
   return endTurn(w, still);
 }
@@ -95,11 +94,11 @@ describe('outpost services', () => {
     const part = w.gauntlet!.outposts[0].stock[0];
     w = outpostBuyPart(w, part.id);
     const me = playerVehicle(w);
-    me.pos = pointAt(courseLine(w.gauntlet!.course), w.gauntlet!.outposts[0].at + 30, GAUNTLET.laneOffsets[1]);
+    me.pos = roadPoint(w.seed, w.gauntlet!.window, milestoneAt(1) + 30, GAUNTLET.laneOffsets[1]);
 
     w = endTurn(w, still);
 
-    expect(w.gauntlet!.stretch).toBe(1);
+    expect(w.gauntlet!.window).toBe(1);
     expect(playerVehicle(w).items.some((it) => it.kind === 'part' && it.part.id === part.id)).toBe(true);
   });
 
@@ -136,9 +135,9 @@ describe('outpost commands off the pad', () => {
   });
 
   it.each(commands)('refuse to %s at an outpost not reached yet', (_name, command) => {
-    const w = newWorld(3, startKit('gauntlet'), TEST_MAP, defaultSetup('gauntlet'));
+    const w = gauntletWorld();
     const me = playerVehicle(w);
-    me.pos = { ...w.gauntlet!.outposts[1].pad };
+    me.pos = outpostPad(w, 1);
     me.speed = 0;
     w.player.fuel -= 5;
 

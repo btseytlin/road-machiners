@@ -2,6 +2,7 @@ import type { BakedMap } from '../sim/terrain';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
 import { reachedOutpostAt } from '../sim/gauntlet';
+import { highwayMap } from '../sim/highway';
 import type { BrokenProp, Obstacle, Player, Vehicle, World, WorldSetup } from '../sim/types';
 import { refreshVision } from '../sim/vision';
 import { parseSetup } from '../sim/settings';
@@ -65,10 +66,28 @@ type SavedWorld = Omit<World, 'terrain' | 'events' | 'removed' | 'broken' | 'veh
 
 type ViewField = 'visible' | 'contacts' | 'clouds';
 
-export function loadWorld(slots: SaveSlots, slot: SlotId, map: BakedMap): World | null {
+export function newMapFor(setup: WorldSetup, seed: number, icarus: BakedMap): BakedMap {
+  return setup.mode === 'gauntlet' ? highwayMap(seed, 0) : icarus;
+}
+
+export function mapFor(saved: Pick<World, 'mapHash' | 'seed' | 'setup' | 'gauntlet'>, icarus: BakedMap): BakedMap {
+  const highway = saved.mapHash.startsWith('highway:');
+  if (saved.setup.mode !== 'gauntlet') {
+    if (highway) throw new SaveError(`A ${saved.setup.mode} save names highway map ${saved.mapHash}`);
+    return icarus;
+  }
+  if (!saved.gauntlet) throw new SaveError('This Gauntlet run was laid on Icarus roads, and the highway has replaced them');
+  if (!highway) throw new SaveError(`A Gauntlet save names map ${saved.mapHash}, which is no highway`);
+  const map = highwayMap(saved.seed, saved.gauntlet.window);
+  if (map.hash !== saved.mapHash) throw new SaveError(`Game save was made on map ${saved.mapHash}, not on the current highway ${map.hash}`);
+  return map;
+}
+
+export function loadWorld(slots: SaveSlots, slot: SlotId, icarus: BakedMap): World | null {
   const envelope = slots.get(slot);
   if (envelope === null) return null;
   const world = savedWorld(envelope);
+  const map = mapFor(world, icarus);
   if (world.mapHash !== map.hash) throw new SaveError(`Game save was made on map ${world.mapHash}, not on the current map ${map.hash}`);
   const explored = unpackExplored(world.player.explored, world.size * world.size);
   if (world.obstacles.some(isBakedObstacle)) throw new SaveError('Game save holds baked map props, which come from the map file');

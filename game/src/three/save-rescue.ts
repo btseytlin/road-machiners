@@ -1,5 +1,3 @@
-// Rescue of a save that cannot load: reads what the player cannot get back from its raw JSON and carries it to
-// a new world on the current map. It checks JSON shapes only. What the ids mean is known by carriedWorld().
 
 import type { StartKit } from '../data/start';
 import type { BakedMap } from '../sim/terrain';
@@ -7,7 +5,7 @@ import { carriedWorld, type Carried, type CarriedItem, type CarriedPart, type Ca
 import type { World } from '../sim/types';
 import type { SlotId } from './save-slots';
 import { CENTS_PER_MONEY_29_30, pooledSkills_9_10 } from './save-migrations';
-import { savedRunId, storedSave, writeSave } from './save';
+import { newMapFor, savedRunId, storedSave, writeSave } from './save';
 import type { SaveSlots } from './save-db';
 
 type Json = Record<string, unknown>;
@@ -122,10 +120,10 @@ function pooledOf(player: Json): Pick<Carried, 'xp' | 'ranks'> {
   return pooledSkills_9_10(countsOf(player.skills));
 }
 
-export function rescueSave(slots: SaveSlots, slot: SlotId, map: BakedMap, kit: StartKit, freshSeed: () => number, freshRunId: () => string, savedAt: number): { world: World; report: CarryReport; runId: string } | null {
+export function rescueSave(slots: SaveSlots, slot: SlotId, icarus: BakedMap, kit: StartKit, freshSeed: () => number, freshRunId: () => string, savedAt: number): { world: World; report: CarryReport; runId: string } | null {
   const parsed = storedSave(slots, slot);
   if (objectOf(parsed) === null) return null;
-  const rescued = carriedWorld(readCarried(parsed), kit, map, freshSeed);
+  const rescued = carriedWorld(readCarried(parsed), kit, (setup, seed) => newMapFor(setup, seed, icarus), freshSeed);
   const runId = savedRunId(parsed) ?? freshRunId();
   writeSave(slots, slot, rescued.world, runId, savedAt);
   return { ...rescued, runId };

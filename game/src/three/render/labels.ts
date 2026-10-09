@@ -1,5 +1,6 @@
 
 import { atlasOf, atlasSites } from '../../sim/atlas';
+import { runOutposts } from '../../sim/gauntlet';
 import { groundPoint, type VehicleFrame } from '../../phys/frames';
 import type { World } from '../../sim/types';
 import type { Vec } from '../../sim/vec';
@@ -57,14 +58,14 @@ export class Labels {
   }
 
   private updateOutposts(world: World, rig: CameraRig, limit: SightLimit): void {
-    const posts = world.gauntlet?.outposts ?? [];
-    const ids = new Set(posts.map((p) => p.id));
+    const posts = runOutposts(world);
+    const ids = new Set(posts.map((p) => p.name));
     for (const [id, el] of this.outposts) {
       if (ids.has(id)) continue;
       el.remove();
       this.outposts.delete(id);
     }
-    for (const post of posts) place(this.outpostLabel(post.id, post.name), world, post.pad, rig, limit, true);
+    for (const post of posts) place(this.outpostLabel(post.name, post.name), world, post.pad, rig, limit, true);
   }
 
   private outpostLabel(id: string, name: string): HTMLDivElement {

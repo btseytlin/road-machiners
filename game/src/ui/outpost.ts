@@ -1,11 +1,11 @@
 import { GOODS } from "../data/goods";
 import { partDef, type PartKind } from "../data/parts";
 import { playerVehicle } from "../sim/damage";
-import { reachedOutpostAt } from "../sim/gauntlet";
+import { reachedOutpostAt, type Outpost } from "../sim/gauntlet";
 import { goodsCount, MOUNT_CELLS } from "../sim/grid";
 import { canStowPart } from "../sim/inventory";
 import { outpostBuyGood, outpostBuyPart, outpostBuySupply, outpostGoodPrice, outpostGoodRoom, outpostPartPrice, outpostRepairAll, outpostRepairBasics } from "../sim/outposts";
-import type { Outpost, PartInstance, World } from "../sim/types";
+import type { PartInstance, World } from "../sim/types";
 import { compareBase, createItemIcon } from "./cards";
 import { el, panel } from "./dom";
 import { GOODS_COLUMNS } from "./format";

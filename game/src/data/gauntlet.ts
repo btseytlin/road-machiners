@@ -4,29 +4,12 @@ import type { PropKind } from '../sim/terrain';
 import type { TerrainTypeId } from './terrain';
 
 export type GroupPlan = { from: 'ahead' | 'behind'; templates: string[]; level: GearLevel };
-export type RowLook = { kind: 'wreck' } | { kind: 'landmark'; look: Extract<LandmarkLook, 'barrier' | 'tankTrap' | 'drums'> };
+export type Curve = { first: number; step: number; max: number };
 
 export const GAUNTLET = {
-  stretches: 4,
-  roads: [0, 1],
-  townMargin: 24,
-  startGap: 24,
-  stretchJitter: 0.12,
-  rowGap: 14,
-  outpostGap: 16,
-  rowsPerStretch: [2, 3, 3, 4],
-  maxBlocked: [1, 1, 2, 2],
   laneOffsets: [-2.25, -0.75, 0.75, 2.25],
-  startLane: 1,
   rowRadius: [0.55, 0.7] as [number, number],
-  rowLooks: [
-    { kind: 'wreck' },
-    { kind: 'landmark', look: 'barrier' },
-    { kind: 'landmark', look: 'tankTrap' },
-    { kind: 'landmark', look: 'drums' },
-  ] as RowLook[],
   outpost: {
-    padOffset: 7,
     padRadius: 3,
     props: [
       { look: 'guardPost', along: -2.5, across: 2.5, r: 0.8 },
@@ -35,8 +18,7 @@ export const GAUNTLET = {
       { look: 'barrier', along: -3.5, across: -0.5, r: 0.5 },
     ] as { look: LandmarkLook; along: number; across: number; r: number }[],
   },
-  stockSize: [2, 3, 4, 5],
-  groups: [
+  waves: [
     [{ from: 'ahead', templates: ['buggy'], level: 'light' }],
     [
       { from: 'ahead', templates: ['buggy'], level: 'light' },
@@ -51,6 +33,26 @@ export const GAUNTLET = {
       { from: 'behind', templates: ['buggy', 'buggy', 'gunwagon'], level: 'heavy' },
       { from: 'ahead', templates: ['gunwagon', 'gunwagon', 'buggy'], level: 'heavy' },
     ],
+    [
+      { from: 'ahead', templates: ['gunwagon', 'buggy', 'buggy'], level: 'heavy' },
+      { from: 'behind', templates: ['gunwagon', 'buggy', 'buggy'], level: 'heavy' },
+      { from: 'ahead', templates: ['gunwagon', 'gunwagon'], level: 'heavy' },
+    ],
+    [
+      { from: 'ahead', templates: ['gunwagon', 'gunwagon', 'buggy'], level: 'heavy' },
+      { from: 'behind', templates: ['gunwagon', 'buggy', 'buggy'], level: 'heavy' },
+      { from: 'ahead', templates: ['gunwagon', 'gunwagon'], level: 'loaded' },
+    ],
+    [
+      { from: 'ahead', templates: ['gunwagon', 'gunwagon', 'buggy'], level: 'loaded' },
+      { from: 'behind', templates: ['gunwagon', 'gunwagon', 'buggy'], level: 'heavy' },
+      { from: 'ahead', templates: ['gunwagon', 'gunwagon'], level: 'loaded' },
+    ],
+    [
+      { from: 'ahead', templates: ['gunwagon', 'gunwagon', 'buggy'], level: 'loaded' },
+      { from: 'behind', templates: ['gunwagon', 'gunwagon', 'buggy'], level: 'loaded' },
+      { from: 'ahead', templates: ['gunwagon', 'gunwagon'], level: 'loaded' },
+    ],
   ] as GroupPlan[][],
   groupSpread: [0.2, 0.85] as [number, number],
   spawnLead: 32,
@@ -59,7 +61,8 @@ export const GAUNTLET = {
   spawnStagger: 3,
   maxAlive: 8,
   spawnRetryTurns: 20,
-  pay: { base: [15000, 25000, 35000, 50000], perWreck: [3000, 4000, 5000, 6000] },
+  pay: { base: { first: 15000, step: 10000, max: 80000 } as Curve, perWreck: { first: 3000, step: 1000, max: 10000 } as Curve },
+  stock: { base: 2, every: 2, max: 6 },
   goodsMarkup: 1.5,
   maxTries: 400,
 };

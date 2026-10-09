@@ -1,12 +1,10 @@
-// The fullscreen death screen. A dead run takes no more turns or commands, so it covers the whole game.
-// Load save opens the Load panel, and New game opens the New game screen over it.
 
-import { abandonRun, canAbandonRun, runEarnings } from "../sim/gauntlet";
+import { abandonRun, canAbandonRun, outpostName, runEarnings } from "../sim/gauntlet";
 import type { RunLossCause, World } from "../sim/types";
 import { disabledWith, el, panel } from "./dom";
 import { CONFIRM_NEW_GAME, openNewGame, type NewGameActions } from "./new-game";
 import { SavePanel, type SavePanelActions } from "./save-panel";
-import { moneyEl } from "./units";
+import { distanceText } from "./units";
 
 export type DeathActions = SavePanelActions & {
   hasSave: () => boolean;
@@ -32,35 +30,6 @@ export class DeathScreen {
 
   isShown(): boolean {
     return this.root !== null;
-  }
-
-  noteTurn(world: World): void {
-    if (world.events.some((e) => e.t === "runComplete")) this.showRunComplete(world);
-  }
-
-  private showRunComplete(world: World): void {
-    const run = world.gauntlet;
-    if (this.root || !run) return;
-    const { pay, wrecks } = runEarnings(world);
-    const root = panel("death run-complete");
-    root.setAttribute("role", "alertdialog");
-    root.setAttribute("aria-label", "Run complete");
-    root.append(
-      el("h3", {}, "Run complete"),
-      el("div", { class: "run-tally" }, el("span", {}, `${run.outposts.length} outposts`), el("span", {}, `${wrecks} wrecks`), el("span", { class: "good" }, "+", moneyEl(pay))),
-      el(
-        "div",
-        { class: "death-buttons" },
-        el("button", { onclick: () => this.closeRunComplete() }, "Keep driving"),
-        el("button", { onclick: () => openNewGame(this.actions.newGame, () => {}) }, "New game"),
-      ),
-    );
-    this.root = root;
-  }
-
-  private closeRunComplete(): void {
-    this.root?.remove();
-    this.root = null;
   }
 
   show(world: World): void {
@@ -101,8 +70,8 @@ function deathTitle(world: World): string {
 }
 
 function runCaption(world: World): HTMLElement[] {
-  const run = world.gauntlet;
-  if (!run) return [];
-  const reached = Math.min(run.stretch + 1, run.outposts.length);
-  return [el("div", { class: "death-caption" }, `Stretch ${reached} of ${run.outposts.length}`)];
+  if (!world.gauntlet) return [];
+  const { reached, north } = runEarnings(world);
+  const where = reached > 0 ? `Reached ${outpostName(reached)}` : "Stretch 1";
+  return [el("div", { class: "death-caption" }, `${where}, ${distanceText(north)} north`)];
 }

@@ -1,6 +1,3 @@
-// One line per recorded turn: the player truck's state after the turn, the hostiles it sees, the money the turn moved
-// and every event that touches the player. A batch writes these beside its traces, so one run answers every later
-// question about it without a replay.
 
 import { inCombat } from '../combat';
 import { playerVehicle } from '../damage';
@@ -77,7 +74,7 @@ export function turnLine(world: World, events: readonly GameEvent[], ledger: Led
 
 function runField(world: World): { run?: string } {
   const run = gauntletReadout(world);
-  return run ? { run: `${run.stretch}/${run.total}${run.complete ? ' done' : ` ${Math.round(run.toOutpost)}`}` } : {};
+  return run ? { run: `${run.stretch} ${Math.round(run.toOutpost)}` } : {};
 }
 
 const SNAPSHOT_TURNS = 10;
@@ -129,7 +126,7 @@ function foesSeen(world: World, me: Vehicle): SeenFoe[] {
     .map((v) => ({ id: v.id, who: `${v.brain?.templateId ?? v.faction}/${v.chassisId}`, dist: Math.round(dist(v.pos, me.pos)), odds: Math.round(100 * fightOddsAgainst(world, me, v).win), speed: Math.round(vehicleStats(world, v).maxSpeed * 10) / 10 }));
 }
 
-const OWN = new Set(['money', 'contract', 'death', 'knockout', 'wake', 'skillUp', 'supply', 'townPatch', 'scrapPatch', 'searched', 'discover', 'outpostReached', 'runLost', 'runComplete']);
+const OWN = new Set(['money', 'contract', 'death', 'knockout', 'wake', 'skillUp', 'supply', 'townPatch', 'scrapPatch', 'searched', 'discover', 'outpostReached', 'runLost']);
 const QUIET = new Set(['practice', 'activity', 'arrived', 'spawn', 'despawn', 'info', 'weather']);
 
 export function touchesPlayer(e: GameEvent, me: string): boolean {
