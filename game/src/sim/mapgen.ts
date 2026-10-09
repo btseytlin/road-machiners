@@ -86,7 +86,7 @@ export function findRoadWreckSpot(world: World, obstacles: Obstacle[], allowed: 
   throw new Error('Road wreck placement ran out of tries');
 }
 
-function overlapsAny(out: Obstacle[], pos: Vec, r: number): boolean {
+export function overlapsAny(out: Obstacle[], pos: Vec, r: number): boolean {
   return out.some((o) => o.kind !== 'site' && dist(pos, o.pos) < o.r + r + O.gap);
 }
 
@@ -102,7 +102,7 @@ export function onDeck(pos: Vec, r: number): boolean {
   return DECKS.some((deck) => segmentDist(pos, deck.from, deck.to) < deck.width / 2 + r);
 }
 
-function clearOfDecks(pos: Vec, r: number): boolean {
+export function clearOfDecks(pos: Vec, r: number): boolean {
   return !onDeck(pos, r) && TERRAIN.features.mounds.every((m) => dist(pos, m.center) >= m.radius + m.bank + r);
 }
 

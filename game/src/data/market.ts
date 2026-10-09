@@ -146,6 +146,8 @@ function shelfWeightOf(def: PartDef): number {
 
 export type PartStockTable = { parts: Weighted<string>[]; wear: Weighted<number>[] };
 
+export const GARAGE_STOCK: PartStockTable = { parts: GARAGE_PARTS, wear: GARAGE_WEAR };
+
 export type ShopDef = {
   id: string;
   kind: ShopKind;

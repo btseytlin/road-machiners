@@ -43,6 +43,7 @@ import { advanceAid, readyAid } from './aid';
 import type { GridItem, MoveOrder, PartInstance, UtilityOrder, Vehicle, WeaponOrder, World, WorldSettings, WorldSetup, XpSource } from './types';
 import { defaultSetup, modeRules, parseSetup, repairSetup } from './settings';
 import { gauntletStart } from './gauntlet-course';
+import { layGauntlet } from './gauntlet-layout';
 import { canOverdrive, vehicleStats } from './stats';
 import { playerSees, practiceContacts, refreshVision } from './vision';
 import { noteEscape } from './escape';
@@ -170,6 +171,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
 
 function setUpWorldStock(world: World, truck: Vehicle, kit: StartKit, populate: boolean): void {
   const rules = modeRules(world);
+  if (world.setup.mode === 'gauntlet') layGauntlet(world);
   if (rules.salvage) initializeSalvage(world);
   setUpOpening(world, truck, kit.opening);
   world.player.storage = kit.storage.map((defId) => makePart(world, defId, 0));

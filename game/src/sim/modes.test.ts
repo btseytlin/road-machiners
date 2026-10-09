@@ -64,6 +64,7 @@ describe('a new world by mode', () => {
     expect(world.salvage).toEqual([]);
     expect(world.shops).toEqual({});
     expect(world.obstacles.some((o) => /^wreck\d+$/.test(o.id))).toBe(false);
+    expect(world.gauntlet?.stretch).toBe(0);
   });
 
   it('gives the Gauntlet player the Gauntlet kit with no opening', () => {
