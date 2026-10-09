@@ -17,7 +17,7 @@ import { campGoodPrice, campPartPrice } from './economy';
 import { corePart, goodsCount } from './grid';
 import { addGoods, spareParts } from './inventory';
 import { CLEARANCE, isTransientWreck, nearCliff, terrainNav } from './nav/layer';
-import { decide, huntingGrounds, lawmanTowns, raiderGrounds, raiderPatrolPosts } from './npc-decisions';
+import { decide, fightOddsAgainst, huntingGrounds, judgeDanger, lawmanTowns, raiderGrounds, raiderPatrolPosts } from './npc-decisions';
 import { finishGoal, resolveNpcActivities, topGoal } from './npc-activities';
 import { yieldTo } from './parley';
 import { route } from './path';
@@ -160,6 +160,20 @@ function watchingRaider(traderGap: number) {
   return { w, raider, trader };
 }
 
+function drawShare(w: World, raider: Vehicle, decision: 'hostileSeen' | 'contactHeard', subject: string, danger: number | null, option: string): number {
+  const draws = 400;
+  let hits = 0;
+  for (let i = 0; i < draws; i++) if (decide(w, raider, decision, subject, danger) === option) hits++;
+  return hits / draws;
+}
+
+function watchingRaiderSeeing() {
+  const { w, raider } = watchingRaider(200);
+  const player = playerVehicle(w);
+  player.pos = { x: raider.pos.x + 8, y: raider.pos.y };
+  return { w, raider, player };
+}
+
 describe('the watch', () => {
   it('starts on arrival, keeps the raider parked for the watch turns without a stall, then ends', () => {
     forceOption('idle', 'patrol');
@@ -197,21 +211,51 @@ describe('the watch', () => {
     expect(() => planNpcOrders(w)).toThrow(/watch/);
   });
 
-  it('makes a raider that hears loaded prey beyond sight mostly lie low', () => {
+  it('makes a watching raider that hears loaded prey beyond sight mostly investigate', () => {
     const { w, raider, trader } = watchingRaider(TERRAIN.vision.radius + 5);
     trader.speed = 4;
     expect(isWatching(raider)).toBe(true);
     expect(contactsOf(w, raider, Infinity).some((c) => c.vehicleId === trader.id)).toBe(true);
-    const draws = 400;
-    let keeps = 0;
-    for (let i = 0; i < draws; i++) if (decide(w, raider, 'contactHeard', trader.id, null) === 'keep') keeps++;
-    const watching = keeps / draws;
-    raider.brain!.goals = [raidGoal({ x: raider.pos.x + 30, y: raider.pos.y })];
-    keeps = 0;
-    for (let i = 0; i < draws; i++) if (decide(w, raider, 'contactHeard', trader.id, null) === 'keep') keeps++;
-    expect(watching).toBeGreaterThan(0.55);
-    expect(watching).toBeLessThan(0.85);
-    expect(keeps / draws).toBeLessThan(0.15);
+    expect(drawShare(w, raider, 'contactHeard', trader.id, null, 'investigate')).toBeGreaterThanOrEqual(0.8);
+  });
+
+  it('attacks the start-kit player about half the time and rarely flees', () => {
+    const { w, raider, player } = watchingRaiderSeeing();
+    const danger = judgeDanger(w, raider, player);
+    const fight = drawShare(w, raider, 'hostileSeen', player.id, danger, 'fight');
+    expect(fight).toBeGreaterThanOrEqual(0.35);
+    expect(fight).toBeLessThanOrEqual(0.6);
+    expect(drawShare(w, raider, 'hostileSeen', player.id, danger, 'flee')).toBeLessThanOrEqual(0.1);
+  });
+
+  it('almost always attacks a player carrying six electronics', () => {
+    const { w, raider, player } = watchingRaiderSeeing();
+    if (addGoods(w, player, 'electronics', 6) < 6) throw new Error('No room for the cargo');
+    expect(drawShare(w, raider, 'hostileSeen', player.id, judgeDanger(w, raider, player), 'fight')).toBeGreaterThanOrEqual(0.9);
+  });
+
+  it('flees prey that outguns it, when it has a getaway', () => {
+    const { w, raider } = watchingRaider(200);
+    const brute = addVehicle(w, 'traders', 'hauler', ['mg', 'mg', 'mg', 'mg', 'stockEngine'], { x: raider.pos.x + 8, y: raider.pos.y });
+    brute.brain = npcBrain('trader', brute.pos, ['trader']);
+    if (addGoods(w, brute, 'electronics', 6) < 6) throw new Error('No room for the cargo');
+    const danger = judgeDanger(w, raider, brute);
+    expect(danger).toBeGreaterThan(NPC_BEHAVIOR.threatRatio * 1.5);
+    expect(drawShare(w, raider, 'hostileSeen', brute.id, danger, 'flee')).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it('flees prey when it is weak', () => {
+    const { w, raider, trader } = watchingRaider(TERRAIN.vision.radius - 6);
+    corePart(raider, 'cab').hp = 1;
+    expect(drawShare(w, raider, 'hostileSeen', trader.id, judgeDanger(w, raider, trader), 'flee')).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it('weighs a load by the raid curve when it is not hunting', () => {
+    const { w, raider, player } = watchingRaiderSeeing();
+    const danger = judgeDanger(w, raider, player);
+    const hunting = drawShare(w, raider, 'hostileSeen', player.id, danger, 'fight');
+    raider.brain!.goals = [{ ...raidGoal(raider.pos), kind: 'sell', destination: null, phase: 'go' }];
+    expect(drawShare(w, raider, 'hostileSeen', player.id, danger, 'fight')).toBeLessThan(hunting);
   });
 
   it('closes on heard prey only as far as its contact circle', () => {

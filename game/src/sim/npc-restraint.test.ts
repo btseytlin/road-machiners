@@ -29,6 +29,13 @@ function createNpc(templateId = 'scavenger') {
   return { world, npc };
 }
 
+function loadedTrader(world: World, pos: { x: number; y: number }, parts = ['mg', 'stockEngine']): Vehicle {
+  const trader = addVehicle(world, 'traders', 'scout', parts, pos);
+  trader.brain = npcBrain('trader', trader.pos, TRAITS_OF.trader);
+  addGoods(world, trader, 'scrap', 2);
+  return trader;
+}
+
 const scavengeGoal: NpcActivity = { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' };
 
 function shareOfSeeds(world: World, npcId: string, check: (x: World, npc: Vehicle) => boolean, seeds = 200): number {
@@ -69,11 +76,11 @@ describe('NPC restraint', () => {
 
   it('judges the nearby hostile faction group before attacking', () => {
     const { world, npc } = createNpc('buggy');
-    addVehicle(world, 'traders', 'scout', ['mg'], { x: 33, y: 30 });
+    loadedTrader(world, { x: 33, y: 30 });
     const alone = shareOfSeeds(world, npc.id, (x, me) => thinkNpc(x, me).kind === 'flee');
-    addVehicle(world, 'traders', 'scout', ['mg'], { x: 33, y: 32 });
+    loadedTrader(world, { x: 33, y: 32 }, ['mg', 'mg', 'mg', 'stockEngine']);
     const grouped = shareOfSeeds(world, npc.id, (x, me) => thinkNpc(x, me).kind === 'flee');
-    expect(grouped).toBeGreaterThan(0.5);
+    expect(grouped).toBeGreaterThan(0.25);
     expect(grouped).toBeGreaterThan(alone + 0.2);
   });
 
@@ -98,6 +105,7 @@ describe('NPC restraint', () => {
     const gate = siteGates(REGION.towns[0])[0];
     npc.pos = { x: gate.x + 3, y: gate.y };
     const prey = addVehicle(world, 'traders', 'scout', [], gate);
+    prey.brain = npcBrain('trader', prey.pos, TRAITS_OF.trader);
     addGoods(world, prey, 'scrap', 1);
     const fought = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);

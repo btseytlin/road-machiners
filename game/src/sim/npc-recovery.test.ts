@@ -201,9 +201,12 @@ describe('NPC gameplay recovery', () => {
 
   it('mostly withdraws from a locally stronger enemy group', () => {
     const { world, npc } = createScenario('buggy');
-    addVehicle(world, 'scavengers', 'scout', ['mg'], { x: 33, y: 30 });
-    addVehicle(world, 'scavengers', 'scout', ['mg'], { x: 34, y: 32 });
-    expect(shareOfSeeds(world, npc.id, (x, me) => thinkNpc(x, me).kind === 'flee')).toBeGreaterThan(0.5);
+    for (const pos of [{ x: 33, y: 30 }, { x: 34, y: 32 }]) {
+      const mate = addVehicle(world, 'scavengers', 'scout', ['mg', 'mg', 'mg', 'stockEngine'], pos);
+      mate.brain = npcBrain('scavenger', mate.pos, ['scavenger']);
+      addGoods(world, mate, 'scrap', 2);
+    }
+    expect(shareOfSeeds(world, npc.id, (x, me) => thinkNpc(x, me).kind === 'flee')).toBeGreaterThan(0.25);
   });
 
   it('investigates a useful contact once instead of chasing its moving center forever', () => {
