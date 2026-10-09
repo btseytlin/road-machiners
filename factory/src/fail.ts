@@ -32,7 +32,7 @@ export async function reportFailure(ctx: Ctx, stage: Stage, issue: number | null
   ctx.log(stage, issue, `failed: ${message}`);
   const failure: Failure = { stage, issue, error: summarizeError(message), log, at: ctx.now().toISOString(), ...causeOf(error, batch) };
   updateState(ctx.statePath, (state) => ({ ...state, failures: [...state.failures, failure] }));
-  if (issue !== null && !(error instanceof UsageLimitError)) await ctx.github.addLabel(issue, STUCK_LABEL);
+  if (issue !== null && stage !== 'catch-up' && !(error instanceof UsageLimitError)) await ctx.github.addLabel(issue, STUCK_LABEL);
 }
 
 function causeOf(error: unknown, batch: number[]): Pick<Failure, 'batch' | 'decision'> {

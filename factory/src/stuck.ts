@@ -57,7 +57,7 @@ function causeOf(input: SweepInput, issue: number, prev: StuckRecord | undefined
 }
 
 function newestFailure(state: FactoryState, issue: number): Failure | null {
-  const own = state.failures.filter((failure) => failure.issue === issue || (failure.stage === 'merge' && (failure.batch ?? []).includes(issue)));
+  const own = state.failures.filter((failure) => (failure.issue === issue && failure.stage !== 'catch-up') || (failure.stage === 'merge' && (failure.batch ?? []).includes(issue)));
   return own.reduce<Failure | null>((newest, failure) => (newest === null || failure.at >= newest.at ? failure : newest), null);
 }
 

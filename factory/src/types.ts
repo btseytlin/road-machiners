@@ -6,7 +6,7 @@ export type Column = typeof COLUMNS[number];
 
 export type CardStage = 'triage' | 'design' | 'implement' | 'verify' | 'harden';
 export type ReleaseStage = 'release' | 'playtest' | 'candidate' | 'ship' | 'remove';
-export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'merge' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste' | 'intake' | 'tick' | 'control';
+export type Stage = CardStage | ReleaseStage | 'checks' | 'approve' | 'merge' | 'catch-up' | 'feedback' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste' | 'intake' | 'tick' | 'control';
 
 export type FactoryConfig = {
   observationHeartbeatMs: number;
@@ -106,8 +106,8 @@ export type Issue = {
 
 export type Card = { itemId: string; issue: number; column: Column; labels: string[] };
 
-export type JobStage = CardStage | ReleaseStage | 'checks' | 'approve' | 'merge' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste';
-export type Job = { id: string; stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string; batch?: number[] };
+export type JobStage = CardStage | ReleaseStage | 'checks' | 'approve' | 'merge' | 'catch-up' | 'change' | 'adhoc' | 'incident' | 'dev' | 'waste';
+export type Job = { id: string; stage: JobStage; issue: number | null; pid: number; startedAt: string; log: string; batch?: number[]; caughtUp?: number[] };
 
 export type Queue = 'branch' | 'triage' | 'design' | 'implement' | 'verify' | 'test';
 export const AGENT_QUEUES: Queue[] = ['triage', 'design', 'implement', 'verify'];
@@ -115,7 +115,7 @@ export const QUEUE_OF: Record<JobStage, Queue> = {
   triage: 'triage', waste: 'triage', design: 'design', implement: 'implement', adhoc: 'implement', verify: 'verify', harden: 'verify',
   change: 'implement',
   checks: 'test',
-  approve: 'branch', merge: 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', incident: 'branch',
+  approve: 'branch', merge: 'branch', 'catch-up': 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', incident: 'branch',
   playtest: 'verify',
 };
 export type Route = 'answer' | 'patch' | 'redesign';

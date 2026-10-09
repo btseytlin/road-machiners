@@ -612,6 +612,30 @@ describe('resolving a conflict', () => {
     expect(await show('dev', 'f.txt')).toBe('dev\n');
   });
 
+  it('catches a waiting issue branch up to dev with a resolved conflict, leaves dev alone, and its later merge into dev is clean', async () => {
+    const { home, repo, commit, feature, show, head } = await setup();
+    await commit('factory/issue-8', 'f.txt', 'card 8\n');
+    await feature(7, 'f.txt', 'card 7\n');
+    await commit('dev', 'g.txt', 'dev moved\n');
+    await repo.fetch();
+    const devBefore = await head('dev');
+    const catchUp = { branch: 'dev', into: 'factory/issue-8', message: 'Merge dev into factory/issue-8 while it waits in Merging' };
+    const error = await repo.merge([catchUp]).catch((e: unknown) => e) as MergeConflictError;
+    expect(error).toBeInstanceOf(MergeConflictError);
+    const dir = join(home, 'work', 'merge-factory-issue-8');
+    await repo.openConflict(dir, error);
+    await agent(dir, 'f.txt', 'card 7 and 8\n');
+    const { resolution } = await repo.closeConflict(dir, error);
+    await repo.merge([catchUp], [resolution]);
+    expect(await head('dev')).toBe(devBefore);
+    expect(await show('dev', 'f.txt')).toBe('card 7\n');
+    expect(await show('factory/issue-8', 'f.txt')).toBe('card 7 and 8\n');
+    expect(await show('factory/issue-8', 'g.txt')).toBe('dev moved\n');
+    expect(await repo.isMerged('dev', 'factory/issue-8')).toBe(true);
+    await repo.merge([{ branch: 'factory/issue-8', into: 'dev', message: 'Merge issue #8: title 8' }]);
+    expect(await show('dev', 'f.txt')).toBe('card 7 and 8\n');
+  });
+
   it('rejects a merge the agent left open, and a commit that drops a side', async () => {
     const { home, repo, commit, host } = await setup();
     await commit('main', 'f.txt', 'main\n', 'main');

@@ -12,6 +12,7 @@ import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
 import { repairClone } from './repair-clone';
 import { clearSessions, markResumed } from './sessions';
+import { waitingMerges } from './stages/merge';
 import { openTasks } from './stages/release-common';
 import { sweepStuck, type Repair } from './stuck';
 import { clearQueued, isQueued, orderKey, readState, updateState } from './state';
@@ -26,7 +27,7 @@ type Due = Pick<FactoryConfig, 'releaseDays' | 'wasteReviewDays' | 'maxJobsPerCa
 
 const DAY_MS = 24 * 3_600_000;
 const MINUTE_MS = 60_000;
-const NOT_CARD_LIMITED_STAGES: JobStage[] = ['approve', 'merge', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev', 'waste', 'checks'];
+const NOT_CARD_LIMITED_STAGES: JobStage[] = ['approve', 'merge', 'catch-up', 'remove', 'ship', 'change', 'adhoc', 'incident', 'dev', 'waste', 'checks'];
 const CARD_ORDER: Card['column'][] = ['Hardening', 'Testing', 'Implementation', 'Design', 'Triage'];
 
 function isDue(last: string | null, now: Date, everyMs: number): boolean {
@@ -75,8 +76,18 @@ function cardStage(state: FactoryState, card: Card): JobStage {
 }
 
 function mergeJob(state: FactoryState, cards: Card[]): JobPick | null {
-  const shipping = state.jobs.some((job) => job.stage === 'ship');
-  return openCards(state, cards).some((card) => card.column === 'Merging' && !(shipping && card.labels.includes(RELEASE_TASK_LABEL))) ? { stage: 'merge', issue: null } : null;
+  const ready = waitingMerges(state, openCards(state, cards)).filter((card) => !state.jobs.some((job) => job.issue === card.issue));
+  return ready.length > 0 ? { stage: 'merge', issue: null } : null;
+}
+
+const CATCH_UP_CARDS = 6;
+
+function catchUpJobs(state: FactoryState, cards: Card[]): JobPick[] {
+  const merge = state.jobs.find((job) => job.stage === 'merge');
+  if (merge?.batch === undefined) return [];
+  const next = waitingMerges(state, cards).slice(0, CATCH_UP_CARDS);
+  const failed = (card: Card): boolean => state.failures.some((failure) => failure.stage === 'catch-up' && failure.issue === card.issue);
+  return openCards(state, next).filter((card) => !(merge.caughtUp ?? []).includes(card.issue) && !failed(card)).map((card) => ({ stage: 'catch-up' as const, issue: card.issue }));
 }
 
 const has =
@@ -138,7 +149,7 @@ function devJob(state: FactoryState, devHead: string | null): JobPick | null {
 }
 
 function branchCandidates(state: FactoryState, cards: Card[], now: Date, cfg: Due, heads: Heads): Candidate[] {
-  const picks = [...queued(state), mergeJob(state, cards), devJob(state, heads.dev), releaseCut(state, now, cfg), releaseJob(state, cards, heads.release)];
+  const picks = [...queued(state), mergeJob(state, cards), ...catchUpJobs(state, cards), devJob(state, heads.dev), releaseCut(state, now, cfg), releaseJob(state, cards, heads.release)];
   return picks.filter((pick) => pick !== null).map((pick) => ({ ...pick, pastCardLimit: false }));
 }
 
@@ -178,7 +189,7 @@ function findCapacityReasons(state: FactoryState, pick: JobPick, running: JobPic
   if (group !== undefined && running.some((job) => group.includes(job.stage))) reasons.push('issue-running');
   return reasons;
 }
-const ONE_AT_A_TIME: JobStage[][] = [['ship', 'remove'], ['incident']];
+const ONE_AT_A_TIME: JobStage[][] = [['ship', 'remove'], ['incident'], ['catch-up']];
 function readCardWait(state: FactoryState, card: Card): ScheduleDecision[] {
   const reasons: WaitReason[] = [];
   if (card.labels.includes(STUCK_LABEL)) reasons.push('failed');
