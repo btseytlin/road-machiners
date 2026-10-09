@@ -75,7 +75,7 @@ function sampleNote(params) {
 function entryLines(key) {
   const noun = nounOf('ru', key);
   if (noun) {
-    const forms = Object.values(noun.forms).join(' · ');
+    const forms = Object.values(noun.forms).join(', ');
     const place = noun.place ? ` — at «${noun.place.at}», to «${noun.place.to}», from «${noun.place.from}»` : '';
     return [`### ${key}`, `- en: ${entryText('en', key)}`, `- ru (${noun.gender}): ${forms}${place}`, ''];
   }
