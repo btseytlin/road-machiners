@@ -103,7 +103,7 @@ try {
     r = await read(page);
     assert(r.deltas > 0, `${spot}: Enter must select and compare`);
     assert(!r.chips.includes('Free cargo cells'), `${spot}: garage header must not show free cells`);
-    for (const t of ['Money', 'Mass against rated load']) assert(r.chips.includes(t), `${spot}: header must keep the ${t} chip`);
+    for (const t of ["M's", 'Mass against rated load']) assert(r.chips.includes(t), `${spot}: header must keep the ${t} chip`);
     assert(!r.repair.includes('Nothing broken'), `${spot}: no idle Nothing broken label`);
     await page.evaluate(async () => {
       const g = window.__ROAM__;

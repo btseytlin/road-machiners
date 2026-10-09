@@ -6,7 +6,7 @@ What agents hand to the committee, and what the factory checks before it posts.
 
 A testing session that ends in a post writes `.factory/approval.json` with `description` and `howToTry`. The post checkpoint counts a missing one as a failure and hands it back to the session. The session also writes `.factory/screenshot.png`, the primary, and may list more images in order in `.factory/evidence.json`: `{"images": [{"file": "view-gate.png", "description": "Gate and approach"}]}`.
 
-The testing session judges the look itself. It reads its own screenshots, compares them with the issue, the task file, the reference images and `game/docs/DESIGN.md`, and fixes what looks wrong. No file records that reading, and nothing checks it.
+The testing session judges the look itself. It reads its own screenshots, compares them with the issue, the task file, the reference images, `game/docs/DESIGN.md` and, for the UI, `game/docs/ui.md`, and fixes what looks wrong. No file records that reading, and nothing checks it.
 
 Evidence never blocks a card. The post shows the images as the agent listed them. With no screenshot, the approval post is a text message with the same Approve and Deny buttons, post mapping and reply routing, and a status line edits its text. It opens with "No screenshot", and the issue comment says what was missing. An image the post cannot show is left out, alone, and the issue comment names it:
 

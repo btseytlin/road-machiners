@@ -1,0 +1,70 @@
+@media (max-width: 720px) {
+  .speed-tip {
+    position: fixed;
+    left: var(--space-6);
+    bottom: 200px;
+  }
+  .instrument-actions {
+    flex-wrap: wrap;
+  }
+  #ui {
+    --right-column: calc(var(--dock-width) + var(--hud-inset));
+  }
+  #ui .log {
+    top: auto;
+    bottom: var(--narrow-log-bottom);
+    right: var(--hud-inset);
+    height: var(--narrow-log-height);
+  }
+  #ui .radio {
+    --radio-line: 12px;
+    --radio-lines: 4;
+    --knob-size: 22px;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+  }
+  #ui .radio-lcd {
+    font-size: var(--text-caption);
+  }
+  /* Small enough that the four knob labels keep apart on the narrow radio. */
+  #ui .knob-cell {
+    font-size: calc(var(--text-caption) - var(--space-1));
+  }
+  /* One gap above the narrow log, whose top is its bottom offset plus its height. */
+  #ui .right-dock {
+    bottom: calc(var(--narrow-log-bottom) + var(--narrow-log-height) + var(--hud-gap));
+    right: var(--hud-inset);
+  }
+  #ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded {
+    width: calc(100vw - 2 * var(--hud-inset));
+    height: calc(100dvh - var(--narrow-log-bottom) - var(--hud-hover-top) - var(--hud-gap));
+  }
+  #ui .modal {
+    padding: var(--space-8) var(--space-7);
+    height: calc(100dvh - var(--narrow-modal-clearance));
+  }
+  .inv-wrap {
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-9);
+  }
+  .inv-side {
+    width: 100%;
+  }
+  .town-split {
+    grid-template-columns: 1fr;
+    overflow: auto;
+  }
+  .town-truck,
+  .town-shop {
+    overflow: visible;
+  }
+  .town-truck {
+    padding-right: 0;
+    border-right: none;
+  }
+  .modal td,
+  .modal th {
+    padding: var(--space-3) var(--space-2);
+  }
+}

@@ -1,0 +1,158 @@
+.save-panel .save-exports {
+  display: flex;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+.save-panel .save-exports button {
+  flex: 1;
+}
+
+/* The New game screen sits over the game, the menus and the death screen. */
+#ui .new-game {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: var(--z-new-game);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  box-sizing: border-box;
+  width: var(--panel-xl);
+  max-width: 100vw;
+  max-height: 100vh;
+  overflow-y: auto;
+}
+#ui .new-game h3 {
+  font-size: var(--text-heading);
+}
+.new-game .mode-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+#ui .new-game .mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  text-align: left;
+  padding: var(--space-5) var(--space-6);
+}
+#ui .new-game .mode-card b {
+  font-size: var(--text-lead);
+  color: var(--ink-title);
+}
+#ui .new-game .mode-card.selected {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+#ui .new-game .settings-toggle {
+  align-self: flex-start;
+}
+#ui .new-game .settings-toggle::after {
+  content: " ▸";
+}
+#ui .new-game .settings-toggle[aria-expanded="true"]::after {
+  content: " ▾";
+}
+.new-game .world-settings {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  column-gap: var(--space-6);
+  row-gap: var(--space-6);
+  align-items: center;
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--line-soft);
+  background: var(--surface-well);
+}
+.new-game .world-settings[hidden] {
+  display: none;
+}
+.new-game .world-settings .reset {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+.new-game .setting-row {
+  display: grid;
+  grid-template-columns: subgrid;
+  grid-column: 1 / -1;
+  align-items: center;
+}
+.new-game .setting-row label {
+  font-weight: bold;
+  color: var(--ink-title);
+  cursor: help;
+}
+.new-game .setting-row .setting-value {
+  min-width: var(--space-10);
+  text-align: right;
+  font: var(--text-body) var(--font-mono);
+  color: var(--accent-bright);
+}
+.new-game .setting-slider {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.new-game .setting-slider input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  height: var(--slider-thumb);
+  appearance: none;
+  background: transparent;
+}
+.new-game .setting-slider input::-webkit-slider-runnable-track {
+  height: var(--slider-track);
+  background: var(--line);
+}
+.new-game .setting-slider input::-moz-range-track {
+  height: var(--slider-track);
+  background: var(--line);
+}
+.new-game .setting-slider input::-webkit-slider-thumb {
+  appearance: none;
+  width: var(--slider-thumb);
+  height: var(--slider-thumb);
+  margin-top: calc((var(--slider-track) - var(--slider-thumb)) / 2);
+  background: var(--accent-warm);
+  border: 0;
+  border-radius: 0;
+}
+.new-game .setting-slider input::-moz-range-thumb {
+  width: var(--slider-thumb);
+  height: var(--slider-thumb);
+  background: var(--accent-warm);
+  border: 0;
+  border-radius: 0;
+}
+.new-game .setting-slider input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: var(--space-1);
+}
+.new-game .setting-slider .default-tick {
+  position: absolute;
+  top: calc(50% - var(--slider-tick) / 2);
+  left: calc(var(--slider-thumb) / 2 + var(--default-at) * (100% - var(--slider-thumb)));
+  width: var(--space-1);
+  height: var(--slider-tick);
+  transform: translateX(-50%);
+  background: var(--ink-label);
+  pointer-events: none;
+}
+.new-game .new-game-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-5);
+}
+#ui .new-game .new-game-buttons .start {
+  border-color: var(--accent-warm);
+}
+@media (max-width: 480px) {
+  #ui .new-game {
+    width: 100vw;
+    height: 100vh;
+    padding: var(--space-6);
+  }
+}
