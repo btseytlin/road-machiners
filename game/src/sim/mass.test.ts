@@ -1,12 +1,12 @@
 import { RULES } from '../data/rules';
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
-import { GOODS } from '../data/goods';
+import { CRATE_MASS, GOODS } from '../data/goods';
 import { PARTS } from '../data/parts';
 import { makePart } from './factory';
 import { mountedParts } from './grid';
 import { addGoods, stowPart } from './inventory';
-import { loadFactor, vehicleMass } from './mass';
+import { itemMass, loadFactor, vehicleMass } from './mass';
 import { vehicleStats } from './stats';
 import { addVehicle, emptyWorld } from './testkit';
 
@@ -25,7 +25,7 @@ describe('vehicle mass', () => {
     expect(vehicleMass(v)).toBe(CHASSIS.hauler.mass + coreMass('hauler') + PARTS.mg.mass + PARTS.stockEngine.mass);
     expect(stowPart(w, v, makePart(w, 'plates', 0))).toBe(true);
     expect(addGoods(w, v, 'scrap', 3)).toBe(3);
-    expect(vehicleMass(v)).toBe(CHASSIS.hauler.mass + coreMass('hauler') + PARTS.mg.mass + PARTS.stockEngine.mass + PARTS.plates.mass + 3 * GOODS.scrap.mass);
+    expect(vehicleMass(v)).toBe(CHASSIS.hauler.mass + coreMass('hauler') + PARTS.mg.mass + PARTS.stockEngine.mass + PARTS.plates.mass + 3 * CRATE_MASS);
   });
 
   it('load factor is sqrt(handling / mass) up to the rated mass, and falls hard over it', () => {
@@ -36,9 +36,10 @@ describe('vehicle mass', () => {
     expect(loadFactor(v)).toBeCloseTo(Math.sqrt(ch.handlingMass / vehicleMass(v)), 10);
     expect(loadFactor(v)).toBeGreaterThan(1);
     addGoods(w, v, 'scrap', 999);
-    const m = vehicleMass(v);
+    const extra = ch.ratedMass - vehicleMass(v) + 500;
+    const m = vehicleMass(v) + extra;
     expect(m).toBeGreaterThan(ch.ratedMass);
-    expect(loadFactor(v)).toBeCloseTo(Math.sqrt(ch.handlingMass / m) * (ch.ratedMass / m) ** RULES.overloadExponent, 10);
+    expect(loadFactor(v, extra)).toBeCloseTo(Math.sqrt(ch.handlingMass / m) * (ch.ratedMass / m) ** RULES.overloadExponent, 10);
   });
 
   it.each(Object.keys(CHASSIS))('a %s with armor on every armor cell and guns on half the deck is not overloaded', (id) => {
@@ -53,13 +54,22 @@ describe('vehicle mass', () => {
     expect(vehicleMass(v)).toBeLessThanOrEqual(CHASSIS[id].ratedMass);
   });
 
-  it('every chassis, part and good states a positive mass', () => {
+  it('a cell of any trade good is one crate of the same mass', () => {
+    const scrap = itemMass({ id: 'a', x: 0, y: 0, rot: 0, kind: 'good', good: 'scrap' });
+    const electronics = itemMass({ id: 'b', x: 0, y: 0, rot: 0, kind: 'good', good: 'electronics' });
+    expect(scrap).toBe(CRATE_MASS);
+    expect(electronics).toBe(CRATE_MASS);
+    expect(() => itemMass({ id: 'c', x: 0, y: 0, rot: 0, kind: 'good', good: 'unobtainium' })).toThrow('Unknown good unobtainium');
+  });
+
+  it('every chassis, part and the crate state a positive mass', () => {
     for (const c of Object.values(CHASSIS)) {
       expect(c.mass).toBeGreaterThan(0);
       expect(c.ratedMass).toBeGreaterThan(c.mass);
     }
     for (const p of Object.values(PARTS)) expect(p.mass).toBeGreaterThan(0);
-    for (const g of Object.values(GOODS)) expect(g.mass).toBeGreaterThan(0);
+    expect(CRATE_MASS).toBeGreaterThan(0);
+    for (const g of Object.values(GOODS)) expect(g).not.toHaveProperty('mass');
   });
 });
 

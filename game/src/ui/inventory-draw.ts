@@ -1,6 +1,6 @@
 // Drawing pieces of the inventory view: the grid, item boxes, labels and the items a running refit moves.
 
-import { GOODS } from "../data/goods";
+import { CRATE_MASS, GOODS } from "../data/goods";
 import { partDef, type WeaponDef } from "../data/parts";
 import { fireSpans, reachedSides, sideBlockers, SIDES, type FireSpan } from "../sim/armor";
 import { maxHp } from "../sim/wear";
@@ -151,7 +151,7 @@ export function itemName(it: GridItem): string {
 }
 
 export function itemState(it: GridItem, mounted: boolean): string {
-  if (it.kind === "good") return `Cargo, ${kg(GOODS[it.good].mass)}`;
+  if (it.kind === "good") return `Crate, ${kg(CRATE_MASS)}`;
   if (partDef(it.part.defId).kind === "core") return "Built in";
   return mounted ? "Mounted" : "Spare";
 }

@@ -236,7 +236,7 @@ function runOffers(world: World, vehicle: Vehicle, source: ShopDef, buyer: ShopD
     const buy = getTradePrice(world, vehicle, source.id, good, 'buy');
     const profit = getTradePrice(world, vehicle, buyer.id, good, 'sell') - buy;
     if (spend < buy || profit <= 0) return [];
-    const loadProfit = affordableBuyCount(world, vehicle, source.id, good, cargoRoom(vehicle, good), spend) * profit;
+    const loadProfit = affordableBuyCount(world, vehicle, source.id, good, cargoRoom(vehicle), spend) * profit;
     return loadProfit > fuel ? [{ value: { source: source.id, good, sellShop: buyer.id }, weight: (loadProfit - fuel) / trip }] : [];
   });
 }

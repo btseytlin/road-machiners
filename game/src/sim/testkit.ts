@@ -1,7 +1,11 @@
 import { START_KITS, type StartKit } from '../data/start';
 
 import { RULES } from '../data/rules';
-import { makeVehicle } from './factory';
+import { makePart, makeVehicle } from './factory';
+import { CRATE_MASS } from '../data/goods';
+import { freeCells } from './grid';
+import { stowPart } from './inventory';
+import { npcMassRoom } from './stats';
 import { nextRandom } from './rng';
 import { mountedParts } from './grid';
 import { burnFuel } from './resources';
@@ -62,6 +66,16 @@ export function addVehicle(w: World, faction: Faction, chassisId: string, parts:
   const v = makeVehicle(w, { name: chassisId, faction, chassisId, parts: parts.map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {}, pos, heading, brain: null });
   w.vehicles.push(v);
   return v;
+}
+
+export function weighDown(w: World, npc: Vehicle): void {
+  const brain = npc.brain;
+  while (Math.floor(npcMassRoom(npc) / CRATE_MASS) >= freeCells(npc)) {
+    npc.brain = null;
+    const stowed = stowPart(w, npc, makePart(w, 'ram', 0)) || stowPart(w, npc, makePart(w, 'mg', 0));
+    npc.brain = brain;
+    if (!stowed) throw new Error(`${npc.chassisId} holds no more heavy spares, and its mass room still fits every free cell`);
+  }
 }
 
 export function practiceOf(w: World, source: XpSource): Extract<GameEvent, { t: 'practice' }>[] {

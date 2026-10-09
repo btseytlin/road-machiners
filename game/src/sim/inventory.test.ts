@@ -7,9 +7,11 @@ import { makePart } from './factory';
 import { update } from './world';
 import { openSides } from './armor';
 import { freeCells, goodsCount, gridOf, isMounted, mountedItems, mountedParts } from './grid';
-import { canStowPart, dumpItem, installSpot, mountPart, moveItem, removeAllGoods, spareParts, storePart, stowPart, stowSpot, takeFromStorage } from './inventory';
+import { addGoods, canStowPart, cargoMassRoom, cargoRoom, dumpItem, hasCargoRoom, installSpot, mountPart, moveItem, removeAllGoods, spareParts, storePart, stowPart, stowSpot, takeFromStorage } from './inventory';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
-import { addVehicle, emptyWorld } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, weighDown } from './testkit';
+import { CRATE_MASS } from '../data/goods';
+import { npcMassRoom } from './stats';
 import type { GridItem, Vehicle, World } from './types';
 import { sitePads } from './sites';
 import { siteOf } from './market';
@@ -308,5 +310,32 @@ describe('garage work at every shop', () => {
     const me = w.vehicles[0];
     while (canStowPart(me, makePart(w, 'cage', 0))) expect(stowPart(w, me, makePart(w, 'cage', 0))).toBe(true);
     expect(stowPart(w, me, makePart(w, 'cage', 0))).toBe(false);
+  });
+});
+
+describe('cargo room in crates', () => {
+  it('a player fits as many crates as free cells, and none on a full grid', () => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'player', 'hauler', ['stockEngine'], { x: 40, y: 40 });
+    expect(cargoMassRoom(v)).toBe(Infinity);
+    expect(cargoRoom(v)).toBe(freeCells(v));
+    addGoods(w, v, 'tools', 1000);
+    expect(freeCells(v)).toBe(0);
+    expect(cargoRoom(v)).toBe(0);
+    expect(hasCargoRoom(v)).toBe(false);
+  });
+
+  it('an NPC fits the fewer of its free cells and the crates its mass room holds', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'scavengers', 'hauler', ['mg', 'stockEngine'], { x: 40, y: 40 });
+    npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
+    expect(cargoRoom(npc)).toBe(freeCells(npc));
+    weighDown(w, npc);
+    const crates = Math.floor(npcMassRoom(npc) / CRATE_MASS);
+    expect(crates).toBeLessThan(freeCells(npc));
+    expect(cargoRoom(npc)).toBe(crates);
+    expect(addGoods(w, npc, 'electronics', 1000)).toBe(crates);
+    expect(cargoRoom(npc)).toBe(0);
+    expect(hasCargoRoom(npc)).toBe(false);
   });
 });

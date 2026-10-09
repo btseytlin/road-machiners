@@ -1,6 +1,6 @@
 // Inventory commands. Field equipment changes use parked refit jobs.
 
-import { GOODS } from '../data/goods';
+import { CRATE_MASS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { playerVehicle } from './damage';
@@ -68,12 +68,12 @@ export function cargoMassRoom(v: Vehicle): number {
   return v.brain ? npcMassRoom(v) : Infinity;
 }
 
-export function cargoRoom(v: Vehicle, good: string): number {
-  return Math.min(freeCells(v), Math.floor(cargoMassRoom(v) / GOODS[good].mass));
+export function cargoRoom(v: Vehicle): number {
+  return Math.min(freeCells(v), Math.floor(cargoMassRoom(v) / CRATE_MASS));
 }
 
 export function hasCargoRoom(v: Vehicle): boolean {
-  return Object.keys(GOODS).some((good) => cargoRoom(v, good) > 0);
+  return cargoRoom(v) > 0;
 }
 
 function stowPlace(v: Vehicle, item: GridItem): Spot | null {
@@ -93,7 +93,7 @@ export function stowPart(world: World, v: Vehicle, part: PartInstance): boolean 
 }
 
 export function addGoods(world: World, v: Vehicle, good: string, n: number): number {
-  const count = Math.min(n, cargoRoom(v, good));
+  const count = Math.min(n, cargoRoom(v));
   for (let i = 0; i < count; i++) {
     const item: GridItem = { id: newId(world, 'i'), x: 0, y: 0, rot: 0, kind: 'good', good };
     const spot = findSpot(gridOf(v), v.items, item, null, null);

@@ -1,6 +1,6 @@
 # Items
 
-Every chassis, part and good in the game. Value is money for a pristine item. Every price derives from it, see [economy.md](economy.md). Mass is per part in kilograms, and per unit for goods. Footprints are in grid cells. One cell is `RULES.cellMeters` meters wide.
+Every chassis, part and good in the game. Value is money for a pristine item. Every price derives from it, see [economy.md](economy.md). Mass is per part in kilograms. Goods come in crates, one per cargo cell, and every crate weighs `CRATE_MASS`, 50 kg, whatever the good. A good's value is per crate. Footprints are in grid cells. One cell is `RULES.cellMeters` meters wide.
 
 Parts are defined in `src/data/parts.ts`, chassis in `src/data/chassis.ts` and goods in `src/data/goods.ts`. A value is a hand-set base plus a modifier from the stats the kind is bought for. The modifier numbers are `PART_PRICE_MODIFIERS` for parts and `CHASSIS_PRICE_MODIFIERS` for chassis. Core parts come built into a chassis at fixed cells and are never sold.
 
@@ -187,19 +187,19 @@ Yellow deck parts with one job each. An active utility acts once on an order and
 ## Goods
 
 <!-- wiki:goods -->
-| id | name | tier | value (M) | mass per unit (kg) |
-| --- | --- | --- | --- | --- |
-| scrap | Scrap metal | 1 | 7 | 100 |
-| salt | Salt | 1 | 9 | 75 |
-| meds | Meds | 2 | 24 | 50 |
-| grain | Grain | 1 | 7 | 90 |
-| textiles | Textiles | 1 | 12 | 25 |
-| tools | Machine tools | 3 | 37 | 160 |
-| batteries | Batteries | 2 | 26 | 120 |
-| electronics | Electronics | 3 | 52 | 15 |
-| parts | Parts | 1 | 7 | 20 |
-| fuelDrums | Fuel drums | 1 | 10 | 140 |
-| water | Water | 1 | 6 | 110 |
+| id | name | tier | value per crate (M) |
+| --- | --- | --- | --- |
+| scrap | Scrap metal | 1 | 7 |
+| salt | Salt | 1 | 9 |
+| meds | Meds | 2 | 24 |
+| grain | Grain | 1 | 7 |
+| textiles | Textiles | 1 | 12 |
+| tools | Machine tools | 3 | 37 |
+| batteries | Batteries | 2 | 26 |
+| electronics | Electronics | 3 | 52 |
+| parts | Parts | 1 | 7 |
+| fuelDrums | Fuel drums | 1 | 10 |
+| water | Water | 1 | 6 |
 <!-- /wiki:goods -->
 
 ## Numbers

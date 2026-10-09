@@ -10,7 +10,7 @@ import { CONDITION } from '../data/wear';
 import { everyGunFires } from './armor';
 import { makeVehicle } from './factory';
 import { coreParts, freeCells, goodsCount, gridOf, isMounted, mountedParts, placementError } from './grid';
-import { loadFactor, vehicleMass } from './mass';
+import { itemMass, loadFactor, vehicleMass } from './mass';
 import { generateNpcLoadout, sampleWeighted } from './npc-loadout';
 import { spawnAt, spawnInitial, spawnNpcs } from './spawn';
 import { openSides, reachedSides } from './armor';
@@ -19,7 +19,7 @@ import type { EngineDef, WeaponDef } from '../data/parts';
 import { gunDrag, isStranded, npcMassRoom, speedShare } from './stats';
 import { wornDef } from './wear';
 import { addGoods } from './inventory';
-import { GOODS } from '../data/goods';
+import { CRATE_MASS } from '../data/goods';
 import { emptyWorld } from './testkit';
 import type { Vehicle, World } from './types';
 import { TEST_MAP } from '../test/map';
@@ -77,6 +77,19 @@ describe('NPC equipment generation', () => {
       const cost = CHASSIS[v.chassisId].value + loadout.parts.reduce((sum, p) => sum + PARTS[p.defId].value, 0);
       expect(cost).toBeLessThanOrEqual(template.loadout.budget * Math.max(1, GEAR_LEVELS[loadout.level].budget));
       expect(v.resources?.money).toBe(fixture.player.money);
+    }
+  });
+
+  it('loads a trader with crates of one mass, within its rated mass', () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const world = { ...fixture, rngState: seed };
+      const loadout = generateNpcLoadout(world, NPCS.trader);
+      const v = makeVehicle(world, { ...loadout, name: 'trader', faction: NPCS.trader.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+      const crates = Object.values(loadout.cargo).reduce((sum, n) => sum + n, 0);
+      expect(crates).toBeGreaterThan(0);
+      const goodsMass = v.items.filter((it) => it.kind === 'good').reduce((sum, it) => sum + itemMass(it), 0);
+      expect(goodsMass).toBe(crates * CRATE_MASS);
+      expect(vehicleMass(v)).toBeLessThanOrEqual(CHASSIS[v.chassisId].ratedMass);
     }
   });
 
@@ -161,10 +174,10 @@ describe('NPC equipment generation', () => {
       const npc = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 50, y: 50 });
       return { world, npc };
     });
-    const { world, npc } = rolls.find(({ npc }) => Math.floor(npcMassRoom(npc) / GOODS.tools.mass) < freeCells(npc))!;
+    const { world, npc } = rolls.find(({ npc }) => Math.floor(npcMassRoom(npc) / CRATE_MASS) < freeCells(npc))!;
     const room = npcMassRoom(npc);
     const added = addGoods(world, npc, 'tools', 1000);
-    expect(added).toBe(Math.floor(room / GOODS.tools.mass));
+    expect(added).toBe(Math.floor(room / CRATE_MASS));
     const player = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 60, y: 50 });
     player.brain = null;
     const playerFree = freeCells(player);
@@ -623,11 +636,11 @@ describe('loadout fingerprint', () => {
   it('rolls the same loadouts and RNG streams for every template', () => {
     const w = emptyWorld();
     const loadouts = Object.values(NPCS).flatMap((template) => Array.from({ length: 5 }, () => generateNpcLoadout(w, template)));
-    expect(sha({ loadouts, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('5567917b7ce31784');
+    expect(sha({ loadouts, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('b8ab1d2bc29a67aa');
   }, budget(180_000));
 
   it('populates a new world the same way', () => {
     const w = newWorld(7, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
-    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('fd7d53679332c8ea');
+    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('1dddd4986b269ea6');
   }, budget(60_000));
 });

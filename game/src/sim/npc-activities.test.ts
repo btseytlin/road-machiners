@@ -1,7 +1,7 @@
 import { TERRAIN } from '../data/terrain';
 import { describe, expect, it } from 'vitest';
 import { contactsOf } from './detect';
-import { emptyWorld, addVehicle, editableTerrain, forceOption, npcBrain, testDrive , startCombat } from './testkit';
+import { emptyWorld, addVehicle, editableTerrain, forceOption, npcBrain, testDrive , startCombat, weighDown } from './testkit';
 import { planNpcOrders, turnCornered } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
@@ -397,7 +397,7 @@ describe('NPC activities', () => {
           if (spend < buy || profit <= 0) return [];
           const sourcePos = getKnownSite(source.id).pos;
           const trip = dist(npc.pos, sourcePos) + dist(sourcePos, getKnownSite(buyer.id).pos);
-          const loadProfit = affordableBuyCount(w, npc, source.id, good, cargoRoom(npc, good), spend) * profit;
+          const loadProfit = affordableBuyCount(w, npc, source.id, good, cargoRoom(npc), spend) * profit;
           return [{ source: source.id, good, sellShop: buyer.id, trip, loadProfit, fuel: tripFuelCost(w, npc, trip) }];
         })));
     }
@@ -1779,7 +1779,8 @@ describe('a full hold', () => {
     const w = emptyWorld({ x: 50, y: 50 });
     const npc = addVehicle(w, 'scavengers', 'hauler', ['mg', 'stockEngine'], { x: 10, y: 10 });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
-    for (const good of Object.keys(GOODS).sort((a, b) => GOODS[b].mass - GOODS[a].mass)) addGoods(w, npc, good, 1000);
+    weighDown(w, npc);
+    for (const good of Object.keys(GOODS)) addGoods(w, npc, good, 1000);
     expect(freeCells(npc)).toBeGreaterThan(0);
     expect(hasCargoRoom(npc)).toBe(false);
     return { w, npc };

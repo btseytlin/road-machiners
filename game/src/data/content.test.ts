@@ -193,7 +193,7 @@ describe("equipment variety", () => {
     expect(Object.keys(GOODS)).toHaveLength(11);
     expect(GOOD_IDS).toEqual(Object.keys(GOODS));
     for (const id of addedGoods) {
-      expect(GOODS[id].mass).toBeGreaterThan(0);
+      expect(GOODS[id]).not.toHaveProperty('mass');
       const [cheap, dear] = [...REGION.towns].sort(
         (a, b) => goodBasePrice(a.id, id) - goodBasePrice(b.id, id),
       );

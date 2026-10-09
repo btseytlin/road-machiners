@@ -1,5 +1,5 @@
 import { chassisDef } from '../data/chassis';
-import { GOODS } from '../data/goods';
+import { CRATE_MASS, GOODS } from '../data/goods';
 import { GEAR_DRAWS, GEAR_LEVELS, GEAR_LEVEL_IDS, GEAR_WHIM, MAX_GUN_SLOWDOWN, NPC_UPKEEP, NPC_WEAR, PRIORITY_TOP, SCRAP_ARMOR, type CargoRoll, type GearLevel, type LoadoutPriorities, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
 import { NPC_UTILITY_PARTS, type UtilityRoll } from '../data/npc-utilities';
 import { partDef, type EngineDef, type PartKind } from '../data/parts';
@@ -232,22 +232,22 @@ function mountedNonCore(v: Vehicle): PartSpec[] {
 type Room = { cells: number; mass: number };
 
 function biggestLoad(table: NpcLoadoutTable, level: Level): Load {
-  const counts = table.goods.map(({ value }) => (value ? { n: Math.max(1, Math.round(value.count * level.cargo)), kg: GOODS[value.good].mass } : { n: 0, kg: 0 }));
+  const counts = table.goods.map(({ value }) => (value ? { n: Math.max(1, Math.round(value.count * level.cargo)), kg: CRATE_MASS } : { n: 0, kg: 0 }));
   const repair = NPC_UPKEEP.repairParts;
   const goods = { kg: Math.max(0, ...counts.map((c) => c.n * c.kg)), cells: Math.max(0, ...counts.map((c) => c.n)) };
   const spares = table.spares ? Math.round(Math.max(...table.spares.count.map((c) => c.value)) * level.cargo) : 0;
   const pool = table.spares ? table.spares.pool.flatMap((p) => (p.value ? [partDef(p.value)] : [])) : [];
   const spareKg = spares * Math.max(0, ...pool.map((def) => def.mass));
   const spareCells = spares * Math.max(0, ...pool.map((def) => def.w * def.h));
-  return { kg: repair * GOODS.parts.mass + goods.kg + spareKg, cells: repair + goods.cells + spareCells };
+  return { kg: repair * CRATE_MASS + goods.kg + spareKg, cells: repair + goods.cells + spareCells };
 }
 
 function chooseGoods(rng: Rng, table: NpcLoadoutTable, level: Level, room: Room): CargoRoll | null {
-  const goods = table.goods.filter(({ value }) => value === null || (value.count <= room.cells && GOODS[value.good].mass * value.count <= room.mass));
+  const goods = table.goods.filter(({ value }) => value === null || (value.count <= room.cells && CRATE_MASS * value.count <= room.mass));
   if (!goods.length) throw new Error('No fitting cargo outcome for this NPC template');
   const roll = sampleWeighted(rng, goods);
   if (!roll) return null;
-  const count = Math.min(Math.max(1, Math.round(roll.count * level.cargo)), room.cells, Math.floor(room.mass / GOODS[roll.good].mass));
+  const count = Math.min(Math.max(1, Math.round(roll.count * level.cargo)), room.cells, Math.floor(room.mass / CRATE_MASS));
   return { good: roll.good, count };
 }
 
@@ -260,7 +260,7 @@ function chooseCargo(world: World, rng: Rng, wearRng: Rng, table: NpcLoadoutTabl
     const added = addGoods(world, load, good, n);
     if (added > 0) carried[good] = (carried[good] ?? 0) + added;
   };
-  addGood('parts', Math.min(NPC_UPKEEP.repairParts, Math.floor(massLeft() / GOODS.parts.mass)));
+  addGood('parts', Math.min(NPC_UPKEEP.repairParts, Math.floor(massLeft() / CRATE_MASS)));
   const cargo = chooseGoods(rng, table, level, { cells: freeCells(load), mass: massLeft() });
   if (cargo) addGood(cargo.good, cargo.count);
   return { spares: addSpareParts(world, wearRng, table, level, load, massLeft), carried };

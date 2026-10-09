@@ -435,7 +435,7 @@ function serviceHere(o: Orders): void {
 
 function stockRepairParts(o: Orders, shop: string): void {
   if (!shopDef(shop).goods.includes('parts')) return;
-  const want = Math.min(REPAIR_PARTS - (goodsCount(o.me).parts ?? 0), cargoRoom(o.me, 'parts'));
+  const want = Math.min(REPAIR_PARTS - (goodsCount(o.me).parts ?? 0), cargoRoom(o.me));
   if (want <= 0) return;
   const n = affordableBuyCount(o.world, o.me, shop, 'parts', want, o.world.player.money);
   if (n > 0) o.run((w) => buyGood(w, 'parts', n), 'repairs');

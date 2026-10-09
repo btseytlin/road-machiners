@@ -168,8 +168,8 @@ const TABLES: WikiTable[] = [
   partTable('core', 'core', ['role'], (p) => [p.role]),
   {
     id: 'goods',
-    headers: ['id', 'name', 'tier', 'value (M)', 'mass per unit (kg)'],
-    rows: () => Object.values(GOODS).map((g) => [g.id, g.name, g.tier, moneyAmount(g.value), g.mass]),
+    headers: ['id', 'name', 'tier', 'value per crate (M)'],
+    rows: () => Object.values(GOODS).map((g) => [g.id, g.name, g.tier, moneyAmount(g.value)]),
   },
   {
     id: 'shops',

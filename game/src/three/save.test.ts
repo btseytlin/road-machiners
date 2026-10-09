@@ -12,6 +12,10 @@ import type { GridItem } from '../sim/types';
 import { advanceContracts, siteOf, type Contract } from '../sim/market';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
+import { CRATE_MASS } from '../data/goods';
+import { addGoods } from '../sim/inventory';
+import { goodsCount } from '../sim/grid';
+import { itemMass, vehicleMass } from '../sim/mass';
 import { clearGame, clearSlot, hasSave, loadWorld, packExplored, SaveError, unpackExplored, saveKey, saveInTown, isDayStart, saveOf, savedRunId, saveWorld, SaveHold, writeSave } from './save';
 import { memoryBackend, SaveSlots } from './save-db';
 import { REGION } from '../data/region';
@@ -125,6 +129,34 @@ describe('game save', () => {
     expect(after.player.money).toBe(loaded.player.money);
     writeSave(slots, 'auto', after, RUN, 1000);
     expect(loadWorld(slots, 'auto', TEST_MAP)?.player.contracts).toEqual([{ ...bounty, fulfilled: true }]);
+  });
+
+  it('loads light and heavy crates, a haul, a cost basis and hidden goods as they were saved', () => {
+    const slots = makeSlots();
+    const world = emptyWorld();
+    const truck = world.vehicles[0];
+    const held = goodsCount(truck);
+    expect(addGoods(world, truck, 'electronics', 3)).toBe(3);
+    expect(addGoods(world, truck, 'tools', 2)).toBe(2);
+    const haul: Contract = { id: 'ct-h', shop: 'bowl', kind: 'haul', good: 'salt', units: 4, to: 'nose', reward: 900, deadline: 900, window: 900, rush: false, tier: 1 };
+    expect(addGoods(world, truck, 'salt', 4)).toBe(4);
+    world.player.contracts = [haul];
+    world.player.costBasis = { electronics: 5000, tools: 3500, salt: 867 };
+    world.salvage.push({ id: 'sv-x', pos: { x: 34, y: 30 }, radius: 1, goods: { scrap: 2 }, parts: [], hidden: { goods: { batteries: 3 }, parts: [], fuel: 0, supplies: 0 } });
+    writeSave(slots, 'auto', world, RUN, 1000);
+    const loaded = loadWorld(slots, 'auto', TEST_MAP)!;
+    const loadedTruck = loaded.vehicles[0];
+    expect(loadedTruck.items).toEqual(truck.items);
+    expect(goodsCount(loadedTruck)).toEqual({ ...held, electronics: 3, tools: 2, salt: 4 });
+    expect(loaded.player.contracts).toEqual([haul]);
+    expect(loaded.player.money).toBe(world.player.money);
+    expect(loaded.player.xp).toBe(world.player.xp);
+    expect(loaded.player.costBasis).toEqual(world.player.costBasis);
+    expect(loaded.salvage.find((s) => s.id === 'sv-x')?.hidden.goods).toEqual({ batteries: 3 });
+    expect(loaded.events).toEqual(world.events);
+    const crates = Object.values(held).reduce((sum, n) => sum + n, 0) + 9;
+    const partsMass = loadedTruck.items.filter((it) => it.kind === 'part').reduce((sum, it) => sum + itemMass(it), 0);
+    expect(vehicleMass(loadedTruck)).toBe(CHASSIS[loadedTruck.chassisId].mass + partsMass + crates * CRATE_MASS);
   });
 
   it('resumes a pending refit after loading without losing progress', () => {
