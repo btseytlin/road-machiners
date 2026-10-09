@@ -121,6 +121,14 @@ export function playCookOff(host: CombatHost, brk: PartBreak): void {
   host.sound.at("explosion", p, 0);
 }
 
+export function gunfireSeen(events: readonly GameEvent[], seen: (vehicleId: string) => boolean): boolean {
+  return events.some((e) => e.t === "shot" && seen(e.shooter) && seen(e.target));
+}
+
+export function volleySeen(events: readonly GameEvent[], seen: (vehicleId: string) => boolean): boolean {
+  return gunfireSeen(events, seen) || events.some((e) => (e.t === "utility" || e.t === "partDisabled") && seen(e.vehicle));
+}
+
 export function playDryGuns(host: CombatHost, played: Set<string>): void {
   for (const e of host.world.events) {
     const p = e.t === "empty" && !played.has(gunKey(e.vehicle, e.weapon)) ? host.eventPoint(e.vehicle) : null;

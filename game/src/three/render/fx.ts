@@ -463,8 +463,8 @@ export class Fx3D {
     slot.el.style.opacity = '1';
   }
 
-  tick(dtMs: number, world: World): void {
-    const dt = dtMs / 1000;
+  tick(playMs: number, realMs: number, world: World): void {
+    const dt = playMs / 1000;
     this.puffs.tick(dt);
     this.glows.tick(dt);
     this.particles.tick(dt);
@@ -483,6 +483,10 @@ export class Fx3D {
       job.run();
     }
     this.projectiles.tick(dt);
+    this.floatTexts(realMs / 1000);
+  }
+
+  private floatTexts(dt: number): void {
     for (const slot of this.texts) {
       if (!slot.used) continue;
       slot.age += dt;
