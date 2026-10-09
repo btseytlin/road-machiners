@@ -180,7 +180,7 @@ export class TownScreen {
   }
 
   private button(label: string, cmd: (w: World) => World, disabled = false, title = "", key = ""): HTMLElement {
-    return el("button", { disabled, title, "data-key": key || undefined, onclick: () => this.run(cmd) }, label);
+    return el("button", { class: "btn-s", disabled, title, "data-key": key || undefined, onclick: () => this.run(cmd) }, label);
   }
 
   private hintMounts(kind: PartKind): (on: boolean) => void {
@@ -647,7 +647,7 @@ export class TruckTradeScreen {
   }
 
   private button(label: string, cmd: (w: World) => World, disabled = false, key = ""): HTMLElement {
-    return el("button", { disabled, "data-key": key || undefined, onclick: () => this.run(cmd) }, label);
+    return el("button", { class: "btn-s", disabled, "data-key": key || undefined, onclick: () => this.run(cmd) }, label);
   }
 
   private hintMounts(kind: PartKind): (on: boolean) => void {

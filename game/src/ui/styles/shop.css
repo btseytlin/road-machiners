@@ -23,16 +23,6 @@
   text-align: left;
 }
 
-/* Small buttons inside cards, rows and tables take the .btn-s size. */
-#ui .card-foot button,
-#ui .town-repair button,
-#ui .service button,
-#ui .job button,
-#ui .trade button,
-#ui button.buy-rank {
-  padding: var(--space-1) var(--space-4);
-  font-size: var(--text-dense);
-}
 #ui .trade button,
 #ui button.buy-rank {
   font-family: var(--font-mono);

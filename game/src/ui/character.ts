@@ -70,7 +70,7 @@ export class CharacterScreen {
     if (rank >= MAX_RANK) return el('span', {}, 'max');
     const blocked = canBuyRank(world, skill);
     return el('button', {
-      class: 'buy-rank',
+      class: 'btn-s buy-rank',
       disabled: blocked !== null,
       title: blocked ?? `Spend ${rankCost(rank + 1)} XP on ${SKILL_INFO[skill].name} rank ${rank + 1}`,
       onclick: () => this.host.announce(buyRank(this.host.world(), skill)),

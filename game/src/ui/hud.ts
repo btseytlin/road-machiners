@@ -261,7 +261,7 @@ export class Hud {
       {
         onclick: onUse,
         disabled: !action.ready,
-        class: action.combat !== undefined ? "combat" : "",
+        class: action.combat !== undefined ? "btn-danger" : "",
         title: actionTitle(action),
       },
       action.hint ? action.label : `[E] ${action.label}`,
@@ -326,7 +326,7 @@ export class Hud {
     }
     this.contracts.style.display = "";
     this.contracts.replaceChildren(
-      el("h3", {}, "Contracts"),
+      el("h3", { class: "panel-title" }, "Contracts"),
       ...w.player.contracts.map((c) =>
         el(
           "div",

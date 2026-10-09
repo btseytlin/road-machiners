@@ -65,17 +65,12 @@
   display: flex;
   justify-content: flex-end;
 }
-.contracts h3 {
-  font-size: var(--text-dense) !important;
-  margin-bottom: var(--space-2) !important;
-}
 .contract-line {
   padding: var(--space-1) 0;
   color: var(--ink-muted);
 }
-.log h3 {
-  font-size: var(--text-dense) !important;
-  margin: 0 !important;
+#ui .log .panel-title {
+  margin: 0;
 }
 .log-head {
   flex: none;

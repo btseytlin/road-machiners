@@ -211,10 +211,6 @@
   font-size: var(--text-dense);
   white-space: nowrap;
 }
-#ui .action button.combat {
-  color: var(--danger-bright);
-  border-color: var(--danger-bright);
-}
 #ui .action:has(.job-bar) {
   padding: var(--space-4) var(--space-6);
   text-align: center;
