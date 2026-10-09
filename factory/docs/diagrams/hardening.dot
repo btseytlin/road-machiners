@@ -32,7 +32,7 @@ digraph hardening {
   XA -> HM;
   HM -> MM [label="docs only:\nno session"];
   XO -> MM;
-  MC -> XS [label="budget spent, timeout\nor job death"];
+  MC -> XS [label="fix budget spent, timeout\nor job death"];
   MP -> XN;
   HH -> CU [label="waits while\na merge job runs"];
   CU -> MM [label="its batch meets only\nwhat the base gained since"];

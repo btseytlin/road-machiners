@@ -49,8 +49,8 @@ async function mergeRelease(ctx: Ctx, release: ReleaseState): Promise<void> {
   await ctx.repo.prepareWorkClone('main', 'main', dir);
   resetOutputs(join(dir, GAME_DIR));
   const land: Landing = { stage: 'ship', dir, into: 'main', guardAgainst: ['main', release.branch], agent: landingAgent(ctx, 'ship', dir, 'main') };
-  const spent = await mergeIn(ctx, land, { branch: release.branch, message: `Release ${release.day}`, reason: `release ${release.day} ships` });
-  await checkAndPush(ctx, land, spent, (failure) => fillPrompt('ship-fix', { release: release.branch, failure }));
+  const conflicts = await mergeIn(ctx, land, { branch: release.branch, message: `Release ${release.day}`, reason: `release ${release.day} ships` });
+  await checkAndPush(ctx, land, conflicts, (failure) => fillPrompt('ship-fix', { release: release.branch, failure }));
 }
 
 export function publish(ctx: Ctx, keys: ItchKeys, logName: string): Promise<void> {

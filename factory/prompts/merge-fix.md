@@ -14,7 +14,7 @@ Run `npm ci` before anything else. The commit hook needs it.
 
 Fix the cause, so the merged result passes. The failure may come from two cards that pass alone and break together, or from something already broken on {{into}}.
 The committee approved each card by playing it. Keep the behavior each card was approved with. Change only what the fix needs.
-Run the failing tests and the typecheck to confirm the fix. Do not run the full suite or the playtest, since the factory runs them again after you.
+Run the exact failing test first, to see the failure yourself. Then run it again with the typecheck to confirm the fix. A test run that hangs or times out has not passed, so find out why. Do not run the full suite or the playtest, since the factory runs them again after you.
 Commit the fix with a message that names the cards it touches.
 Never add `.github/` files, and never bump SAVE_MAJOR.
 Never push.

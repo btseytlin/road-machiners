@@ -165,6 +165,26 @@ describe('ship', () => {
     expect(readState(f.ctx.statePath).releasePost).not.toBeNull();
   });
 
+  it('still gives failed checks to the ship agent when resolving the release conflict cost the whole budget', async () => {
+    const f = shippable();
+    f.ctx.cfg.mergingBudgetUsd = 1;
+    let open = true;
+    f.ctx.repo.mergeBranchIntoWork = async (_dir, branch) => {
+      f.calls.push(`mergeWork ${branch}`);
+      const result = open ? { commit: 'c0ffee1', conflicts: ['game/src/sim/sun.ts'] } : { commit: null, conflicts: [] };
+      open = false;
+      return result;
+    };
+    let fails = 1;
+    f.ctx.container.shell = async (clone) => {
+      f.calls.push(`shell ${clone}`);
+      if (clone.endsWith('ship-main') && fails-- > 0) throw new Error('tests failed');
+    };
+    await ship(f.ctx, 11, 'Ann');
+    expect(f.calls.filter((call) => /^(agent|shell .*ship-main|push)/.test(call)).map((call) => call.split(' ')[0])).toEqual(['agent', 'shell', 'agent', 'shell', 'push', 'push']);
+    expect(f.agentRuns[1]!.prompt).toContain('tests failed');
+  });
+
   it('fails and ships nothing when the ship agent spent its budget and the checks still fail', async () => {
     const f = shippable();
     f.ctx.cfg.mergingBudgetUsd = 1;

@@ -20,10 +20,12 @@ let diff = '';
 let messages: string[] = [];
 let limits: (number | undefined)[] = [];
 let logs: string[] = [];
+let costs: number[] = [];
+const PASS = 'pass';
 const HUNG = 'CheckTimeoutError: the checks ran past their 45 minute limit, and the factory removed their container.';
 
 const card = (issue: number, labels: string[] = []): Card => ({ itemId: `i${issue}`, issue, column: 'Merging', labels });
-const result = `${JSON.stringify({ type: 'result', total_cost_usd: 1, duration_ms: 1000 })}\n`;
+const result = (cost = 1) => `${JSON.stringify({ type: 'result', total_cost_usd: cost, duration_ms: 1000 })}\n`;
 
 beforeEach(() => {
   mkdirSync('tmp', { recursive: true });
@@ -39,6 +41,7 @@ beforeEach(() => {
   messages = [];
   limits = [];
   logs = [];
+  costs = [];
   deployed.length = 0;
   writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), approvedResolving: { 5: 'Ann', 6: 'Bob' }, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [9], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } }, pendingShip: 'ann' });
 });
@@ -59,12 +62,12 @@ function fakeCtx(budget = 5): Ctx {
     },
     telegram: { sendMessage: async (_chat: string, text: string) => { calls.push(`message ${text}`); return 1; } },
     container: {
-      agent: async (run: AgentRun) => { runs.push(run); calls.push('agent'); return result; },
+      agent: async (run: AgentRun) => { runs.push(run); calls.push('agent'); return result(costs.shift()); },
       shell: async (_dir: string, _script: string, _log: string, _env?: Record<string, string>, _mounts?: Record<string, string>, limit?: number) => {
         calls.push('checks');
         limits.push(limit);
         const failure = shellFailures.shift();
-        if (failure !== undefined) throw new Error(failure);
+        if (failure !== undefined && failure !== PASS) throw new Error(failure);
       },
     },
     repo: {
@@ -172,6 +175,53 @@ describe('merge queue', () => {
     expect(calls).toContain('label 5 factory-stuck');
     expect(calls).toContain('label 6 factory-stuck');
     expect(calls.some((call) => call.startsWith('push'))).toBe(false);
+  });
+
+  it('gives a failing checkpoint to the merge session even when its conflicts cost more than the budget, and pushes only after checks pass', async () => {
+    merges = { 'factory/issue-5': [{ commit: 'c5', conflicts: ['game/src/a.ts'] }], 'factory/issue-6': [{ commit: 'c6', conflicts: ['game/src/b.ts'] }] };
+    costs = [15, 15, 2];
+    shellFailures = ['FAIL combat-harness.test.ts\nAssertionError: expected 3 to be 4'];
+    await merge(fakeCtx(5));
+    expect(runs).toHaveLength(3);
+    expect(runs[2]!.prompt).toContain('expected 3 to be 4');
+    expect(runs[2]!.session).toEqual({ ...runs[0]!.session, resume: true });
+    expect(calls.filter((call) => /^(agent|checks|push)/.test(call))).toEqual(['agent', 'agent', 'checks', 'agent', 'checks', 'push head1 dev']);
+    expect(calls).not.toContain('label 5 factory-stuck');
+  });
+
+  it('fails with nothing pushed once the fixes alone spent the budget, and names the conflict spend apart', async () => {
+    merges = { 'factory/issue-5': [{ commit: 'c5', conflicts: ['game/src/a.ts'] }] };
+    costs = [30, 2, 2, 2];
+    shellFailures = Array(9).fill('FAIL contracts.test.ts');
+    await expect(merge(fakeCtx(5))).rejects.toThrow(/\$6\.00 of its \$5 budget[\s\S]*\$30\.00 on conflicts/);
+    expect(calls.filter((call) => call === 'agent')).toHaveLength(4);
+    expect(calls.some((call) => call.startsWith('push'))).toBe(false);
+    expect(calls).toContain('label 5 factory-stuck');
+  });
+
+  it('stops a repeated failure after the fix budget, with a full checkpoint after every fix', async () => {
+    costs = [2, 2, 2, 2];
+    shellFailures = Array(9).fill('FAIL a.test.ts');
+    await expect(merge(fakeCtx(5))).rejects.toThrow(BudgetError);
+    expect(calls.filter((call) => /^(agent|checks)/.test(call))).toEqual(['checks', 'agent', 'checks', 'agent', 'checks', 'agent', 'checks']);
+  });
+
+  it('never takes a timeout after expensive conflicts as a pass, and runs the checks again with no agent round', async () => {
+    merges = { 'factory/issue-5': [{ commit: 'c5', conflicts: ['game/src/a.ts'] }] };
+    costs = [30];
+    shellFailures = [HUNG, HUNG, HUNG];
+    await expect(merge(fakeCtx(5))).rejects.toThrow('timed out 3 times');
+    expect(runs).toHaveLength(1);
+    expect(calls.some((call) => call.startsWith('push'))).toBe(false);
+  });
+
+  it('keeps the conflicts of a moved base out of the fix budget, and keeps counting fixes across the recheck', async () => {
+    pushFailures = 1;
+    merges = { dev: [{ commit: 'd1', conflicts: ['game/src/a.ts'] }] };
+    costs = [3, 30, 3, 3];
+    shellFailures = ['FAIL a.test.ts', PASS, 'FAIL b.test.ts', 'FAIL c.test.ts'];
+    await expect(merge(fakeCtx(5))).rejects.toThrow(/\$6\.00 of its \$5 budget[\s\S]*\$30\.00 on conflicts/);
+    expect(calls.filter((call) => /^(agent|checks|push|merge dev)/.test(call))).toEqual(['checks', 'agent', 'checks', 'push head1 dev', 'merge dev', 'agent', 'merge dev', 'checks', 'agent', 'checks']);
   });
 
   it('runs each checks run with the time limit, and runs a timed-out run again before it pushes', async () => {
