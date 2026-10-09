@@ -59,6 +59,7 @@ export const PAL = {
   flash: 0xfff0a0,
   brass: 0xc8a048,
   lamp: { on: 0xfff2c8, off: 0x8a8470 },
+  siteLight: { sodium: 0xffb060, warm: 0xffd8a0, cold: 0xcfe0ff, fire: 0xff7a30 },
   radioLight: { on: 0xff3020, off: 0x4a1a14 },
   truckGlow: 0xffffff,
   reactorLight: 0x38d6e8,
