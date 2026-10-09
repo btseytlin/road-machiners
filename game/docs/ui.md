@@ -52,6 +52,8 @@ P17. Never narrate the screen. Text is allowed only when it adds a fact the scre
 
 P18. The world is the most precious space. Every pixel a panel covers hides the desert, the trucks and the road. A panel takes the smallest area its content needs. It sits at the screen edge, never in the middle of play, and it opens only while it is needed. Transient overlays such as tooltips fit their content and never cover a value the player is comparing. A wider or taller panel needs a reason in the decision it serves. Test: in a field screenshot with every always-on panel shown, the center of the screen is clear, and no panel has an empty block wider than its content column.
 
+P19. Controls are physical things. The truck's own controls look like hardware in a cab: toggle switches, knobs, keys and LCD displays like an old Casio. A setting that stays on is a switch, a level is a knob, and a readout of the truck is a display. A flat button is for a one-time action, like Buy or End turn, and for screens that are not part of the truck, like the menu. A new truck control picks the nearest existing piece in `drawings.css` before it gets a new look. Test: every control on the truck's HUD looks like something you could touch in a cab.
+
 ## 3. Information tiers
 
 Every fact on a screen belongs to one tier for the decision that screen serves. The tier decides where the fact goes, how big it is and when it shows. The same fact can be key on one screen and supporting on another. Price is key in the shop and absent on the map.
