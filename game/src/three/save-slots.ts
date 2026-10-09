@@ -1,5 +1,3 @@
-// The save slots and the request that tells boot which one to load. A slot holds one save envelope. In local
-// storage, where older builds kept saves, the Autosave had the key a single save had before slots.
 
 import type { SaveSlots } from './save-db';
 
@@ -46,14 +44,14 @@ export function newestSlot(slots: SaveSlots, count: number): SlotId | null {
   return listSaves(slots, count)[0]?.slot ?? null;
 }
 
-export type BootRequest = SlotId | { new: WorldSetup };
+export type BootRequest = SlotId | { new: WorldSetup } | { slot: SlotId; reason: 'road' };
 
 function requestKey(base: string): string {
   return `${base}.boot`;
 }
 
 export function requestBoot(session: Storage, base: string, request: BootRequest): void {
-  session.setItem(requestKey(base), typeof request === 'string' ? request : JSON.stringify({ new: request.new }));
+  session.setItem(requestKey(base), typeof request === 'string' ? request : JSON.stringify(request));
 }
 
 function isSlotId(value: string): value is SlotId {
@@ -65,16 +63,23 @@ export function takeBootRequest(session: Storage, base: string): BootRequest | n
   if (value === null) return null;
   session.removeItem(requestKey(base));
   if (isSlotId(value)) return value;
-  return { new: parseSetup(newGameSetup(value)) };
+  const request = parsedRequest(value);
+  if ('new' in request) return { new: parseSetup(request.new) };
+  if (isRoadBoot(request)) return { slot: request.slot, reason: 'road' };
+  throw new Error(`Unknown boot request ${value}`);
 }
 
-function newGameSetup(value: string): unknown {
+function isRoadBoot(request: { slot?: unknown; reason?: unknown }): request is { slot: SlotId; reason: 'road' } {
+  return request.reason === 'road' && typeof request.slot === 'string' && isSlotId(request.slot);
+}
+
+function parsedRequest(value: string): { new?: unknown; slot?: unknown; reason?: unknown } {
   let request: unknown;
   try {
     request = JSON.parse(value);
   } catch {
     throw new Error(`Unknown boot request ${value}`);
   }
-  if (typeof request !== 'object' || request === null || !('new' in request)) throw new Error(`Unknown boot request ${value}`);
-  return request.new;
+  if (typeof request !== 'object' || request === null) throw new Error(`Unknown boot request ${value}`);
+  return request;
 }

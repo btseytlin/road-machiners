@@ -301,7 +301,17 @@ export function turnFailedNote(err: unknown): string {
   return `The turn failed and did not play: ${err instanceof Error ? err.message : String(err)}. The game was not saved.`;
 }
 
-export type Run = { slots: SaveSlots; runId: string; log: RunLog };
+export type Run = { slots: SaveSlots; runId: string; log: RunLog; mapHash: string };
+
+export function changeMapIfMoved(run: Run, world: World, hold: SaveHold, session: Storage, reload: () => void): boolean {
+  if (world.mapHash === run.mapHash) return false;
+  if (hold.held) throw new Error(`The map moved to ${world.mapHash} while saves are held, so a reboot would lose the turn`);
+  writeSave(run.slots, 'auto', world, run.runId, Date.now());
+  run.mapHash = world.mapHash;
+  requestBoot(session, SAVE_KEY, { slot: 'auto', reason: 'road' });
+  Promise.all([run.slots.flush(), run.log.flush()]).then(reload, reportError);
+  return true;
+}
 
 export class GameSaves {
   private readonly hold = new SaveHold();
@@ -350,9 +360,11 @@ export class GameSaves {
 
   afterTurn(world: World): void {
     this.hold.finishTurn();
-    if (this.hold.held) return;
-    saveWorld(this.run.slots, world, this.run.runId, CONFIG.saveTurns, Date.now());
-    saveOnArrival(this.run.slots, world, this.run.runId, Date.now());
+    if (!this.hold.held) {
+      saveWorld(this.run.slots, world, this.run.runId, CONFIG.saveTurns, Date.now());
+      saveOnArrival(this.run.slots, world, this.run.runId, Date.now());
+    }
+    changeMapIfMoved(this.run, world, this.hold, window.sessionStorage, () => window.location.reload());
   }
 
   afterCommand(world: World): void {

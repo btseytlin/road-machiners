@@ -1,11 +1,9 @@
-// The boot steps and their state. A step moves only when real boot work starts, counts or ends.
 
 export type BootStep = 'code' | 'map' | 'physics' | 'models' | 'sounds' | 'world' | 'ground' | 'scene' | 'frame';
 export type BootState = 'waiting' | 'running' | 'done' | 'failed';
 
 export const BOOT_STEPS: readonly BootStep[] = ['code', 'map', 'physics', 'models', 'sounds', 'world', 'ground', 'scene', 'frame'];
 
-// Every player-visible boot string. index.html repeats `title`, `code` and `failedToLoad`; a test keeps them equal.
 export const BOOT_TEXT = {
   title: 'Road Machiners',
   barLabel: 'Loading',
@@ -16,6 +14,7 @@ export const BOOT_TEXT = {
   sounds: 'Loading sounds',
   loadSave: 'Loading your save',
   newGame: 'Starting a new game',
+  nextWindow: 'Opening the road north',
   ground: 'Painting the ground',
   scene: 'Building the scene',
   frame: 'Drawing the first frame',
@@ -90,14 +89,12 @@ export class BootProgress {
     return BOOT_STEPS.filter((s) => this.state(s) === 'done').length;
   }
 
-  // The running steps' labels with counts, joined.
   get stageLine(): string {
     return this.runningEntries()
       .map((e) => (e.total === null ? e.label : countedLabel(e.label, e.done, e.total)))
       .join(', ');
   }
 
-  // The same without counts, so it changes only when the set of running steps does.
   get liveLine(): string {
     return this.runningEntries()
       .map((e) => e.label)

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { startKit } from '../data/start';
 import { defaultSetup } from '../sim/settings';
 import { playerVehicle } from '../sim/damage';
@@ -8,7 +8,9 @@ import { gauntletWorld } from '../sim/testkit';
 import type { World } from '../sim/types';
 import { endTurn, newWorld } from '../sim/world';
 import { TEST_MAP } from '../test/map';
-import { loadWorld, mapFor, SaveError, writeSave } from './save';
+import { changeMapIfMoved, loadWorld, mapFor, SaveError, SaveHold, SAVE_KEY, writeSave, type Run } from './save';
+import type { RunLog } from './run-log';
+import { takeBootRequest } from './save-slots';
 import { memoryBackend, SaveSlots } from './save-db';
 
 function saved(world: World): SaveSlots {
@@ -74,5 +76,38 @@ describe('the map of a saved world', () => {
 
   it('gives a Roaming world the Icarus map', () => {
     expect(mapFor({ seed: 4, mapHash: TEST_MAP.hash, setup: defaultSetup('roaming'), gauntlet: null }, TEST_MAP)).toBe(TEST_MAP);
+  });
+});
+
+describe('the window swap in the game', () => {
+  function runOn(world: World): Run {
+    const log = { flush: () => Promise.resolve() } as unknown as RunLog;
+    return { slots: new SaveSlots(memoryBackend(), new Map()), runId: 'run-1', log, mapHash: world.mapHash };
+  }
+
+  it('asks for a boot of the autosave only when the map has moved', async () => {
+    const world = gauntletWorld(21);
+    const run = runOn(world);
+    const session = new Map<string, string>();
+    const storage = { getItem: (k: string) => session.get(k) ?? null, setItem: (k: string, v: string) => void session.set(k, v), removeItem: (k: string) => void session.delete(k) } as Storage;
+    const reload = vi.fn();
+
+    expect(changeMapIfMoved(run, world, new SaveHold(), storage, reload)).toBe(false);
+    expect(takeBootRequest(storage, SAVE_KEY)).toBeNull();
+
+    const moved = arrived(world);
+    expect(changeMapIfMoved(run, moved, new SaveHold(), storage, reload)).toBe(true);
+    await vi.waitFor(() => expect(reload).toHaveBeenCalledOnce());
+    expect(takeBootRequest(storage, SAVE_KEY)).toEqual({ slot: 'auto', reason: 'road' });
+    expect(loadWorld(run.slots, 'auto', TEST_MAP)?.gauntlet?.window).toBe(1);
+  });
+
+  it('refuses to reboot while saves are held', () => {
+    const world = gauntletWorld(21);
+    const run = runOn(world);
+    const hold = new SaveHold();
+    hold.noteError();
+
+    expect(() => changeMapIfMoved(run, arrived(world), hold, {} as Storage, () => {})).toThrow(/held/);
   });
 });
