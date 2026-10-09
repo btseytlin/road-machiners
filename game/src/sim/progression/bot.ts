@@ -34,7 +34,8 @@ import { firepower, getUpkeepReserve, isWeak, judgeDanger, getKnownSite, strengt
 import { fightOdds } from '../fight-odds';
 import { canLootTruck, canReachSalvage, hasSalvage, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
-import { canUseSite, isTerritory, nearestPad, nearestTown, siteGates, sitePads, townAt, type Site } from '../sites';
+import { territoryEntries } from '../territory';
+import { canUseSite, isTerritory, nearestPad, reachedSite, nearestTown, siteGates, sitePads, townAt, type Site } from '../sites';
 import { fuelCap, hasWorkingEngine, isStranded, isWorking, suppliesCap, vehicleStats } from '../stats';
 import { escortsOf, inTowReach, playerTow, setBeacon } from '../tow';
 import { towData } from '../states';
@@ -601,7 +602,8 @@ function cargoToTown(o: Orders, stripping: boolean): boolean {
 function findSalvageSite(o: Orders): boolean {
   const site = nearestUndiscovered(o.world, REGION.locations.filter(isTerritory));
   if (!site) return false;
-  driveToSite(o, site);
+  const entry = nearest(o.me.pos, territoryEntries(site));
+  if (entry && !reachedSite(o.me.pos, site)) driveTo(o, entry);
   return true;
 }
 

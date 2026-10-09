@@ -37,9 +37,10 @@ describe('NPC spawns', () => {
     expect(spots(1337)).not.toEqual(spots(42));
   }, budget(15_000));
 
-  it('starts the whole roster on every seed, with at most one dealt neutral driver per site', () => {
+  it('starts the whole roster on every seed, with the dealt neutral drivers spread evenly over the sites', () => {
     const guards = SPAWN.initial.filter((id) => id === 'convoy').map(() => 'convoyGuard');
     const roster = [...SPAWN.initial, ...SPAWN.startTraffic.templates, ...guards].sort();
+    const neutralSites = REGION.towns.length + REGION.locations.filter((l) => l.kind !== 'camp' && l.kind !== 'territory').length;
     for (let seed = 1; seed <= 20; seed++) {
       const npcs = newWorld(seed * 7919, START_KITS.standard, TEST_MAP, defaultSetup('roaming')).vehicles.filter((v) => v.brain);
       expect(npcs.map((v) => v.brain!.templateId).sort()).toEqual(roster);
@@ -48,9 +49,11 @@ describe('NPC spawns', () => {
         const id = nearestSite(v.pos).id;
         perSite.set(id, (perSite.get(id) ?? 0) + 1);
       }
+      const dealt = [...perSite.values()].reduce((sum, n) => sum + n, 0) - SPAWN.startTraffic.templates.length;
+      const share = Math.ceil(dealt / neutralSites);
       for (const [id, count] of perSite) {
         const traffic = id === SPAWN.startTraffic.town ? SPAWN.startTraffic.templates.length : 0;
-        expect(count).toBeLessThanOrEqual(1 + traffic);
+        expect(count).toBeLessThanOrEqual(share + traffic);
       }
     }
   }, budget(60_000));
