@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { hitOdds } from "../sim/combat";
 import { playerVehicle } from "../sim/damage";
 import { mountedParts } from "../sim/grid";
@@ -11,7 +11,7 @@ import type { UiHost } from "./host";
 import { makePart } from "../sim/factory";
 import { mountPart } from "../sim/inventory";
 import { wornReload } from "../sim/utility";
-import { HoverHold, UtilityRow, WeaponPanel, aimAtPart, aimMarks, aimsBody, bodyMarks, InspectPin, aimLine, type AimState, gunsLabel, aimName, ammoCells, canForceReload, getWeaponReadout, toggleBodyAim, vehicleMarks, shortStatus, weaponGrid, BLOCK_SHORT, utilityKey, utilitySlots, utilityStatus } from "./weapons";
+import { HoverHold, UtilityRow, WeaponPanel, aimAtPart, aimMarks, aimsBody, bodyMarks, InspectPin, gunsLabel, aimName, ammoCells, canForceReload, getWeaponReadout, toggleBodyAim, vehicleMarks, shortStatus, weaponGrid, BLOCK_SHORT, utilityKey, utilitySlots, utilityStatus } from "./weapons";
 
 function createDuel() {
   const world = emptyWorld();
@@ -545,36 +545,6 @@ describe("InspectPin", () => {
 
   it("rejects an empty id", () => {
     expect(() => make().pin.click("")).toThrow();
-  });
-});
-
-describe("aim line", () => {
-  beforeEach(() => vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t) }));
-  afterEach(() => vi.unstubAllGlobals());
-
-  const line = (state: Partial<AimState>, onBody = vi.fn()) =>
-    aimLine({ guns: "all guns", body: [], bodyAimed: false, locked: false, hasGuns: true, ...state }, onBody) as unknown as FakeNode;
-  const chip = (n: FakeNode) => n.find((c) => c.tag === "button")!;
-
-  it("holds only the Body chip, with no instruction text", () => {
-    expect(line({}).text()).toBe("Body");
-    expect(chip(line({ guns: "gun 2" })).attrs.get("title")).toContain("gun 2");
-  });
-
-  it("shows the numbers of the guns with a body shot", () => {
-    expect(line({ body: [1, 2] }).text()).toBe("Body1 2");
-  });
-
-  it("presses the chip while aimed, disables it while locked and calls back on click", () => {
-    const onBody = vi.fn();
-    expect(chip(line({ bodyAimed: true })).attrs.get("aria-pressed")).toBe("true");
-    expect(chip(line({ locked: true })).attrs.get("disabled")).toBe("");
-    chip(line({}, onBody)).fire("click");
-    expect(onBody).toHaveBeenCalledOnce();
-  });
-
-  it("is missing without guns", () => {
-    expect(aimLine({ guns: "all guns", body: [], bodyAimed: false, locked: false, hasGuns: false }, vi.fn())).toBeNull();
   });
 });
 
