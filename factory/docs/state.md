@@ -31,7 +31,7 @@ The board column is the position. Only a Testing card has a second one, `post`. 
 - `post`: column Testing, with the issue in `postOnly`. Next job: checks, which builds, publishes and posts with no tests or playtest. `move N approval` puts a card here and drops its approval.
 - `approval`: column Approval. Needs a published build in `builds` and an open post in `approvalPosts`, or an approval queued in `pendingApprovals`. Next job: approve, which runs when the committee presses Approve.
 - `harden`: column Hardening, with an `approvedResolving` entry, or a cleanup task. Next job: harden, which runs the hardening session and moves the card to Merging. `move N harden` records the mover as approver when none is recorded.
-- `merging`: column Merging, with an `approvedResolving` entry, or a cleanup task. Next job: merge, one for every Merging card of a base. `move N merging` and `merge N` record the mover as approver when none is recorded.
+- `merging`: column Merging, with an `approvedResolving` entry, or a cleanup task. Next job: merge, one for up to three Merging cards of a base. `move N merging` and `merge N` record the mover as approver when none is recorded.
 - `done`: column Done. Runs nothing.
 
 Fields that belong to one position:

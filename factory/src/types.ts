@@ -53,6 +53,7 @@ export type FactoryConfig = {
   playtestRuns: number;
   playtestTimeoutMinutes: number;
   mergeTimeoutMinutes: number;
+  checksTimeoutMinutes: number;
   testingBudgetUsd: number;
   mergingBudgetUsd: number;
   wasteReviewDays: number;
@@ -234,7 +235,7 @@ export type AgentRun = { clone: string; dir: string; model: string; prompt: stri
 
 export interface Container {
   agent(run: AgentRun): Promise<string>;
-  shell(clone: string, script: string, log: string, env?: Record<string, string>, mounts?: Record<string, string>): Promise<void>;
+  shell(clone: string, script: string, log: string, env?: Record<string, string>, mounts?: Record<string, string>, limitMinutes?: number): Promise<void>;
 }
 
 export type MergeStep = { branch: string; into: string; message: string };

@@ -7,7 +7,7 @@ import { BRANCH, GAME_DIR, RELEASE_CANDIDATE_LABEL, STUCK_LABEL, type AgentSessi
 import { withWorkFolder } from '../work-lock';
 import { closeMerged } from './approval';
 import { runCost, untilPasses } from './checkpoint';
-import { checkFailure, checkScript, checkUntilReal, testCacheMount } from './checks';
+import { checkScript, checkUntilReal, runChecks } from './checks';
 import { guardAgainstAll } from '../diff-guard';
 import { BASE_BRANCH, baseBranchFor, fillPrompt, playtestCommand, resetOutputs } from './common';
 import { releaseLog } from './release-common';
@@ -51,6 +51,8 @@ export async function checkAndPush(ctx: Ctx, land: Landing, spent: number, fixPr
   }
 }
 
+const MERGE_BATCH_CARDS = 3;
+
 async function nextBatch(ctx: Ctx): Promise<{ base: string; cards: Card[] } | null> {
   const merging = (await ctx.github.cards()).filter((card) => card.column === 'Merging' && !card.labels.includes(STUCK_LABEL));
   let taken: { base: string; cards: Card[] } | null = null;
@@ -59,7 +61,7 @@ async function nextBatch(ctx: Ctx): Promise<{ base: string; cards: Card[] } | nu
     const waiting = merging.filter((card) => !(String(card.issue) in state.held) && !(shipping && baseBranchFor(ctx, card.labels) === state.release?.branch));
     if (waiting.length === 0) return state;
     const base = baseBranchFor(ctx, waiting[0]!.labels);
-    const cards = waiting.filter((card) => baseBranchFor(ctx, card.labels) === base);
+    const cards = waiting.filter((card) => baseBranchFor(ctx, card.labels) === base).slice(0, MERGE_BATCH_CARDS);
     taken = { base, cards };
     const batch = cards.map((card) => card.issue);
     return { ...state, jobs: state.jobs.map((job) => (job.stage === 'merge' ? { ...job, batch } : job)) };
@@ -98,14 +100,7 @@ export async function mergeIn(ctx: Ctx, land: Landing, { branch, message, reason
 async function mergedChecks(ctx: Ctx, land: Landing): Promise<string | null> {
   const log = releaseLog(ctx, `${land.stage}-checks-${land.into.replaceAll('/', '-')}`);
   const script = checkScript(playtestCommand(ctx.cfg, false));
-  return checkUntilReal(async () => {
-    try {
-      await ctx.container.shell(land.dir, script, log, { BUILD_SCOPE: land.stage }, testCacheMount(ctx));
-      return null;
-    } catch (error) {
-      return checkFailure(log, error);
-    }
-  }, (run) => ctx.log(land.stage, null, `the checks only timed out, run ${run}, running them again`));
+  return checkUntilReal(() => runChecks(ctx, { stage: land.stage, issue: null }, land.dir, script, log, { BUILD_SCOPE: land.stage }), (run) => ctx.log(land.stage, null, `the checks only timed out, run ${run}, running them again`));
 }
 
 async function pushed(ctx: Ctx, land: Landing): Promise<boolean> {
