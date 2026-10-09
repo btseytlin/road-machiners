@@ -308,7 +308,7 @@ describe('agent usage', () => {
         const id = args[args.indexOf('--session-id') + 1];
         mkdirSync(`${projects}/-work-game`, { recursive: true });
         const usage = { input_tokens: 0, output_tokens: 100_000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 } };
-        writeFileSync(`${projects}/-work-game/${id}.jsonl`, `${JSON.stringify({ type: 'assistant', message: { id: 'm1', model: 'opus', usage } })}\n`);
+        writeFileSync(`${projects}/-work-game/${id}.jsonl`, `${JSON.stringify({ type: 'assistant', timestamp: new Date().toISOString(), message: { id: 'm1', model: 'opus', usage } })}\n`);
       }
       return agentRun(1, '')(cmd, args, opts);
     };

@@ -421,7 +421,7 @@ describe('work clones', () => {
     writeFileSync(join(work, 'game', '.factory-tasks', 'issue-10.md'), '# plan\n');
     writeFileSync(join(work, 'f.txt'), 'ten\n');
     await git(work, 'add', '-f', 'f.txt', 'game/.factory-tasks/issue-10.md');
-    await git(work, 'commit', '-m', 'work on 10 with the task file');
+    await git(work, '-c', 'core.hooksPath=/dev/null', 'commit', '-m', 'work on 10 with the task file');
     expect(await repo.untrackFactoryFiles(work)).toEqual(['game/.factory-tasks/issue-10.md']);
     expect(await repo.untrackFactoryFiles(work)).toEqual([]);
     const head = await repo.fetchFromWork(work, 'factory/issue-10');
