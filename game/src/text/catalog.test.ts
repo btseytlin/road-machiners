@@ -18,6 +18,14 @@ const BANNED: Record<Locale, readonly string[]> = {
   ru: ['ход', 'квест', 'опыт', 'уров', 'игрок', 'игров', 'клик', 'нажм', 'клавиш', 'клетк', 'сохран'],
 };
 
+// Russian the committee rejected as machine translation. None of it may come back, in any entry.
+const REJECTED_RU: readonly { text: string; reason: string }[] = [
+  { text: 'чинено', reason: 'ungrammatical as a part status; a rebuild after a breakdown is «капремонт»' },
+  { text: 'удлинённая платформа', reason: 'the flatbed extension lengthens the bed: «удлинитель кузова»' },
+  { text: 'является', reason: 'bureaucratic; use a plain verb or a dash' },
+  { text: 'осуществ', reason: 'bureaucratic; say what is done' },
+];
+
 function bannedIn(locale: Locale, text: string): string[] {
   const words = text.toLowerCase().split(/[^\p{L}]+/u);
   return BANNED[locale].filter((stem) => words.some((word) => (stem === 'ход' ? word === stem : word.startsWith(stem))));
@@ -89,6 +97,15 @@ describe('the catalog', () => {
     for (const locale of LOCALES) {
       for (const key of talk) expect(bannedIn(locale, entryText(locale, key)), `${locale} ${key}`).toEqual([]);
     }
+  });
+
+  it('holds none of the Russian the committee rejected', () => {
+    const found = KEYS.flatMap((key) => {
+      const entry = CATALOGS.ru[key];
+      const texts = typeof entry === 'string' ? [entry] : 'forms' in entry ? Object.values(entry.forms) : [entry.text];
+      return REJECTED_RU.filter(({ text }) => texts.some((t) => t.toLowerCase().includes(text))).map(({ text, reason }) => `${key}: «${text}», ${reason}`);
+    });
+    expect(found).toEqual([]);
   });
 
   it('the banned words check catches its own case', () => {

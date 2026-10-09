@@ -41,7 +41,7 @@ A truck has no saved name. Its title comes from the player's own truck or from i
 - `?lang=pseudo` picks the dev-only pseudo locale, never stored. It pads English by 40% with accented letters inside ⟦⟧, to show which layouts break on longer text.
 - `el()` in `src/ui/dom.ts` takes only messages as text. A `Msg` child becomes a bound text node, and a `Msg` title, aria-label, aria-valuetext, placeholder or alt a bound attribute. `setText()` writes a message into a view that redraws every frame and skips an unchanged one.
 - On a switch, `relocalize()` rewrites every bound node under `#ui` and the map overlay once, then the game redraws its panels and the radio shows its broadcast again. Old log lines keep their messages, so they switch too. `confirm()` text and canvas text resolve when shown, through `say()`.
-- The language control, `LanguageSwitch` in `src/ui/language-switch.ts`, is the last row of the game menu and sits in the header of the boot save screens. Each language is named in its own words.
+- The language control, `LanguageSwitch` in `src/ui/language-switch.ts`, lives only in the Options panel, `src/ui/options.ts`, reached as Menu → Options → Language. The boot save screens show before any menu, so their header has an Options button that opens the same panel. Each language is named in its own words.
 - Barlow Semi Condensed has no Cyrillic. Fira Sans Condensed, after it in `--font-ui`, draws the Cyrillic glyphs. IBM Plex Mono covers Cyrillic on its own.
 
 ## Adding a language
@@ -55,12 +55,13 @@ A truck has no saved name. Its title comes from the player's own truck or from i
 All of them run in `npm test` and `npm run typecheck`. Together the text tests take about 5 seconds.
 
 - tsc: a missing key in a language, a wrong param, or a string passed to `el()` as text fails to compile. So does an id of a closed union, like a goal reason, without its words.
-- `src/text/catalog.test.ts`: every entry parses in every language, uses exactly its schema's params, and has exactly the language's plural forms (`one, other` in English and `one, few, many, other` in Russian). No Russian entry may copy its English, apart from a short list of brands and language names. Radio talk and broadcasts hold none of the out-of-character words, like turn, level or save, and ход, уровень or сохран.
+- `src/text/catalog.test.ts`: no Russian entry holds a form the committee rejected, like «чинено» or «удлинённая платформа». Every entry parses in every language, uses exactly its schema's params, and has exactly the language's plural forms (`one, other` in English and `one, few, many, other` in Russian). No Russian entry may copy its English, apart from a short list of brands and language names. Radio talk and broadcasts hold none of the out-of-character words, like turn, level or save, and ход, уровень or сохран.
 - `src/text/coverage.test.ts`: every data id the game can show, like each part, chassis, good, template, site, terrain, trait, skill, perk, radio line and broadcast, has its words in every language.
 - `src/text/scan.test.ts`: it parses every production file of `src/ui`, `src/three`, `src/sim`, `src/data`, `src/render` and `src/text` with `oxc-parser`. It fails on a prose literal, on a text sink like `.textContent =`, `.title =`, `setAttribute` of a text attribute or `confirm()` without `say()`, on `.innerHTML =`, on Cyrillic outside `src/text/ru/`, and on `as Msg`, `new Msg` or `verbatim` of a literal outside `src/text/`. Each failure prints `file:line`, the rule and the literal.
 - `src/text/fixtures.test.ts`: an old save migrates, and every goal, call, contract and truck title it holds reads in both languages.
 - `src/sim/text-free.test.ts`: a seeded world played for 120 turns holds no phrase in its events, goals or call.
-- `npm run layout`, below, checks the real DOM. `npm run playtest` switches to Russian from the menu, checks the HUD and the log, and checks that the choice outlives a reload.
+- `npm run layout`, below, checks the real DOM. `npm run playtest` picks Russian by keyboard alone through Menu → Options → Language, checks the HUD and the log, checks that the choice outlives a reload, and picks English back by mouse. It fails on any language control outside the Options panel.
+- `npm run text:review` is not a check. It writes the review sheet for reading Russian in context, as [Russian copy](../russian-style.md) describes.
 
 ### The allowlist
 
@@ -68,7 +69,7 @@ All of them run in `npm test` and `npm run typecheck`. Together the text tests t
 
 ### The layout check
 
-`npm run layout` runs `scripts/layout-check.mjs` against the dev server. It boots one new game on seed 4242 through `?seed=` on the GPU, switches the language live, and in English, Russian and pseudo at 1280×720 and 700×800 it opens eleven screens: the menu, the log with forty long lines, the inventory with an item card, the shop, the market, the trucks tab, a radio call on the hub and on a deal, the help guide, the character sheet and the save panel. `src/ui/dom.ts` measures each one and reports:
+`npm run layout` runs `scripts/layout-check.mjs` against the dev server. It boots one new game on seed 4242 through `?seed=` on the GPU, switches the language live, and in English, Russian and pseudo at 1280×720 and 700×800 it opens twelve screens: the menu, the log with forty long lines, the inventory with an item card, the shop, the market, the trucks tab, a radio call on the hub and on a deal, the help guide, the character sheet, the save panel and the Options panel. `src/ui/dom.ts` measures each one and reports:
 
 - `page-overflow`: the page scrolls sideways.
 - `clipped-text`: text overflows a box that clips it. Ellipsis passes only with the full text in a title.

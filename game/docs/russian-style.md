@@ -6,6 +6,8 @@ How to write the Russian text in `src/text/ru/`. Read it before you add or chang
 
 The Russian must read as if a Russian game writer wrote it first. Think of Ex Machina, Space Rangers 2 and Дальнобойщики: terse, dry, a bit rough, never bureaucratic. A player must never be able to guess the English behind a line.
 
+Read an entry where it shows before you change it. `npm run text:review` writes `tmp/text-review/<area>.md`, every entry in English and in Russian with sample params: a name of each gender, counts 1, 3, 5 and 1.5, and a place. Agreement and plural errors show there as wrong words in a sentence.
+
 Translate what the line means where the player sees it, not its words. The key tells you where it shows:
 
 - `line.*` is a driver speaking on the radio. It is speech: short, spoken, rude when the English is rude.
@@ -47,7 +49,13 @@ A new name entry is a `noun()` with all six forms and its gender. Write the form
 Bad, then good, with the reason.
 
 - `refusal.needsXp`: «Нужно опыта: {cost}, у вас: {have}» → «Нужно {cost} опыта, у вас {have}». A form, not a sentence.
-- `short.gun`, `short.arm`: «Орд», «Брн» → «Оруж», «Брон». A chopped word nobody can read.
+- `short.gun`, `short.arm`: «Орд», «Брн» → «Оруж.», «Броня». A chopped word nobody can read, and an abbreviation keeps its period.
+- `cond.rebuilt`: «чинено ×2» → «2 капремонта». Committee: ungrammatical and unclear as a status. It counts rebuilds after a breakdown, so it says that in a mechanic's word, with a plural.
+- `cond.pristine`: «новая» → «без износа». The word sits beside any part, and «новая» does not agree with «пулемёт» or «колесо». A condition word must be gender-free or take the part as a param.
+- `cond.broken`, `cond.junk`: «сломана», «негодная» → «не работает», «лом». Same reason.
+- `item.mounted`: «Установлено» → «На креплении». It sat under «Боковые корзины» and agreed with nothing.
+- `part.flatbed`: «удлинённая платформа» → «удлинитель кузова». Committee: unnatural and wrong for the equipment. The part lengthens the cargo bed.
+- `part.cage`: «арматурная клетка» → «арматурный каркас». A welded frame around a truck is a «каркас».
 - `inv.patch`: «Ремонт {turns}х/{parts}зч» → «Ремонт: {turns} х., {parts} дет.». Made-up abbreviations.
 - `job.search`: «Обыск» → «Поиски». «Обыск» is a police search of a person or a house.
 - `goal.leftPost`: «Покинули пост» → «Покинул пост». The status is about one driver.
@@ -83,3 +91,5 @@ Good lines to match:
 - HP of a part: прочность. Short form: прочн.
 - turn: ход. Never on the radio.
 - refit: переоснащение. Mount: крепление.
+- pristine (no wear): без износа. Rebuilt after a breakdown: капремонт, «2 капремонта». Broken: не работает. Junk: лом.
+- flatbed extension: удлинитель кузова. Cage: каркас. Armor plate: стальной лист.
