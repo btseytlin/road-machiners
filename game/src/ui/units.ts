@@ -68,7 +68,7 @@ export function moneyNumber(cents: number): string {
 }
 
 const COIN_SVG =
-  '<svg viewBox="0 0 40 40" focusable="false"><circle class="coin-face" cx="20" cy="20" r="17" stroke-width="3"/><path class="coin-mark" d="M15.2 24.8V15.2l4.8 6 4.8-6v9.6" fill="none" stroke-width="2.16" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+  '<svg viewBox="0 0 40 40" focusable="false"><circle cx="20" cy="20" r="17" stroke-width="3"/><path d="M15.2 24.8V15.2l4.8 6 4.8-6v9.6" fill="none" stroke-width="2.16" stroke-linejoin="round" stroke-linecap="round"/></svg>';
 
 function coinEl(): HTMLElement {
   const coin = el('span', { class: 'coin', 'aria-hidden': 'true' });

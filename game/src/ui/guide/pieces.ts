@@ -1,4 +1,5 @@
 import { el } from "../dom";
+import { moneyEl } from "../units";
 
 export interface Piece {
   name: string;
@@ -24,12 +25,13 @@ export const PIECES: Piece[] = [
   { name: ".tile", note: "A boxed list item edged in its tone.", build: () => sample("tile", "A tile") },
   { name: ".chip", note: "A small boxed value.", build: () => text("span", "chip", "120 scrap") },
   { name: ".tag", note: "An outlined word.", build: () => text("span", "tag", "buy") },
+  { name: ".amount .coin", note: "Money from moneyEl(): the M's coin, then the number. Debt is in danger ink.", build: () => moneyEl(1500) },
   { name: ".meter", note: "A bar that fills from the left.", build: () => meter("meter", 70) },
   { name: ".meter.progress", note: "A bar for timed work.", build: () => meter("meter progress", 40) },
   { name: ".meter.broken", note: "A bar of a broken part.", build: () => meter("meter broken", 100) },
   { name: ".selected", note: "The one look of a chosen item. A pressed button.on uses it too.", build: () => sample("selected tile", "Selected") },
   { name: '[aria-disabled="true"]', note: "A control that cannot be used now. It keeps hover and focus.", build: () => disabled() },
-  { name: ".tooltip", note: "A note that opens over its anchor. It also gives a disabled reason.", build: () => sample("tooltip", "Need 12 M more") },
+  { name: ".tooltip", note: "A note that opens over its anchor. It also gives a disabled reason.", build: () => sample("tooltip", "Need 12 M's more") },
   { name: ".tooltip-row", note: "Label on the left, value on the right, for breakdowns.", build: () => breakdown() },
   { name: ".num", note: "A number in the mono face.", build: () => text("span", "num", "1 240") },
 ];

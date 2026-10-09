@@ -86,11 +86,11 @@
   gap: var(--space-1);
   padding: 0 var(--space-1);
 }
-.resource .coin-face {
+.resource .coin circle {
   fill: none;
   stroke: currentColor;
 }
-.resource .coin-mark {
+.resource .coin path {
   stroke: currentColor;
 }
 .resource strong {
