@@ -64,7 +64,7 @@ function tipOf(tip: ChanceTip): HTMLElement {
 }
 
 function chanceOf(r: HitRow, theirs: boolean): HTMLElement {
-  if (!r.odds || !r.tip) return el('span', { class: 'hc-pct blocked' }, r.text);
+  if (!r.odds || !r.tip) return el('span', { class: 'hc-pct blocked', title: r.text }, r.text);
   const percent = Math.round(r.odds.damageChance * 100);
   const tone = percent === 0 ? 'zero' : percent >= HIGH_CHANCE ? 'high' : '';
   return el('span', { class: `hc-pct ${theirs ? 'theirs' : 'mine'} ${tone}`.trim(), tabindex: 0 }, r.text, tipOf(r.tip));

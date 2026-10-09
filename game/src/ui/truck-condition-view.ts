@@ -32,7 +32,8 @@ export class TruckConditionView {
 
   fitTo(box: HTMLElement): void {
     this.root.style.zoom = "1";
-    const scale = Math.min(1, box.clientHeight / this.body.offsetHeight, box.clientWidth / this.body.offsetWidth);
+    const outline = parseFloat(token("--space-4"));
+    const scale = Math.min(1, (box.clientHeight - outline) / this.body.offsetHeight, (box.clientWidth - outline) / this.body.offsetWidth);
     this.root.style.zoom = String(scale);
   }
 
