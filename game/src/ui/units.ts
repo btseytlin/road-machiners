@@ -47,13 +47,24 @@ export function damage(value: number): number {
 
 const WHOLE_M = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
+export const MINUS = '\u2212';
+
 export function moneyAmount(cents: number): string {
   const whole = Math.round(cents);
   if (whole === 0) return '0';
-  const m = Math.ceil(Math.abs(whole) / UNITS.centsPerM);
-  return WHOLE_M.format(Math.sign(whole) * m);
+  const m = WHOLE_M.format(Math.ceil(Math.abs(whole) / UNITS.centsPerM));
+  return whole < 0 ? `${MINUS}${m}` : m;
 }
 
 export function moneyText(cents: number): string {
   return `${moneyAmount(cents)} M`;
+}
+
+export function moneyDelta(cents: number): string {
+  const text = moneyText(cents);
+  return Math.round(cents) > 0 ? `+${text}` : text;
+}
+
+export function turnsText(turns: number): string {
+  return `${turns} ${turns === 1 ? 'turn' : 'turns'}`;
 }

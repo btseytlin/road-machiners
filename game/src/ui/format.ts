@@ -86,7 +86,7 @@ function aidWorkLabel(world: World, v: Vehicle, s: NpcState): string {
 export function workProgress(work: WorkLeft): number {
   return 1 - work.turnsLeft / work.total;
 }
-import { damage, fuelLiters, hp, moneyAmount, moneyText } from './units';
+import { damage, fuelLiters, hp, moneyDelta, moneyText, turnsText as turnsLabel } from './units';
 import { npcName } from '../sim/spawn';
 
 export function wearLabel(part: PartInstance): string {
@@ -155,7 +155,7 @@ export function formatNpcCargo(world: World, vehicle: Vehicle): string | null {
 export function formatNpcMark(world: World, vehicle: Vehicle): string | null {
   if (!hasPerk(world, 'spotter')) return null;
   const mark = world.player.marked.find((m) => m.vehicleId === vehicle.id && world.turn <= m.until);
-  return mark ? `Marked: ${mark.until - world.turn} turns left` : '[N] Mark';
+  return mark ? `Marked: ${turnsLabel(mark.until - world.turn)} left` : '[N] Mark';
 }
 
 const COMBAT_LABEL = 'In combat';
@@ -191,7 +191,7 @@ export function formatNpcStates(world: World, vehicle: Vehicle): string[] {
 }
 
 function turnsText(label: string, turnsLeft: number | null): string {
-  return turnsLeft === null ? label : `${label}, ${turnsLeft} turn${turnsLeft === 1 ? '' : 's'}`;
+  return turnsLeft === null ? label : `${label}, ${turnsLabel(turnsLeft)}`;
 }
 
 function combatLine(world: World, vehicle: Vehicle): string | null {
@@ -285,7 +285,7 @@ function harpoonText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLin
   const onTarget = shotDamage(e).get(e.target) ?? [];
   const what = harpoonOutcome(world, e);
   return spanLine(e.target === me && hurts(onTarget) ? 'bad' : '', [
-    { text: `${partName(world, e.shooter, e.weapon)} → ${vehicleName(world, e.target)}: ${what}`, cls: '' },
+    { text: `${partName(world, e.shooter, e.weapon)} fires at ${vehicleName(world, e.target)}: ${what}`, cls: '' },
     { text: ` (${Math.round(e.chance * 100)}%)`, cls: 'dim' },
     ...damageSpans(world, e.target, onTarget),
   ]);
@@ -318,7 +318,7 @@ function aimedSpans(world: World, e: Extract<GameEvent, { t: 'shot' }>, onTarget
   const hits = e.rounds.filter((r) => hitsAim(e, r)).length;
   const crits = e.rounds.filter((r) => r.crit).length;
   return [
-    { text: `${partName(world, e.shooter, e.weapon)} → ${vehicleName(world, e.target)}${aim}, ${hits}/${e.rounds.length} hit`, cls: '' },
+    { text: `${partName(world, e.shooter, e.weapon)} fires at ${vehicleName(world, e.target)}${aim}, ${hits}/${e.rounds.length} hit`, cls: '' },
     { text: ` (${Math.round(e.damageChance * 100)}%)`, cls: 'dim' },
     ...(crits ? [{ text: `, ${crits} crit`, cls: '' }] : []),
     ...damageSpans(world, e.target, onTarget),
@@ -342,7 +342,7 @@ function jobText(world: World, e: Extract<GameEvent, { t: 'job' }>): LogLine | n
   if (e.vehicle !== world.player.vehicleId) return null;
   const what = jobLabel(world, playerVehicle(world), e.job);
   const lines = {
-    started: { text: `${what} started: stay parked about ${e.job.turnsLeft} turns.`, cls: '' },
+    started: { text: `${what} started: stay parked about ${turnsLabel(e.job.turnsLeft)}.`, cls: '' },
     cancelled: { text: `${what} cancelled: the truck moved, a hostile came in sight, or required items changed`, cls: 'bad' },
     done: { text: `${what} done`, cls: 'good' },
   };
@@ -580,7 +580,7 @@ function pulseText(world: World, e: Extract<GameEvent, { t: 'pulse' }>): LogLine
   }
   if (!e.hit.includes(me.id)) return null;
   const left = shutDownTurnsLeft(world, me);
-  return { text: `${vehicleName(world, e.vehicle)}'s emitter pulse shuts your truck down for ${left} ${left === 1 ? 'turn' : 'turns'}`, cls: 'bad' };
+  return { text: `${vehicleName(world, e.vehicle)}'s emitter pulse shuts your truck down for ${turnsLabel(left)}`, cls: 'bad' };
 }
 
 function cookOffText(world: World, e: Extract<GameEvent, { t: 'claymoreCookOff' }>): LogLine {
@@ -664,7 +664,7 @@ export function eventText(world: World, e: GameEvent): LogLine | null {
     case 'skillUp':
       return { text: skillUpText(e.skill, e.level), cls: 'good' };
     case 'money':
-      return { text: `${e.amount > 0 ? '+' : ''}${moneyText(e.amount)}: ${e.reason}`, cls: e.amount > 0 ? 'good' : 'bad' };
+      return { text: `${moneyDelta(e.amount)}: ${e.reason}`, cls: e.amount > 0 ? 'good' : 'bad' };
     case 'discover': {
       const loc = [...REGION.towns, ...REGION.locations].find((l) => l.id === e.location);
       return { text: `Discovered ${loc?.name ?? e.location}`, cls: 'good' };
@@ -726,8 +726,8 @@ export function estimateText(e: SaleEstimate): string {
     case "none": return "";
     case "unrecorded": return "?";
     case "even": return "0";
-    case "gain": return `+${moneyAmount(e.perUnit)}`;
-    case "loss": return `\u2212${moneyAmount(e.perUnit)}`;
+    case "gain": return moneyDelta(e.perUnit);
+    case "loss": return moneyDelta(-e.perUnit);
   }
 }
 
@@ -735,10 +735,10 @@ export function estimateTitle(e: SaleEstimate): string {
   switch (e.kind) {
     case "none": return "";
     case "unrecorded": return "No cost on record";
-    default: return `Avg cost ${moneyAmount(e.avgCost)}`;
+    default: return `Avg cost ${moneyText(e.avgCost)}`;
   }
 }
 
 export function lotTitle(direction: "buy" | "sell", count: number, total: number): string {
-  return direction === "buy" ? `Buy ${count} for ${moneyAmount(total)} total` : `Sell all ${count} for ${moneyAmount(total)} total`;
+  return direction === "buy" ? `Buy ${count} for ${moneyText(total)} total` : `Sell all ${count} for ${moneyText(total)} total`;
 }
