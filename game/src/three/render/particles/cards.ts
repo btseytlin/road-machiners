@@ -10,6 +10,8 @@ const CARD_ORDER = { lit: 904, glow: 906 };
 
 export type CardLight = { sunDir: THREE.Vector3; sun: THREE.Color; sky: THREE.Color; ground: THREE.Color };
 
+export type FxCards = { lit: CardBatch; glow: CardBatch };
+
 export type Card = {
   x: number;
   y: number;
