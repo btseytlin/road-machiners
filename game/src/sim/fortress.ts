@@ -1,27 +1,12 @@
 // Fortress layout: the curtain outline of each fortress site, and the wall, tower, gatehouse, bastion and inner
 // gate pieces that close it, and the pit dug inside a curtain. Map tiles throughout.
 //
-// The outline runs counterclockwise, from map +x toward +y. A piece's pos is its footprint center, and its model
-// +x runs along the wall at its yaw. The prop pose lands model (x, y) at map (x cos + y sin, x sin - y cos), so
-// model +y, the outer face, looks to the right of the yaw. A piece with yaw a + PI/2 faces out at bearing a.
-//
-// At a castle style each gate is a gatehouse whose outer face lies on the site circle at a road gate from
-// siteGates(), so the pads stay where they are. Where the curtain runs through the gatehouse, the gatehouse closes
-// that stretch of it. Where the gatehouse lies wholly outside the curtain, a barbican joins it back: two neck walls
-// and an inner gate in the curtain. At a flush style the gatehouse stands in the curtain, its outer face on the
-// curtain line where the gate's bearing meets it, and the ground between it and the road gate is a forecourt.
-//
-// A site with rock leaves that stretch of outline to a rock mass: no wall or tower stands there, and the walls either
-// side end in the rock. Nose's mountain is the one, from src/sim/nose.ts.
 
 import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES, type FortressBastions, type FortressKind, type FortressSite, type FortressStyle, type FortressStyleDef } from '../data/fortress';
 import { siteGates, type Site } from './sites';
 import type { PropKind } from './terrain';
 import { bearing, DEG, dist, pointInPolygon, polygonEdgeDist, segmentDist, type Vec } from './vec';
 
-// r is half the piece's length along its model +x. For a wall that is half its stretched length.
-// The one table of a fort piece's prop kind. The map file stores the kind, and the kind names the piece's model.
-// A style has a kind for each piece it builds, FORTRESS_STYLES[style].pieces.
 export const FORT_PROPS = {
   masonry: { wall: 'fortMasonryWall', tower: 'fortMasonryTower', gate: 'fortMasonryGate', bastion: 'fortMasonryBastion', inner: 'fortMasonryInner' },
   shipMetal: { wall: 'fortShipWall', tower: 'fortShipTower', gate: 'fortShipGate' },
@@ -32,17 +17,14 @@ export const FORT_PROPS = {
   yard: { wall: 'fortYardWall', tower: 'fortYardTower', gate: 'fortYardGate' },
 } as const satisfies Record<FortressStyle, Partial<Record<FortressKind, PropKind>>>;
 const FORT_STYLE_NAMES = { masonry: 'masonry', shipMetal: 'ship', scrap: 'scrap', patchwork: 'patchwork', compound: 'compound', ring: 'ring', yard: 'yard' } as const satisfies Record<FortressStyle, string>;
-// The model of each piece a style builds, such as fort_ship_gate.
 export type FortModel = { [S in FortressStyle]: `fort_${(typeof FORT_STYLE_NAMES)[S]}_${keyof (typeof FORT_PROPS)[S] & string}` }[FortressStyle];
 
-// The model name of each fort prop kind, and the piece it is. Built once, since no map says more than the kind.
 export const FORT_MODELS: ReadonlyMap<PropKind, { model: FortModel; piece: FortressKind }> = new Map(
   (Object.keys(FORT_PROPS) as FortressStyle[]).flatMap((style) =>
     (Object.entries(FORT_PROPS[style]) as [FortressKind, PropKind][]).map(([piece, kind]) => [kind, { model: `fort_${FORT_STYLE_NAMES[style]}_${piece}` as FortModel, piece }] as const),
   ),
 );
 
-// The prop kind of a piece at a style. A style that has no model for the piece throws.
 export function fortProp(style: FortressStyle, piece: FortressKind): PropKind {
   const table: Partial<Record<FortressKind, PropKind>> = FORT_PROPS[style];
   const kind = table[piece];
@@ -52,21 +34,12 @@ export function fortProp(style: FortressStyle, piece: FortressKind): PropKind {
 
 export type FortressPiece = { kind: FortressKind; pos: Vec; yaw: number; r: number };
 
-// An outline corner and the piece that stands on it. Plain circle corners carry none.
 type Corner = { pos: Vec; piece: 'tower' | 'bastion' | null };
-// A rectangle in map tiles: center, unit axis along its length, and half sizes along and across it.
 type Rect = { center: Vec; axis: Vec; half: { along: number; across: number } };
-// A stretch of the outline left after the gate cuts: points in outline order, with the outline corner index of each
-// point, or null for a cut end.
 type Run = { points: Vec[]; corners: (number | null)[] };
 
-// One gate of a fortress site. gate is the road gate point on the site circle, face the middle of the gatehouse's
-// outer face at the ground, out the unit bearing from the site center to the gate, and width and height the style's
-// gatehouse size. At a castle style face is the gate point. At a flush style it lies on the curtain line.
 export type FortGate = { gate: Vec; face: Vec; out: Vec; width: number; height: number };
 
-// Each site's outline and gates are derived once from the constants, then reused by every inside test and view.
-// The key is the REGION site object, which is never cloned.
 const OUTLINES = new WeakMap<Site, Vec[]>();
 const CORES = new WeakMap<Site, Vec[]>();
 const GATES = new WeakMap<Site, FortGate[]>();
@@ -80,8 +53,6 @@ export function fortressOutline(site: Site): Vec[] {
   return outline;
 }
 
-// The main enclosure: a bastioned site's inner vertices, the corners its curtains run between. Any other outline is
-// its own enclosure. The pit is dug inside it, and the bastions stand at the rim.
 export function fortressCore(site: Site): Vec[] {
   let core = CORES.get(site);
   if (core === undefined) {
@@ -92,8 +63,6 @@ export function fortressCore(site: Site): Vec[] {
   return core;
 }
 
-// Whether a point lies inside the site's curtain, at least inset tiles from every wall line. Interiors keep half a
-// wall depth clear, so a model never pokes into the wall.
 export function insideCurtain(site: Site, p: Vec, inset: number = FORTRESS.wallDepth / 2): boolean {
   const outline = fortressOutline(site);
   let inside = false;
@@ -106,7 +75,6 @@ export function insideCurtain(site: Site, p: Vec, inset: number = FORTRESS.wallD
   return inside;
 }
 
-// The gates of a fortress site, in siteGates() order. fortressPieces() lays a gatehouse at each.
 export function fortressGates(site: Site): FortGate[] {
   let gates = GATES.get(site);
   if (gates === undefined) {
@@ -128,15 +96,12 @@ export function fortressPieces(site: Site): FortressPiece[] {
   return [...laid.flatMap((l) => l.pieces), ...walls, ...standing];
 }
 
-// Whether a point lies on the stretch of outline the site's rock closes, by its bearing from the center.
 export function onFortressRock(site: Site, p: Vec): boolean {
   const { rock, turn } = fortressOf(site);
   const turned = (deg: number): number => ((deg % 360) + 360) % 360;
   return (rock ?? []).some((r) => turned(bearing(site.pos, p) / DEG - turn - r.from) <= turned(r.to - r.from));
 }
 
-// Tiles below the rim at p for a site with a pit: 0 outside the curtain and within the pit margin of the curtain line,
-// then one step down per terrace width in from the margin, to the flat floor. The terraces follow the outline.
 export function pitDepth(site: Site, p: Vec): number {
   const pit = fortressOf(site).pit;
   if (pit === undefined) throw new Error(`Site ${site.id} has no pit`);
@@ -151,7 +116,6 @@ function wallRun(points: Vec[]): FortressPiece[] {
   return points.slice(1).flatMap((p, i) => wallLine(points[i], p));
 }
 
-// The towers and bastions on the outline corners, less those a gatehouse stands in for.
 function cornerPieces(site: Site, corners: Corner[], houses: Rect[]): FortressPiece[] {
   const style = fortressOf(site).style;
   return corners.flatMap((c) => {
@@ -162,7 +126,6 @@ function cornerPieces(site: Site, corners: Corner[], houses: Rect[]): FortressPi
   });
 }
 
-// The four footprint corners of a piece of the site, counterclockwise. The first two lie on its outer face.
 export function fortressFootprint(site: Site, piece: FortressPiece): Vec[] {
   const rect = pieceRect(styleOf(site), piece);
   const { axis, half, center } = rect;
@@ -191,7 +154,6 @@ function styleOf(site: Site): FortressStyleDef {
   return FORTRESS_STYLES[fortressOf(site).style];
 }
 
-// The outline corners, counterclockwise from the site's turn.
 function outlineCorners(site: Site): Corner[] {
   const def = fortressOf(site);
   const radius = site.radius - FORTRESS.inset;
@@ -206,7 +168,6 @@ function outlineCorners(site: Site): Corner[] {
       return { pos: at((k * 2 * Math.PI) / count, point ? radius : radius * (1 - FORTRESS.starDepth)), piece: point ? 'bastion' : null };
     });
   }
-  // A circle is an N-gon of sections about one wall long, with a tower every circleTowerEvery sections.
   const every = def.towerEvery ?? FORTRESS.circleTowerEvery;
   const count = every * Math.ceil((2 * Math.PI * radius) / (FORTRESS.wallLength * every));
   const towers = def.towers ?? true;
@@ -215,7 +176,6 @@ function outlineCorners(site: Site): Corner[] {
 
 type BastionVertex = { capital: number; inner: Vec };
 
-// The inner vertex of each bastion, on its capital at the curtain radius.
 function bastionVertices(site: Site, def: FortressSite): BastionVertex[] {
   const b = def.bastions;
   if (b === undefined || b.capitals.length < 3) throw new Error(`Site ${site.id} has a bastioned outline with under three bastions`);
@@ -225,10 +185,6 @@ function bastionVertices(site: Site, def: FortressSite): BastionVertex[] {
   });
 }
 
-// A bastioned outline: five corners per bastion, in order. The left gorge, then the left shoulder tower, the salient
-// tower, the right shoulder tower and the right gorge. The gorges carry no piece, so a curtain runs from one bastion's
-// right gorge to the next one's left gorge. Each shoulder stands flank tiles out from its gorge, along the outward
-// normal of the curtain it stands on, so it flanks that curtain and the next bastion's face.
 function bastionedCorners(site: Site, def: FortressSite): Corner[] {
   const b = def.bastions as FortressBastions;
   const vertices = bastionVertices(site, def);
@@ -267,7 +223,6 @@ function bastionedCorners(site: Site, def: FortressSite): Corner[] {
   return corners;
 }
 
-// Whether segments ab and cd cross, short of touching at an end.
 function segmentsCross(a: Vec, b: Vec, c: Vec, d: Vec): boolean {
   const turn = (p: Vec, q: Vec, r: Vec): number => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
   return turn(a, b, c) * turn(a, b, d) < 0 && turn(c, d, a) * turn(c, d, b) < 0;
@@ -278,8 +233,6 @@ function unit(from: Vec, to: Vec): Vec {
   return { x: (to.x - from.x) / d, y: (to.y - from.y) / d };
 }
 
-// Where a gate's gatehouse stands. At a castle style it stands square to the gate's bearing with its outer face on
-// the gate point. At a flush style it stands along the curtain side that the bearing meets, with its outer face on it.
 function gateSpot(site: Site, gate: Vec, outline: Vec[]): { fort: FortGate; house: FortressPiece } {
   const style = styleOf(site);
   const { width, depth, height } = style.gate;
@@ -289,21 +242,16 @@ function gateSpot(site: Site, gate: Vec, outline: Vec[]): { fort: FortGate; hous
   const cast = castToOutline(gate, { x: -out.x, y: -out.y }, outline);
   if (cast === null) throw new Error(`Site ${site.id} has a gate that misses its curtain at ${fmt(gate)}`);
   const yaw = bearing(outline[cast.segment], outline[(cast.segment + 1) % outline.length]);
-  // The outer face looks to the right of the yaw.
   const normal = { x: Math.sin(yaw), y: -Math.cos(yaw) };
   return { fort: { gate, face: cast.point, out, width, height }, house: { kind: 'gate', pos: along(cast.point, normal, -depth / 2), yaw, r: width / 2 } };
 }
 
-// The pieces of one gate, the rectangle it cuts out of the curtain, and the rectangle in which it stands in for any
-// corner piece, or null where a barbican's inner gate makes the cut.
 function layGate(site: Site, gate: Vec, corners: Corner[]): { pieces: FortressPiece[]; cut: Rect; standsIn: Rect | null } {
   const outline = corners.map((c) => c.pos);
   const style = styleOf(site);
   const { house: gatehouse, fort } = gateSpot(site, gate, outline);
   const house = pieceRect(style, gatehouse);
   const tagged = corners.filter((c) => c.piece !== null).map((c) => c.pos);
-  // A flush gatehouse's outer face lies on the curtain line, so its cut reaches its depth out past the line too, and
-  // takes every outline stretch along its width.
   const cut: Rect = style.flush ? { center: fort.face, axis: house.axis, half: { along: house.half.along, across: style.gate.depth } } : house;
   if (!style.flush && !outline.some((p, i) => clipSegment(p, outline[(i + 1) % outline.length], house) !== null)) {
     const barbican = layBarbican(site, { gate, out: fort.out, outline, tagged });
@@ -313,8 +261,6 @@ function layGate(site: Site, gate: Vec, corners: Corner[]): { pieces: FortressPi
   return { pieces: [gatehouse], cut, standsIn: cut };
 }
 
-// A gatehouse keeps gateClearance from every tower. At a bastioned site the gorges count too, since a curtain's open
-// stretch ends at them.
 function checkGateClearance(site: Site, gate: Vec, cut: Rect, corners: Corner[]): void {
   const keepClear = corners.filter((c) => c.piece !== null || fortressOf(site).shape === 'bastioned');
   for (const c of keepClear) {
@@ -324,7 +270,6 @@ function checkGateClearance(site: Site, gate: Vec, cut: Rect, corners: Corner[])
 
 type GateSpot = { gate: Vec; out: Vec; outline: Vec[]; tagged: Vec[] };
 
-// A barbican. The neck walls run in from the gatehouse back to the curtain, inside its side faces.
 function layBarbican(site: Site, spot: GateSpot): { pieces: FortressPiece[]; cut: Rect } {
   const { gate, out, outline, tagged } = spot;
   const style = styleOf(site);
@@ -337,7 +282,6 @@ function layBarbican(site: Site, spot: GateSpot): { pieces: FortressPiece[]; cut
     const from = along(back, tangent, side * (width / 2 - FORTRESS.wallDepth / 2));
     const reach = castToOutline(from, inward, outline);
     if (reach === null) throw new Error(`Site ${site.id} has a barbican neck that misses the curtain at ${fmt(gate)}`);
-    // A short neck reaches further back into the gatehouse, so it is at least one wall model long.
     const into = Math.max(0, FORTRESS.wallLength - FORTRESS.wallDepth - reach.distance);
     if (into > depth) throw new Error(`Site ${site.id} has no room for a barbican neck at ${fmt(gate)}`);
     return { start: along(from, out, into), end: reach.point };
@@ -360,7 +304,6 @@ function layBarbican(site: Site, spot: GateSpot): { pieces: FortressPiece[]; cut
 
 type Span = { segment: number; t0: number; t1: number };
 
-// The outline less the cut rectangles and the segments the rock closes, as runs in outline order.
 function cutOutline(outline: Vec[], cuts: Rect[], onRock: (segment: number) => boolean): Run[] {
   const kept = outline.flatMap((_, i) => (onRock(i) ? [] : keptSpans(outline, i, cuts)));
   const n = outline.length;
@@ -382,19 +325,16 @@ function cutOutline(outline: Vec[], cuts: Rect[], onRock: (segment: number) => b
   return runs;
 }
 
-// The index of a span that begins at a cut, so every run starts and ends at one.
 function firstCut(kept: Span[], n: number): number {
   const first = kept.findIndex((k, i) => !continues(kept[(i - 1 + kept.length) % kept.length], k, n));
   if (first < 0) throw new Error('A fortress outline has no gate cut');
   return first;
 }
 
-// Whether span k picks up where span prev ends, with no cut between.
 function continues(prev: Span, k: Span, n: number): boolean {
   return k.t0 === 0 && prev.t1 === 1 && prev.segment === (k.segment - 1 + n) % n;
 }
 
-// The parts of outline segment i that lie outside every cut.
 function keptSpans(outline: Vec[], i: number, cuts: Rect[]): Span[] {
   let spans: [number, number][] = [[0, 1]];
   for (const cut of cuts) {
@@ -408,8 +348,6 @@ function keptSpans(outline: Vec[], i: number, cuts: Rect[]): Span[] {
   return spans.map(([t0, t1]) => ({ segment: i, t0, t1 }));
 }
 
-// A run's points, with a cut end joined straight past a plain circle corner when the stretch between them is too
-// short for a wall. Towers and bastions stay, and the gate clearance keeps their stretches long enough.
 function mergeShortEnds(run: Run, corners: Corner[]): Vec[] {
   const shortest = FORTRESS.wallLength * FORTRESS.stretch[0] - FORTRESS.wallDepth;
   const points = [...run.points];
@@ -430,8 +368,6 @@ function mergeShortEnds(run: Run, corners: Corner[]): Vec[] {
   return points;
 }
 
-// Walls along a straight line from a to b, in equal sections near the model length. Each wall reaches half the
-// wall depth past both section ends, so it overlaps its neighbors at every joint.
 function wallLine(a: Vec, b: Vec): FortressPiece[] {
   const length = dist(a, b);
   const [least, most] = FORTRESS.stretch.map((s) => s * FORTRESS.wallLength);
@@ -446,7 +382,6 @@ function wallLine(a: Vec, b: Vec): FortressPiece[] {
 
 type Cast = { point: Vec; distance: number; segment: number };
 
-// The first point where a ray from p along unit dir meets the outline.
 function castToOutline(p: Vec, dir: Vec, outline: Vec[]): Cast | null {
   const hits = outline.flatMap((a, i): Cast[] => {
     const t = rayHit(p, dir, a, outline[(i + 1) % outline.length]);
@@ -455,7 +390,6 @@ function castToOutline(p: Vec, dir: Vec, outline: Vec[]): Cast | null {
   return hits.reduce<Cast | null>((best, h) => (best === null || h.distance < best.distance ? h : best), null);
 }
 
-// How far along the ray from p the segment ab is met, or null.
 function rayHit(p: Vec, dir: Vec, a: Vec, b: Vec): number | null {
   const e = { x: b.x - a.x, y: b.y - a.y };
   const denom = dir.x * e.y - dir.y * e.x;
@@ -466,7 +400,6 @@ function rayHit(p: Vec, dir: Vec, a: Vec, b: Vec): number | null {
   return t < 0 || u < 0 || u > 1 ? null : t;
 }
 
-// The span of segment ab, as fractions of it, that lies inside the rectangle, or null.
 function clipSegment(a: Vec, b: Vec, rect: Rect): [number, number] | null {
   const la = toRect(rect, a);
   const lb = toRect(rect, b);
@@ -489,7 +422,6 @@ function clipSegment(a: Vec, b: Vec, rect: Rect): [number, number] | null {
   return t1 - t0 > 1e-9 ? [t0, t1] : null;
 }
 
-// Signed distance from p to the rectangle's edge: positive inside, negative outside.
 function rectEdgeDistance(rect: Rect, p: Vec): number {
   const l = toRect(rect, p);
   const dx = rect.half.along - Math.abs(l.x);

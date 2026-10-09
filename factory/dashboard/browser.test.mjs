@@ -3,6 +3,7 @@ import { readFile, mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
+import { LABELS } from '../src/dashboard/labels.ts';
 
 if (!process.argv[2] || !process.argv[3]) throw new Error('Usage: node browser.test.mjs <playwright-module> <evidence-directory>');
 const { chromium } = await import(pathToFileURL(resolve(process.argv[2])).href);
@@ -12,10 +13,12 @@ const now = new Date().toISOString();
 function createSource(value) { return { status: 'ok', at: now, value }; }
 const jobs = Array.from({ length: 45 }, (_, i) => ({ key: `job-${i}`, issue: i + 1, stage: ['design', 'implement', 'verify'][i % 3], startedAt: new Date(Date.now() - 900000).toISOString() }));
 const cardColumns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Done'];
+const boardColumns = Object.keys(LABELS.columns);
+const fill = (value) => boardColumns.map(() => value);
 function createSummary(days) {
   const tokens = { input: 1000000, output: 300000, cacheRead: 200000, cacheWrite: 100000 };
   const yesterday = new Date(Date.parse(now) - 86400000).toISOString().slice(0, 10);
-  return { days, since: `${yesterday}T00:00:00Z`, workerMs: 7200000, cost: days > 1 ? 16.5 : 14.5, tokens, waitingMs: 3600000, waitingGaps: 1, missingUsage: 2,
+  return { days, since: `${yesterday}T00:00:00Z`, workerMs: 7200000, cost: days > 1 ? 16.5 : 14.5, tokens, waitingMs: 3600000, waitingSpanMs: 1800000, waitingGaps: 1, missingUsage: 2,
     wasted: { cost: 4.25, tokens: { input: 400000, output: 50000, cacheRead: 0, cacheWrite: 0 } },
     stages: [{ stage: 'design', workerMs: 7200000 }], waitingStages: [{ stage: 'design', workerMs: 3600000 }],
     buckets: [...(days > 1 ? [{ start: yesterday, cost: 2, tokens: null, stages: { design: { cost: 2, tokens: 0 } }, models: { unattributed: { cost: 2, tokens: 0 } } }] : []),
@@ -30,22 +33,67 @@ function createSummary(days) {
     ],
     activity: jobs.map((job) => ({ stage: job.stage, issue: job.issue, outcome: 'done', at: now })), delivery: createDelivery(days) };
 }
+function createMerges() {
+  const hour = 3600000;
+  const merge = (issue, ageHours, mergedHoursAgo) => {
+    const mergedAt = Date.parse(now) - mergedHoursAgo * hour;
+    return { issue, createdAt: new Date(mergedAt - ageHours * hour).toISOString(), mergedAt: new Date(mergedAt).toISOString() };
+  };
+  return [merge(1, 50, 2), merge(2, 10, 72), merge(3, 120, 480)];
+}
 function createDelivery(days) {
   const hour = 3600000;
   const stage = (name, count, mean) => ({ stage: name, count, meanMs: count ? mean * hour : null, medianMs: count ? mean * hour : null, open: 2, openMeanMs: 5 * hour });
-  return { since: '2026-08-01T00:00:00.000Z', issues: 12 * days, excluded: 3, legacy: 4, lead: { count: 5, meanMs: 50 * hour, medianMs: 40 * hour, open: 7, openMeanMs: 20 * hour, missingStart: 1 },
+  return { since: '2026-08-01T00:00:00.000Z', issues: 12 * days, excluded: 3, legacy: 4, lead: { open: 7, openMeanMs: 20 * hour, missingStart: 1 },
     stages: [stage('triage', 6, 2), stage('design', 6, 10), stage('implementation', 5, 5), stage('preview', 5, 3), stage('approval', 4, 24), stage('harden', 3, 4), stage('merge', 0, 0)],
     loops: [{ step: 'questions', events: 2, issues: 2 }, { step: 'rebuild', events: 0, issues: 0 }, { step: 'patch', events: 3, issues: 1 }], looped: 3,
     retries: [{ stage: 'design', runs: 2, issues: 1 }, { stage: 'verify', runs: 0, issues: 0 }],
     rejections: [{ gate: 'triage', decided: 8, rejected: 2 }, { gate: 'design', decided: 6, rejected: 0 }, { gate: 'committee', decided: 0, rejected: 0 }] };
 }
+function createBucketRows(bucket) {
+  const rows = (grouping, segments) => Object.entries(segments).map(([key, segment]) => ({ start: bucket.start, grouping, key, cost: segment.cost, tokens: bucket.tokens ? segment.tokens : null }));
+  return [...rows('stage', bucket.stages), ...rows('model', bucket.models)];
+}
+function createDeliveryPanels(delivery) {
+  if (!delivery) return { delivery_coverage: [{ since: null, issues: 0, excluded: 0, legacy: 0, looped: 0 }], lead: [{ open: 0, open_mean_ms: null, missing_start: 0 }], dwell: [], loops: [], rejections: [], delivery_retries: [] };
+  return {
+    delivery_coverage: [{ since: delivery.since, issues: delivery.issues, excluded: delivery.excluded, legacy: delivery.legacy, looped: delivery.looped }],
+    lead: [{ open: delivery.lead.open, open_mean_ms: delivery.lead.openMeanMs, missing_start: delivery.lead.missingStart }],
+    dwell: delivery.stages.map((row) => ({ stage: row.stage, count: row.count, mean_ms: row.meanMs, median_ms: row.medianMs, open: row.open, open_mean_ms: row.openMeanMs })),
+    loops: delivery.loops, rejections: delivery.rejections, delivery_retries: delivery.retries,
+  };
+}
+function createRangePanels(summary) {
+  const { tokens, wasted } = summary;
+  return {
+    problems: [{ unreadable: 0, untimed: 0, uncosted: 0 }],
+    coverage: [{ since: summary.since, missing_usage: summary.missingUsage }],
+    counters: [{ worker_ms: summary.workerMs, cost: summary.cost, input: tokens.input, output: tokens.output, cache_read: tokens.cacheRead, cache_write: tokens.cacheWrite,
+      wasted_cost: wasted.cost, wasted_input: wasted.tokens.input, wasted_output: wasted.tokens.output, wasted_cache_read: wasted.tokens.cacheRead, wasted_cache_write: wasted.tokens.cacheWrite }],
+    usage_buckets: summary.buckets.flatMap(createBucketRows),
+    stage_time: summary.stages.map((row) => ({ stage: row.stage, worker_ms: row.workerMs })),
+    waiting: [{ waiting_ms: summary.waitingMs, span_ms: summary.waitingSpanMs, gaps: summary.waitingGaps }],
+    waiting_stages: summary.waitingStages.map((row) => ({ stage: row.stage, waiting_ms: row.workerMs })),
+    retries: summary.retries.map((row) => ({ outcome: row.outcome, runs: row.runs, worker_ms: row.workerMs, cost: row.cost })),
+    stage_models: summary.stageModels.map((row) => ({ stage: row.stage, model: row.model, input: row.input, output: row.output, cache_read: row.cacheRead, cache_write: row.cacheWrite, cost: row.cost })),
+    activity: summary.activity,
+    ...createDeliveryPanels(summary.delivery),
+  };
+}
+function createAnalytics(mutate = () => {}) {
+  const ranges = [1, 7, 30].map((days) => { const summary = createSummary(days); mutate(summary); return [days, createRangePanels(summary)]; });
+  const names = Object.keys(ranges[0][1]);
+  return Object.fromEntries(names.map((name) => [name, { error: null, ranges: Object.fromEntries(ranges.map(([days, panels]) => [days, panels[name]])) }]));
+}
+function withAnalytics(mutate) { const value = structuredClone(fixture); value.analytics = createSource(createAnalytics(mutate)); return value; }
 const fixture = {
   generatedAt: now, repoUrl: 'https://github.com/example/factory', playUrl: 'https://example.com/',
   operations: createSource({ jobs, queues: Object.fromEntries(['branch', 'triage', 'design', 'implement', 'verify', 'test'].map((queue) => [queue, { total: 20, busy: 15 }])), releaseKey: 'release', release: { issue: 99 }, candidateUrl: null }),
-  github: createSource({ releaseKey: 'release', features: Array.from({ length: 34 }, (_, index) => ({ issue: index + 1, title: `Feature ${index + 1} ${'long'.repeat(60)}` })), cards: jobs.map((job, index) => ({ issue: job.issue, column: cardColumns[index % cardColumns.length], title: `Task ${job.issue} ${'unbroken'.repeat(60)}` })) }),
+  github: createSource({ releaseKey: 'release', merges: createMerges(), features: Array.from({ length: 34 }, (_, index) => ({ issue: index + 1, title: `Feature ${index + 1} ${'long'.repeat(60)}` })), cards: jobs.map((job, index) => ({ issue: job.issue, column: cardColumns[index % cardColumns.length], title: `Task ${job.issue} ${'unbroken'.repeat(60)}` })) }),
   live: createSource({ workers: jobs.map((job) => ({ key: job.key, activity: 'tests', phase: 'running', status: 'ok', source: 'runner', progressAt: now })), manager: { activity: 'command', intent: 'investigate', phase: 'running', status: 'ok', at: now, since: now }, scheduler: { status: 'ready', freshness: 'ok', at: now, counts: { Triage: 12345678, Design: 200, Implementation: 31, Testing: 20, Approval: 10, Done: 99 }, decisions: [{ stage: 'design', queue: 'design', issue: 42, reasons: ['needs-info'] }], release: { reason: 'release-tasks', issues: [42] } } }),
   host: createSource({ cpu: createSource(85), ram: createSource({ used: 10000000000, total: 16000000000 }), gpu: createSource([{ utilization: 90 }]), ssd: createSource({ free: 20000000000 }), containers: createSource(jobs.map((job) => ({ jobId: job.key, service: 'worker', cpu: 2, memory: 1000000000 }))) }),
-  analytics: createSource({ ranges: [1, 7, 30].map(createSummary) }),
+  analytics: createSource(createAnalytics()),
+  labels: LABELS,
 };
 function readContentType(path) {
   const extension = path.split('.').at(-1);
@@ -77,6 +125,11 @@ async function checkLayout(page, size) {
     await page.screenshot({ path: `${evidence}/${tab}-${size.width}.png` });
     assert.equal(overflow.document, false);
     assert.deepEqual(overflow.panels, []);
+    if (tab === 'overview') {
+      const tops = await page.locator('#funnel div').evaluateAll((items) => items.map((item) => item.getBoundingClientRect().top));
+      assert.equal(tops.length, boardColumns.length);
+      assert.equal(new Set(tops).size, 1);
+    }
     console.log(size, tab, 'fits without scrolling');
   }
 }
@@ -165,6 +218,8 @@ async function checkCounters(page) {
   assert.equal(await page.locator('.token-counter .panel').count(), 0);
   assert.deepEqual(await page.locator('.token-counter .counter span').allTextContents(), ['Total tokens', 'Input incl. cache', 'Output']);
   assert.equal(await page.locator('#usage-wasted-cost').textContent(), '$4.25');
+  assert.equal(await page.locator('#usage-wait').textContent(), '2.0 cards');
+  assert.equal(await page.locator('#usage-wait').getAttribute('data-exact'), '1h 0m summed card-time');
   assert.equal(await page.locator('#usage-wasted-tokens').textContent(), '450K tokens');
   assert.equal(await page.locator('#usage-input').textContent(), '1.3M');
   assert.equal(await page.locator('#usage-input').getAttribute('data-exact'), '1300000');
@@ -174,16 +229,21 @@ async function checkCounters(page) {
   assert.deepEqual(await page.locator('#stage-model-measures th').allTextContents(), ['Input + cache', 'Output', 'Input + cache', 'Output']);
   assert.ok(!(await page.locator('#analytics').textContent()).includes('Input incl. cache / output, measured runs'));
   const verify = page.locator('#stage-model-rows tr').filter({ has: page.locator('td:first-child', { hasText: 'Verify' }) });
-  assert.deepEqual(await verify.locator('td').allTextContents(), ['Verify + review', '130K', '100K', '380K', '80K']);
-  const extra = structuredClone(fixture);
-  for (const range of extra.analytics.value.ranges) {
-    range.models.push({ model: 'extra-model', input: 3, output: 4, cacheRead: 0, cacheWrite: 0, cost: 0.01 });
-    range.stageModels.push({ stage: 'verify', model: 'extra-model', input: 3, output: 4, cacheRead: 0, cacheWrite: 0, cost: 0.01 });
-  }
+  assert.deepEqual(await verify.locator('td').allTextContents(), ['Verify', '130K', '100K', '380K', '80K']);
+  const extra = withAnalytics((range) => range.stageModels.push({ stage: 'verify', model: 'extra-model', input: 3, output: 4, cacheRead: 0, cacheWrite: 0, cost: 0.01 }));
   await sendSnapshot(page, extra);
   await page.getByRole('button', { name: 'Next model column', exact: true }).click();
   await waitForRender(page);
   assert.ok((await page.locator('#stage-model-header').textContent()).includes('extra-model'));
+  const broken = structuredClone(fixture);
+  broken.analytics.value.stage_models = { error: 'Binder Error', ranges: null };
+  broken.analytics.value.waiting = { error: 'Conversion Error', ranges: null };
+  await sendSnapshot(page, broken);
+  assert.equal(await page.locator('#stage-model-rows').textContent(), 'Tokens by stage and model failed: Binder Error');
+  assert.match(await page.locator('#coverage').textContent(), /2 runs lack token counts, Waiting time failed: Conversion Error/);
+  assert.equal(await page.locator('#usage-wait').textContent(), '—');
+  assert.equal(await page.locator('#usage-wasted-cost').textContent(), '$4.25');
+  assert.equal(await page.locator('#retry-rows td').first().textContent(), 'timeout');
   await sendSnapshot(page, fixture);
   assert.match(await page.locator('#coverage').textContent(), /History from .*UTC.*2 runs lack token counts/);
   assert.equal(await page.getByRole('button', { name: 'Cost', exact: true }).getAttribute('aria-pressed'), 'true');
@@ -211,8 +271,9 @@ async function checkCounters(page) {
 async function checkDelivery(page) {
   await page.locator('#delivery-tab').click();
   await waitForRender(page);
-  assert.equal(await page.locator('#lead-mean').textContent(), '50h 0m');
-  assert.equal(await page.locator('#lead-median').textContent(), '40h 0m');
+  assert.equal(await page.locator('#issue-mean').textContent(), '30h 0m');
+  assert.equal(await page.locator('#issue-median').textContent(), '30h 0m');
+  assert.equal(await page.locator('#issue-mean').getAttribute('data-exact'), `${30 * 3600000} ms mean of 2 issues`);
   assert.equal(await page.locator('#lead-open').textContent(), '7');
   assert.equal(await page.locator('#loop-rate').textContent(), '4%');
   assert.match(await page.locator('#delivery-coverage').textContent(), /^84 cards, records since 2026-08-01 UTC$/);
@@ -226,14 +287,23 @@ async function checkDelivery(page) {
   assert.equal(await page.locator('#committee-rate').getAttribute('data-exact'), 'Committee Deny: 0 of 0 decided cards');
   assert.deepEqual(await page.locator('#stage-retry-rows td').allTextContents(), ['Design', '2', '1']);
   assert.equal(await page.getByRole('button', { name: '30 days', exact: true }).count(), 1);
+  await page.getByRole('button', { name: '24 hours', exact: true }).click();
+  await waitForRender(page);
+  assert.equal(await page.locator('#issue-mean').textContent(), '50h 0m');
+  assert.equal(await page.locator('#issue-median').textContent(), '50h 0m');
   await page.getByRole('button', { name: '30 days', exact: true }).click();
   await waitForRender(page);
+  assert.equal(await page.locator('#issue-mean').textContent(), '60h 0m');
+  assert.equal(await page.locator('#issue-median').textContent(), '50h 0m');
   assert.match(await page.locator('#delivery-coverage').textContent(), /^360 cards, /);
   await page.getByRole('button', { name: '7 days', exact: true }).click();
-  const unrecorded = structuredClone(fixture);
-  for (const range of unrecorded.analytics.value.ranges) range.delivery = null;
+  const unlabeled = withAnalytics((range) => range.delivery.loops.push({ step: 'brand-new-step', events: 1, issues: 1 }));
+  await sendSnapshot(page, unlabeled);
+  assert.ok((await page.locator('#loop-rows td:first-child').allTextContents()).includes('brand-new-step'));
+  const unrecorded = withAnalytics((range) => { range.delivery = null; });
   await sendSnapshot(page, unrecorded);
-  assert.equal(await page.locator('#lead-mean').textContent(), '—');
+  assert.equal(await page.locator('#issue-mean').textContent(), '30h 0m');
+  assert.equal(await page.locator('#lead-open').textContent(), '—');
   assert.equal(await page.locator('#loop-rate').textContent(), '—');
   assert.match(await page.locator('#delivery-coverage').textContent(), /No card moves recorded yet/);
   assert.equal(await page.locator('#dwell-rows').textContent(), 'No card moves recorded yet');
@@ -269,7 +339,7 @@ async function checkPause(page) {
   paused.live.value.scheduler.status = 'paused';
   paused.live.value.scheduler.counts = {};
   await sendSnapshot(page, paused);
-  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['8', '8', '8', '7', '7', '7']);
+  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), boardColumns.map((column) => String(fixture.github.value.cards.filter((card) => card.column === column).length)));
   assert.match(await page.locator('#source-status').textContent(), /Paused.*Claude weekly usage limit/);
   assert.equal(await page.evaluate(() => document.documentElement.scrollHeight > innerHeight), false);
   await page.screenshot({ path: `${evidence}/paused-${page.viewportSize().width}.png` });
@@ -334,21 +404,22 @@ async function checkUntrustedAndMissingData(page) {
   assert.equal(await page.locator('#stage-model-rows').textContent(), 'Unavailable');
   await page.locator('#delivery-tab').click();
   await waitForRender(page);
-  assert.equal(await page.locator('#lead-mean').textContent(), '—');
+  assert.equal(await page.locator('#issue-mean').textContent(), '—');
+  assert.equal(await page.locator('#issue-median').textContent(), '—');
   assert.equal(await page.locator('#delivery-coverage').textContent(), 'Card records unavailable');
   assert.equal(await page.locator('#dwell-rows').textContent(), 'Unavailable');
   assert.equal(await page.locator('#committee-rate').textContent(), '—');
   await page.locator('#overview-tab').click();
   await waitForRender(page);
-  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['—', '—', '—', '—', '—', '—']);
+  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), fill('—'));
   const empty = structuredClone(fixture);
   empty.github.value.cards = [];
   await sendSnapshot(page, empty);
-  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['0', '0', '0', '0', '0', '0']);
+  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), fill('0'));
   const stale = structuredClone(fixture);
   stale.github.status = 'stale';
   await sendSnapshot(page, stale);
-  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), ['—', '—', '—', '—', '—', '—']);
+  assert.deepEqual(await page.locator('#funnel strong').allTextContents(), fill('—'));
 }
 await new Promise((done) => server.listen(0, '127.0.0.1', done));
 await mkdir(evidence, { recursive: true });

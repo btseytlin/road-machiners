@@ -1,17 +1,14 @@
 // Renders every item and chassis icon from the game's models in headless Chromium, through icons.html.
 // Writes the sprite sheets public/icons/items.svg and public/icons/chassis.png, the manifest src/data/item-icons.json,
 // and under public/icons/atlas/ the labeled atlases atlas-top.png, atlas-diagonal.png and atlas-game.png (each entry in
-// the view the game shows) and report.txt. The build serves the atlases for review, and the game never loads them.
-// Fails when a weapon's barrel does not read from lower left to upper right in the diagonal view.
-// Rerun after a model, a weapon pick or the icon style changes. src/data/item-icons.test.ts fails while the manifest is stale.
-// Usage: npm run icons -- [--cpu]. With --cpu, Chromium draws in software, as on a machine without a GPU.
 
 import { mkdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { chromium } from 'playwright';
 import { createServer } from 'vite';
+import { gpuArgs } from './gpu.mjs';
 
-const BUILD_LIMIT_MS = 600000; // software drawing renders about 150 icons, each in four passes
+const BUILD_LIMIT_MS = 600000;
 const cpu = process.argv.includes('--cpu');
 const plansOnly = process.argv.includes('--plans');
 
@@ -23,7 +20,7 @@ function writeAtomic(path, data) {
 
 const server = await createServer({ server: { port: 5191, strictPort: false }, logLevel: 'error' });
 await server.listen();
-const browser = await chromium.launch({ args: cpu ? [] : ['--use-angle=metal', '--enable-gpu', '--ignore-gpu-blocklist'] });
+const browser = await chromium.launch({ args: cpu ? [] : gpuArgs() });
 try {
   const page = await browser.newPage();
   const errors = [];

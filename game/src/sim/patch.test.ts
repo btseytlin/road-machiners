@@ -33,18 +33,16 @@ function breakEngine(v: Vehicle): void {
 
 const parts = (v: Vehicle) => goodsCount(v).parts ?? 0;
 
-// Start kits carry spare parts. Tests set the count they need.
 function setParts(w: World, v: Vehicle, n: number): void {
   removeGoods(v, 'parts', parts(v));
   addGoods(w, v, 'parts', n);
 }
 const find = (w: World, id: string) => w.vehicles.find((v) => v.id === id)!;
 
-// A player with a dead engine and a parked trader in sight. No spawns, so nothing interrupts the work.
 function brokenPlayer(traderParts: number): { w: World; trader: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
-  w.player.autoRepair = false; // the player's own field repair would spend the same parts
+  w.player.autoRepair = false;
   breakEngine(playerVehicle(w));
   setParts(w, playerVehicle(w), 0);
   const trader = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 38, y: 30 }, Math.PI);
@@ -69,7 +67,6 @@ function runUntil(w: World, max: number, done: (w: World) => boolean): { w: Worl
   return { w, events };
 }
 
-// The deal is rolled when the topic opens, so force it before asking.
 function agreedTerms(start: World, traderId: string, deal: PatchDeal): World {
   forceOption('patchDeal', deal);
   let w = askPatch(start, traderId);
@@ -180,7 +177,6 @@ describe('asking a driver for a patch', () => {
 });
 
 describe('a stranded driver asking the player', () => {
-  // A scavenger with a dead engine parks in sight of a player who carries parts.
   function brokenNpc(): { w: World; npc: Vehicle } {
     const w = emptyWorld({ x: 30, y: 30 });
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -295,7 +291,6 @@ describe('a stranded driver asking the player', () => {
     forceOption('patchDeal', 'paid');
     let w = endTurn(start, testDrive);
     w = answer(answer(w, 'What are you offering?'), 'Deal. Stay where you are.');
-    // The forced roll is only likely, so the deal is set to a paid one here.
     const deal = patchData(stateOf(w, 'patch', w.player.vehicleId, npc.id)!);
     Object.assign(deal, { deal: 'paid', price: Math.max(deal.price, 1) });
     find(w, npc.id).resources!.money = 0;
@@ -318,7 +313,6 @@ describe('a stranded driver asking the player', () => {
     expect(r.events.some((e) => e.t === 'patch' && e.outcome === 'lapsed')).toBe(true);
     expect(r.w.player.money).toBe(money);
     expect(parts(playerVehicle(r.w))).toBe(4);
-    // The driver notices the deal is off when it next thinks.
     expect(topGoal(find(endTurn(r.w, testDrive), npc.id))?.kind).not.toBe('patch');
   });
 });
@@ -365,7 +359,7 @@ describe('a holed fuel tank', () => {
 
   it('gets no patch or aid offer and raises no request while on a tow rope', () => {
     const { w, npc } = holedNpc(0);
-    npc.resources!.supplies = 0; // a leaking tank asks for no fuel, so the aid offer rests on supplies
+    npc.resources!.supplies = 0;
     const offers = ['Your truck looks dead. Want me to patch it?', 'Running low? I can spare some.'];
     expect(currentOptions(callVehicle(cloneWorld(w), npc.id)).map((o) => o.text)).toEqual(expect.arrayContaining(offers));
     const tower = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 44, y: 30 }, Math.PI);
@@ -388,7 +382,6 @@ describe('a holed fuel tank', () => {
 });
 
 describe('patch practice', () => {
-  // A finished free patch that spends one of the patcher's parts on the client's dead engine.
   function settle(w: World, patcher: Vehicle, client: Vehicle): void {
     setParts(w, patcher, 1);
     breakEngine(client);
@@ -422,8 +415,6 @@ describe('patch practice', () => {
 });
 
 describe('social on patch prices', () => {
-  // The own-parts terms an NPC names, rolled on a copy so both sides of a test see the same rolls. Own-parts terms
-  // charge labor only, so the trade price spread of the same skill stays out of the price.
   function laborPrice(w: World, npcId: string, social: number): number {
     const copy = cloneWorld(w);
     copy.player.ranks.social = social;
@@ -473,7 +464,6 @@ describe('social on patch prices', () => {
 
 
 describe('road mechanic', () => {
-  // A scavenger with a dead engine beside a player who carries parts.
   function brokenNpc(money: number): { w: World; npc: Vehicle } {
     const w = emptyWorld({ x: 30, y: 30 });
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 40, y: 30 }, Math.PI);
@@ -484,7 +474,6 @@ describe('road mechanic', () => {
     return { w, npc };
   }
 
-  // The price an NPC names for a deal, rolled on a copy with the given perks.
   function priceWith(w: World, npcId: string, deal: PatchDeal, perks: World['player']['perks']): number {
     const copy = cloneWorld(w);
     copy.player.perks = perks;
@@ -498,7 +487,6 @@ describe('road mechanic', () => {
     const { w, npc } = brokenNpc(333333);
     const base = priceWith(w, npc.id, 'paid', []);
     expect(base).toBeGreaterThan(0);
-    // Both prices round the unrounded labor to a cent, so they can differ from an exact multiple by a cent.
     expect(Math.abs(priceWith(w, npc.id, 'paid', ['roadMechanic']) - base * PERK_NUMBERS.roadMechanic.price)).toBeLessThanOrEqual(1);
   });
 
@@ -521,7 +509,6 @@ describe('patching a worn truck that still drives', () => {
   const offered = (w: World, id: string) => currentOptions(callVehicle(cloneWorld(w), id)).map((o) => o.text).includes(OFFER);
   const target = (p: { defId: string; hp: number }) => Math.max(1, Math.round(partDef(p.defId).hp * PATCH.share));
 
-  // A scavenger drives on with a worn engine and no parts, in sight of a player who carries parts.
   function wornNpc(): { w: World; npc: Vehicle } {
     const w = emptyWorld({ x: 30, y: 30 });
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -532,7 +519,7 @@ describe('patching a worn truck that still drives', () => {
     setParts(w, npc, 0);
     const engine = mountedParts(npc, 'engine')[0];
     engine.hp = Math.round(partDef(engine.defId).hp * 0.1);
-    const driving = endTurn(w, testDrive); // the driver picks the goal it will return to
+    const driving = endTurn(w, testDrive);
     return { w: driving, npc: find(driving, npc.id) };
   }
 
@@ -711,7 +698,6 @@ describe('patching a worn truck that still drives', () => {
 });
 
 describe('the Patcher crane on roadside patches', () => {
-  // The player patches a hauler whose engine is dead. Its engine alone takes `parts` units of parts.
   function playerPatcher(machining: number, crane: boolean): { w: World; client: Vehicle } {
     const w = emptyWorld({ x: 30, y: 30 });
     w.player.ranks.machining = machining;

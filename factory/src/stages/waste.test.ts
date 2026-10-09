@@ -26,7 +26,6 @@ function fakeCtx(brief: string | null): { ctx: Ctx; seen: Seen } {
       agent: async (run: AgentRun) => {
         seen.runs.push(run);
         seen.numbers = readFileSync(`${run.clone}/${run.dir}/.factory/numbers.md`, 'utf8');
-        // A second review in one test has an empty window, so issue 7 is not among its expensive issues.
         const issue = `${run.clone}/${run.dir}/.factory/issues/issue-7.md`;
         seen.inputs = [existsSync(issue) ? readFileSync(issue, 'utf8') : '', readFileSync(`${run.clone}/${run.dir}/.factory/earlier-reviews.md`, 'utf8')];
         if (brief !== null) writeFileSync(`${run.clone}/${run.dir}/.factory/brief.md`, brief);

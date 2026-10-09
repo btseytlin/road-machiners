@@ -1,19 +1,15 @@
 import { el } from "./dom";
 
 export interface SwitchOptions {
-  // The option named above the lever, chosen while `on` is true.
   on: string;
-  // The option named below the lever, chosen while `on` is false.
   off: string;
   checked: boolean;
-  // The shortcut letter, shown next to the chosen option. Omit when the switch has none.
   key?: string;
   title: string;
   disabled?: boolean;
   onclick: () => void;
 }
 
-// A metal toggle switch for a binary choice. The lever leans toward the chosen option, which glows.
 export function createSwitch(o: SwitchOptions): HTMLElement {
   const option = (name: string, chosen: boolean) =>
     el(

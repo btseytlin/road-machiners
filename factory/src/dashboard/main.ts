@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { readEnvFiles } from '../config';
+import { AnalyticsRunner } from './analytics';
 import { loadDashboardConfig } from './config';
 import { HostSampler } from './host';
 import { PublicGitHub, SnapshotCollector, createGithubRun } from './snapshot';
@@ -39,7 +40,7 @@ async function startDashboard(): Promise<void> {
   const config = loadDashboardConfig(env);
   const githubEnv = { PATH: process.env.PATH, HOME: process.env.HOME, GH_CONFIG_DIR: process.env.GH_CONFIG_DIR, GH_TOKEN: env.GH_TOKEN };
   const github = new PublicGitHub(config, createGithubRun(config.commandTimeoutMs, githubEnv));
-  const collector = new SnapshotCollector(config, github, new HostSampler(config.home, config.commandTimeoutMs));
+  const collector = new SnapshotCollector(config, github, new HostSampler(config.home, config.commandTimeoutMs), await AnalyticsRunner.open());
   const server = new DashboardServer(collector, fileURLToPath(new URL('../../dashboard', import.meta.url)), config);
   await server.start(config);
   console.log(`Factory dashboard listening on ${config.socket ?? `127.0.0.1:${config.port}`}`);

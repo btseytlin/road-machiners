@@ -47,11 +47,11 @@ import { sitePads, townAt, townNear } from "./sites";
 import { addVehicle, emptyWorld, testDrive } from "./testkit";
 import { endTurn, newWorld } from "./world";
 import { TEST_MAP } from "../test/map";
+import { defaultSetup } from "./settings";
 
 const bowl = REGION.towns.find((t) => t.id === "bowl")!;
 const nose = REGION.towns.find((t) => t.id === "nose")!;
 const startAtBowl = () => emptyWorld(sitePads(bowl)[0]);
-// A longbed at Bowl, for trades bigger than the start scout's cargo room. Its money is back to the start amount.
 const longbedAtBowl = () => {
   const start = startAtBowl();
   const money = start.player.money;
@@ -681,7 +681,7 @@ describe("locations", () => {
   });
 
   it("driving near a site discovers it once, with XP", () => {
-    let w = newWorld(5, START_KITS.standard, TEST_MAP);
+    let w = newWorld(5, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const convoy = REGION.locations.find((l) => l.kind === "convoy")!;
     w.vehicles.find((v) => v.faction === "player")!.pos = {
       x: convoy.pos.x + 3.5,
@@ -708,7 +708,6 @@ describe("debt", () => {
     expect(() => buySupply(w, "fuel", 1)).toThrow(/money/);
     expect(() => buyStockPart(w, w.shops.bowl.stock[0].id)).toThrow(/money/);
     expect(() => repairAll(w)).toThrow(/money/);
-    // A chassis swap that costs nothing is still a purchase.
     w.player.money = -1;
     expect(() => buyChassis(w, "courier")).toThrow(/money/);
   });

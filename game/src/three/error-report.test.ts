@@ -5,42 +5,35 @@ import type { World } from '../sim/types';
 import type { DriveSnapshot } from '../phys/drive';
 import { ErrorReporter, type ErrorReport } from './error-report';
 import { writeSave } from './save';
+import { memoryBackend, SaveSlots } from './save-db';
 import { TurnFailure } from './travel';
 
-function makeStorage(): Storage {
-  const values = new Map<string, string>();
-  return {
-    get length() { return values.size; },
-    clear: () => values.clear(),
-    getItem: (key) => values.get(key) ?? null,
-    key: (index) => [...values.keys()][index] ?? null,
-    removeItem: (key) => { values.delete(key); },
-    setItem: (key, value) => { values.set(key, value); },
-  };
+function makeSlots(): SaveSlots {
+  return new SaveSlots(memoryBackend(), new Map());
 }
 
 type Sent = { url: string; report: ErrorReport };
 
-function reporter(storage: Storage, status = 200): { reporter: ErrorReporter; sent: Sent[] } {
+function reporter(status = 200): { reporter: ErrorReporter; sent: Sent[] } {
   const sent: Sent[] = [];
   const post = async (url: string, init: RequestInit): Promise<Response> => {
     const bytes = new Uint8Array(await (init.body as Blob).arrayBuffer());
     sent.push({ url, report: JSON.parse(gunzipSync(bytes).toString('utf8')) as ErrorReport });
     return new Response(null, { status });
   };
-  return { reporter: new ErrorReporter('https://factory.test/errors', 'dev', '3.4.5+abc1234', storage, post), sent };
+  return { reporter: new ErrorReporter('https://factory.test/errors', 'dev', '3.4.5+abc1234', post), sent };
 }
 
-function watching(r: ErrorReporter, world: World): void {
-  r.watch({ world: () => world, log: () => ['Day 2 08:00 Sold scrap', 'Day 2 07:30 Arrived'] });
+function watching(r: ErrorReporter, world: World, slots = makeSlots()): void {
+  r.watch({ world: () => world, log: () => ['Day 2 08:00 Sold scrap', 'Day 2 07:30 Arrived'], slots });
 }
 
 describe('error reports', () => {
   it('sends the error, the world in memory, the log and an older autosave', async () => {
-    const storage = makeStorage();
-    writeSave(storage, 'auto', { ...emptyWorld(), turn: 40 }, 1);
-    const { reporter: r, sent } = reporter(storage);
-    watching(r, { ...emptyWorld(), turn: 44 });
+    const slots = makeSlots();
+    writeSave(slots, 'auto', { ...emptyWorld(), turn: 40 }, 'run-1', 1);
+    const { reporter: r, sent } = reporter();
+    watching(r, { ...emptyWorld(), turn: 44 }, slots);
 
     await r.report(new RangeError('wheel 7 has no axle'));
 
@@ -56,10 +49,10 @@ describe('error reports', () => {
   });
 
   it('marks an autosave of the same turn as the world in memory and does not send it twice', async () => {
-    const storage = makeStorage();
-    writeSave(storage, 'auto', { ...emptyWorld(), turn: 44 }, 1);
-    const { reporter: r, sent } = reporter(storage);
-    watching(r, { ...emptyWorld(), turn: 44 });
+    const slots = makeSlots();
+    writeSave(slots, 'auto', { ...emptyWorld(), turn: 44 }, 'run-1', 1);
+    const { reporter: r, sent } = reporter();
+    watching(r, { ...emptyWorld(), turn: 44 }, slots);
 
     await r.report(new Error('boom'));
 
@@ -67,7 +60,7 @@ describe('error reports', () => {
   });
 
   it('reports a boot error with no world', async () => {
-    const { reporter: r, sent } = reporter(makeStorage());
+    const { reporter: r, sent } = reporter();
 
     await r.report('map fetch failed');
 
@@ -76,7 +69,7 @@ describe('error reports', () => {
   });
 
   it('sends a repeated error once per session', async () => {
-    const { reporter: r, sent } = reporter(makeStorage());
+    const { reporter: r, sent } = reporter();
 
     await r.report(new Error('every frame'));
     await r.report(new Error('every frame'));
@@ -86,7 +79,7 @@ describe('error reports', () => {
   });
 
   it('carries a failed turn with the worker stack and its start drive', async () => {
-    const { reporter: r, sent } = reporter(makeStorage());
+    const { reporter: r, sent } = reporter();
     watching(r, { ...emptyWorld(), turn: 9 });
     const drive = { bodies: { player: 3 }, obstacles: {}, craters: {}, memory: {}, terrain: 1, decks: [], snapshot: new Uint8Array([0, 1, 254, 255]) } satisfies DriveSnapshot;
     const workerStack = 'TypeError: no route\n    at planRoute (turn-abc.js:1:200)';
@@ -100,7 +93,7 @@ describe('error reports', () => {
 
   it('only warns when the endpoint refuses, so the game goes on', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    const { reporter: r, sent } = reporter(makeStorage(), 429);
+    const { reporter: r, sent } = reporter(429);
 
     await expect(r.report(new Error('boom'))).resolves.toBeUndefined();
 

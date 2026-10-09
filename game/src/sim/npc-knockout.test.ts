@@ -20,7 +20,6 @@ import { vehicleStats } from './stats';
 import { canTowNpc, npcHomeSite } from './tow';
 import { dist } from './vec';
 
-// The player at 30,30 with a machine gun, and a raider buggy beside it that the player hit last.
 function beside(): { w: World; me: Vehicle; buggy: Vehicle } {
   const w = emptyWorld();
   const me = w.vehicles[0];
@@ -151,7 +150,6 @@ describe('NPC waking', () => {
 });
 
 describe('the retreat home', () => {
-  // A raider buggy that woke from a knockout far from the player, stripped of its gun.
   function retreating(): { w: World; buggy: Vehicle } {
     const w = emptyWorld();
     const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 150, y: 150 });
@@ -286,7 +284,6 @@ describe('revenge', () => {
   });
 });
 
-// The cab drops from half to 5% this turn by one hit, and the next world roll is `roll`-ish.
 function cabHitFromHalf(w: World, v: Vehicle, roll: (r: number) => boolean): void {
   const cab = corePart(v, 'cab');
   cab.hp = maxHp(cab) * 0.05;

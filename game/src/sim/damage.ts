@@ -7,8 +7,6 @@ import { practice, skillEffect, vehicleHasPerk } from "./progress";
 import { corePart, mountedParts } from "./grid";
 import type { PartInstance, Vehicle, World } from "./types";
 
-// Damage to the player's cab also hurts the character. Rounds pass a broken cab, so a player fighting through on a
-// broken cab is hurt by damage to any part instead.
 export function damagePart(
   world: World,
   v: Vehicle,
@@ -24,7 +22,6 @@ export function damagePart(
   return dealt;
 }
 
-// Damage lands in whole hit points, so an amount under half a point does nothing.
 export function wholeDamage(amount: number): number {
   return Math.max(0, Math.round(amount));
 }
@@ -36,8 +33,6 @@ function hurtsDriver(world: World, v: Vehicle, part: PartInstance): boolean {
   return corePart(v, "cab").hp === 0 && vehicleHasPerk(world, v, "fightThrough");
 }
 
-// The player's character takes a share of cab damage, cut by toughness, and the health lost
-// practices toughness.
 function hurtDriver(world: World, v: Vehicle, dealt: number): void {
   const health = world.player.health;
   const share = RULES.cabHealthShare * (1 - skillEffect(world, v, "toughness", "cabShare"));
@@ -45,7 +40,6 @@ function hurtDriver(world: World, v: Vehicle, dealt: number): void {
   if (world.player.health < health) practice(world, "damage", health - world.player.health, null, "driver");
 }
 
-// Mounted parts only: spares in the cargo grid cannot be shot or crashed.
 export function findPart(v: Vehicle, partId: string): PartInstance | null {
   return mountedParts(v).find((p) => p.id === partId) ?? null;
 }

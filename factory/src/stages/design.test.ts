@@ -10,6 +10,8 @@ let diff = '';
 let labels: string[] = [];
 let bases: string[] = [];
 let earlier: string[] = [];
+let caughtUp: { commit: string | null; conflicts: string[]; kept: string | null } = { commit: null, conflicts: [], kept: null };
+let merged = true;
 
 beforeEach(() => {
   mkdirSync('tmp', { recursive: true });
@@ -19,7 +21,9 @@ beforeEach(() => {
   labels = [];
   bases = [];
   earlier = [];
-  writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } } });
+  caughtUp = { commit: null, conflicts: [], kept: null };
+  merged = true;
+  writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } } });
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
@@ -36,10 +40,12 @@ function fakeCtx(agent: (run: AgentRun) => void): Ctx {
       comments: async () => [{ login: 'a', body: 'yes please' }, ...earlier.map((body) => ({ login: 'bot', body }))],
       comment: record('comment'), addLabel: record('addLabel'), removeLabel: record('removeLabel'), close: record('close'), move: record('move'),
     },
-    container: { agent: async (run: AgentRun) => { calls.push('agent'); agent(run); } },
+    container: { agent: async (run: AgentRun) => { calls.push(run.prompt.startsWith('This is a merge round') ? 'agent base-merge' : 'agent design'); agent(run); } },
     repo: {
       fetch: record('fetch'), push: record('push'), fetchFromWork: async () => 'w1', untrackFactoryFiles: async () => [],
-      mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
+      mergeBranchIntoWork: async () => { calls.push('mergeBranchIntoWork'); return { commit: null, conflicts: [] }; },
+      catchUpBase: async (_dir: string, base: string) => { calls.push(`catchUpBase ${base}`); return caughtUp; },
+      isMerged: async () => merged,
       prepareWorkClone: async (_b: string, base: string, dir: string) => { bases.push(`prepare ${base}`); mkdirSync(dir, { recursive: true }); },
       diff: async (base: string) => { bases.push(`diff ${base}`); return diff; },
     },
@@ -155,16 +161,6 @@ describe('design stage', () => {
     expect(calls.at(-1)).toBe('move 7 Implementation');
   });
 
-  it('drops a patch queued before the card came to Design, so Implementation runs the new plan', async () => {
-    writeState(`${home}/state.json`, { ...readState(`${home}/state.json`), patching: { 7: 'abc1234', 8: 'def5678' } });
-    const ctx = fakeCtx((run) => {
-      mkdirSync(`${run.clone}/${run.dir}/.factory-tasks`, { recursive: true });
-      writeFileSync(`${run.clone}/${run.dir}/.factory-tasks/issue-7.md`, PLAN);
-    });
-    await runStage(ctx, 7);
-    expect(readState(`${home}/state.json`).patching).toEqual({ 8: 'def5678' });
-  });
-
   it('writes the issue input as untrusted text', async () => {
     let seen = '';
     await runStage(fakeCtx((run) => {
@@ -225,5 +221,47 @@ describe('design stage', () => {
     await runStage(fakeCtx((run) => writeFileSync(`${run.clone}/${run.dir}/.factory/wont-do.md`, 'Nothing worth doing.\n')), 7);
     expect(calls).toContain('close 7 not planned');
     expect(calls.at(-1)).toBe('move 7 Done');
+  });
+
+  const planned = (run: AgentRun): void => {
+    mkdirSync(`${run.clone}/${run.dir}/.factory-tasks`, { recursive: true });
+    writeFileSync(`${run.clone}/${run.dir}/${TASK_FILE(7)}`, PLAN);
+  };
+
+  it('catches the clone up to GitHub\'s issue branch and the base before the agent, so the agent never fetches', async () => {
+    let prompt = '';
+    await runStage(fakeCtx((run) => { prompt = run.prompt; planned(run); }), 7);
+    expect(calls.slice(0, 5)).toEqual(['fetch ', 'fetch ', 'mergeBranchIntoWork', 'catchUpBase dev', 'agent design']);
+    expect(prompt).toContain('The factory merged the latest dev into this clone before you started');
+    expect(prompt).toContain('You cannot fetch');
+    expect(prompt).toContain('Never ask the author about branches, clones, fetching or the network.');
+  });
+
+  it('hands a conflict with the base to a merge round, then designs', async () => {
+    caughtUp = { commit: 'b3e6e3f2aa', conflicts: ['game/src/a.ts'], kept: null };
+    const prompts: string[] = [];
+    await runStage(fakeCtx((run) => { prompts.push(run.prompt); if (!run.prompt.startsWith('This is a merge round')) planned(run); }), 7);
+    expect(calls.filter((call) => call.startsWith('agent'))).toEqual(['agent base-merge', 'agent design']);
+    expect(prompts[0]).toContain('The factory merged the latest dev into this clone');
+    expect(prompts[0]).toContain('- game/src/a.ts');
+    expect(calls.at(-1)).toBe('move 7 Implementation');
+  });
+
+  it('fails before design when the merge round leaves the base unmerged', async () => {
+    caughtUp = { commit: 'b3e6e3f2aa', conflicts: ['game/src/a.ts'], kept: null };
+    merged = false;
+    await expect(runStage(fakeCtx(planned), 7)).rejects.toThrow('left the merge of dev at b3e6e3f into factory/issue-7 unfinished');
+    expect(calls.filter((call) => call.startsWith('agent'))).toEqual(['agent base-merge']);
+  });
+
+  it('designs on a clone it kept as it is, and asks the author nothing about it', async () => {
+    caughtUp = { commit: null, conflicts: [], kept: 'uncommitted changes in f.txt' };
+    let prompt = '';
+    await runStage(fakeCtx((run) => { prompt = run.prompt; planned(run); }), 7);
+    expect(prompt).toContain('could not merge the latest dev into this clone, because of uncommitted changes in f.txt');
+    expect(prompt).not.toContain('before you started');
+    expect(calls.filter((call) => call.startsWith('agent'))).toEqual(['agent design']);
+    expect(calls.some((call) => call.startsWith('comment 7 ## Questions'))).toBe(false);
+    expect(calls.at(-1)).toBe('move 7 Implementation');
   });
 });

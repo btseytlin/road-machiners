@@ -6,8 +6,9 @@ import type { BakedMap } from '../sim/terrain';
 import { carriedWorld, type Carried, type CarriedItem, type CarriedPart, type CarryReport } from '../sim/world';
 import type { World } from '../sim/types';
 import type { SlotId } from './save-slots';
-import { CENTS_PER_MONEY_28_29, pooledSkills_9_10 } from './save-migrations';
-import { storedSave, tryWriteSave } from './save';
+import { CENTS_PER_MONEY_29_30, pooledSkills_9_10 } from './save-migrations';
+import { savedRunId, storedSave, writeSave } from './save';
+import type { SaveSlots } from './save-db';
 
 type Json = Record<string, unknown>;
 
@@ -31,7 +32,6 @@ function idOf(value: unknown): string | null {
   return typeof value === 'string' && value !== '' ? value : null;
 }
 
-// Each own entry with a finite non-negative number.
 function countsOf(value: unknown): Record<string, number> {
   const entries = Object.entries(objectOf(value) ?? {}).map(([key, n]) => [key, countOf(n)] as const);
   return Object.fromEntries(entries.filter((e): e is [string, number] => e[1] !== null));
@@ -79,15 +79,14 @@ function truckOf(world: Json, player: Json): Carried['truck'] {
 
 const NO_CARRIED: Carried = {
   seed: null, money: null, xp: null, ranks: {}, xpBySource: {}, perks: [], discovered: [], knockouts: null, autoFire: null,
-  autoRepair: null, fuel: null, supplies: null, costBasis: {}, truck: null, storage: [],
+  autoRepair: null, fuel: null, supplies: null, costBasis: {}, truck: null, storage: [], setup: undefined,
 };
 
-// What a save holds of the player's progression. Never throws: anything of the wrong type reads as missing.
 export function readCarried(raw: unknown): Carried {
   const world = objectOf(objectOf(raw)?.world);
   const player = objectOf(world?.player);
   if (!world || !player) return NO_CARRIED;
-  const scale = moneyScale_28_29(raw);
+  const scale = moneyScale_29_30(raw);
   return {
     seed: isGridInt(world.seed) ? world.seed : null,
     money: centsOf(player.money, scale),
@@ -103,15 +102,14 @@ export function readCarried(raw: unknown): Carried {
     costBasis: Object.fromEntries(Object.entries(countsOf(player.costBasis)).map(([good, basis]) => [good, basis * scale])),
     truck: truckOf(world, player),
     storage: listOf(player.storage).flatMap((p) => partOf(p) ?? []),
+    setup: world.setup,
   };
 }
 
-// Money in a save from before format 2.29 is in the old unit, a third of an M per fuel unit, as the 28 to 29 step
-// reads it. A save with no format is older still. A newer major format is not old money.
-function moneyScale_28_29(raw: unknown): number {
+function moneyScale_29_30(raw: unknown): number {
   const format = objectOf(objectOf(raw)?.format);
   const part = (key: 'major' | 'minor'): number => (typeof format?.[key] === 'number' ? format[key] : 0);
-  return part('major') * 1000 + part('minor') < 2029 ? CENTS_PER_MONEY_28_29 : 1;
+  return part('major') * 1000 + part('minor') < 2030 ? CENTS_PER_MONEY_29_30 : 1;
 }
 
 function centsOf(value: unknown, scale: number): number | null {
@@ -119,19 +117,16 @@ function centsOf(value: unknown, scale: number): number | null {
   return money === null ? null : Math.round(money * scale);
 }
 
-// The XP pool and skill ranks. A save from before format 2.10 holds XP per skill, which reads as the 2.9 to 2.10 step
-// reads it.
 function pooledOf(player: Json): Pick<Carried, 'xp' | 'ranks'> {
   if (objectOf(player.ranks)) return { xp: countOf(player.xp), ranks: countsOf(player.ranks) };
   return pooledSkills_9_10(countsOf(player.skills));
 }
 
-// Builds a new world from the stored save and stores it, so the next boot loads it. Null when the stored
-// save is not a JSON object, which leaves nothing to carry.
-export function rescueSave(storage: Storage, slot: SlotId, map: BakedMap, kit: StartKit, freshSeed: () => number, savedAt: number): { world: World; report: CarryReport } | null {
-  const parsed = storedSave(storage, slot);
+export function rescueSave(slots: SaveSlots, slot: SlotId, map: BakedMap, kit: StartKit, freshSeed: () => number, freshRunId: () => string, savedAt: number): { world: World; report: CarryReport; runId: string } | null {
+  const parsed = storedSave(slots, slot);
   if (objectOf(parsed) === null) return null;
   const rescued = carriedWorld(readCarried(parsed), kit, map, freshSeed);
-  tryWriteSave(storage, slot, rescued.world, savedAt);
-  return rescued;
+  const runId = savedRunId(parsed) ?? freshRunId();
+  writeSave(slots, slot, rescued.world, runId, savedAt);
+  return { ...rescued, runId };
 }

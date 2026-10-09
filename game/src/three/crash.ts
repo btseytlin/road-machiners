@@ -16,22 +16,18 @@ export function installCrashScreen(): void {
   window.addEventListener('unhandledrejection', (e) => onError(e.reason));
 }
 
-// Call once the game runs. Does nothing in dev, where every error crashes.
 export function keepRunningOnErrors(to: (text: string) => void): void {
   if (!import.meta.env.DEV) report = to;
 }
 
-// Calls `listener` on every error after boot, repeats included, in dev too.
 export function onEveryError(listener: () => void): void {
   listeners.push(listener);
 }
 
-// Calls `sink` with every error itself, boot errors and repeats included, before the crash screen or the debug console.
 export function onReport(sink: (err: unknown) => void): void {
   sinks.push(sink);
 }
 
-// Routes a handled error like an uncaught one: the crash screen in dev, the debug console outside dev.
 export function reportError(err: unknown): void {
   onError(err);
 }
@@ -46,7 +42,6 @@ function onFault(err: unknown): void {
   for (const listener of listeners) listener();
   if (!report) return showCrash(err);
   const text = err instanceof Error ? err.message : String(err);
-  // The browser logs every error itself. The debug console gets each message once, so a per-frame error does not flood it.
   if (reported.has(text)) return;
   reported.add(text);
   report(`Error: ${text}`);

@@ -4,7 +4,7 @@
 import { MIX, SOUNDS } from '../src/data/sounds.ts';
 import { bandBalance, isField, measure, SFX_DIR } from './sfx-lib.mjs';
 
-const SLACK_DB = 1; // an import shelf lands near the spread edge, not on it
+const SLACK_DB = 1;
 const anchor = SOUNDS[MIX.anchors.sfx].files[0];
 const row = (file) => {
   const { low, high } = bandBalance(`${SFX_DIR}/${file}`, 'anull');

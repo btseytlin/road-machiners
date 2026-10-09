@@ -19,8 +19,6 @@ import { hostileToPlayer } from '../world';
 import type { Ledger } from './orders';
 import { netWorth } from './record';
 
-// A hostile in sight: id, driver template, chassis, distance, the player's odds in percent to win a fight against
-// its group, and its top speed.
 export type SeenFoe = { id: string; who: string; dist: number; odds: number; speed: number };
 
 export type TurnLine = {
@@ -32,14 +30,14 @@ export type TurnLine = {
   sup: number;
   heat: number;
   chassis: string;
-  speed: number; // top speed now
+  speed: number;
   state: string;
   goods: Record<string, number>;
-  parts: string[]; // defId:hp percent of each mounted part
+  parts: string[];
   contracts: string[];
   order: string | null;
   job: string | null;
-  flags: string[]; // combat, stranded, towed, beacon, fire
+  flags: string[];
   call: string | null;
   foes: SeenFoe[];
   ledger: Partial<Ledger>;
@@ -74,12 +72,8 @@ export function turnLine(world: World, events: readonly GameEvent[], ledger: Led
   };
 }
 
-// Every truck is snapshotted every SNAPSHOT_TURNS turns: a truck drives under 10 tiles a turn, so ten turns keeps a
-// route followable and the file small enough to read whole.
 const SNAPSHOT_TURNS = 10;
 
-// The world log of one turn: every event of the turn raw, whoever it touches, and on a snapshot turn the position,
-// order, goal stack, money, fuel and part health of every truck, whether it keeps off roads and whether it is on one.
 export type WorldLine = { t: number; events?: GameEvent[]; trucks?: TruckSnap[] };
 export type TruckSnap = { id: string; who: string; faction: string; chassis: string; pos: [number, number]; speed: number; order: string | null; goals: string[]; money: number; fuel: number; hp: number; states: string[]; offRoad: boolean; onRoad: boolean };
 
@@ -90,7 +84,6 @@ export function worldLine(world: World, events: readonly GameEvent[]): WorldLine
   return line.events || line.trucks ? line : null;
 }
 
-// The mean health of the mounted parts, in percent.
 function meanHp(v: Vehicle): number {
   const parts = mountedParts(v);
   return Math.round(parts.reduce((sum, p) => sum + (100 * p.hp) / maxHp(p), 0) / Math.max(1, parts.length));
@@ -128,7 +121,6 @@ function foesSeen(world: World, me: Vehicle): SeenFoe[] {
     .map((v) => ({ id: v.id, who: `${v.brain?.templateId ?? v.faction}/${v.chassisId}`, dist: Math.round(dist(v.pos, me.pos)), odds: Math.round(100 * fightOddsAgainst(world, me, v).win), speed: Math.round(vehicleStats(world, v).maxSpeed * 10) / 10 }));
 }
 
-// Events with no vehicle field are the player's own.
 const OWN = new Set(['money', 'contract', 'death', 'knockout', 'wake', 'skillUp', 'supply', 'townPatch', 'scrapPatch', 'searched', 'discover']);
 const QUIET = new Set(['practice', 'activity', 'arrived', 'spawn', 'despawn', 'info', 'weather']);
 
@@ -138,7 +130,6 @@ export function touchesPlayer(e: GameEvent, me: string): boolean {
   return JSON.stringify(e).includes(`"${me}"`);
 }
 
-// A truck id with its driver template and chassis, such as v76:raider-gunwagon/gunwagon.
 function truck(world: World, id: string): string {
   const v = world.vehicles.find((x) => x.id === id);
   return v ? `${id}:${v.brain?.templateId ?? 'player'}/${v.chassisId}` : id;

@@ -32,7 +32,6 @@ function attached(obj: THREE.Object3D, root: THREE.Object3D): boolean {
   return false;
 }
 
-// True when any sample point of the object's box projects inside the camera view.
 function inView(obj: THREE.Object3D, camera: THREE.Camera): boolean {
   const box = new THREE.Box3().setFromObject(obj);
   const steps = 6;
@@ -48,7 +47,6 @@ function inView(obj: THREE.Object3D, camera: THREE.Camera): boolean {
   return false;
 }
 
-// Small props on hills of up to 60 m, plus wide objects that span many chunks.
 function populate(scope: RenderScope): THREE.Object3D[] {
   const rnd = random(7);
   const objects: THREE.Object3D[] = [];
@@ -138,10 +136,18 @@ describe('render scope', () => {
 });
 
 describe('sight limit', () => {
-  function compiled(material: THREE.Material): string {
+  function shaders(material: THREE.Material): { vertexShader: string; fragmentShader: string } {
     const shader = { uniforms: {}, vertexShader: THREE.ShaderLib.lambert.vertexShader, fragmentShader: THREE.ShaderLib.lambert.fragmentShader };
     material.onBeforeCompile(shader as unknown as THREE.WebGLProgramParametersWithUniforms, {} as THREE.WebGLRenderer);
-    return shader.fragmentShader;
+    return shader;
+  }
+  function compiled(material: THREE.Material): string {
+    return shaders(material).fragmentShader;
+  }
+  function sampledBox(itemSize = 2): THREE.BufferGeometry {
+    const geo = new THREE.BoxGeometry();
+    geo.setAttribute('sightAt', new THREE.Float32BufferAttribute(new Float32Array(geo.getAttribute('position').count * itemSize), itemSize));
+    return geo;
   }
 
   it('discards fragments beyond the edge and greys only when asked', () => {
@@ -159,6 +165,38 @@ describe('sight limit', () => {
     expect(groundShader).toContain('discard');
     expect(groundShader).not.toContain('sightSeen');
     expect(prop.customProgramCacheKey()).not.toBe(ground.customProgramCacheKey());
+  });
+
+  it('greys a mesh with sight sample points by those points, while the edge still clips by the fragment', () => {
+    const limit = new SightLimit(SIZE);
+    const deck = new THREE.MeshLambertMaterial();
+    const prop = new THREE.MeshLambertMaterial();
+    limit.patch(new THREE.Mesh(sampledBox(), deck), true);
+    limit.patch(new THREE.Mesh(new THREE.BoxGeometry(), prop), true);
+
+    const deckShader = shaders(deck);
+    expect(deckShader.vertexShader).toContain('attribute vec2 sightAt;');
+    expect(deckShader.vertexShader).toContain('vSightAt = sightAt;');
+    expect(deckShader.fragmentShader).toContain('texture2D(sightVisible, vSightAt / sightMapMeters)');
+    expect(deckShader.fragmentShader).toContain('if (distance(vSightXZ, sightCenter) > sightRadius) discard;');
+    expect(deck.customProgramCacheKey()).not.toBe(prop.customProgramCacheKey());
+
+    const propShader = shaders(prop);
+    expect(propShader.vertexShader).not.toContain('sightAt');
+    expect(propShader.fragmentShader).not.toContain('vSightAt');
+    expect(propShader.fragmentShader).toContain('texture2D(sightVisible, vSightXZ / sightMapMeters)');
+  });
+
+  it('rejects one material on a mesh with sight sample points and on one without', () => {
+    const limit = new SightLimit(SIZE);
+    const shared = new THREE.MeshLambertMaterial();
+    limit.patch(new THREE.Mesh(sampledBox(), shared), true);
+    expect(() => limit.patch(new THREE.Mesh(new THREE.BoxGeometry(), shared), true)).toThrow();
+  });
+
+  it('rejects sight sample points that are not map points', () => {
+    const limit = new SightLimit(SIZE);
+    expect(() => limit.patch(new THREE.Mesh(sampledBox(3), new THREE.MeshLambertMaterial()), true)).toThrow();
   });
 
   it('rejects a visible tile outside the map', () => {

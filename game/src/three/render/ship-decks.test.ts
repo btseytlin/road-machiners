@@ -11,11 +11,8 @@ import { buildShipDecks } from './ship-decks';
 
 const S = PHYSICS.metersPerTile;
 const t = TEST_MAP.terrain;
-// Meters a few dented panel corners of ship_wing_deck stand over its top (the Blender kit's dent_by jag), more than
-// the 2 cm its script promises. A pose off by more than this shows here.
 const PANEL_DENT = 0.065;
 
-// The model files as base64 data URLs, since tests run without a server.
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
 await loadModels(async (name) => {
   const url = FILES[`/public/models/${name}.glb`];
@@ -25,7 +22,6 @@ await loadModels(async (name) => {
 const decks = buildShipDecks(t);
 decks.updateMatrixWorld(true);
 
-// The parts of a drawn deck with this name, in drawing order.
 function parts(deck: Deck, name: string): Object3D[] {
   const group = decks.getObjectByName(`ship-deck-${deck.id}`);
   if (!group) throw new Error(`No drawn deck ${deck.id}`);
@@ -39,7 +35,6 @@ function part(deck: Deck, name: string): Object3D {
   return obj;
 }
 
-// Every vertex of the object's meshes in world meters.
 function vertices(obj: Object3D): Vector3[] {
   const out: Vector3[] = [];
   obj.traverse((o) => {
@@ -50,7 +45,6 @@ function vertices(obj: Object3D): Vector3[] {
   return out;
 }
 
-// Meters a world point stands over the deck line, and where it lies along the deck in tiles.
 function overLine(deck: Deck, v: Vector3): { over: number; along: number } {
   const along = (v.x / S - deck.from.x) * deck.axis.x + (v.z / S - deck.from.y) * deck.axis.y;
   const clamped = Math.min(deck.length, Math.max(0, along));
@@ -92,7 +86,6 @@ describe('Fallen Sun deck models', () => {
 });
 
 describe('Fallen Sun deck skirts', () => {
-  // The skirt's vertices grouped into columns, one per map point it stands on.
   function columns(deck: Deck): { at: Vec; low: number; high: number }[] {
     const byPoint = new Map<string, { at: Vec; low: number; high: number }>();
     for (const v of vertices(part(deck, 'ship-deck-skirt'))) {

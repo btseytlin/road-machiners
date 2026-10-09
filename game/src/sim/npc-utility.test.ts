@@ -17,7 +17,6 @@ const NPC_POS = { x: 60, y: 40 };
 const NIGHT = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
 const DAY = Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => sunAt(t))!;
 
-// A trader hauler facing east with one utility, far from the player.
 function npcWith(defId: string): { w: World; npc: Vehicle; part: PartInstance } {
   const w = emptyWorld();
   const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine', defId], { ...NPC_POS });
@@ -27,7 +26,6 @@ function npcWith(defId: string): { w: World; npc: Vehicle; part: PartInstance } 
   return { w, npc, part };
 }
 
-// A raider hauler `dx` tiles east of the NPC, driving along `heading`, in a feud with it.
 function foeAt(w: World, npc: Vehicle, dx: number, heading = 0, speed = 3): Vehicle {
   const foe = addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x: npc.pos.x + dx, y: npc.pos.y }, heading);
   foe.speed = speed;
@@ -39,7 +37,6 @@ function goal(kind: NpcActivity['kind'], target: Vehicle | null, destination: { 
   return { kind, targetId: target?.id ?? null, destination, phase: 'travel', reason: 'test' };
 }
 
-// The NPC is fleeing `foe`, which shot at it.
 function fleeing(w: World, npc: Vehicle, foe: Vehicle): void {
   npc.brain!.goals = [goal('flee', foe, { x: npc.pos.x + 30, y: npc.pos.y })];
   npc.brain!.attackers[foe.id] = true;

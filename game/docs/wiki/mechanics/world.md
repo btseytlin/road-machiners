@@ -49,7 +49,7 @@ Glass Flats is a large territory, 47 to 95 tiles from its centre to its edge, fi
 
 No town or camp has a gate gun or a guard tower. Lawmen live in Bowl and Nose, spawn at their gates and patrol the roads around them. Within 12 tiles of a lawman town's gate, drivers rarely start a robbery or a fight, but a fight that reaches a gate goes on there.
 
-Raiders have two camps, Scrapjaw Camp in the north and Kiln Camp in the south. A dirt track leads to each camp gate. Raiders spawn outside a camp gate and patrol the roads around their own camp between raids. The player cannot use camp services.
+Raiders have two camps, Scrapjaw Camp in the north and Kiln Camp in the south. A dirt track leads to each camp gate. Raiders spawn outside a camp gate. They watch the roads from off-road posts around their camp, on raids and between them. The player cannot use camp services.
 
 ## Sun, time and weather
 

@@ -1,7 +1,6 @@
 // Runs the traffic speed harness (src/test/traffic-speed.ts) for each seed in its own process. Writes
 // tmp/traffic/<layer>-seed-<n>.json per seed and the merged report tmp/traffic/<layer>.md, and prints the report.
 // Usage: npm run traffic -- [--seeds 1-3] [--turns 300] [--layer physics|far]
-// About 13 minutes for the physics layer at 3 seeds and 300 turns, and 10 for the far layer at 800 turns.
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 
@@ -26,8 +25,6 @@ const seedFile = (seed) => `tmp/traffic/${layer}-seed-${seed}.json`;
 
 if (one !== null) {
   if (layer === 'physics') {
-    // Level of detail only: past the map size every NPC counts as near the player and drives in Rapier, through the
-    // sim's own data rather than a copied rule (architecture principle 2).
     const { PERF } = await import('../src/data/perf.ts');
     const { PHYSICS } = await import('../src/data/physics.ts');
     PERF.liveMargin = 1e6;

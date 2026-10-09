@@ -8,7 +8,6 @@ import { archiveTranscripts, sweepTranscripts, transcriptsDir } from './transcri
 const HOME = resolve('tmp/factory-transcript-archive-test');
 const NOW = new Date('2026-01-30T00:00:00Z');
 
-// Claude Code's files of a conversation run in /work/game, with one subagent.
 function save(projects: string, id: string, text: string): void {
   mkdirSync(join(projects, '-work-game', id, 'subagents'), { recursive: true });
   writeFileSync(join(projects, '-work-game', `${id}.jsonl`), text);

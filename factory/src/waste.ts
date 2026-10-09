@@ -1,21 +1,19 @@
 import { isFailedOutcome, lineTime, type AgentUsage, type LedgerLine } from './ledger';
 import { QUEUE_OF, type JobStage, type Queue, type Route } from './types';
 
-// Every number the weekly waste review shows. The agent explains them and never computes its own.
 export type WasteNumbers = {
   from: string;
   to: string;
   jobs: number;
   costUsd: number;
-  stages: StageNumbers[]; // most expensive first
-  models: { model: string; runs: number; costUsd: number }[]; // most expensive first
-  waits: QueueWait[]; // longest total first
-  reruns: { issue: number; stage: JobStage; runs: number }[]; // most runs first
+  stages: StageNumbers[];
+  models: { model: string; runs: number; costUsd: number }[];
+  waits: QueueWait[];
+  reruns: { issue: number; stage: JobStage; runs: number }[];
   routes: Record<Route, number>;
-  issues: { issue: number; costUsd: number; jobs: number; wallMinutes: number }[]; // the five most expensive
+  issues: { issue: number; costUsd: number; jobs: number; wallMinutes: number }[];
 };
 export type StageNumbers = { stage: JobStage; runs: number; failed: number; wallMinutes: number; agentMinutes: number; costUsd: number };
-// A handoff is the gap between a job that finished and the next job on the same issue: the time the card waited for a free worker.
 export type QueueWait = { queue: Queue; handoffs: number; medianMinutes: number; maxMinutes: number; totalMinutes: number; worstIssue: number };
 
 type JobLine = Extract<LedgerLine, { kind: 'job' }>;
@@ -28,7 +26,6 @@ const minutesBetween = (from: string, to: string): number => Math.round((new Dat
 const cost = (agents: AgentUsage[]): number => agents.reduce((sum, agent) => sum + agent.costUsd, 0);
 const byCost = <T extends { costUsd: number }>(a: T, b: T): number => b.costUsd - a.costUsd;
 
-// The lines that ended in [from, to).
 export function wasteNumbers(lines: LedgerLine[], from: Date, to: Date): WasteNumbers {
   const inside = lines.filter((line) => new Date(lineTime(line)).getTime() >= from.getTime() && new Date(lineTime(line)).getTime() < to.getTime());
   const jobs = inside.filter((line): line is JobLine => line.kind === 'job');
@@ -58,14 +55,15 @@ function modelNumbers(jobs: JobLine[]): WasteNumbers['models'] {
   return [...group(jobs.flatMap((line) => line.agents), (agent) => agent.model)].map(([model, runs]) => ({ model, runs: runs.length, costUsd: cost(runs) })).sort(byCost);
 }
 
-// After checks the card waits for the committee, not for a worker, so that gap is no handoff. A failed job hands off to nobody.
+const POSTS: JobStage[] = ['verify', 'checks'];
+
 function handoffs(jobs: JobLine[]): { queue: Queue; issue: number; minutes: number }[] {
   const card = jobs.filter((line): line is JobLine & { issue: number } => line.issue !== null && QUEUE_OF[line.stage] !== 'branch');
   return [...group(card, (line) => line.issue)].flatMap(([issue, lines]) => {
     const ordered = [...lines].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
     return ordered.slice(1).flatMap((line, index) => {
       const before = ordered[index];
-      if (before.outcome !== 'done' || before.stage === 'checks') return [];
+      if (before.outcome !== 'done' || POSTS.includes(before.stage)) return [];
       return [{ queue: QUEUE_OF[line.stage], issue, minutes: minutesBetween(before.endedAt, line.startedAt) }];
     });
   });

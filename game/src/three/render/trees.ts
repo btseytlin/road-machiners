@@ -14,11 +14,9 @@ import type { RenderScope } from './scope';
 import { TERRAIN_CHUNK } from './terrain';
 
 const S = PHYSICS.metersPerTile;
-const ZERO = new Float32Array(16); // a zero matrix collapses an instance to a point, so nothing of it draws
+const ZERO = new Float32Array(16);
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
-// Where a tree's instance lives: the meshes of its chunk's model and its index in each. standing holds the
-// instance matrices of each mesh as built, so a tree that grows back gets its pose again.
 type Slot = { meshes: THREE.InstancedMesh[]; standing: Float32Array[]; index: number };
 
 export class TreeInstances {
@@ -71,8 +69,6 @@ export class TreeInstances {
   }
 }
 
-// A group at the prop's pose, standing at base height units: propBase() in src/sim/bridge.ts. A three.js turn by -yaw
-// points the model's +X at map direction yaw. Model sideways is three.js z and model up is three.js y.
 export function posed(base: number, pose: PropPose): THREE.Group {
   const g = new THREE.Group();
   g.position.set(pose.pos.x * S, base * S, pose.pos.y * S);
@@ -93,7 +89,6 @@ function byChunk(trees: readonly Landmark[]): Map<string, Landmark[]> {
   return out;
 }
 
-// The outline shares the mesh's instance matrices, so it hides and shows with it.
 function setInstance(mesh: THREE.InstancedMesh, index: number, matrix: ArrayLike<number>): void {
   mesh.instanceMatrix.array.set(matrix, index * 16);
   mesh.instanceMatrix.needsUpdate = true;

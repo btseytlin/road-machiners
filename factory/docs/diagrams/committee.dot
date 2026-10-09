@@ -13,7 +13,7 @@ digraph committee {
   ready [label="Plugin checks the text;\nimages never block"];
   node [fillcolor="#eef2ff", color="#6366f1"];
   approveJob [label="approve job"]; closed [label="Issue closed\nas wont-do"]; answer [label="Answer in chat\ncard stays"];
-  patchJob [label="patch job"]; design [label="Card to Design"]; shipJob [label="ship job"]; removeJob [label="remove job"];
+  patchJob [label="Card to Testing\nthe reply is the task"]; design [label="Card to Design"]; shipJob [label="ship job"]; removeJob [label="remove job"];
   newTask [label="release-task issue\nin Design"]; changeJob [label="change job"]; adhocJob [label="adhoc job"];
   approve -> approveJob; deny -> closed;
   reply -> hermes; hermes -> answer [label="answer"]; hermes -> ready [label="patch or\nredesign"];

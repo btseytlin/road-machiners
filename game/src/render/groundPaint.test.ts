@@ -1,3 +1,4 @@
+import { defaultSetup } from '../sim/settings';
 import { describe, expect, it } from 'vitest';
 import { START_KITS } from '../data/start';
 import { REGION } from '../data/region';
@@ -8,7 +9,7 @@ import type { Terrain } from '../sim/terrain';
 import { pointInPolygon, polylineDist, type Vec } from '../sim/vec';
 import { newWorld } from '../sim/world';
 import { TEST_MAP } from '../test/map';
-import { desertWeight, glassField, groundDiscs, lookTypes, paintGroundCanvas, TERRAIN_MARGIN, type LookType, type PaintCanvas } from './groundPaint';
+import { desertWeight, glassField, lookTypes, paintGroundCanvas, TERRAIN_MARGIN, type LookType, type PaintCanvas } from './groundPaint';
 
 const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
 const sunBasin = TERRAIN.features.basins.find((b) => b.center.x === sun.pos.x && b.center.y === sun.pos.y)!;
@@ -20,7 +21,6 @@ describe('desertWeight', () => {
   });
 });
 
-// A 12x12 map with a road band six tiles wide down the middle, hardpan on its left and salt crust on its right.
 function bandMap(): Terrain {
   const size = 12;
   const types: TerrainTypeId[] = [];
@@ -51,7 +51,7 @@ describe('lookTypes', () => {
   });
 
   it('gives road tiles beside ground without a desert look no desert look', () => {
-    const t = newWorld(1337, START_KITS.standard, TEST_MAP).terrain;
+    const t = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming')).terrain;
     const look = lookTypes(t);
     let checked = 0;
     for (let y = 1; y < t.size - 1; y++) for (let x = 1; x < t.size - 1; x++) {
@@ -66,20 +66,9 @@ describe('lookTypes', () => {
   });
 });
 
-describe('ground discs', () => {
-  it('paints no disc under the outlined Fallen Sun and Old Orchard', () => {
-    const ids = groundDiscs().map((d) => d.id);
-    expect(ids).not.toContain('fallen-sun');
-    expect(ids).not.toContain('orchard');
-  });
-});
-
-// A path the painter filled or stroked, in canvas pixels.
 type Shape = { kind: 'arc'; x: number; y: number; r: number } | { kind: 'poly'; points: Vec[] };
 type Op = { kind: 'image' } | { kind: 'fill'; shapes: Shape[] } | { kind: 'stroke'; shapes: Shape[]; width: number };
 
-// The part of a 2D context the ground painter uses. It keeps each fill and stroke as geometry, so a test can ask
-// which paint lands on a point. Node has no canvas, and the painted pixels follow from that geometry.
 class RecordingContext {
   ops: Op[] = [];
   image: Uint8ClampedArray | null = null;
@@ -140,13 +129,11 @@ function covers(op: Op, p: Vec): boolean {
   });
 }
 
-// The whole map painted at half a pixel per tile, with its ops recorded.
 function paintedMap(): { canvas: PaintCanvas; ops: Op[] } {
   const res = 0.5;
   const from = -TERRAIN_MARGIN;
   const ctx = new RecordingContext();
   const canvas: PaintCanvas = {
-    // The recorder covers every call the painter makes; the painter never reads anything else off the context.
     ctx: ctx as unknown as CanvasRenderingContext2D,
     size: Math.ceil((TEST_MAP.terrain.size + 2 * TERRAIN_MARGIN) * res),
     res,
@@ -157,7 +144,6 @@ function paintedMap(): { canvas: PaintCanvas; ops: Op[] } {
   return { canvas, ops: ctx.ops };
 }
 
-// Paint laid over the ground image at a map point, in paint order.
 function paintOver(painted: { canvas: PaintCanvas; ops: Op[] }, p: Vec): Op[] {
   const px = { x: painted.canvas.toPx(p.x), y: painted.canvas.toPx(p.y) };
   const image = painted.ops.findIndex((op) => op.kind === 'image');
@@ -173,11 +159,9 @@ describe('ground paint over the Fallen Sun', () => {
 
   it('centres no disc on a basin', () => {
     const centres = painted.ops.flatMap((op) => (op.kind === 'image' ? [] : op.shapes.flatMap((s) => (s.kind === 'arc' ? [s] : []))));
-    expect(centres.length).toBeGreaterThan(0);
     for (const b of TERRAIN.features.basins) {
       const at = { x: painted.canvas.toPx(b.center.x), y: painted.canvas.toPx(b.center.y) };
       for (const c of centres) expect(Math.hypot(c.x - at.x, c.y - at.y)).toBeGreaterThan(painted.canvas.res);
-      for (const crater of TERRAIN.features.craters) expect(crater.center).not.toEqual(b.center);
     }
   });
 
@@ -194,7 +178,6 @@ describe('ground paint over the Fallen Sun', () => {
 
   it('paints scree on the foot of the bank of the west arc only', () => {
     const scree = TERRITORIES['fallen-sun'].wreck!.scree!;
-    // `up` tiles up the bank, out from a floor vertex along its bearing.
     const onBank = (k: number, up = 3) => {
       const v = sunBasin.floor[k];
       const r = Math.hypot(v.x, v.y);
@@ -202,23 +185,61 @@ describe('ground paint over the Fallen Sun', () => {
       return { x: sunBasin.center.x + v.x * out, y: sunBasin.center.y + v.y * out };
     };
     const n = sunBasin.floor.length;
-    // The vertices strictly between the arc's two ends, which wraps past vertex 0.
     const arc = Array.from({ length: (scree.to - scree.from + n) % n - 1 }, (_, i) => (scree.from + 1 + i) % n);
     expect(arc).toEqual([21, 0, 1]);
     for (const k of arc) expect(paintOver(painted, onBank(k)).length, `vertex ${k}`).toBeGreaterThan(0);
     for (const k of [6, 12, 17]) expect(paintOver(painted, onBank(k)), `vertex ${k}`).toEqual([]);
-    // The west road's long bank is a road grade: no scree halfway up it.
     expect(sunBasin.bank[21]).toBeGreaterThan(20);
     expect(paintOver(painted, onBank(21, sunBasin.bank[21] / 2))).toEqual([]);
   });
+});
 
-  it("keeps the Bowl's scorched crater floor", () => {
-    const bowl = TERRAIN.features.craters[0];
-    expect(paintOver(painted, bowl.center).length).toBeGreaterThanOrEqual(2);
+describe('ground paint around towns, sites and craters', () => {
+  const painted = paintedMap();
+  const places = [...REGION.towns, ...REGION.locations];
+
+  it('centres no circle on a town, site or crater', () => {
+    const arcs = painted.ops.flatMap((op) => (op.kind === 'image' ? [] : op.shapes.flatMap((s) => (s.kind === 'arc' ? [s] : []))));
+    const centres = [...places.map((p) => p.pos), ...TERRAIN.features.craters.map((c) => c.center)];
+    for (const at of centres) {
+      const px = { x: painted.canvas.toPx(at.x), y: painted.canvas.toPx(at.y) };
+      for (const a of arcs) expect(Math.hypot(a.x - px.x, a.y - px.y)).toBeGreaterThan(painted.canvas.res);
+    }
+  });
+
+  it("paints nothing over Bowl's crater floor", () => {
+    const crater = TERRAIN.features.craters[0];
+    let samples = 0;
+    for (let y = -crater.radius; y <= crater.radius; y += 3) for (let x = -crater.radius; x <= crater.radius; x += 3) {
+      if (Math.hypot(x, y) > crater.radius) continue;
+      samples++;
+      expect(paintOver(painted, { x: crater.center.x + x, y: crater.center.y + y }), `${x},${y}`).toEqual([]);
+    }
+    expect(samples).toBeGreaterThan(300);
+  });
+
+  it('paints nothing on or just around a site', () => {
+    const { canyon, dryRiver } = TERRAIN.features;
+    for (const id of ['bowl', 'nose', 'dustwell', 'granary', 'scrapjaw', 'kiln', 'green-pit']) {
+      const place = places.find((p) => p.id === id);
+      if (!place) continue;
+      const reach = place.radius + 3;
+      let samples = 0;
+      let clear = 0;
+      for (let y = -reach; y <= reach; y++) for (let x = -reach; x <= reach; x++) {
+        if (Math.hypot(x, y) > reach) continue;
+        const p = { x: place.pos.x + x, y: place.pos.y + y };
+        samples++;
+        if (polylineDist(p, canyon.path) <= canyon.width + canyon.bank) continue;
+        if (polylineDist(p, dryRiver.path) <= dryRiver.width + dryRiver.bank) continue;
+        clear++;
+        expect(paintOver(painted, p), `${id} ${x},${y}`).toEqual([]);
+      }
+      expect(clear / samples, id).toBeGreaterThan(0.8);
+    }
   });
 });
 
-// The ground image painted over a small map at 4 pixels per tile, as RGB per pixel.
 function paintedImage(t: Terrain): Uint8ClampedArray {
   const res = 4;
   const size = t.size * res;
@@ -240,7 +261,6 @@ describe('ground paint under fused glass', () => {
   });
 });
 
-// A size x size flat map with glass on the tiles that `glass` accepts.
 function glassMap(size: number, glass: (x: number, y: number) => boolean): Terrain {
   const types: TerrainTypeId[] = Array.from({ length: size * size }, (_, i) => (glass(i % size, Math.floor(i / size)) ? 'glass' : 'sand'));
   return { size, heights: new Array<number>((size + 1) ** 2).fill(0), types };
@@ -260,7 +280,6 @@ describe('glassField', () => {
     const at = (x: number, y: number) => field[y * 20 + x];
     expect(at(5, 10)).toBeGreaterThan(HALF);
     expect(at(4, 10)).toBeLessThan(HALF);
-    // The corner tile sees less glass around it than an edge tile does.
     expect(at(5, 5)).toBeLessThan(at(5, 10));
   });
 

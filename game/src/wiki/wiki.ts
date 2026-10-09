@@ -1,8 +1,6 @@
 // Game wiki pages in docs/wiki/. A page mixes prose with generated blocks between `<!-- wiki:<id> -->` and
 // `<!-- /wiki:<id> -->`. fillPage() rewrites the blocks from code and leaves the prose alone. `npm run wiki` writes
 // the pages and src/wiki/wiki.test.ts fails when a committed page differs from the fresh fill.
-// What each table shows is below the engine: rows read src/data and two read-only lookups, the binds flag in
-// src/sim/states.ts and the models in src/render/partLooks.ts. Nothing in the game imports this file.
 import { CHASSIS } from '../data/chassis';
 import { DETECT } from '../data/detect';
 import { GOODS, ECONOMY } from '../data/goods';
@@ -13,7 +11,7 @@ import { CHASSIS_PRICE_MODIFIERS } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
 import { PARTS, PART_PRICE_MODIFIERS } from '../data/parts';
 import type { PartDef, PartKind } from '../data/parts';
-import { RULES } from '../data/rules';
+import { BREAKABLE, RULES } from '../data/rules';
 import { SALVAGE, STRIP } from '../data/salvage';
 import { PERKS, PERK_NUMBERS, SKILL_EFFECTS, SKILL_INFO, XP_RULES, XP_SOURCES, RANK_COSTS } from '../data/skills';
 import { SOUNDS } from '../data/sounds';
@@ -29,7 +27,7 @@ import { moneyAmount } from '../ui/units';
 export type Cell = string | number | boolean | null | readonly unknown[] | object;
 export type WikiTable = { id: string; headers: string[]; rows: () => Cell[][] };
 
-const MECHANICS = ['character', 'truck', 'turns', 'defeat', 'detection', 'world', 'npcs', 'social', 'economy', 'content'];
+const MECHANICS = ['character', 'truck', 'turns', 'defeat', 'detection', 'world', 'npcs', 'social', 'economy', 'content', 'world-settings'];
 
 export const PAGES: readonly string[] = [
   'README.md', 'items.md', 'combat.md', 'economy.md', 'npcs.md', 'skills.md', 'assets.md',
@@ -242,10 +240,9 @@ const TABLES: WikiTable[] = [
 
 export const WIKI_TABLES: Record<string, WikiTable> = Object.fromEntries(TABLES.map((t) => [t.id, t]));
 
-// The src/data exports wiki prose may name by data path. Add one when prose needs it.
 export const WIKI_ROOTS: Record<string, unknown> = {
   RULES, ECONOMY, EFFORT, CONTRACTS, PRICE_FACTOR, DISTANCE_PREMIUM, PRESSURE_MAX,
   PART_PRICE_MODIFIERS, CHASSIS_PRICE_MODIFIERS, CONDITION, WEAR, REPAIR, PATCH, SALVAGE, STRIP,
   NPC_BEHAVIOR, NPC_UPKEEP, HUNT, SPAWN, MIN_CHANCE, DETECT, TOW, XP_RULES, PERK_NUMBERS,
-  UNITS, TIME, PHYSICS,
+  UNITS, TIME, PHYSICS, BREAKABLE,
 };

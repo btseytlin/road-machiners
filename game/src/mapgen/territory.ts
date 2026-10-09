@@ -1,9 +1,6 @@
 // Territory layer: a wreck's hull pieces, caches, buildings, rim rocks, field spots and debris, the reactor, a farm's
 // layout (./farm) and debris, and fused glass (./glass) inside each territory, placed by the rules in TERRITORIES. It
 // runs after the new-world layer, so ground rules read these props, the seated heights and the marks. Pieces, the
-// reactor, caches, buildings and farms are authored; rim rocks, field spots, debris, glass and its spires are drawn
-// from the map seed and the territory's own seed offset, on open ground off the pieces, the dirt roads and their
-// spurs, the decks and their landing strips, the region roads and the farm's marks.
 
 import { PHYSICS } from '../data/physics';
 import { REGION, type TerritoryDef } from '../data/region';
@@ -22,12 +19,10 @@ import { fillGlass } from './glass';
 import { at, markRoads, type Touch } from './marks';
 import { prop, ruleRng, tileOf } from './oldworld';
 
-export const TERRITORY_SEED_OFFSET = 9100; // one block of offsets per territory, so a new territory shifts no other
-// Draws for one prop before the layer gives up: the orchard's groves leave little open band. The Fallen Sun's
-// draws succeed early, so its bake does not depend on this number.
+export const TERRITORY_SEED_OFFSET = 9100;
 const TRIES = 1000;
-const REACTOR_MARGIN = 2; // tiles between the hazard's edge and any drawn prop
-const DEBRIS_BAND: [number, number] = [0, 1.5]; // a farm's debris spills half a band past its spine band, toward the rim
+const REACTOR_MARGIN = 2;
+const DEBRIS_BAND: [number, number] = [0, 1.5];
 
 export function territoryLayer(seed: number, d: MapDraft): MapDraft {
   for (const t of REGION.locations.filter(isTerritory)) {
@@ -37,10 +32,7 @@ export function territoryLayer(seed: number, d: MapDraft): MapDraft {
   return d;
 }
 
-// What every draw reads: the draft, the territory and its draws.
 type Draws = { d: MapDraft; t: TerritoryDef; rules: TerritoryRules; rng: Rng };
-// pieces are the authored piece props: drawn props keep clear of their boxes, not of their placement circles, which
-// are half a long piece's length. onRoad touches the dirt roads and spurs, and strips are the decks' landing strips.
 type Ground = Draws & {
   wreck: WreckRules;
   pieces: ReadonlySet<BakedProp>;
@@ -49,7 +41,6 @@ type Ground = Draws & {
   strips: readonly LandingStrip[];
 };
 
-// Glass goes last, so it keeps off the dirt roads and the yards round every piece, building and cache.
 function fill(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, rng: Rng): void {
   const pieces = rules.wreck ? placePieces(d, t, rules.wreck) : [];
   if (rules.reactor) d.props.push(prop(rules.reactor.look, reactorPos(t), rules.reactor.radius, 0));
@@ -58,7 +49,6 @@ function fill(d: MapDraft, t: TerritoryDef, rules: TerritoryRules, rng: Rng): vo
   if (rules.glass) fillGlass(d, t, rules, rules.glass, rng);
 }
 
-// The wreck's pieces on their seated ground. Returns the piece props.
 function placePieces(d: MapDraft, t: TerritoryDef, wreck: WreckRules): BakedProp[] {
   const pieces = territoryPieces(t);
   seatPieces(d, pieces, wreck.seatEase);
@@ -67,9 +57,6 @@ function placePieces(d: MapDraft, t: TerritoryDef, wreck: WreckRules): BakedProp
   return props;
 }
 
-// The dirt roads and spurs first, so no prop stands on them, then the caches, the buildings, rim rocks and the patches
-// round the placed pieces. An authored cache on a dirt road is a data error, as is a building off its ground or on a
-// piece. Field spots keep the spot gap from the caches and the buildings.
 function fillWreck(draws: Draws, rules: TerritoryRules, wreck: WreckRules, pieceProps: readonly BakedProp[]): void {
   const { d, t, rng } = draws;
   const { roads, spurs } = territoryRoads(t);
@@ -87,8 +74,6 @@ function fillWreck(draws: Draws, rules: TerritoryRules, wreck: WreckRules, piece
   for (const patch of wreck.patches) spots = placePatch(g, patch, spots);
 }
 
-// The farm's layout, then debris along its spine band. Its buildings are its loot spots, so debris keeps the debris
-// gap from them and a truck can still park beside one.
 function fillFarmBand(draws: Draws, rules: TerritoryRules, farm: FarmRules): void {
   const { d, t, rng } = draws;
   const buildings = fillFarm(d, t, rules, farm, rng);
@@ -100,7 +85,6 @@ function fillFarmBand(draws: Draws, rules: TerritoryRules, farm: FarmRules): voi
   }
 }
 
-// A point along the farm's spine, to either side of it between shares of the band.
 function bandPoint({ t, rng }: Draws, farm: FarmRules, band: [number, number]): Vec {
   const { from, to } = farm.spine;
   const share = randRange(rng, 0, 1);
@@ -112,15 +96,10 @@ function bandPoint({ t, rng }: Draws, farm: FarmRules, band: [number, number]): 
   };
 }
 
-// The landmark obstacle world creation makes of a baked piece, so the bake reads the boxes trucks will hit.
 function pieceObstacle(p: BakedPiece, id: string) {
   return { id, pos: p.pos, r: p.r, kind: 'landmark', look: p.look, yaw: p.yaw } as const;
 }
 
-// The ground under each piece's low boxes is levelled to the height at the piece's centre, less its sink, and eases
-// back to the crater relief over ease tiles, so a big piece neither floats nor sinks. A sunk piece lies half buried in
-// a pit of its own, no wider than its footprint plus the ease. Heights are read before any seating. Every piece eases
-// first and levels after, so no piece's ease reaches under another piece.
 function seatPieces(d: MapDraft, pieces: readonly BakedPiece[], ease: number): void {
   const before = { size: d.size, heights: Array.from(d.heights), types: [] };
   const level: { k: number; h: number }[] = [];
@@ -136,8 +115,6 @@ function seatPieces(d: MapDraft, pieces: readonly BakedPiece[], ease: number): v
   for (const { k, h } of level) d.heights[k] = h;
 }
 
-// Map corners within ease tiles of a piece's low boxes, with their gap to the nearest. The corners of the tile under
-// the piece's centre count as under it too, so the piece stands at the seated height.
 function seatCorners(size: number, p: BakedPiece, low: readonly PosedBox[], ease: number): { i: number; j: number; gap: number }[] {
   if (low.length === 0) return [];
   const reach = Math.max(...low.map((b) => dist(b.center, p.pos) + Math.hypot(b.half.x, b.half.y))) + ease;
@@ -153,20 +130,15 @@ function seatCorners(size: number, p: BakedPiece, low: readonly PosedBox[], ease
   return out;
 }
 
-// Corner indices within reach of v on one axis, inside the map.
 function cornerSpan(size: number, v: number, reach: number): number[] {
   const [lo, hi] = [Math.max(0, Math.floor(v - reach)), Math.min(size, Math.ceil(v + reach))];
   return Array.from({ length: hi - lo + 1 }, (_, n) => lo + n);
 }
 
-// 0 at 0 and 1 at 1, flat at both ends.
 function smooth(s: number): number {
   return s * s * (3 - 2 * s);
 }
 
-// Rim rocks drawn on the bank of the basin's arc of floor vertices from..to, from out[0] to out[1] tiles out from the
-// floor edge, off roads and other props. They overlap each other by up to two thirds and run along the rim, so they
-// read as one broken rock wall.
 function placeRimRocks(g: Ground, rim: RimRocks): void {
   const { from, to, out, count, size } = rim;
   const b = basinUnder(g.t);
@@ -176,14 +148,12 @@ function placeRimRocks(g: Ground, rim: RimRocks): void {
   const lengths = foot.slice(1).map((q, k) => dist(foot[k], q));
   const total = lengths.reduce((sum, l) => sum + l, 0);
   const pick = (): Vec => {
-    // The edge the drawn share of the arc's length falls on, and the share along it.
     let left = randRange(g.rng, 0, total);
     let k = 0;
     while (k < lengths.length - 1 && left > lengths[k]) left -= lengths[k++];
     const [a, c] = [foot[k], foot[k + 1]];
     const share = Math.min(left / lengths[k], 1);
     const edge = { x: a.x + (c.x - a.x) * share, y: a.y + (c.y - a.y) * share };
-    // The edge's normal away from the basin's centre.
     const normal = { x: (c.y - a.y) / lengths[k], y: -(c.x - a.x) / lengths[k] };
     const side = (edge.x - b.center.x) * normal.x + (edge.y - b.center.y) * normal.y >= 0 ? 1 : -1;
     const reach = randRange(g.rng, out[0], out[1]) * side;
@@ -193,15 +163,12 @@ function placeRimRocks(g: Ground, rim: RimRocks): void {
   const rocks: BakedProp[] = [];
   const ok = (pos: Vec, r: number): boolean => clearOfPieces(g, pos, r) && clearOf(others, pos, r, 0) && rocks.every((o) => dist(o.pos, pos) >= (o.r + r) / 3);
   for (let i = 0; i < count; i++) {
-    // A chunk runs along the rim, its steep face toward the crater.
     const rock = draw(g, 'rimRock', 'on the rim', pick, size, ok);
     rocks.push({ ...rock, yaw: Math.atan2(rock.pos.y - g.t.pos.y, rock.pos.x - g.t.pos.x) + Math.PI / 2 });
   }
   g.d.props.push(...rocks);
 }
 
-// A patch's field spots go first, so its debris never boxes one in. Field spots keep the spot gap from every loot
-// spot placed before them, caches included. Returns the loot spots so far.
 function placePatch(g: Ground, patch: Patch, before: BakedProp[]): BakedProp[] {
   const spots = [...before];
   const centre = { x: g.t.pos.x + patch.at.x, y: g.t.pos.y + patch.at.y };
@@ -222,38 +189,30 @@ function placePatch(g: Ground, patch: Patch, before: BakedProp[]): BakedProp[] {
   return spots;
 }
 
-// Every prop but the authored pieces.
 function drawn(g: Ground): BakedProp[] {
   return g.d.props.filter((p) => !g.pieces.has(p));
 }
 
-// Inside the territory, outside the hazard and its margin, off every piece's boxes, the dirt roads and spurs, the
-// decks and their landing strips. The marked road tiles are kept off by standable(), as for every drawn prop.
 function open(g: Ground, pos: Vec, r: number): boolean {
   if (siteGap(g.t, pos) >= -r || inHazard(g, pos, r) || !clearOfPieces(g, pos, r)) return false;
   return !onWay(g, pos, r);
 }
 
-// Whether a circle reaches into the hazard or its margin.
 function inHazard(g: Ground, pos: Vec, r: number): boolean {
   const reactor = g.rules.reactor;
   return !!reactor?.hazard && dist(pos, reactorPos(g.t)) <= reactor.hazard.radius + REACTOR_MARGIN + r;
 }
 
-// Whether a circle reaches onto a way a truck takes: a dirt road or spur, a deck, or a landing strip.
 function onWay(g: Ground, pos: Vec, r: number): boolean {
   return g.onRoad(pos, r) || onDeck(pos, r) || g.strips.some((s) => onStrip(s, pos, r));
 }
 
-// Whether a circle reaches onto a landing strip, a band as wide as its deck from a to b.
 function onStrip(s: LandingStrip, pos: Vec, r: number): boolean {
   const length = dist(s.a, s.b);
   const along = ((pos.x - s.a.x) * (s.b.x - s.a.x) + (pos.y - s.a.y) * (s.b.y - s.a.y)) / length;
   return along > -r && along < length + r && segmentDist(pos, s.a, s.b) < s.width / 2 + r;
 }
 
-// The first drawn prop at a picked point that stands on open ground and passes ok. Fails loudly: a territory that
-// cannot hold its props is a data problem, not something to place fewer of.
 export function draw(g: Draws, look: BakedProp['kind'], where: string, pick: () => Vec, radius: [number, number], ok: (pos: Vec, r: number) => boolean): BakedProp {
   for (let k = 0; k < TRIES; k++) {
     const pos = pick();
@@ -266,13 +225,10 @@ export function draw(g: Draws, look: BakedProp['kind'], where: string, pick: () 
   throw new Error(`Territory ${g.t.id} has no room for a ${look} ${where}`);
 }
 
-// Whether a circle at pos with radius r keeps the obstacle gap from every piece's boxes.
 function clearOfPieces(g: Ground, pos: Vec, r: number): boolean {
   return g.pieceBoxes.every((b) => boxDistance(b, pos) >= r + REGION.obstacles.gap);
 }
 
-// Inside the map margin, off every road, off a farm's old road, pads and tracks, and off cliffs. With a relief limit,
-// also on ground that lies no farther than it off the prop's seat under its footprint.
 function standable(d: MapDraft, p: BakedProp, relief: number | null): boolean {
   const { pos, r } = p;
   if (Math.min(pos.x, pos.y, d.size - pos.x, d.size - pos.y) < REGION.obstacles.edgeMargin + r) return false;
@@ -283,7 +239,6 @@ function standable(d: MapDraft, p: BakedProp, relief: number | null): boolean {
   return relief === null || footprintRelief(d.heights, d.size, p, false) <= relief;
 }
 
-// Whether no prop of the list stands within gap tiles of a circle at pos with radius r.
 export function clearOf(props: readonly BakedProp[], pos: Vec, r: number, gap: number): boolean {
   return props.every((o) => dist(o.pos, pos) >= o.r + r + REGION.obstacles.gap + gap);
 }

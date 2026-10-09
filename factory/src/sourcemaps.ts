@@ -4,9 +4,6 @@ import { must } from './exec';
 import { withLockSync } from './lock';
 import { GAME_DIR, type Ctx, type FactoryConfig, type Stage } from './types';
 
-// The source maps of the game builds that send error reports, kept on the host by commit, so the error service maps a
-// player's stack to source. No build publishes its maps: /dev/ and the candidate are served from our web root, and itch is public.
-
 export type ReportBuild = 'release' | 'dev' | 'candidate';
 export type Published = { sha: string; kind: ReportBuild; publishedAt: string };
 
@@ -17,20 +14,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 export const mapsRoot = (home: string): string => join(home, 'sourcemaps');
 export const publishedPath = (home: string): string => join(mapsRoot(home), 'published.jsonl');
 
-// The error endpoint sits beside the play links, so /dev/ and the candidate post to their own origin.
 export function errorUrl(publicUrl: string): string {
   return new URL('/errors', publicUrl).href;
 }
 
-// The build env that turns error reports on in the game.
 export function reportEnv(cfg: Pick<FactoryConfig, 'publicUrl'>, kind: ReportBuild): Record<string, string> {
   return { ERROR_REPORT_URL: errorUrl(cfg.publicUrl), ERROR_REPORT_BUILD: kind };
 }
 
-// Moves every map out of the clone's build into the host's store under its commit, and records the publish, before the
-// build goes out. Dev and candidate maps older than FACTORY_ERROR_MAP_DAYS go at the same time.
-// Game code from before error reports writes no maps and sends no reports. Such a build publishes as before, unrecorded,
-// so a branch that lacks the reporting code yet, like an open release or main before its ship, still builds.
 export async function takeMaps(ctx: Ctx, clone: string, kind: ReportBuild): Promise<void> {
   const dist = join(clone, GAME_DIR, 'dist');
   const maps = readdirSync(dist, { recursive: true, encoding: 'utf8' }).filter((file) => file.endsWith('.map'));
@@ -55,8 +46,6 @@ export function readPublished(home: string): Published[] {
   return readFileSync(path, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line) as Published);
 }
 
-// Players keep old itch tabs and saves, so release maps stay. A dev or candidate tab left open sends reports for a while
-// after the next build, so its maps stay FACTORY_ERROR_MAP_DAYS.
 function pruneMaps(home: string, now: Date, days: number): void {
   const published = readPublished(home);
   const released = new Set(published.filter((entry) => entry.kind === 'release').map((entry) => entry.sha));

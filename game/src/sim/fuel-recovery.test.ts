@@ -4,7 +4,11 @@ import { NPC_BEHAVIOR } from '../data/npc-behavior';
 import { RULES } from '../data/rules';
 import { REGION } from '../data/region';
 import { advanceFar } from './far';
+import { corePart } from './grid';
 import { getResources } from './resources';
+import { tankLeaks } from './supplies';
+import { maxHp } from './wear';
+import { sitePads } from './sites';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import { endTurn } from './world';
 import type { Vec } from './vec';
@@ -17,8 +21,6 @@ const moveAllFar = (w: World) => {
   for (const v of w.vehicles) advanceFar(w, v);
 };
 
-// A fuelless majority: most NPCs broke, dry and a few tiles off the site that serves them. Every one gets fuel again.
-// What a driver does with that fuel afterwards, like a long trip to sell loot, is its own goals' business.
 describe('a fuelless majority of NPCs', () => {
   it('all recover scrap fuel at their serving sites with no stall', () => {
     let w = emptyWorld({ x: 5, y: 5 });
@@ -46,7 +48,6 @@ describe('a fuelless majority of NPCs', () => {
     const farthest = Math.max(...broke.map((v) => dist(v.pos, v === raider ? camp.pos : bowl.pos)));
     const bound = Math.ceil(farthest / RULES.limpSpeed) + NPC_BEHAVIOR.stallTurns;
     const stalls: unknown[] = [];
-    // A recovered driver goes back to work and may run dry again before the end, so recovery is any turn with fuel.
     const refuelled = new Set<string>();
     for (let turn = 0; turn < bound; turn++) {
       w = endTurn(w, moveAllFar);
@@ -56,5 +57,33 @@ describe('a fuelless majority of NPCs', () => {
 
     expect(stalls).toEqual([]);
     expect([...refuelled].sort()).toEqual(broke.map((v) => v.id).sort());
+  });
+});
+
+describe('a broke driver with a holed tank', () => {
+  function holed(site: { pos: Vec; radius: number }, faction: Vehicle['faction'], chassis: string, brainId: string, traits: string[]) {
+    let w = emptyWorld({ x: 5, y: 5 });
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
+    const pad = sitePads(site as typeof bowl)[0];
+    const v = addVehicle(w, faction, chassis, ['stockEngine'], pad);
+    v.brain = npcBrain(brainId, pad, traits as TraitId[]);
+    const r = getResources(w, v);
+    r.money = 0;
+    r.fuel = 0;
+    corePart(v, 'tank').hp = 0;
+    return { w, id: v.id, run: (turns: number) => { for (let i = 0; i < turns; i++) w = endTurn(w, moveAllFar); return w.vehicles.find((x) => x.id === v.id)!; } };
+  }
+
+  it.each([
+    ['a trader at the Bowl', bowl, 'traders', 'hauler', 'trader', NPCS.trader.traits as string[]],
+    ['a raider at Scrapjaw', camp, 'raiders', 'buggy', 'buggy', ['raider']],
+  ] as const)('%s gets the tank patched and keeps its fuel', (_name, site, faction, chassis, brainId, traits) => {
+    const d = holed(site, faction, chassis, brainId, [...traits]);
+    const v = d.run(3);
+    expect(tankLeaks(v)).toBe(false);
+    expect(corePart(v, 'tank').hp).toBeGreaterThanOrEqual(Math.ceil(maxHp(corePart(v, 'tank')) * RULES.scrapPatch));
+    expect(getResources(d.w, v).fuel).toBeGreaterThan(0);
+    const events = d.w.events.filter((e) => e.t === 'stall');
+    expect(events).toEqual([]);
   });
 });

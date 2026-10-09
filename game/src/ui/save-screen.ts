@@ -4,22 +4,18 @@
 import type { CarryReport } from '../sim/world';
 import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
-import { el, panel } from './dom';
+import { WORLD_SETTINGS } from '../data/modes';
+import { percent } from '../sim/settings';
+import { download, el, panel } from './dom';
+import { openNewGame, type NewGameActions } from './new-game';
 import { moneyText } from './units';
-import { chooseNewGame } from './new-game';
 
-export type SaveFate = 'migrate' | 'new';
-
-// Shows the choice and resolves with the player's pick. New game opens the setup screen, and Back returns here.
-export function chooseSaveFate(reason: string, canMigrate: boolean): Promise<SaveFate> {
+export function chooseSaveFate(reason: string, canMigrate: boolean, stored: unknown, newGame: NewGameActions): Promise<void> {
   return new Promise((resolve) => {
     const root = savePanel('Your save needs migrating');
-    const done = (fate: SaveFate) => {
+    const migrate = () => {
       root.remove();
-      resolve(fate);
-    };
-    const confirmNew = async () => {
-      if (await chooseNewGame()) done('new');
+      resolve();
     };
     root.append(
       el('div', {}, 'This update changed the world. Migrate keeps your skills, perks, money, truck, parts and cargo, and moves you to a town. The rest of the world starts fresh.'),
@@ -27,15 +23,16 @@ export function chooseSaveFate(reason: string, canMigrate: boolean): Promise<Sav
       el(
         'div',
         { class: 'death-buttons' },
-        el('button', { onclick: () => done('migrate'), disabled: !canMigrate }, 'Migrate save'),
-        el('button', { onclick: confirmNew }, 'New game'),
+        el('button', { onclick: migrate, disabled: !canMigrate }, 'Migrate save'),
+        el('button', { onclick: () => openNewGame(newGame, () => {}) }, 'New game'),
+        el('button', { onclick: () => downloadSave(stored) }, 'Download save'),
       ),
     );
     if (!canMigrate) root.append(el('div', { class: 'dim' }, 'The save is unreadable'));
+    root.append(el('div', { class: 'dim' }, 'If this looks like a bug, download the save and attach it to a GitHub issue.'));
   });
 }
 
-// Shows what the migration did. Resolves when the player drives on.
 export function showCarryReport(report: CarryReport): Promise<void> {
   return new Promise((resolve) => {
     const root = savePanel('Save migrated');
@@ -45,6 +42,10 @@ export function showCarryReport(report: CarryReport): Promise<void> {
       el('div', { class: 'death-buttons' }, el('button', { onclick: () => { root.remove(); resolve(); } }, 'Drive on')),
     );
   });
+}
+
+function downloadSave(stored: unknown): void {
+  download('roam-save.json', typeof stored === 'string' ? stored : JSON.stringify(stored), 'application/json');
 }
 
 function savePanel(title: string): HTMLElement {
@@ -62,5 +63,6 @@ function reportLines(report: CarryReport): string[] {
     ...(garage.length > 0 ? [`Moved to the garage: ${garage.join(', ')}`] : []),
     ...sold,
     ...(report.lost.length > 0 ? [`Lost, no longer in the game: ${report.lost.join(', ')}`] : []),
+    ...report.settingsReset.map((id) => `${WORLD_SETTINGS[id].name} was reset to ${percent(WORLD_SETTINGS[id].default)}`),
   ];
 }

@@ -17,12 +17,13 @@ import { canOverdrive, vehicleStats } from './stats';
 import { sunAt } from './sun';
 import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import type { World } from './types';
+import { defaultSetup } from './settings';
 
 describe('townStart', () => {
   it('parks every chassis on a town pad with no vehicle on top of it', () => {
     for (const chassis of Object.keys(CHASSIS)) {
-      const kit = { ...START_KITS.standard, chassis, parts: [], cargo: {}, storage: [] };
-      const world = newWorld(7, kit, TEST_MAP, true, townStart());
+      const kit = { ...START_KITS.standard, chassis, parts: [], cargo: {}, storage: [], opening: null };
+      const world = newWorld(7, kit, TEST_MAP, defaultSetup('roaming'), true, townStart());
       const truck = playerVehicle(world);
       expect(townAt(world), chassis).not.toBeNull();
       for (const v of world.vehicles.filter((o) => o !== truck)) {
@@ -32,7 +33,7 @@ describe('townStart', () => {
   });
 
   it('leaves the default start where the new game puts it', () => {
-    const world = newWorld(7, START_KITS.standard, TEST_MAP, false);
+    const world = newWorld(7, START_KITS.standard, TEST_MAP, defaultSetup('roaming'), false);
     expect(playerVehicle(world).pos).toEqual(startPose().pos);
   });
 });
@@ -111,7 +112,7 @@ function stockHp(): number {
 }
 
 describe('isAtRest', () => {
-  const truck = () => playerVehicle(newWorld(7, START_KITS.standard, TEST_MAP, false));
+  const truck = () => playerVehicle(newWorld(7, START_KITS.standard, TEST_MAP, defaultSetup('roaming'), false));
   const slow = RULES.parkedSpeed / 2;
   const fast = RULES.parkedSpeed * 2;
 
@@ -144,7 +145,7 @@ describe('the headlight switch', () => {
   };
 
   it('starts off in a new game', () => {
-    expect(newWorld(7, START_KITS.standard, TEST_MAP, false).player.headlights).toBe(false);
+    expect(newWorld(7, START_KITS.standard, TEST_MAP, defaultSetup('roaming'), false).player.headlights).toBe(false);
   });
 
   it('switches through setHeadlights into a new world', () => {
