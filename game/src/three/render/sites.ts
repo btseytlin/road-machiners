@@ -93,7 +93,12 @@ export class SiteBuilder {
     return this.addLampHead(x, z, height, yaw);
   }
   addWorkLight(kind: SiteLightKind, x: number, z: number, height: number, aim: { x: number; z: number; lift?: number }, color: number): void {
-    this.addLight(kind, this.addMast(x, z, height, 0), aim, color);
+    const anchor = new THREE.Group();
+    const wx = this.site.pos.x + x;
+    const wz = this.site.pos.y + z;
+    anchor.position.set(wx * S, (heightAt(this.terrain, wx, wz) + height) * S, wz * S);
+    this.root.add(anchor);
+    this.addLight(kind, anchor, aim, color);
   }
   addWash(reach: number, color: number): void {
     this.addWorkLight('wash', WASH.mast * reach, WASH.mast * reach, WORK_MAST, { x: -WASH.aim * reach, z: -WASH.aim * reach, lift: WASH.lift }, color);
