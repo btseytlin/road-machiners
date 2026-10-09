@@ -86,7 +86,7 @@ function aidWorkLabel(world: World, v: Vehicle, s: NpcState): string {
 export function workProgress(work: WorkLeft): number {
   return 1 - work.turnsLeft / work.total;
 }
-import { damage, fuelLiters, hp, kph, moneyDelta, moneyText, turnsText as turnsLabel } from './units';
+import { damage, fuelLiters, hp, kph, moneyDelta, moneyNumber, moneyText, turnsText as turnsLabel } from './units';
 import { npcName } from '../sim/spawn';
 
 export function wearLabel(part: PartInstance): string {
@@ -705,9 +705,9 @@ export type SaleEstimate =
   | { kind: "gain" | "loss"; perUnit: number; avgCost: number }
   | { kind: "even"; avgCost: number };
 
-export const GOODS_COLUMNS = { good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit/unit" } as const;
+export const GOODS_COLUMNS = { good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit" } as const;
 
-export const PROFIT_HEAD_TITLE = "Sell price here minus your average cost. Salvaged and hauled goods count at their usual value.";
+export const PROFIT_HEAD_TITLE = "Per unit: sell price here minus your average cost. Salvaged and hauled goods count at their usual value.";
 
 function checkEstimate(held: number, sell: number, basis: number | undefined): void {
   if (!Number.isInteger(held) || held < 0) throw new Error(`saleEstimate: bad held count ${held}`);
@@ -734,8 +734,8 @@ export function estimateText(e: SaleEstimate): string {
     case "none": return "";
     case "unrecorded": return "?";
     case "even": return "0";
-    case "gain": return moneyDelta(e.perUnit);
-    case "loss": return moneyDelta(-e.perUnit);
+    case "gain": return `+${moneyNumber(e.perUnit)}`;
+    case "loss": return moneyNumber(-e.perUnit);
   }
 }
 

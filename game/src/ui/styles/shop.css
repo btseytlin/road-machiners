@@ -437,9 +437,17 @@
 .goods-head {
   font-size: var(--text-dense);
 }
-.goods-head span:nth-last-child(-n + 2),
-.goods.truck .goods-head span:nth-child(2) {
-  text-align: right;
+.goods-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.goods-head .end {
+  justify-content: flex-end;
+}
+.goods-head .price-head {
+  justify-content: flex-end;
+  width: var(--icon-3xl);
 }
 .good-row:hover {
   background: var(--surface-highlight);
@@ -458,6 +466,16 @@
   align-items: center;
   gap: var(--space-2);
 }
+.trade.wide {
+  grid-column: span 2;
+}
+.good-name.supply {
+  min-width: 0;
+}
+.good-name.supply .service-meter {
+  flex: 1;
+  min-width: 0;
+}
 .trade > .amount,
 .job > .amount {
   min-width: var(--icon-3xl);
@@ -470,11 +488,14 @@
   min-width: var(--icon-3xl);
   font: var(--text-dense) var(--font-mono);
 }
-.tag.buy {
+.trade > .price {
+  justify-content: flex-end;
+}
+.price.good {
   color: var(--good-bright);
 }
-.tag.sell {
-  color: var(--accent-warm);
+.price.bad {
+  color: var(--danger-ink);
 }
 .count,
 .profit {
@@ -483,6 +504,8 @@
 }
 .cap {
   display: none;
+  align-items: center;
+  gap: var(--space-1);
   margin-right: var(--space-2);
   font-size: var(--text-dense);
   color: var(--ink-muted);
@@ -524,19 +547,11 @@
     justify-self: end;
   }
   .cap {
-    display: inline;
+    display: inline-flex;
   }
 }
 
-/* Garage services: fuel, supplies and repair, each a meter and its buttons. */
-.services {
-  display: grid;
-  grid-template-columns: var(--icon-xl) minmax(var(--col-name), 1fr) auto auto auto;
-  gap: var(--space-4) var(--space-5);
-  align-items: center;
-  padding: var(--space-3) 0 var(--space-5);
-  border-bottom: 1px solid var(--line-faint);
-}
+/* Garage repair bar and the meter of a fuel or supplies row. */
 .town-repair {
   display: flex;
   align-items: center;
@@ -550,9 +565,6 @@
 }
 .town-repair .bad {
   flex: 1;
-}
-.service {
-  display: contents;
 }
 .service-meter {
   display: flex;

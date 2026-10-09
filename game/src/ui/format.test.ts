@@ -484,12 +484,12 @@ describe("saleEstimate", () => {
   it("words a loss per unit against the average cost", () => {
     const e = saleEstimate(11, 1200, 2000);
     expect(e).toEqual({ kind: "loss", perUnit: 800, avgCost: 2000 });
-    expect(estimateText(e)).toBe("\u22128 M's");
+    expect(estimateText(e)).toBe("\u22128");
     expect(estimateTitle(e)).toBe("Avg cost 20 M's");
   });
 
   it("words a gain", () => {
-    expect(estimateText(saleEstimate(1, 3800, 500))).toBe("+33 M's");
+    expect(estimateText(saleEstimate(1, 3800, 500))).toBe("+33");
   });
 
   it("calls a rounded zero even, never -0", () => {
@@ -513,12 +513,12 @@ describe("saleEstimate", () => {
   });
 
   it("keeps multi-digit values whole", () => {
-    expect(estimateText(saleEstimate(12, 98700, 123400))).toBe("\u2212247 M's");
+    expect(estimateText(saleEstimate(12, 98700, 123400))).toBe("\u2212247");
   });
 
   it("only ever gives a signed number, ? or nothing", () => {
     for (const e of [saleEstimate(11, 3700, 4500), saleEstimate(3, 3700, 3000), saleEstimate(2, 3700, 3700), saleEstimate(2, 3700, undefined), saleEstimate(0, 3700, 100)]) {
-      expect(estimateText(e)).toMatch(/^([+\u2212]\d[\d,]* M(?:'s)?|0|\?|)$/);
+      expect(estimateText(e)).toMatch(/^([+\u2212]\d[\d,]*|0|\?|)$/);
     }
   });
 
@@ -533,10 +533,11 @@ describe("saleEstimate", () => {
 
 describe("goods table words", () => {
   it("has terse column heads", () => {
-    expect(GOODS_COLUMNS).toEqual({ good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit/unit" });
+    expect(GOODS_COLUMNS).toEqual({ good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit" });
   });
 
   it("explains the profit head in a hover title without turns", () => {
+    expect(PROFIT_HEAD_TITLE).toContain("Per unit");
     expect(PROFIT_HEAD_TITLE).toContain("average cost");
     expect(PROFIT_HEAD_TITLE).toContain("usual value");
     expect(PROFIT_HEAD_TITLE).not.toMatch(/turn/i);
