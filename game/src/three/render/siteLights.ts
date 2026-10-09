@@ -8,24 +8,27 @@ import { PAL } from '../../render/palette';
 import { DEG } from '../../sim/vec';
 import { lampsOn } from './daylight';
 
-export type SiteLightKind = 'flood' | 'wash' | 'gate' | 'fire';
-export type SiteLight = { id: string; siteId: string; kind: SiteLightKind; at: V3; aim: V3; ground: number; color?: number };
+export type SiteLightKind = 'flood' | 'wash' | 'wall' | 'yard' | 'plaza' | 'gate' | 'fire';
+export type SiteLight = { id: string; siteId: string; kind: SiteLightKind; at: V3; aim: V3; ground: number; color?: number; range?: number };
 
 type Look = { color: number; intensity: number; range: number; angle: number; penumbra: number; decay: number };
 
-export const SITE_LIGHT_POOL = 8;
+export const SITE_LIGHT_POOL = 12;
 export const SITE_LIGHT_FADE_S = 1.5;
 export const GATE_APRON_MARGIN = 3;
 
 export const LOOKS: Record<SiteLightKind, Look> = {
   flood: { color: PAL.siteLight.sodium, intensity: 170, range: 18, angle: 38 * DEG, penumbra: 0.6, decay: 1 },
   wash: { color: PAL.siteLight.sodium, intensity: 240, range: 32, angle: 17 * DEG, penumbra: 0.6, decay: 1 },
-  gate: { color: PAL.siteLight.sodium, intensity: 70, range: 22, angle: 30 * DEG, penumbra: 0.5, decay: 1 },
+  wall: { color: PAL.siteLight.sodium, intensity: 260, range: 22, angle: 30 * DEG, penumbra: 0.6, decay: 1 },
+  yard: { color: PAL.siteLight.sodium, intensity: 230, range: 30, angle: 38 * DEG, penumbra: 0.5, decay: 1 },
+  plaza: { color: PAL.siteLight.warm, intensity: 200, range: 40, angle: 52 * DEG, penumbra: 0.5, decay: 1 },
+  gate: { color: PAL.siteLight.sodium, intensity: 200, range: 28, angle: 48 * DEG, penumbra: 0.5, decay: 1 },
   fire: { color: PAL.siteLight.fire, intensity: 30, range: 12, angle: 60 * DEG, penumbra: 0.8, decay: 1 },
 };
 
 export function lookOf(light: SiteLight): Look {
-  return LOOKS[light.kind];
+  return light.range === undefined ? LOOKS[light.kind] : { ...LOOKS[light.kind], range: light.range };
 }
 
 // Where the cone meets flat ground, edge rays plus inner rings. The inner rings catch the range arc of a cone that rises over the ground.

@@ -44,6 +44,12 @@ const LIGHTS = [
   { x: -8, z: 8, aim: { x: -9, z: 2, lift: 1 } },
   { x: 2, z: 4.5, aim: { x: 2, z: 0.5, lift: 0.5 } },
 ];
+const PLAZAS = [
+  { x: 5.5, z: 5.5 },
+  { x: -5.5, z: 5.5 },
+  { x: 5.5, z: -5.5 },
+  { x: -5.5, z: -5.5 },
+];
 const FENCE = { r: POND.r + 0.5, posts: 14, height: 0.28 };
 
 const CROP = mix(FACTION_COLORS.bowl.top, PAL.palm, 0.3);
@@ -60,6 +66,7 @@ export function buildBowl(b: SiteBuilder, site: Site): void {
   addTerraces(b, site, taken);
   addSheds(b, site);
   for (const l of LIGHTS) b.addWorkLight('flood', l.x, l.z, MAST, l.aim, PAL.siteLight.warm);
+  for (const l of PLAZAS) b.addPlaza(l.x, l.z, PAL.siteLight.warm);
 }
 
 function buildFloor(b: SiteBuilder, site: Site, taken: Disc[]): void {

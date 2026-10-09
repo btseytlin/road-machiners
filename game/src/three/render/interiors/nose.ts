@@ -64,6 +64,12 @@ const LIGHTS: { kind: 'flood' | 'wash'; mast: { u: number; v: number }; aim: { u
   { kind: 'flood', mast: { u: 12, v: -9 }, aim: { u: 16, v: -6, lift: 1.5 } },
   { kind: 'flood', mast: { u: 2, v: -8 }, aim: { u: 6, v: -3.5, lift: 0.8 } },
 ];
+const PLAZAS = [
+  { u: 11, v: 0 },
+  { u: -11, v: 0 },
+  { u: 0, v: 11 },
+  { u: 0, v: -11 },
+];
 const RUBBLE = { count: 44, scale: [2, 6], reach: 29.3 };
 const ROCK_SINK = 0.25 * 1.1;
 const UP = new THREE.Vector3(0, 1, 0);
@@ -96,6 +102,10 @@ export function buildNose(b: SiteBuilder, site: Site): void {
   for (const l of LIGHTS) {
     const at = placeAt(f, l.mast.u, l.mast.v);
     b.addWorkLight(l.kind, at.x, at.z, MAST, { ...placeAt(f, l.aim.u, l.aim.v), lift: l.aim.lift }, PAL.siteLight.cold);
+  }
+  for (const p of PLAZAS) {
+    const at = placeAt(f, p.u, p.v);
+    b.addPlaza(at.x, at.z, PAL.siteLight.cold);
   }
 }
 

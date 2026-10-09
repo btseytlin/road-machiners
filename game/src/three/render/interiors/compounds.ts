@@ -41,6 +41,8 @@ export function buildDustwell(b: SiteBuilder): void {
   addPipes(b);
   for (const l of DUSTWELL_LIGHTS) b.addWorkLight('flood', l.x, l.z, MAST, l.aim, PAL.siteLight.sodium);
   b.addWash(0.65, PAL.siteLight.sodium);
+  b.addYard(0, 0, PAL.siteLight.sodium);
+  b.addWallWash(3, PAL.siteLight.sodium);
 }
 
 function addPumpjack(b: SiteBuilder): void {
@@ -115,6 +117,8 @@ export function buildGranary(b: SiteBuilder): void {
   for (const c of YARD_CRATES) b.addModel('crates', c.x, c.z, c.yaw);
   for (const [i, j] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) addBin(b, BINS.x + (i * BINS.apart) / 2, BINS.z + (j * BINS.apart) / 2);
   for (const l of GRANARY_LIGHTS) b.addWorkLight('flood', l.x, l.z, MAST, l.aim, PAL.siteLight.warm);
+  b.addYard(0, 0, PAL.siteLight.warm);
+  b.addWallWash(4.3, PAL.siteLight.warm);
 }
 
 function addConveyor(b: SiteBuilder): void {
@@ -238,6 +242,8 @@ export function buildSalvageYard(b: SiteBuilder): void {
   for (const p of YARD_PROPS) b.addModel(p.name, p.x, p.z, p.yaw);
   for (const l of SALVAGE_LIGHTS) b.addWorkLight('flood', l.x, l.z, MAST, l.aim, PAL.siteLight.sodium);
   b.addWash(0.65, PAL.siteLight.sodium);
+  b.addYard(0, 0, PAL.siteLight.sodium);
+  b.addWallWash(3, PAL.siteLight.sodium);
 }
 
 function addCrane(b: SiteBuilder): void {
