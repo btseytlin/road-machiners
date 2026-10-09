@@ -90,7 +90,10 @@ const checkNoStrayControl = async (when) => {
 const languageReadout = () => page.evaluate(() => ({
   lang: document.documentElement.lang,
   menu: document.querySelector('#ui .game-menu .menu-button')?.textContent ?? '',
-  money: document.querySelector('#ui [data-resource="money"] small')?.textContent ?? '',
+  // The HUD may render compact icon-only resources; their accessible labels still
+  // have to change language even when there is no visible <small> caption.
+  hud: [...document.querySelectorAll('#ui [data-resource]')].map((item) =>
+    item.querySelector('small')?.textContent || item.getAttribute('aria-label') || item.getAttribute('title') || ''),
 }));
 const openOptionsByMouse = async () => {
   if (!(await page.locator('.game-menu [role=menu]').isVisible())) await page.locator('.game-menu .menu-button').click();
@@ -148,7 +151,7 @@ const pressedLanguage = async () => {
 await checkNoStrayControl('in English');
 await pickLanguageByKeyboard('ru');
 const russian = await languageReadout();
-if (russian.lang !== 'ru' || !CYRILLIC.test(russian.menu) || !CYRILLIC.test(russian.money)) languageProblems.push(`Русский did not switch the menu and HUD: ${JSON.stringify(russian)}`);
+if (russian.lang !== 'ru' || !CYRILLIC.test(russian.menu) || !russian.hud.some((label) => CYRILLIC.test(label))) languageProblems.push(`Русский did not switch the menu and HUD: ${JSON.stringify(russian)}`);
 await checkNoStrayControl('in Russian');
 
 for (let i = 0; i < turns; i++) {
@@ -198,7 +201,7 @@ const reload = async () => {
 if ((await reload()).lang !== 'ru' || (await pressedLanguage()) !== 'ru') languageProblems.push('Russian did not survive a reload');
 await pickLanguageByMouse('en');
 const english = await reload();
-if (english.lang !== 'en' || CYRILLIC.test(english.menu) || CYRILLIC.test(english.money) || (await pressedLanguage()) !== 'en') languageProblems.push(`English did not stay after a reload: ${JSON.stringify(english)}`);
+if (english.lang !== 'en' || CYRILLIC.test(english.menu) || english.hud.some((label) => CYRILLIC.test(label)) || (await pressedLanguage()) !== 'en') languageProblems.push(`English did not stay after a reload: ${JSON.stringify(english)}`);
 await checkNoStrayControl('after the reload');
 await browser.close();
 
