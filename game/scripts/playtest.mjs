@@ -13,7 +13,7 @@ const cpu = process.argv.includes('--cpu');
 const turns = Number(arg('turns', cpu ? '4' : '12'));
 const fpsGate = !cpu && !process.argv.includes('--no-fps-gate');
 const MIN_FPS = 50;
-const timeoutsOff = process.env.TEST_TIMEOUTS === 'off';
+const timeoutsOff = process.env.TEST_TIMEOUTS === 'shared';
 const TURN_LIMIT_MS = timeoutsOff ? 0 : cpu ? 60000 : 10000;
 const BOOT_LIMIT_MS = timeoutsOff ? 0 : 30000;
 

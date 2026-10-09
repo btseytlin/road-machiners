@@ -1,6 +1,8 @@
-import { timeoutsOff } from './timeouts';
+// A slow test's own time limit, for a test that finishes but needs more than the default.
+// On the factory's shared server it doubles, and is never below the shared default.
+import { SHARED_LIMITS, timeoutMode } from './timeouts';
 
-// A test's own time limit. Where test time limits are off, it returns 0, which vitest reads as no limit.
-export function budget(ms: number): number {
-  return timeoutsOff() ? 0 : ms;
+export function budget(ms: number, env: NodeJS.ProcessEnv = process.env): number {
+  if (!Number.isFinite(ms) || ms <= 0) throw new Error(`A test budget must be a finite number of ms above 0, got ${ms}.`);
+  return timeoutMode(env) === 'shared' ? Math.max(SHARED_LIMITS.testTimeout, ms * 2) : ms;
 }
