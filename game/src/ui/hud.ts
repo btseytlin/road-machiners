@@ -5,30 +5,30 @@ import type { Vehicle, World } from "../sim/types";
 import { setupLabel } from "../sim/settings";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
-import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
+import { bottomLeft, disabledWith, el, isBrowserChord, panel, rightDock, topCenter, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
 import {
   heldContractDue,
   contractSummary,
   eventText,
-  formatNpcActivity,
   workLabel,
   workProgress,
   formatNpcCargo,
   formatNpcMark,
-  formatNpcStates,
   formatNpcTraits,
+  formatVehicleState,
   type LogLine,
 } from "./format";
-import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, overdriveSwitch, versionLabel, type RescueReadout } from "./hud-readout";
+import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, overdriveSwitch, versionLabel, type RescueReadout, type TipLine } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
-import { aimLine, aimMarks, type AimState } from "./weapons";
+import { aimMarks, TURN_PLAYING, type AimState } from "./weapons";
+import { token } from "./tokens";
 import { createSwitch } from "./switch";
-import { Tips } from "./tips";
-import { kph, moneyText } from "./units";
+import { Tips, type TipSwitch } from "./tips";
+import { moneyEl } from "./units";
 import { playerVehicle } from "../sim/damage";
 import { affordableRanks, pendingPerkPairs } from "../sim/progress";
-import { canDouse } from "../sim/engine-heat";
+import { douseBlock } from "../sim/engine-heat";
 import { ENGINE_HEAT } from "../data/wear";
 import type { RadioPanel } from "./radio";
 import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
@@ -53,7 +53,7 @@ function actionTitle(action: ContextAction): string {
   return action.ready ? "" : "Stop to use";
 }
 
-export const combatBlocked = (turns: number): string => `Can't do this while in combat, ${turns} turns left`;
+export const combatBlocked = (turns: number): string => `In combat, ${turns} ${turns === 1 ? "turn" : "turns"} left`;
 
 type HudActions = {
   openInventory: () => void;
@@ -71,12 +71,13 @@ type HudActions = {
   dialogue: DialogueHost;
   recenter: () => void;
   aimPart: (vehicleId: string, partId: string) => void;
-  aimBody: (vehicleId: string) => void;
   aimState: (vehicleId: string) => AimState;
 };
 export type CameraMode = "centered" | "auto";
 
 const TOAST_MS = 3500;
+
+const TONE_CLASS: Record<TipLine['tone'], string> = { base: 'dim', bad: 'bad', good: 'good', plain: '' };
 
 export class MaxSpeedView {
   private readonly text = el('span', { class: 'speed-max-text' });
@@ -85,17 +86,19 @@ export class MaxSpeedView {
     'span',
     { class: 'speed-max', tabindex: 0, 'aria-describedby': 'speed-breakdown' },
     this.text,
-    el('div', { class: 'speed-tip', id: 'speed-breakdown', role: 'tooltip' }, this.lines),
+    el('div', { class: 'speed-tip tooltip', id: 'speed-breakdown', role: 'tooltip' }, this.lines),
   );
 
   private shown = '';
 
-  render(maxSpeed: string, lines: string[]): void {
-    this.text.textContent = `max ${maxSpeed}`;
-    const key = lines.join('\n');
+  render(maxSpeed: string, lines: TipLine[]): void {
+    this.text.textContent = `${maxSpeed} km/h`;
+    const key = lines.map((line) => `${line.label}|${line.value}|${line.tone}`).join('\n');
     if (key === this.shown) return;
     this.shown = key;
-    this.lines.replaceChildren(...lines.map((line) => el('div', { class: 'speed-line' }, line)));
+    this.lines.replaceChildren(
+      ...lines.map((line) => el('div', { class: 'speed-line' }, el('span', {}, line.label), el('span', { class: `num ${TONE_CLASS[line.tone]}` }, line.value))),
+    );
   }
 }
 
@@ -108,42 +111,50 @@ export class Hud {
   private readoutSlot = el("div", { class: "readouts" });
   private actionSlot = el("div", { class: "instrument-actions" });
   private condition = new TruckConditionView();
-  private inspected = new TruckConditionView();
-  private contracts = panel("contracts", rightDock());
+  private inspected = new TruckConditionView(true);
+  private inspectedDraw = el("div", { class: "info-draw" }, this.inspected.root);
+  private infoColumn = el("div", { class: "info-column" });
+  private contracts = panel("contracts dock-panel", rightDock());
   private log = new LogPanel();
   private info = panel("info");
-  private infoBody = el("div");
+  private infoBody = el("div", { class: "info-content" });
   private feedback = panel("feedback", topLeft());
   private action = panel("action");
   private toastBox = panel("toast");
-  private rescue = panel("rescue");
-  private stranded = panel("stranded", this.condition.root);
+  private rescue = panel("rescue notice", topCenter());
+  private knockedOut = panel("status-mark", topCenter());
+  private truckStack = el("div", { class: "truck-stack" });
+  private stranded = panel("stranded notice", this.truckStack);
   private recenter = panel("recenter", bottomLeft());
   private cameraSwitch = panel("camera-mode", topRight());
-  private tips = new Tips(window.localStorage);
+  private tips = new Tips(window.localStorage, topCenter(), () => this.toast("Tips are off. Menu, Show tips turns them back on."));
   cameraMode: CameraMode = "auto";
   private toastTimer: number | null = null;
 
   private readonly dialogue: DialoguePanel;
 
-  private keepRadioClear = (): void => {
-    const shown = this.info.style.display !== "none";
-    const away = shown && overlaps(this.info.getBoundingClientRect(), this.radio.root.getBoundingClientRect());
-    this.radio.root.classList.toggle("away", away);
+  private placeInfo = (): void => {
+    if (this.info.style.display === "none") return;
+    const gap = parseFloat(token("--hud-gap"));
+    const top = topRight().getBoundingClientRect().bottom + gap;
+    this.info.style.top = `${top}px`;
+    this.info.style.height = `${this.radio.root.getBoundingClientRect().top - gap - top}px`;
+    this.inspected.fitTo(this.inspectedDraw);
   };
 
   constructor(private actions: HudActions, private radio: RadioPanel) {
-    bottomLeft().append(this.condition.root);
+    this.truckStack.append(this.condition.root);
+    bottomLeft().append(this.truckStack);
     this.dialogue = new DialoguePanel(actions.dialogue);
     this.info.style.display = "none";
     this.info.append(this.infoBody);
     this.contracts.style.display = "none";
-    const observer = new ResizeObserver(this.keepRadioClear);
-    observer.observe(this.info);
-    observer.observe(rightDock());
-    window.addEventListener("resize", this.keepRadioClear);
+    new ResizeObserver(this.placeInfo).observe(rightDock());
+    window.addEventListener("resize", this.placeInfo);
     this.toastBox.style.display = "none";
     this.rescue.style.display = "none";
+    this.knockedOut.style.display = "none";
+    this.knockedOut.append(el("span", { class: "bad" }, "Knocked out"));
     this.stranded.style.display = "none";
     this.recenter.style.display = "none";
     this.recenter.append(el("button", { onclick: () => actions.recenter() }, "Center on truck (F)"));
@@ -202,8 +213,16 @@ export class Hud {
     this.recenter.style.display = on ? "" : "none";
   }
 
+  tipSwitch(): TipSwitch {
+    return { isOn: () => this.tips.isOn(), setOn: (on) => this.tips.setOn(on) };
+  }
+
   getInspectionRoot(): HTMLElement {
     return this.info;
+  }
+
+  getExchangeRoot(): HTMLElement {
+    return this.infoColumn;
   }
 
   private toast(text: string): void {
@@ -242,7 +261,7 @@ export class Hud {
       el(
         "span",
         {
-          class: "job-bar",
+          class: "job-bar meter progress",
           role: "progressbar",
           "aria-label": `${label} progress`,
           "aria-valuemin": "0",
@@ -258,10 +277,8 @@ export class Hud {
     const use = el(
       "button",
       {
-        onclick: onUse,
-        disabled: !action.ready,
-        class: action.combat !== undefined ? "combat" : "",
-        title: actionTitle(action),
+        ...disabledWith(action.ready ? null : actionTitle(action), onUse),
+        class: action.combat !== undefined ? "btn-danger" : "",
       },
       action.hint ? action.label : `[E] ${action.label}`,
     );
@@ -277,19 +294,18 @@ export class Hud {
   renderRescue(w: World): void {
     this.dialogue.render(w);
     const r = getRescueReadout(w);
-    this.renderMiddle(r?.kind === "stranded" ? null : r);
-    this.renderStranded(r?.kind === "stranded" ? r : null);
+    this.knockedOut.style.display = rescueOf(r, "knockedOut") ? "" : "none";
+    this.renderMiddle(rescueOf(r, "towed"));
+    this.renderStranded(rescueOf(r, "stranded"));
   }
 
-  private renderMiddle(r: Exclude<RescueReadout, { kind: "stranded" }> | null): void {
+  private renderMiddle(r: Extract<RescueReadout, { kind: "towed" }> | null): void {
     this.rescue.style.display = r ? "" : "none";
     if (!r) return this.rescue.replaceChildren();
-    if (r.kind === "knockedOut")
-      return this.rescue.replaceChildren(el("h3", { class: "bad" }, "Knocked out"));
     this.rescue.replaceChildren(
       el("h3", {}, "Under tow"),
-      el("div", {}, `${r.tower} tows you to ${r.town}.`),
-      el("div", { class: "dim" }, `Fee ${moneyText(r.fee)} on arrival.`),
+      el("div", {}, `${r.tower} tows you to ${r.town}`),
+      el("div", { class: "dim" }, "Fee ", moneyEl(r.fee)),
       el(
         "div",
         { class: "rescue-buttons" },
@@ -303,7 +319,7 @@ export class Hud {
     if (!r) return this.stranded.replaceChildren();
     this.stranded.replaceChildren(
       el("h3", {}, "Stranded"),
-      el("div", { class: "dim" }, r.beacon ? "Calling for a tow." : r.reason),
+      ...(r.beacon || !r.reason ? [] : [el("div", { class: "dim" }, r.reason)]),
       el(
         "div",
         { class: "rescue-buttons" },
@@ -325,12 +341,13 @@ export class Hud {
     }
     this.contracts.style.display = "";
     this.contracts.replaceChildren(
-      el("h3", {}, "Contracts"),
+      el("h3", { class: "panel-title" }, "Contracts"),
       ...w.player.contracts.map((c) =>
         el(
           "div",
           { class: "contract-line" },
-          `${contractSummary(c)} — ${heldContractDue(c)}`,
+          el("span", {}, contractSummary(c)),
+          el("span", { class: "num" }, heldContractDue(c)),
         ),
       ),
     );
@@ -338,9 +355,10 @@ export class Hud {
 
   private engineButtons(w: World, busy: boolean): HTMLElement[] {
     const od = overdriveSwitch(w);
+    const lock = busy ? TURN_PLAYING : null;
     const headlights = createSwitch({
-      on: "Lights on",
-      off: "Lights off",
+      on: "Lights",
+      off: "Off",
       checked: this.actions.headlightsOn(),
       key: "L",
       title: "Headlights [L]",
@@ -351,19 +369,20 @@ export class Hud {
       off: "Normal",
       checked: od.checked,
       key: "O",
-      disabled: busy || od.blocked,
+      reason: lock ?? od.reason,
       title: od.title,
       onclick: () => this.actions.toggleOverdrive(),
     });
+    const douseReason = lock ?? douseBlock(w);
     const douse = el(
       "button",
       {
         class: "instrument-button",
-        disabled: busy || !canDouse(w),
-        onclick: () => this.actions.douseEngine(),
-        title: `Pour ${ENGINE_HEAT.douseSupplies} supplies of water over the engine to cool it [G]`,
+        "aria-disabled": douseReason === null ? undefined : "true",
+        onclick: () => douseReason === null && this.actions.douseEngine(),
+        title: douseReason ?? `Costs ${ENGINE_HEAT.douseSupplies} supplies [G]`,
       },
-      "Cool engine [G]",
+      "Cool [G]",
     );
     return [headlights, overdrive, douse];
   }
@@ -374,9 +393,9 @@ export class Hud {
       "button",
       {
         class: "instrument-button",
-        disabled: busy,
-        onclick: () => this.actions.openCharacter(),
-        title: marked ? "Driver and skills: XP to spend or a perk to pick [C]" : "Driver and skills [C]",
+        "aria-disabled": busy ? "true" : undefined,
+        onclick: () => !busy && this.actions.openCharacter(),
+        title: busy ? TURN_PLAYING : marked ? "XP to spend or a perk to pick [C]" : "Driver and skills [C]",
       },
       createIcon("driver"),
       marked ? "! [C]" : "[C]",
@@ -426,31 +445,31 @@ export class Hud {
         el(
           "span",
           {
-            class: `resource ${resource.warning ? "bad" : ""}`,
-            title: resource.label,
-            "aria-label": `${resource.label}: ${resource.value}${resource.warning ? ", warning" : ""}`,
+            class: `resource ${resource.warning ? "alert" : ""}`,
+            title: "tip" in resource ? resource.tip : resource.label,
             "data-resource": resource.label,
           },
-          el("small", {}, resource.label),
-          el("strong", {}, `${resource.warning ? "! " : ""}${resource.value}`),
+          resource.icon ? createIcon(resource.icon) : null,
+          el("strong", {}, "balance" in resource && resource.balance !== undefined ? moneyEl(resource.balance) : resource.value),
         ),
       ),
       ...readout.survival.map((entry) =>
         el(
           "span",
           {
-            class: `resource ${entry.warning ? "bad" : ""}`,
+            class: `resource ${entry.warning ? "alert" : ""}`,
             title: entry.label,
             "data-resource": entry.label,
           },
-          el("small", {}, entry.label),
+          entry.label === "Engine" ? createIcon("engine") : null,
           el("strong", {}, entry.value),
           "progress" in entry && entry.progress !== undefined
             ? el(
                 "span",
                 {
-                  class: "job-bar",
+                  class: "meter s progress",
                   role: "progressbar",
+                  "aria-label": "Engine heat",
                   "aria-valuenow": String(Math.round(entry.progress * 100)),
                 },
                 el("span", { style: `width:${Math.round(entry.progress * 100)}%` }),
@@ -468,16 +487,16 @@ export class Hud {
         off: "Route",
         checked: manual,
         key: "R",
-        disabled: busy,
-        title: "Manual driving: straight at the point, or follow the roads [R]",
+        reason: busy ? TURN_PLAYING : null,
+        title: "Manual drives straight at the point, route follows the roads [R]",
         onclick: () => this.actions.toggleManual(),
       }),
       createSwitch({
-        on: "Auto patch",
-        off: "No patch",
+        on: "Patch",
+        off: "Off",
         checked: w.player.autoRepair,
         key: "P",
-        disabled: busy,
+        reason: busy ? TURN_PLAYING : null,
         title: "Patch damaged parts while parked [P]",
         onclick: () => this.actions.toggleAutoRepair(),
       }),
@@ -496,7 +515,7 @@ export class Hud {
       const line = eventText(w, e);
       if (!line) continue;
       lines.push(line);
-      if (e.t === "knockout" || e.t === "skillUp" || e.t === "discover") this.toast(line.text);
+      if (e.t === "skillUp" || e.t === "discover") this.toast(line.text);
     }
     this.log.add(w.turn, lines);
     this.radio.hear(w);
@@ -516,60 +535,41 @@ export class Hud {
     return { marks: aimMarks(w, v.id), pick: (partId) => this.actions.aimPart(v.id, partId) };
   }
 
-  // The aim line above the diagram, for another truck only.
-  private aimControls(w: World, v: Vehicle): HTMLElement[] {
-    if (v.id === playerVehicle(w).id) return [];
-    const line = aimLine(this.actions.aimState(v.id), () => this.actions.aimBody(v.id));
-    return line ? [line] : [];
-  }
-
   showInfo(w: World, v: Vehicle | null, hostile: boolean): void {
     if (!v) {
       this.info.style.display = "none";
       return;
     }
     this.inspected.render(v, this.aimOf(w, v));
-    const stance =
-      v.faction === "player" ? "" : hostile ? "hostile" : "neutral";
     this.info.style.display = "";
     this.infoBody.replaceChildren(
-      ...infoHeading(w, v),
-      el(
-        "div",
-        { class: hostile ? "bad" : "dim" },
-        `${v.faction} ${stance}`.trim(),
-      ),
-      el("div", {}, `Speed ${kph(v.speed)} km/h`),
-      ...npcLines(w, v),
-      ...this.aimControls(w, v),
-      this.inspected.root,
+      infoHead(v, hostile),
+      el("div", { class: "info-state" }, formatVehicleState(w, v)),
+      ...quietLines(w, v).map((line) => el("div", { class: "info-state info-quiet" }, line)),
+      el("div", { class: "info-body" }, this.inspectedDraw, this.infoColumn),
     );
+    this.placeInfo();
   }
 }
 
-function infoHeading(w: World, v: Vehicle): HTMLElement[] {
-  if (!v.brain) return [el("h3", {}, v.name)];
-  const activity = formatNpcActivity(w, v);
-  return [
-    el("h3", {}, v.brain.driver),
-    ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
-    el("div", { class: "dim" }, v.name),
-  ];
+function rescueOf<K extends RescueReadout["kind"]>(r: RescueReadout | null, kind: K): Extract<RescueReadout, { kind: K }> | null {
+  return r?.kind === kind ? (r as Extract<RescueReadout, { kind: K }>) : null;
 }
 
-function npcLines(w: World, v: Vehicle): HTMLElement[] {
+function infoHead(v: Vehicle, hostile: boolean): HTMLElement {
+  const quiet = [v.brain ? v.name : null, v.faction].filter((part) => part !== null).join(", ");
+  return el(
+    "div",
+    { class: "info-head" },
+    el("span", { class: "info-name" }, v.brain ? v.brain.driver : v.name),
+    el("span", { class: "info-quiet" }, quiet),
+    ...(v.faction === "player" ? [] : [el("span", { class: `tag ${hostile ? "bad" : "dim"}` }, hostile ? "hostile" : "neutral")]),
+  );
+}
+
+function quietLines(w: World, v: Vehicle): string[] {
   if (!v.brain) return [];
-  const traits = formatNpcTraits(w, v);
-  const cargo = formatNpcCargo(w, v);
-  const mark = formatNpcMark(w, v);
-  return [
-    ...(traits ? [el("div", { class: "npc-traits" }, traits)] : []),
-    ...(cargo ? [el("div", { class: "npc-cargo" }, cargo)] : []),
-    ...(mark ? [el("div", { class: "npc-mark" }, mark)] : []),
-    ...formatNpcStates(w, v).map((line) =>
-      el("div", { class: "npc-state" }, line),
-    ),
-  ];
+  return [formatNpcTraits(w, v), formatNpcCargo(w, v), formatNpcMark(w, v)].filter((line) => line !== null);
 }
 
 function shownWork(action: ContextAction | null, work: Work | null): Work | null {

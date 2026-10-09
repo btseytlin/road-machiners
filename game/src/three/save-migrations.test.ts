@@ -41,7 +41,8 @@ import SAVE_SHAPE from './save-shape.json';
 import FORMAT_2_31 from './save-fixtures/format-2-31.json';
 import FORMAT_2_32 from './save-fixtures/format-2-32.json';
 import FORMAT_2_33 from './save-fixtures/format-2-33.json';
-import FORMAT_2_34 from './save-fixtures/format-2-34.json';
+import FORMAT_2_35 from './save-fixtures/format-2-35.json';
+import FORMAT_2_36 from './save-fixtures/format-2-36.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -769,8 +770,22 @@ describe('save migration 33 to 34', () => {
 });
 
 describe('save migration 34 to 35', () => {
-  const before = structuredClone(FORMAT_2_34);
-  const next = MIGRATIONS[34](FORMAT_2_34) as {
+  it('leaves a save from before old-world loot spots as it is, for the load to stock them', () => {
+    const before = MIGRATIONS[33](structuredClone(FORMAT_2_33));
+
+    expect(MIGRATIONS[34](structuredClone(before))).toEqual(before);
+  });
+});
+
+describe('save migration 35 to 36', () => {
+  it('keeps the states and the open call as they are', () => {
+    expect(MIGRATIONS[35](FORMAT_2_35)).toEqual(FORMAT_2_35);
+  });
+});
+
+describe('save migration 36 to 37', () => {
+  const before = structuredClone(FORMAT_2_36);
+  const next = MIGRATIONS[36](FORMAT_2_36) as {
     salvage: { id: string }[];
     shops: Record<string, { contracts: unknown[]; pressure: Record<string, number>; stock: unknown[]; restockAt: number }>;
     obstacles: { id: string }[];
@@ -790,14 +805,14 @@ describe('save migration 34 to 35', () => {
   it('adds both outpost shops empty, to roll their stock on the next turn, and leaves the old shops', () => {
     expect(next.shops.dustwell).toEqual({ contracts: [], pressure: { water: 0, scrap: 0, tools: 0, meds: 0 }, stock: [], restockAt: 1200 });
     expect(next.shops['green-pit']).toEqual({ contracts: [], pressure: { water: 0, grain: 0, salt: 0, textiles: 0 }, stock: [], restockAt: 1200 });
-    expect(next.shops.bowl).toEqual(FORMAT_2_34.shops.bowl);
-    expect(next.shops.nose).toEqual(FORMAT_2_34.shops.nose);
+    expect(next.shops.bowl).toEqual(FORMAT_2_36.shops.bowl);
+    expect(next.shops.nose).toEqual(FORMAT_2_36.shops.nose);
   });
 
   it('ends a search or a refit pickup of a retired stock and keeps other jobs', () => {
     expect(next.vehicles[0].job).toBeNull();
     expect(next.vehicles[1].job).toBeNull();
-    expect(next.vehicles[2].job).toEqual(FORMAT_2_34.vehicles[2].job);
+    expect(next.vehicles[2].job).toEqual(FORMAT_2_36.vehicles[2].job);
   });
 
   it('drops goals, stripped memories, unfit entries and noticed marks of retired stocks', () => {
@@ -814,6 +829,6 @@ describe('save migration 34 to 35', () => {
   });
 
   it('does not mutate its input', () => {
-    expect(FORMAT_2_34).toEqual(before);
+    expect(FORMAT_2_36).toEqual(before);
   });
 });

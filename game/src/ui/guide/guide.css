@@ -1,0 +1,56 @@
+#ui.guide {
+  position: static;
+  overflow: auto;
+  padding: var(--space-9);
+  pointer-events: auto;
+  min-height: 100vh;
+  box-sizing: border-box;
+  background: var(--color-void);
+}
+#ui.guide .panel,
+#ui.guide .dock-panel {
+  position: static;
+}
+#ui.guide h1 {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-heading);
+  color: var(--ink-title);
+}
+#ui.guide h2 {
+  margin: var(--space-10) 0 var(--space-5);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line-soft);
+  font-size: var(--text-heading);
+  color: var(--ink-title);
+  font-weight: normal;
+}
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--panel-s), 1fr));
+  gap: var(--space-5);
+}
+.guide-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font: var(--text-dense) var(--font-mono);
+}
+.guide-cell small {
+  color: var(--ink-muted);
+  font: var(--text-dense) var(--font-ui);
+}
+.guide-swatch {
+  height: var(--space-10);
+  border: 1px solid var(--line-soft);
+}
+.guide-bar {
+  height: var(--space-4);
+  background: var(--accent);
+}
+.guide-box {
+  background: var(--accent-wash);
+  border: 1px solid var(--accent);
+}
+.guide-sample {
+  margin: 0;
+}

@@ -28,7 +28,7 @@ import { applyHazards } from './hazard';
 import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
 import { scrapPatch } from './economy';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
-import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
+import { clearPiles, initializeSalvage, renewSalvage, stockOldSpots } from './salvage';
 import { spillDeadRows } from './spill';
 import { fadeCraters } from './craters';
 import { timed } from '../perf';
@@ -165,6 +165,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
   world.player.storage = kit.storage.map((defId) => makePart(world, defId, 0));
   if (populate) spawnInitial(world);
   initializeShops(world);
+  stockOldSpots(world, map);
   refreshVision(world);
   world.events = [];
   return world;
@@ -221,8 +222,15 @@ function settleOverdrive(w: World): void {
   w.events.push({ t: 'info', text: 'Overdrive cut out: the engine is too worn.' });
 }
 
+export function actBlock(world: World): string | null {
+  if (world.player.state !== 'active') return 'Knocked out';
+  if (isTowed(world)) return 'Under tow';
+  if (world.player.call) return 'On the radio';
+  return null;
+}
+
 export function playerCanAct(world: World): boolean {
-  return world.player.state === 'active' && !isTowed(world) && !world.player.call;
+  return actBlock(world) === null;
 }
 
 export function requireActivePlayer(world: World): void {

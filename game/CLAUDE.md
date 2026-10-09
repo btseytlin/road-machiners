@@ -4,6 +4,8 @@ Turn-based wasteland truck RPG in 3D with an isometric positioned camera.
 
 Read [docs/DESIGN.md](docs/DESIGN.md) before any game change and before answering any question about the game. It is the source of truth for what the game should be. The detailed rules behind each of its sections live in [docs/wiki/mechanics/](docs/wiki/mechanics/). A rule change updates the mechanics page, and DESIGN.md changes only when a principle does.
 
+Every change a player sees in the HTML UI or an overlay goes through [docs/ui.md](docs/ui.md), the UI design system. That covers a new screen, panel, tooltip, notice, button, label or line of UI text. Plan it with the steps in "How to build a screen", build it from the shared formatters and pieces, and check the screenshots against the principle tests. A change that breaks a principle names it and says why, and a new pattern goes into docs/ui.md in the same change.
+
 ## Stack
 
 Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Playwright for browser checks.
@@ -17,6 +19,7 @@ Read the doc for an area before changing it.
 - [Economy, jobs and progression](docs/architecture/economy.md): salvage, shops, wear, jobs, sites and XP.
 - [Movement](docs/architecture/movement.md): NPC driving, routes, physics turns, far NPCs, auto travel and the camera.
 - [Rendering and UI](docs/architecture/render.md): outlines, scope, props, debris, tips and audio.
+- [UI design system](docs/ui.md): the principles, patterns, tokens and shared pieces every screen and overlay follows. `npm run dev` serves a live guide at <http://localhost:5173/ui.html>.
 - [Map and world](docs/architecture/map.md): the bake layers, the bridge, weather and vision.
 - [Saves](docs/architecture/saves.md): slots, boot, versions and rescue.
 - [Principles](docs/architecture/principles.md): the project's architecture principles every design answers to, like one rulebook for every truck, no hot full scans and same seed, same game.
@@ -35,8 +38,8 @@ Run these from `game/`. The repo-wide quality gate and pre-commit hook run from 
 - `npm run progression:record`, `progression:report`, `progression:analyze` and `progression:watch` are the playtest harness. Bots play the real turn pipeline headless with every NPC alive, and each run writes logs of every turn. It covers economy, progression, NPC behavior and fights at the macro level. `progression:playthrough` writes the full activity log of one markov bot run, which the factory's release playtest reads.
 - `npm run combat` plays single fights with physics, for hit rates and ram detail the recorder does not model. `npm run loadouts` rolls NPC gear.
 - `npm run perf` fails on a miss against `scripts/perf-budgets.json`.
-- `npm run map:bake` writes `public/maps/icarus.bin`. Commit it after a change to map rules.
-- `npm run models:shapes`, `npm run wiki` and `npm run save:shape` regenerate checked files. A test fails when they are stale.
+- `npm run map:bake` writes `public/maps/icarus.bin`. Commit it after a change to map rules, then run `npm run old-spots`.
+- `npm run models:shapes`, `npm run wiki`, `npm run save:shape` and `npm run old-spots` regenerate checked files. A test fails when they are stale.
 - `npm run sfx:board`, `sfx:import`, `sfx:reimport`, `sfx:report` and `sfx:gen` manage sounds. `sfx:gen` costs credits, so ask before running it.
 - `npm run itch` publishes to itch.io.
 

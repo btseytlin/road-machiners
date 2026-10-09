@@ -519,61 +519,61 @@ function withCents_29_30(world: SavedJson): SavedJson {
   };
 }
 
-const RETIRED_SITES_34_35 = new Set(['burnt-convoy', 'podfield', 'ridge-wrecks', 'canyon-bridge', 'south-lock', 'broken-wing']);
-const OUTPOST_GOODS_34_35: Record<string, string[]> = {
+const RETIRED_SITES_36_37 = new Set(['burnt-convoy', 'podfield', 'ridge-wrecks', 'canyon-bridge', 'south-lock', 'broken-wing']);
+const OUTPOST_GOODS_36_37: Record<string, string[]> = {
   dustwell: ['water', 'scrap', 'tools', 'meds'],
   'green-pit': ['water', 'grain', 'salt', 'textiles'],
 };
 
-function isRetired_34_35(id: unknown): boolean {
-  return typeof id === 'string' && RETIRED_SITES_34_35.has(id);
+function isRetired_36_37(id: unknown): boolean {
+  return typeof id === 'string' && RETIRED_SITES_36_37.has(id);
 }
 
-function retiredObstacle_34_35(o: SavedJson): boolean {
+function retiredObstacle_36_37(o: SavedJson): boolean {
   const id = o.id as string;
-  for (const site of RETIRED_SITES_34_35) if (id === `site-${site}` || id.startsWith(`cw-${site}-`)) return true;
+  for (const site of RETIRED_SITES_36_37) if (id === `site-${site}` || id.startsWith(`cw-${site}-`)) return true;
   return false;
 }
 
-function jobOnRetired_34_35(job: SavedJson | null | undefined): boolean {
+function jobOnRetired_36_37(job: SavedJson | null | undefined): boolean {
   if (!job) return false;
-  if (job.kind === 'search') return isRetired_34_35(job.stockId);
+  if (job.kind === 'search') return isRetired_36_37(job.stockId);
   const pickup = job.pickup as SavedJson | null | undefined;
-  return job.kind === 'refit' && pickup?.from === 'stock' && isRetired_34_35(pickup.stockId);
+  return job.kind === 'refit' && pickup?.from === 'stock' && isRetired_36_37(pickup.stockId);
 }
 
-function idleVehicle_34_35(v: SavedJson): SavedJson {
+function idleVehicle_36_37(v: SavedJson): SavedJson {
   const brain = v.brain as SavedJson | null | undefined;
-  const job = jobOnRetired_34_35(v.job as SavedJson | null | undefined) ? { job: null } : {};
-  return { ...v, ...job, ...(brain ? { brain: withoutRetiredMemory_34_35(brain) } : {}) };
+  const job = jobOnRetired_36_37(v.job as SavedJson | null | undefined) ? { job: null } : {};
+  return { ...v, ...job, ...(brain ? { brain: withoutRetiredMemory_36_37(brain) } : {}) };
 }
 
-function withOutposts_34_35(shops: Record<string, SavedJson>, turn: unknown): Record<string, SavedJson> {
-  const added = Object.entries(OUTPOST_GOODS_34_35)
+function withOutposts_36_37(shops: Record<string, SavedJson>, turn: unknown): Record<string, SavedJson> {
+  const added = Object.entries(OUTPOST_GOODS_36_37)
     .filter(([id]) => !(id in shops))
     .map(([id, goods]) => [id, { contracts: [], pressure: Object.fromEntries(goods.map((good) => [good, 0])), stock: [], restockAt: turn }]);
   return { ...shops, ...Object.fromEntries(added) };
 }
 
-function withoutRetiredSites_34_35(world: SavedJson): SavedJson {
-  const keep = (id: string) => !isRetired_34_35(id);
+function withoutRetiredSites_36_37(world: SavedJson): SavedJson {
+  const keep = (id: string) => !isRetired_36_37(id);
   const player = world.player as SavedJson;
   return {
     ...world,
     salvage: (world.salvage as SavedJson[]).filter((stock) => keep(stock.id as string)),
-    shops: withOutposts_34_35(world.shops as Record<string, SavedJson>, world.turn),
-    obstacles: (world.obstacles as SavedJson[]).filter((o) => !retiredObstacle_34_35(o)),
+    shops: withOutposts_36_37(world.shops as Record<string, SavedJson>, world.turn),
+    obstacles: (world.obstacles as SavedJson[]).filter((o) => !retiredObstacle_36_37(o)),
     player: { ...player, scavenged: (player.scavenged as string[]).filter(keep), discovered: (player.discovered as string[]).filter(keep) },
-    vehicles: (world.vehicles as SavedJson[]).map(idleVehicle_34_35),
+    vehicles: (world.vehicles as SavedJson[]).map(idleVehicle_36_37),
   };
 }
 
-function withoutRetiredMemory_34_35(brain: SavedJson): SavedJson {
-  const retired = (key: string) => isRetired_34_35(key) || isRetired_34_35(key.slice(key.indexOf(':') + 1));
-  const goals = (brain.goals as SavedJson[]).filter((g) => !isRetired_34_35(g.targetId));
-  const memories = (brain.memories as SavedJson[]).filter((m) => !isRetired_34_35((m.fact as SavedJson).stock));
+function withoutRetiredMemory_36_37(brain: SavedJson): SavedJson {
+  const retired = (key: string) => isRetired_36_37(key) || isRetired_36_37(key.slice(key.indexOf(':') + 1));
+  const goals = (brain.goals as SavedJson[]).filter((g) => !isRetired_36_37(g.targetId));
+  const memories = (brain.memories as SavedJson[]).filter((m) => !isRetired_36_37((m.fact as SavedJson).stock));
   const noticed = Object.fromEntries(Object.entries(brain.noticed as Record<string, number>).filter(([key]) => !retired(key)));
-  const unfit = ((brain.unfit as string[] | undefined) ?? []).filter((id) => !isRetired_34_35(id));
+  const unfit = ((brain.unfit as string[] | undefined) ?? []).filter((id) => !isRetired_36_37(id));
   return { ...brain, goals, memories, noticed, ...('unfit' in brain ? { unfit } : {}) };
 }
 
@@ -656,7 +656,9 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     return { ...world, player };
   },
   (world) => world,
-  withoutRetiredSites_34_35,
+  (world) => world,
+  (world) => world,
+  withoutRetiredSites_36_37,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
