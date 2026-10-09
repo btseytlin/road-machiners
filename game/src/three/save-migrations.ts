@@ -624,6 +624,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
     return { ...world, player };
   },
   (world) => world,
+  (world) => world,
+  (world) => world,
   withNotesAndWagon_34_35,
   (world) => ({ ...world, player: { ...(world.player as SavedJson), quests: { world: {}, local: {}, session: null } } }),
   (world) => dropQuestVar(dropQuest(dropQuest(world, 'sample_bowl'), 'sample_nose'), null, 'sample_wagon_heard'),

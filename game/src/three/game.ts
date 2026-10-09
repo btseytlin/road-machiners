@@ -60,6 +60,7 @@ import { RenderScope, SightLimit } from "./render/scope";
 import { addSites } from "./render/sites";
 import { addShipDecks } from "./render/ship-decks";
 import { terrainMesh } from "./render/terrain";
+import { type WebGLSurface } from "./webgl";
 import { RadioLights, VehicleView } from "./render/vehicle";
 import { HoverArcsView, WeaponRangeView } from "./render/weaponRange";
 import { stormTintStyle, WeatherView } from "./render/weather";
@@ -102,7 +103,7 @@ const GUN_HEIGHT = 1.6;
 export class Game {
   private world: World;
   private drive: Drive;
-  private readonly renderer = new THREE.WebGLRenderer({ antialias: true, stencil: true });
+  private readonly renderer: THREE.WebGLRenderer;
   private readonly scene = new THREE.Scene();
   private readonly sun = sunLight();
   private readonly sky = new THREE.HemisphereLight();
@@ -191,9 +192,11 @@ export class Game {
     player: SoundPlayer,
     private toggleMute: () => void,
     radio: RadioPanel,
+    surface: WebGLSurface,
   ) {
+    this.renderer = new THREE.WebGLRenderer({ canvas: surface.canvas, context: surface.context, antialias: true, stencil: true });
     this.world = world;
-    this.saves = new GameSaves(run, (text) => this.hud.note(this.world, text, "bad"));
+    this.saves = new GameSaves(run, (text) => this.hud.note(this.world, text, "bad"), (text) => this.hud.note(this.world, text, "dim"));
     this.drive = buildDrive(this.world);
     setTimeout(() => this.travel.warm(this.world, this.drive));
 
@@ -298,10 +301,10 @@ export class Game {
       recenter: () => this.runKey("KeyF"),
       ...aimActions({ world: () => this.world, selected: () => this.selected, canAim: () => this.anim === null && playerCanAct(this.world), apply: (w) => this.apply(w) }),
     }, radio);
-    this.hitCard = new HitCard(this.hud.getInspectionRoot());
+    this.hitCard = new HitCard(this.hud.getExchangeRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
     const saves = this.saves.menuActions(() => this.world);
-    this.menu = new GameMenu(saves, () => this.anim !== null, () => setupLabel(this.world.setup));
+    this.menu = new GameMenu(saves, () => this.anim !== null, () => setupLabel(this.world.setup), this.hud.tipSwitch());
     this.death = new DeathScreen(saves);
 
     this.bindInput();

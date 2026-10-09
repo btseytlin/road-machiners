@@ -33,6 +33,7 @@ import {
   playerDefeats,
   partPristineBuyPrice,
   rollContract,
+  siteOf,
   vehicleValue,
   type Contract,
 } from './market';
@@ -53,41 +54,120 @@ describe('estimateTurns', () => {
 
 describe('contractReward', () => {
   it('scales with turns', () => {
-    const short = contractReward(50, 1, 0, false);
-    const long = contractReward(200, 1, 0, false);
+    const short = contractReward(50, 0, false);
+    const long = contractReward(200, 0, false);
     expect(long).toBeGreaterThan(short);
   });
 
-  it('scales with tier at the same turns', () => {
-    const tier1 = contractReward(100, 1, 0, false);
-    const tier3 = contractReward(100, 3, 0, false);
-    expect(tier3).toBeGreaterThan(tier1);
+  it('adds a cut of cargo value to the reward, and nothing else depends on the good', () => {
+    const plain = contractReward(100, 0, false);
+    const withCargo = contractReward(100, 1000, false);
+    expect(withCargo - plain).toBeCloseTo(1000 * CONTRACTS.haul.valueShare, 0);
+    const rushCut = contractReward(100, 1000, true) - contractReward(100, 0, true);
+    expect(Math.abs(rushCut - 1000 * CONTRACTS.haul.valueShare * CONTRACTS.haul.rush.premium)).toBeLessThanOrEqual(1);
   });
 
-  it('adds a cut of cargo value to the reward', () => {
-    const plain = contractReward(100, 2, 0, false);
-    const withCargo = contractReward(100, 2, 1000, false);
-    expect(withCargo).toBeGreaterThan(plain);
+  it('throws on a non-finite or negative estimate or cargo value', () => {
+    expect(() => contractReward(NaN, 0, false)).toThrow();
+    expect(() => contractReward(-1, 0, false)).toThrow();
+    expect(() => contractReward(100, -5, false)).toThrow();
+    expect(() => contractReward(100, Infinity, false)).toThrow();
   });
 });
 
+describe('haulWindow', () => {
+  it('is the drive times the factor plus the slack, and the drive times the rush factor for rush', () => {
+    expect(haulWindow(100, false)).toBe(Math.round(100 * CONTRACTS.haul.durationFactor + CONTRACTS.haul.slackTurns));
+    expect(haulWindow(100, true)).toBe(Math.round(100 * CONTRACTS.haul.rush.durationFactor));
+  });
+
+  it('gives a standard haul at least twice the rush window on every shop pair', () => {
+    for (const a of SHOP_SITES) for (const b of SHOP_SITES) {
+      if (a === b) continue;
+      const turns = estimateTurns(a.pos, b.pos);
+      expect(haulWindow(turns, false)).toBeGreaterThanOrEqual(2 * haulWindow(turns, true));
+    }
+  });
+
+  it('throws on a negative or non-finite estimate', () => {
+    expect(() => haulWindow(-1, false)).toThrow();
+    expect(() => haulWindow(NaN, true)).toThrow();
+  });
+});
+
+// Slower of the standard and midgame kits, loaded with the heaviest good the source rolls and driven by the
+// hauler bot on far travel in a world with no NPCs. Measured on seed 1 at commit 4a47daf1, issue 358.
+const MEASURED_DRIVE: { from: string; to: string; slowTurns: number }[] = [
+  { from: 'bowl', to: 'nose', slowTurns: 192 }, { from: 'bowl', to: 'salvage-yard', slowTurns: 171 },
+  { from: 'bowl', to: 'granary', slowTurns: 123 }, { from: 'bowl', to: 'pump-station', slowTurns: 64 },
+  { from: 'nose', to: 'bowl', slowTurns: 199 }, { from: 'nose', to: 'salvage-yard', slowTurns: 60 },
+  { from: 'nose', to: 'granary', slowTurns: 86 }, { from: 'nose', to: 'pump-station', slowTurns: 124 },
+  { from: 'salvage-yard', to: 'bowl', slowTurns: 173 }, { from: 'salvage-yard', to: 'nose', slowTurns: 34 },
+  { from: 'salvage-yard', to: 'granary', slowTurns: 69 }, { from: 'salvage-yard', to: 'pump-station', slowTurns: 66 },
+  { from: 'granary', to: 'bowl', slowTurns: 93 }, { from: 'granary', to: 'nose', slowTurns: 78 },
+  { from: 'granary', to: 'salvage-yard', slowTurns: 64 }, { from: 'granary', to: 'pump-station', slowTurns: 28 },
+  { from: 'pump-station', to: 'bowl', slowTurns: 60 }, { from: 'pump-station', to: 'nose', slowTurns: 115 },
+  { from: 'pump-station', to: 'salvage-yard', slowTurns: 64 }, { from: 'pump-station', to: 'granary', slowTurns: 29 },
+];
+
+const SHOP_SITES = Object.keys(SHOPS).map((id) => siteOf(id));
+
+// Standard pay over twice the estimated salvage wage, as a multiple: half the reward factor.
+const BAND_FLOOR_RATIO = 11.9;
+
 describe('haul pay and rush', () => {
-  it('pays a standard haul at least double salvage over the estimated round trip', () => {
-    const towns = [...REGION.towns, ...REGION.locations];
-    for (const a of towns) {
-      for (const b of towns) {
+  it('pays a standard haul at least the band floor over the estimated round trip', () => {
+    for (const a of SHOP_SITES) {
+      for (const b of SHOP_SITES) {
         if (a === b) continue;
         const turns = estimateTurns(a.pos, b.pos);
-        for (const tier of [1, 2, 3] as const) {
-          expect(contractReward(turns, tier, 0, false)).toBeGreaterThanOrEqual(Math.floor(4 * EFFORT.wage[tier] * turns));
-        }
+        expect(contractReward(turns, 0, false) / (2 * turns * EFFORT.wage[1])).toBeGreaterThanOrEqual(BAND_FLOOR_RATIO);
       }
     }
   });
 
+  it('pays the same travel for a tier 1 and a tier 3 good, apart from the value cut', () => {
+    const turns = estimateTurns(siteOf('bowl').pos, siteOf('granary').pos);
+    const grain = contractReward(turns, 8 * GOODS.grain.value, false);
+    const tools = contractReward(turns, 8 * GOODS.tools.value, false);
+    expect(Math.abs(tools - grain - 8 * (GOODS.tools.value - GOODS.grain.value) * CONTRACTS.haul.valueShare)).toBeLessThanOrEqual(1);
+  });
+
+  it('prices the reported Bowl to Granary tools haul at the salvage wage with a window under the old 934 turns', () => {
+    const turns = estimateTurns(siteOf('bowl').pos, siteOf('granary').pos);
+    const reward = contractReward(turns, 8 * GOODS.tools.value, false);
+    const OLD_TIER_RATIO = 2.2 / 0.37;
+    const cut = 8 * GOODS.tools.value * CONTRACTS.haul.valueShare;
+    expect(reward).toBeCloseTo(turns * EFFORT.wage[1] * CONTRACTS.haul.rewardFactor + cut, 0);
+    expect(reward).toBeLessThan(turns * EFFORT.wage[1] * 5 * OLD_TIER_RATIO);
+    expect(haulWindow(turns, false)).toBeLessThan(934);
+  });
+
+  it('keeps a rush window at least 1.1 times the slowest measured loaded drive on every pair', () => {
+    for (const row of MEASURED_DRIVE) {
+      const turns = estimateTurns(siteOf(row.from).pos, siteOf(row.to).pos);
+      expect(haulWindow(turns, true), `${row.from} to ${row.to}`).toBeGreaterThanOrEqual(1.1 * row.slowTurns);
+    }
+  });
+
+  it('pays a rush haul at least 1.5 times a standard one', () => {
+    for (const a of SHOP_SITES) {
+      const turns = estimateTurns(a.pos, siteOf('granary').pos);
+      expect(contractReward(turns, 500, true)).toBeGreaterThanOrEqual(1.5 * contractReward(turns, 500, false));
+    }
+  });
+
+  it('gives the shortest pair and a zero distance no more pay per estimated turn than the median pair', () => {
+    const perTurn = (turns: number) => contractReward(turns, 0, false) / (2 * turns) / EFFORT.wage[1];
+    const all = SHOP_SITES.flatMap((a) => SHOP_SITES.filter((b) => b !== a).map((b) => estimateTurns(a.pos, b.pos))).sort((x, y) => x - y);
+    const median = perTurn(all[Math.floor(all.length / 2)]);
+    expect(perTurn(all[0])).toBeLessThanOrEqual(median * 1.05);
+    expect(perTurn(EFFORT.handlingTurns)).toBeLessThanOrEqual(median * 1.05);
+  });
+
   it('gives a rush haul a shorter window and a higher reward than a standard one', () => {
     expect(haulWindow(100, true)).toBeLessThan(haulWindow(100, false));
-    expect(contractReward(100, 1, 50, true)).toBeGreaterThan(contractReward(100, 1, 50, false));
+    expect(contractReward(100, 50, true)).toBeGreaterThan(contractReward(100, 50, false));
   });
 
   it('rolls both rush and standard hauls, and leaves the main rng alone', () => {

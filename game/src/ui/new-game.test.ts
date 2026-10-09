@@ -95,7 +95,9 @@ describe("the New game screen", () => {
       expect([slider.attrs.min, slider.attrs.max, slider.attrs.step, slider.attrs.value]).toEqual([def.min, def.max, def.step, def.default].map(String));
       const row = screen.all((n) => n.attrs["data-setting"] === id)[0];
       expect(row.textContent).toContain(def.name);
-      expect(row.textContent).toContain("100%default 100%");
+      expect(row.textContent).toBe(`${def.name}100%`);
+      expect(row.all((n) => n.tag === "label")[0].attrs.title).toBe(def.description);
+      expect(row.all((n) => n.className === "default-tick")[0].attrs.style).toBe(`--default-at: ${(def.default - def.min) / (def.max - def.min)}`);
     }
   });
 

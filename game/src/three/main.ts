@@ -18,19 +18,22 @@ import { decodeMap, type BakedMap } from '../sim/terrain';
 import type { World, WorldSetup } from '../sim/types';
 import { newWorld } from '../sim/world';
 import { DebugConsole, Noclip } from '../ui/console';
+import { BOOT_TEXT } from '../ui/boot-progress';
+import { BootScreen } from '../ui/boot-screen';
 import { uiRoot } from '../ui/dom';
 import type { NewGameActions } from '../ui/new-game';
 import { chooseSaveFate, showCarryReport } from '../ui/save-screen';
 import { mountPerfPanel } from '../ui/perf-panel';
 import { SoundSettings } from '../ui/sound';
 import { RadioPanel, RadioStation } from '../ui/radio';
-import { installCrashScreen, keepRunningOnErrors, onEveryError, onReport, reportError } from './crash';
+import { bootStep, installCrashScreen, keepRunningOnErrors, onEveryError, onReport, reportError } from './crash';
 import { ErrorReporter } from './error-report';
 import { Game } from './game';
 import { clearGame, loadWorld, SAVE_KEY, SaveError, savedRunId, storedSave, writeSave } from './save';
 import { idbBackend, SaveSlots } from './save-db';
 import { RunLog } from './run-log';
 import { allSlots, newestSlot, requestBoot, takeBootRequest, type SlotId } from './save-slots';
+import { GAME_GL, openWebGL } from './webgl';
 import { rescueSave } from './save-rescue';
 import { loadModels } from './render/models';
 import { groundTexture } from './render/terrain';
@@ -52,9 +55,10 @@ type Booted = { world: World; runId: string; loadedFrom: SlotId | null; fresh: b
 
 async function bootWorld(): Promise<Booted> {
   const request = takeBootRequest(window.sessionStorage, SAVE_KEY);
-  if (typeof request === 'object' && request !== null) return freshRun(request.new);
+  if (typeof request === 'object' && request !== null) return boot.track('world', () => freshRun(request.new), BOOT_TEXT.newGame);
   const slot = request ?? newestSlot(slots, CONFIG.saveSlots);
-  return slot === null ? newGameSaved(defaultSetup('roaming')) : bootSlot(slot);
+  if (slot === null) return boot.track('world', () => newGameSaved(defaultSetup('roaming')), BOOT_TEXT.newGame);
+  return boot.track('world', () => bootSlot(slot), BOOT_TEXT.loadSave);
 }
 
 async function bootSlot(slot: SlotId): Promise<Booted> {
@@ -85,10 +89,10 @@ function newGameSaved(setup: WorldSetup): Booted {
 async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<Booted> {
   const stored = storedSave(slots, slot);
   const canMigrate = typeof stored === 'object' && stored !== null && !Array.isArray(stored);
-  await chooseSaveFate(error.message, canMigrate, stored, newGameActions);
+  await boot.aside(() => chooseSaveFate(error.message, canMigrate, stored, newGameActions));
   const rescued = rescueSave(slots, slot, map, startKit(CONFIG.startKit), freshSeed, freshRunId, Date.now());
   if (!rescued) throw new Error('The save became unreadable while migrating');
-  await showCarryReport(rescued.report);
+  await boot.aside(() => showCarryReport(rescued.report));
   return { world: rescued.world, runId: rescued.runId, loadedFrom: null, fresh: false };
 }
 
@@ -102,12 +106,20 @@ function newGame(setup: WorldSetup): World {
 }
 
 installCrashScreen();
+const boot = BootScreen.adopt();
 const reporter = ERROR_REPORT_URL ? new ErrorReporter(ERROR_REPORT_URL, ERROR_REPORT_BUILD, GAME_VERSION) : null;
 if (reporter) onReport((err) => void reporter.report(err));
+const surface = openWebGL(document.createElement('canvas'), GAME_GL);
 const mixer = new Mixer(MIX);
 mixer.unlockOn(window);
-const loading = Promise.all([initPhysics(), loadModels(), loadBank(mixer.ctx, SOUNDS)]);
-const map = await fetchMap();
+bootStep('loading physics, models and sounds');
+const loading = Promise.all([
+  boot.track('physics', initPhysics()),
+  boot.track('models', loadModels(undefined, boot.count('models'))),
+  boot.track('sounds', loadBank(mixer.ctx, SOUNDS, boot.count('sounds'))),
+]);
+bootStep('loading the map');
+const map = await boot.track('map', fetchMap());
 const slots = await SaveSlots.open(await idbBackend(SAVE_KEY), window.localStorage, SAVE_KEY, allSlots(CONFIG.saveSlots));
 persistSaves().catch(reportError);
 const newGameActions: NewGameActions = {
@@ -115,24 +127,31 @@ const newGameActions: NewGameActions = {
   reload: () => void slots.flush().then(() => window.location.reload(), reportError),
   confirm: (text) => window.confirm(text),
 };
+// The world and its ground build while physics, models and sounds load, since those wait mostly on the network and decoders.
+bootStep('loading the save');
 const { world, runId, loadedFrom, fresh } = await bootWorld();
 const log = new RunLog(slots.backend, runId, (err) => slots.onError(err));
 log.begin(world, loadedFrom);
-groundTexture(world);
+bootStep('building the ground');
+await boot.track('ground', () => groundTexture(world));
+bootStep('waiting for physics, models and sounds');
 const [, , bank] = await loading;
+bootStep('starting the game');
 const radio = new RadioPanel(new RadioStation(Math.random));
 const soundSettings = new SoundSettings(mixer, window.localStorage, radio.faceplate, radio.keys, () => game.loops.nextTrack());
 radio.hear(world);
 const overlay = element('overlay');
-const game = new Game(world, { slots, runId, log }, element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute(), radio);
+const game = await boot.track('scene', () => new Game(world, { slots, runId, log }, element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute(), radio, surface));
 const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game.follow.keyPan.setSpeed(factor) };
 const opening = startKit(CONFIG.startKit).opening;
 if (fresh && opening) game.hud.note(world, opening.log, "");
 const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
 keepRunningOnErrors((text) => debugConsole.error(text));
 onEveryError(() => game.holdSaves());
+bootStep('running');
 reporter?.watch({ world: () => game.state, log: () => game.logTexts(), slots });
 performance.mark('roam:ready');
+void boot.finish();
 setTimeout(() => warmAfterBoot(routeRadii(game.state)));
 if (import.meta.env.DEV) {
   (window as any).__ROAM__ = game;

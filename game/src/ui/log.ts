@@ -34,7 +34,7 @@ function lineRow(l: LogLine): HTMLElement {
 
 export class LogPanel {
   private book = new LogBook();
-  private root = panel("log");
+  private root = panel("log dock-panel");
   private box = el("div", { class: "log-lines", tabindex: 0 });
   private toggle = el(
     "button",
@@ -50,7 +50,7 @@ export class LogPanel {
   constructor() {
     this.root.setAttribute("aria-label", "Event log");
     this.root.append(
-      el("div", { class: "log-head" }, el("h3", {}, "Log"), this.toggle),
+      el("div", { class: "log-head" }, el("h3", { class: "panel-title" }, "Log"), this.toggle),
       this.box,
     );
   }

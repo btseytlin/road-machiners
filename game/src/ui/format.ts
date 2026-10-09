@@ -21,7 +21,7 @@ import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
 import { hasPerk } from '../sim/progress';
-import { aidData, pleaData, statesHeld, strayData, towData } from '../sim/states';
+import { aidData, lootWarningData, pleaData, statesHeld, strayData, towData } from '../sim/states';
 import { RULES } from '../data/rules';
 import { isJunk, maxHp } from '../sim/wear';
 import { clockOf } from '../sim/sun';
@@ -88,7 +88,7 @@ function aidWorkLabel(world: World, v: Vehicle, s: NpcState): string {
 export function workProgress(work: WorkLeft): number {
   return 1 - work.turnsLeft / work.total;
 }
-import { damage, fuelLiters, hp, moneyAmount, moneyText } from './units';
+import { damage, fuelLiters, hp, kph, moneyDelta, moneyNumber, moneyText, turnsText as turnsLabel } from './units';
 import { npcName } from '../sim/spawn';
 
 export function wearLabel(part: PartInstance): string {
@@ -157,7 +157,7 @@ export function formatNpcCargo(world: World, vehicle: Vehicle): string | null {
 export function formatNpcMark(world: World, vehicle: Vehicle): string | null {
   if (!hasPerk(world, 'spotter')) return null;
   const mark = world.player.marked.find((m) => m.vehicleId === vehicle.id && world.turn <= m.until);
-  return mark ? `Marked: ${mark.until - world.turn} turns left` : '[N] Mark';
+  return mark ? `Marked: ${turnsLabel(mark.until - world.turn)} left` : '[N] Mark';
 }
 
 const COMBAT_LABEL = 'In combat';
@@ -178,6 +178,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   escort: () => 'Escorting you',
   aid: (s) => (aidData(s).giver === 'npc' ? 'Bringing you fuel' : 'Waiting for your fuel'),
   combat: () => COMBAT_LABEL,
+  lootWarning: (s) => (lootWarningData(s).answer === 'comply' ? 'You agreed to leave its loot' : 'Warning you off its loot'),
   strayFire: (s) => `Hit by your stray fire, ${Math.round(strayData(s).damage)} of ${RULES.stray.feudDamage} damage forgiven`,
 };
 
@@ -192,8 +193,16 @@ export function formatNpcStates(world: World, vehicle: Vehicle): string[] {
   return out;
 }
 
+export function formatVehicleState(world: World, vehicle: Vehicle): string {
+  const motion = vehicle.speed > 0 ? `Moving, ${kph(vehicle.speed)} km/h` : 'Parked';
+  const left = shutDownTurnsLeft(world, vehicle);
+  const shutDown = left > 0 ? turnsText('Shut down', left) : null;
+  const brain = vehicle.brain ? [formatNpcActivity(world, vehicle), ...formatNpcStates(world, vehicle)] : [];
+  return [motion, shutDown, ...brain].filter((part) => part !== null).join('. ');
+}
+
 function turnsText(label: string, turnsLeft: number | null): string {
-  return turnsLeft === null ? label : `${label}, ${turnsLeft} turn${turnsLeft === 1 ? '' : 's'}`;
+  return turnsLeft === null ? label : `${label}, ${turnsLabel(turnsLeft)}`;
 }
 
 function combatLine(world: World, vehicle: Vehicle): string | null {
@@ -287,7 +296,7 @@ function harpoonText(world: World, e: Extract<GameEvent, { t: 'shot' }>): LogLin
   const onTarget = shotDamage(e).get(e.target) ?? [];
   const what = harpoonOutcome(world, e);
   return spanLine(e.target === me && hurts(onTarget) ? 'bad' : '', [
-    { text: `${partName(world, e.shooter, e.weapon)} → ${vehicleName(world, e.target)}: ${what}`, cls: '' },
+    { text: `${partName(world, e.shooter, e.weapon)} fires at ${vehicleName(world, e.target)}: ${what}`, cls: '' },
     { text: ` (${Math.round(e.chance * 100)}%)`, cls: 'dim' },
     ...damageSpans(world, e.target, onTarget),
   ]);
@@ -320,7 +329,7 @@ function aimedSpans(world: World, e: Extract<GameEvent, { t: 'shot' }>, onTarget
   const hits = e.rounds.filter((r) => hitsAim(e, r)).length;
   const crits = e.rounds.filter((r) => r.crit).length;
   return [
-    { text: `${partName(world, e.shooter, e.weapon)} → ${vehicleName(world, e.target)}${aim}, ${hits}/${e.rounds.length} hit`, cls: '' },
+    { text: `${partName(world, e.shooter, e.weapon)} fires at ${vehicleName(world, e.target)}${aim}, ${hits}/${e.rounds.length} hit`, cls: '' },
     { text: ` (${Math.round(e.damageChance * 100)}%)`, cls: 'dim' },
     ...(crits ? [{ text: `, ${crits} crit`, cls: '' }] : []),
     ...damageSpans(world, e.target, onTarget),
@@ -344,7 +353,7 @@ function jobText(world: World, e: Extract<GameEvent, { t: 'job' }>): LogLine | n
   if (e.vehicle !== world.player.vehicleId) return null;
   const what = jobLabel(world, playerVehicle(world), e.job);
   const lines = {
-    started: { text: `${what} started: stay parked about ${e.job.turnsLeft} turns.`, cls: '' },
+    started: { text: `${what} started: stay parked about ${turnsLabel(e.job.turnsLeft)}.`, cls: '' },
     cancelled: { text: `${what} cancelled: the truck moved, a hostile came in sight, or required items changed`, cls: 'bad' },
     done: { text: `${what} done`, cls: 'good' },
   };
@@ -484,6 +493,7 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   aidStarted: (e) => [e.giver, e.receiver],
   escortHired: (e) => [e.by, e.client],
   escortRefused: (e) => [e.by, e.client],
+  lootArgument: (e) => [e.warner, e.looter],
   caltrops: (e) => [e.vehicle],
   lineTorn: (e) => [e.vehicle],
   claymore: (e) => [e.vehicle, e.other],
@@ -568,6 +578,14 @@ function infoText(world: World, e: Extract<GameEvent, { t: 'info' }>): LogLine |
   return e.debug && !world.player.fullLog ? null : { text: e.text, cls: 'dim' };
 }
 
+const ARGUMENT_ENDS = { yielded: (_: string, looter: string) => `${looter} rolls on.`, backedOff: (warner: string, looter: string) => `${looter} stays put, and ${warner} rolls on.`, fight: () => 'They fight over it.' };
+
+function lootArgumentText(world: World, e: Extract<GameEvent, { t: 'lootArgument' }>): LogLine {
+  const warner = vehicleName(world, e.warner);
+  const looter = vehicleName(world, e.looter);
+  return { text: `${warner} warns ${looter} off the ${e.place}. ${ARGUMENT_ENDS[e.end](warner, looter)}`, cls: e.end === 'fight' ? 'bad' : 'dim' };
+}
+
 function caltropsText(world: World, e: Extract<GameEvent, { t: 'caltrops' }>): LogLine | null {
   const me = world.player.vehicleId;
   const [text, cls] = e.vehicle === me ? ['You drive into caltrops', 'bad'] : [`${vehicleName(world, e.vehicle)} drives into caltrops`, e.source === me ? 'good' : 'dim'];
@@ -582,7 +600,7 @@ function pulseText(world: World, e: Extract<GameEvent, { t: 'pulse' }>): LogLine
   }
   if (!e.hit.includes(me.id)) return null;
   const left = shutDownTurnsLeft(world, me);
-  return { text: `${vehicleName(world, e.vehicle)}'s emitter pulse shuts your truck down for ${left} ${left === 1 ? 'turn' : 'turns'}`, cls: 'bad' };
+  return { text: `${vehicleName(world, e.vehicle)}'s emitter pulse shuts your truck down for ${turnsLabel(left)}`, cls: 'bad' };
 }
 
 function cookOffText(world: World, e: Extract<GameEvent, { t: 'claymoreCookOff' }>): LogLine {
@@ -643,6 +661,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   escortHired: escortHiredText,
   escortRefused: escortRefusedText,
   note: (_, e) => ({ text: `Noted in your journal: ${NOTES[e.id].title}.`, cls: 'good' }),
+  lootArgument: lootArgumentText,
 };
 
 export function eventText(world: World, e: GameEvent): LogLine | null {
@@ -667,7 +686,7 @@ export function eventText(world: World, e: GameEvent): LogLine | null {
     case 'skillUp':
       return { text: skillUpText(e.skill, e.level), cls: 'good' };
     case 'money':
-      return { text: `${e.amount > 0 ? '+' : ''}${moneyText(e.amount)}: ${e.reason}`, cls: e.amount > 0 ? 'good' : 'bad' };
+      return { text: `${moneyDelta(e.amount)}: ${e.reason}`, cls: e.amount > 0 ? 'good' : 'bad' };
     case 'discover': {
       const loc = [...REGION.towns, ...REGION.locations].find((l) => l.id === e.location);
       return { text: `Discovered ${loc?.name ?? e.location}`, cls: 'good' };
@@ -700,9 +719,9 @@ export type SaleEstimate =
   | { kind: "gain" | "loss"; perUnit: number; avgCost: number }
   | { kind: "even"; avgCost: number };
 
-export const GOODS_COLUMNS = { good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit/unit" } as const;
+export const GOODS_COLUMNS = { good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit" } as const;
 
-export const PROFIT_HEAD_TITLE = "Sell price here minus your average cost. Salvaged and hauled goods count at their usual value.";
+export const PROFIT_HEAD_TITLE = "Per unit: sell price here minus your average cost. Salvaged and hauled goods count at their usual value.";
 
 function checkEstimate(held: number, sell: number, basis: number | undefined): void {
   if (!Number.isInteger(held) || held < 0) throw new Error(`saleEstimate: bad held count ${held}`);
@@ -729,8 +748,8 @@ export function estimateText(e: SaleEstimate): string {
     case "none": return "";
     case "unrecorded": return "?";
     case "even": return "0";
-    case "gain": return `+${moneyAmount(e.perUnit)}`;
-    case "loss": return `\u2212${moneyAmount(e.perUnit)}`;
+    case "gain": return `+${moneyNumber(e.perUnit)}`;
+    case "loss": return moneyNumber(-e.perUnit);
   }
 }
 
@@ -738,10 +757,10 @@ export function estimateTitle(e: SaleEstimate): string {
   switch (e.kind) {
     case "none": return "";
     case "unrecorded": return "No cost on record";
-    default: return `Avg cost ${moneyAmount(e.avgCost)}`;
+    default: return `Avg cost ${moneyText(e.avgCost)}`;
   }
 }
 
 export function lotTitle(direction: "buy" | "sell", count: number, total: number): string {
-  return direction === "buy" ? `Buy ${count} for ${moneyAmount(total)} total` : `Sell all ${count} for ${moneyAmount(total)} total`;
+  return direction === "buy" ? `Buy ${count} for ${moneyText(total)} total` : `Sell all ${count} for ${moneyText(total)} total`;
 }

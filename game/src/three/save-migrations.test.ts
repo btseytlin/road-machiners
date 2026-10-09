@@ -41,15 +41,16 @@ import SAVE_SHAPE from './save-shape.json';
 import FORMAT_2_31 from './save-fixtures/format-2-31.json';
 import FORMAT_2_32 from './save-fixtures/format-2-32.json';
 import FORMAT_2_33 from './save-fixtures/format-2-33.json';
-import FORMAT_2_34 from './save-fixtures/format-2-34.json';
+import FORMAT_2_35 from './save-fixtures/format-2-35.json';
 import { STORY_WRECKS } from '../data/salvage';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
 import { dropQuest, dropQuestVar, endQuestSession, MIGRATIONS, moveQuestCheckpoint, pooledSkills_9_10, renameQuestVar, type SavedJson } from './save-migrations';
-import FORMAT_2_35 from './save-fixtures/format-2-35.json';
 import FORMAT_2_36 from './save-fixtures/format-2-36.json';
 import FORMAT_2_37 from './save-fixtures/format-2-37.json';
+import FORMAT_2_38 from './save-fixtures/format-2-38.json';
+import FORMAT_2_39 from './save-fixtures/format-2-39.json';
 
 describe('save migrations', () => {
   it('0 to 1 gives the player townPatched false and keeps every other field', () => {
@@ -773,54 +774,68 @@ describe('save migration 33 to 34', () => {
 });
 
 describe('save migration 34 to 35', () => {
+  it('leaves a save from before old-world loot spots as it is, for the load to stock them', () => {
+    const before = MIGRATIONS[33](structuredClone(FORMAT_2_33));
+
+    expect(MIGRATIONS[34](structuredClone(before))).toEqual(before);
+  });
+});
+
+describe('save migration 35 to 36', () => {
+  it('keeps the states and the open call as they are', () => {
+    expect(MIGRATIONS[35](FORMAT_2_35)).toEqual(FORMAT_2_35);
+  });
+});
+
+describe('save migration 36 to 37', () => {
   const wagon = STORY_WRECKS[0];
   const fresh = emptyWorld();
 
   it('gives the player an empty journal and puts wagon Seven in place as a new game has it', () => {
-    const next = MIGRATIONS[34](FORMAT_2_34) as typeof FORMAT_2_34 & { player: { notes: unknown[] } };
+    const next = MIGRATIONS[36](FORMAT_2_36) as typeof FORMAT_2_36 & { player: { notes: unknown[] } };
 
-    expect(next.player).toEqual({ ...FORMAT_2_34.player, notes: [] });
-    expect(next.obstacles).toEqual([...FORMAT_2_34.obstacles, { id: wagon.id, pos: wagon.pos, r: wagon.r, kind: 'wreck', hulk: { chassisId: wagon.chassisId, yaw: wagon.yaw } }]);
-    expect(next.salvage).toEqual([...FORMAT_2_34.salvage, fresh.salvage.find((s) => s.id === wagon.id)]);
-    expect(next.turn).toBe(FORMAT_2_34.turn);
+    expect(next.player).toEqual({ ...FORMAT_2_36.player, notes: [] });
+    expect(next.obstacles).toEqual([...FORMAT_2_36.obstacles, { id: wagon.id, pos: wagon.pos, r: wagon.r, kind: 'wreck', hulk: { chassisId: wagon.chassisId, yaw: wagon.yaw } }]);
+    expect(next.salvage).toEqual([...FORMAT_2_36.salvage, fresh.salvage.find((s) => s.id === wagon.id)]);
+    expect(next.turn).toBe(FORMAT_2_36.turn);
   });
 
   it('adds no second wagon to a save that holds one', () => {
-    const once = MIGRATIONS[34](FORMAT_2_34);
+    const once = MIGRATIONS[36](FORMAT_2_36);
 
-    const twice = MIGRATIONS[34](once) as typeof FORMAT_2_34;
+    const twice = MIGRATIONS[36](once) as typeof FORMAT_2_36;
 
     expect(twice.obstacles.filter((o) => o.id === wagon.id)).toHaveLength(1);
     expect(twice.salvage.filter((s) => s.id === wagon.id)).toHaveLength(1);
   });
 });
 
-describe('save migration 35 to 36', () => {
+describe('save migration 37 to 38', () => {
   it('gives the player empty quest state with no open quest', () => {
-    const next = MIGRATIONS[35](FORMAT_2_35);
+    const next = MIGRATIONS[37](FORMAT_2_37);
 
-    expect(next).toEqual({ ...FORMAT_2_35, player: { ...FORMAT_2_35.player, quests: { world: {}, local: {}, session: null } } });
+    expect(next).toEqual({ ...FORMAT_2_37, player: { ...FORMAT_2_37.player, quests: { world: {}, local: {}, session: null } } });
   });
 });
 
-describe('save migration 36 to 37', () => {
+describe('save migration 38 to 39', () => {
   it('drops the sample quests and their world variable and keeps every other quest name', () => {
-    const next = MIGRATIONS[36](FORMAT_2_36);
+    const next = MIGRATIONS[38](FORMAT_2_38);
 
     expect(next).toEqual({
-      ...FORMAT_2_36,
-      player: { ...FORMAT_2_36.player, quests: { world: { kept_flag: true }, local: { kept_quest: { n: 2 } }, session: null } },
+      ...FORMAT_2_38,
+      player: { ...FORMAT_2_38.player, quests: { world: { kept_flag: true }, local: { kept_quest: { n: 2 } }, session: null } },
     });
   });
 });
 
-describe('save migration 37 to 38', () => {
+describe('save migration 39 to 40', () => {
   it('drops the depot quest counters that facts replaced and keeps the rest of the open quest', () => {
-    const next = MIGRATIONS[37](FORMAT_2_37);
+    const next = MIGRATIONS[39](FORMAT_2_39);
 
     expect(next).toEqual({
-      ...FORMAT_2_37,
-      player: { ...FORMAT_2_37.player, quests: { ...FORMAT_2_37.player.quests, local: { nose_depot_leak: { watches: 3, ledger_read: true } } } },
+      ...FORMAT_2_39,
+      player: { ...FORMAT_2_39.player, quests: { ...FORMAT_2_39.player.quests, local: { nose_depot_leak: { watches: 3, ledger_read: true } } } },
     });
   });
 });

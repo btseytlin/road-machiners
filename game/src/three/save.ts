@@ -8,8 +8,9 @@ import { parseSetup } from '../sim/settings';
 import { clearTips } from '../ui/tips';
 import type { NewGameActions } from '../ui/new-game';
 import { settleAims } from '../sim/combat';
+import { stockOldSpots } from '../sim/salvage';
 import { clockOf } from '../sim/sun';
-import { allSlots, listSaves, manualSlots, requestBoot, type BootRequest, type SlotId } from './save-slots';
+import { allSlots, listSaves, manualSlots, requestBoot, slotLabel, type BootRequest, type SlotId } from './save-slots';
 import type { SaveSlots } from './save-db';
 import { reportError } from './crash';
 import { CONFIG, GAME_VERSION } from '../config';
@@ -84,6 +85,7 @@ export function loadWorld(slots: SaveSlots, slot: SlotId, map: BakedMap): World 
     removed: [],
     terrain: map.terrain,
   };
+  stockedOldSpots(loaded, map);
   refreshVision(loaded);
   settleAims(loaded);
   restoreQuest(loaded, QUESTS);
@@ -104,6 +106,14 @@ function isQuestState(value: unknown): value is QuestState {
 
 function isQuestSession(value: unknown): boolean {
   return isJsonObject(value) && typeof value.quest === 'string' && typeof value.checkpoint === 'string' && Number.isInteger(value.seed);
+}
+
+function stockedOldSpots(world: World, map: BakedMap): void {
+  try {
+    stockOldSpots(world, map);
+  } catch (error) {
+    throw new SaveError(`Game save holds a broken set of old-world loot spots: ${(error as Error).message}`);
+  }
 }
 
 function brokenProps(baked: readonly Obstacle[], broken: readonly SavedBroken[]): BrokenProp[] {
@@ -290,7 +300,7 @@ export type Run = { slots: SaveSlots; runId: string; log: RunLog };
 export class GameSaves {
   private readonly hold = new SaveHold();
 
-  constructor(private readonly run: Run, private readonly note: (text: string) => void) {
+  constructor(private readonly run: Run, private readonly note: (text: string) => void, private readonly record: (text: string) => void) {
     run.slots.onError = (err) => this.failed(err);
   }
 
@@ -298,10 +308,16 @@ export class GameSaves {
     const saves = saveStore(this.run.slots, this.run.log, window.sessionStorage, world, this.run.runId, CONFIG.saveSlots);
     return {
       ...saves,
-      save: (slot: SlotId) => this.hold.held ? this.note(SAVE_HELD_NOTE) : saves.save(slot),
+      save: (slot: SlotId) => this.saveManual(slot, saves.save),
       exportSave: () => this.exportSave(world()),
       exportLog: () => this.exportLog(world()).catch((err) => this.failed(err)),
     };
+  }
+
+  private saveManual(slot: SlotId, save: (slot: SlotId) => void): void {
+    if (this.hold.held) return this.note(SAVE_HELD_NOTE);
+    save(slot);
+    this.record(`Saved to ${slotLabel(slot)}`);
   }
 
   logWorld(world: World): void {

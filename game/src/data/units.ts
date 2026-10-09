@@ -8,4 +8,5 @@ export const UNITS = {
   celsiusPerHeat: 12,
   engineColdCelsius: 80,
   engineHotCelsius: 120,
+  currency: { one: 'M', many: "M's" }, // the display name of the sim's money
 };

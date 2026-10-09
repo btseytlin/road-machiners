@@ -12,24 +12,24 @@ Prepare a public release post in the Telegram channel.
 ## The post
 
 - Write for players, in English, as plain text.
-- Lead with what is new that a player will notice most.
-- Go through the changelog and find the core and key changes, and think about how they will impact the player. Make 2 paragraphs about the release.
-- Obtain a screenshot that best depicts the soul of this release, and that will catch attention. You can check the screenshots obtained by each involved issue first: perhaps the right picture is already taken. If not, you can take a screenshot yourself.
+- Pick the 3 or 4 changes that most change how a run plays. Leave the rest out. A post that names every feature tells a player nothing.
+- Give each picked change its context: what a player now does or meets in play because of it. "Destroyed cargo racks spill their goods" is a bare fact. "Shoot up a trader's cargo rack and the load spills on the road, and every raider nearby comes for it" is a moment a player can picture.
+- Changes that serve one moment of play can share a sentence. Never string unrelated changes into a row of short sentences.
+- Most readers of the channel have never played ROAM. They do not know the Fallen Sun or J.J. Describe each place and thing as it is. Never write "X is now Y" or compare with how it was.
+- The first sentence gives a stranger a reason to read on. Say what you do in ROAM and what this release adds to that. Then lead with the change a player will notice most.
 - Say where to play and how to suggest or vote on the next changes.
 - Match the game in tone: a dark, dry but living wasteland. No hype, no marketing words, no emoji, no "hello fellow kids", no pretense roleplay. Write for adults.
 - Keep it short. Under 1024 characters it goes out as one message with the screenshot.
+
+## The screenshot
+
+- It shows one change from the post in the middle of play, close enough to read on a phone. A fight, a wreck, a new location seen up close.
+- No tutorial hints, dialogs or start-of-game screens. Hide the HUD panels if the game lets you.
+- Check the screenshots taken by each issue of the release first. If none fits, take one yourself.
+- Look at the picture before you send it. If it shows mostly UI and empty ground, take another.
 
 ## Steps
 
 1. Write the draft and send it to the committee chat with `factory_release_draft`. Then respond with [SILENT].
 2. A member's reply to the draft reaches you with a header. Change the draft as they ask, send it again with the tool, and answer in one short sentence.
 3. Never post to the channel yourself unless explicitly asked, and even in this case ask for confirmation.
-
-## Example of a decent release post
-
-ROAM 2026-10-07 is out! Our first public release brings new scavenging territories, new cars, deeper combat, a new progression system, new music, the Waste of Time radio and a million bug fixes.
-
-The Fallen Sun and the Old Orchard are large areas to loot and fight in. Drive under the wing of a crashed ship. Buhanka, Lincoln and Niva join the road. J.J. on the radio reads you the weather, the raids and the gossip. In combat, guns no longer fire all at once and aim within their arcs. Parts wear and break visibly, casings fall, and wrecks keep their truck's shape. A hit to the cab can knock the driver out. A shot-up cargo rack spills its load, and the shooters will want it. Skills now grow from XP you spend as you choose. Every inhabited stop sells fuel and repairs, trucks burn less, and a broke driver gets a free tow. Headlights switch by hand, and item condition shows at a glance.
-
-Play it: https://btseytlin.itch.io/road-machiners
-Vote on what comes next: https://github.com/btseytlin/road-machiners/issues
