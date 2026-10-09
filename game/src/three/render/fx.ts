@@ -21,6 +21,7 @@ import type { GroundAt } from './lines';
 import { Casings, Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan, type ShotCues } from './projectiles';
 import { CardBatch, createCardShapes } from './particles/cards';
 import { ChunkBatch } from './particles/chunks';
+import { Emissions } from './particles/emissions';
 import { Particles, type ParticleLook } from './particles/particles';
 
 const MAX_PUFFS = 2048;
@@ -271,6 +272,7 @@ export class Fx3D {
   private readonly particles = new Particles(MAX_PARTICLES);
   private readonly glowParticles = new Particles(MAX_GLOW_PARTICLES);
   private readonly chunks = new ChunkBatch(MAX_CHUNKS, Math.random);
+  private readonly emissions = new Emissions(this.particles, this.glowParticles);
   private readonly sprayLooks = new Map<TerrainType, { dust: ParticleLook; haze: ParticleLook; clod: THREE.Color }>();
   private readonly cardLight = { sunDir: new THREE.Vector3(), sun: new THREE.Color(), sky: new THREE.Color(), ground: new THREE.Color() };
   private texts: FloatText[] = [];
@@ -372,8 +374,7 @@ export class Fx3D {
   }
 
   private missileSmoke(p: V3): void {
-    const vel = { x: (Math.random() - 0.5) * 0.5, y: 0.3 + Math.random() * 0.3, z: (Math.random() - 0.5) * 0.5 };
-    this.puffs.spawn(p, { vel, life: 0.9, fromScale: 0.15, toScale: 0.7 + Math.random() * 0.3, color: 0x8a8278, opacity: 0.6, drag: 2, gravity: -0.2 });
+    this.emissions.missile(p);
   }
 
   label(p: V3, text: string, color: string, row: number, delayMs: number, readMs: number): void {
@@ -396,11 +397,11 @@ export class Fx3D {
   }
 
   dust(p: V3): void {
-    this.puff(p, DUST.color, 1, { speed: 1.2, life: 0.9, scale: 0.5, grow: 1.4 });
+    this.emissions.dust(p);
   }
 
-  smoke(p: V3): void {
-    this.puff(p, 0x4a3f32, 1, { speed: 1.5, life: 1.6, scale: 0.8, grow: 2.4 });
+  smoke(p: V3, damage = 0): void {
+    this.emissions.hurt(p, damage);
   }
 
   light({ sun, sky }: CardLights): void {
@@ -453,23 +454,19 @@ export class Fx3D {
   }
 
   exhaust(p: V3, back: V3): void {
-    const vel = { x: back.x * 0.8 + (Math.random() - 0.5) * 0.4, y: 1.2 + Math.random() * 0.8, z: back.z * 0.8 + (Math.random() - 0.5) * 0.4 };
-    this.puffs.spawn(p, { vel, life: 0.9, fromScale: 0.15, toScale: 0.8 + Math.random() * 0.4, color: 0x1c1a18, opacity: 0.75, drag: 1.5, gravity: -0.4 });
+    this.emissions.exhaust(p, back);
   }
 
   steam(p: V3): void {
-    const vel = { x: (Math.random() - 0.5) * 0.6, y: 1.2 + Math.random() * 0.8, z: (Math.random() - 0.5) * 0.6 };
-    this.puffs.spawn(p, { vel, life: 1.8, fromScale: 0.3, toScale: 1.4 + Math.random() * 0.6, color: 0xf2efe8, opacity: 0.55, drag: 1, gravity: -0.3 });
+    this.emissions.steam(p);
   }
 
   douseSteam(p: V3): void {
-    const vel = { x: (Math.random() - 0.5) * 2.4, y: 1.6 + Math.random() * 1.2, z: (Math.random() - 0.5) * 2.4 };
-    this.puffs.spawn(p, { vel, life: 2.2, fromScale: 0.6, toScale: 2.4 + Math.random() * 1.0, color: 0xf2efe8, opacity: 0.75, drag: 1.2, gravity: -0.25 });
+    this.emissions.douse(p);
   }
 
-  breakdownSmoke(p: V3): void {
-    const vel = { x: (Math.random() - 0.5) * 0.4, y: 0.8 + Math.random() * 0.6, z: (Math.random() - 0.5) * 0.4 };
-    this.puffs.spawn(p, { vel, life: 2.6, fromScale: 0.5, toScale: 2.2 + Math.random() * 0.8, color: 0x151311, opacity: 0.7, drag: 0.6, gravity: -0.35 });
+  breakdownSmoke(p: V3, motion: V3): void {
+    this.emissions.breakdown(p, motion);
   }
 
   floatText(p: V3, text: string, color: string, durationMs: number, rowPx = 0): void {
@@ -543,7 +540,7 @@ const BREAKDOWN_RATE = 5;
 const DAMAGE_RATE = 3;
 const HURT_CAB = 0.35;
 
-type Traits = { stranded: boolean; maxSpeed: number; hurt: boolean };
+type Traits = { stranded: boolean; maxSpeed: number; hurt: boolean; damage: number };
 type Pose = { f: VehicleFrame; h: number; half: { x: number; y: number; z: number } };
 
 export class TruckFx {
@@ -562,8 +559,8 @@ export class TruckFx {
       this.steam(world.player.engineHeat, pose, dt);
       this.douseCloud(pose, dt);
     }
-    if (traits.stranded) this.puffs(BREAKDOWN_RATE, dt, () => this.fx.breakdownSmoke(onBody(pose, 0.5, 1, 0)));
-    else if (traits.hurt) this.puffs(DAMAGE_RATE, dt, () => this.fx.smoke(f.pos));
+    if (traits.stranded) this.puffs(BREAKDOWN_RATE, dt, () => this.fx.breakdownSmoke(onBody(pose, 0.5, 1, 0), motionOf(v, pose.h, moving)));
+    else if (traits.hurt) this.puffs(DAMAGE_RATE, dt, () => this.fx.smoke(f.pos, traits.damage));
   }
 
   private driving(world: World, v: Vehicle, pose: Pose, traits: Traits, seen: boolean, dt: number): void {
@@ -641,11 +638,17 @@ export class TruckFx {
         stranded: isStranded(world, v),
         maxSpeed: vehicleStats(world, v).maxSpeed,
         hurt: cab.hp < maxHp(cab) * HURT_CAB || mountedParts(v).some((p) => p.hp === 0),
+        damage: 1 - cab.hp / maxHp(cab),
       };
       this.traits.set(v.id, t);
     }
     return t;
   }
+}
+
+function motionOf(v: Vehicle, h: number, moving: boolean): V3 {
+  const mps = moving ? v.speed * PHYSICS.metersPerTile : 0;
+  return { x: Math.cos(h) * mps, y: 0, z: Math.sin(h) * mps };
 }
 
 function rotate(x: number, z: number, h: number): { x: number; z: number } {
