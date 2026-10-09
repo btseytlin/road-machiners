@@ -54,7 +54,7 @@ try {
   const seen = await visibleRows(page);
   console.log('visible rows at 1280x730:', seen);
   await writeFile('.playtest/shop-parts-after.json', JSON.stringify({ visible: seen }));
-  assert((await page.locator('.part-sum .price').count()) === 16);
+  assert((await page.locator('.part-line > .price').count()) === 16);
   await page.screenshot({ path: '.playtest/shop-parts-after-1280.png' });
   assert(seen >= 6, `the compact list must show many parts, shows ${seen}`);
 

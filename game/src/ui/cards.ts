@@ -19,8 +19,7 @@ import { conditionStatus, conditionTier, showsCondition, wearLabel } from "./for
 import { fuelLiters, hp, kph, meters, mps2 } from "./units";
 
 const ART = {
-  money:
-    '<ellipse cx="18" cy="9" rx="11" ry="5"/><path d="M7 9v15c0 7 22 7 22 0V9M7 16c0 7 22 7 22 0"/>',
+  trade: '<ellipse cx="18" cy="9" rx="11" ry="5"/><path d="M7 9v15c0 7 22 7 22 0V9M7 16c0 7 22 7 22 0"/>',
   fuel: '<path d="M8 10h16v23H8zM11 4h10v6M15 15l6 6-9 8M24 12h7v18h5V15l-5-5"/>',
   supplies: '<path d="M5 13h30v22H5zM5 13l6-8h18l6 8M15 6v28M25 6v28"/>',
   driver:
@@ -78,7 +77,7 @@ export type IconName = keyof typeof ART;
 
 const ICON_NAMES: Record<IconName, string> = {
   star: "Pristine",
-  money: "Money",
+  trade: "Trade",
   fuel: "Fuel",
   supplies: "Supplies",
   driver: "Driver",
@@ -254,11 +253,18 @@ export function statGrid(diffs: StatDiff[]): HTMLElement {
         { class: "stat", title: d.stat.label },
         createIcon(d.stat.icon),
         el("span", { class: "stat-name" }, ICON_NAMES[d.stat.icon]),
-        el("span", { class: "stat-val" }, d.stat.text, el("small", {}, d.stat.unit)),
+        el("span", { class: "stat-val" }, statValue(d.stat)),
         d.delta === null ? el("span") : el("span", { class: `delta ${d.verdict}` }, d.delta === 0 ? "=" : d.text),
       ),
     ),
   );
+}
+
+const TIGHT_UNITS = ["°", "×"];
+
+export function statValue(s: Stat): string {
+  if (s.unit === "") return s.text;
+  return TIGHT_UNITS.includes(s.unit) ? `${s.text}${s.unit}` : `${s.text} ${s.unit}`;
 }
 
 export function footprint(w: number, h: number): HTMLElement {
@@ -302,7 +308,7 @@ export function statChip(d: StatDiff): HTMLElement {
     "span",
     { class: "stat-chip", title: d.stat.label },
     createIcon(d.stat.icon),
-    el("span", { class: "stat-val" }, d.stat.text, el("small", {}, d.stat.unit)),
+    el("span", { class: "stat-val" }, statValue(d.stat)),
     d.delta === null ? null : el("span", { class: `delta ${d.verdict}` }, d.delta === 0 ? "=" : d.text),
   );
 }
@@ -320,7 +326,7 @@ export function partCard(o: PartCardOptions): HTMLElement {
   const diffs = diffStats(partStats(o.world, o.part), o.base ? partStats(o.world, o.base) : null);
   const card = el(
     "div",
-    { class: `card toned k-${def.kind}`, style: toneStyle(def.id) },
+    { class: `card tile toned k-${def.kind}`, style: toneStyle(def.id) },
     el(
       "div",
       { class: "card-head" },
@@ -342,15 +348,19 @@ export function partCard(o: PartCardOptions): HTMLElement {
   return card;
 }
 
-export function partDetail(world: World, part: PartInstance, base: PartInstance | null, action: HTMLElement): HTMLElement[] {
-  const diffs = diffStats(partStats(world, part), base ? partStats(world, base) : null);
+export function partDetail(world: World, part: PartInstance, base: PartInstance | null): HTMLElement[] {
+  const rest = diffStats(partStats(world, part), base ? partStats(world, base) : null).slice(1);
+  const hpText = hpReadout(part);
   return [
-    conditionRow(part),
     ...(base ? [compareLine(base)] : []),
-    conditionMeter(part),
-    statGrid(diffs),
-    el("div", { class: "card-foot" }, el("span"), action),
-  ].filter((n): n is HTMLElement => n !== null);
+    el("div", { class: "part-hp" }, conditionMeter(part), hpText ? el("span", { class: "num dim" }, hpText) : null),
+    ...(rest.length ? [statGrid(rest)] : []),
+  ];
+}
+
+function hpReadout(part: PartInstance): string | null {
+  const status = conditionStatus(part);
+  return status.tone === "dim" && conditionTier(part) !== "junk" ? status.text : null;
 }
 
 export function compareBase(selected: PartInstance | null, part: PartInstance): PartInstance | null {

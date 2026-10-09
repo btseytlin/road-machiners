@@ -221,8 +221,15 @@ function settleOverdrive(w: World): void {
   w.events.push({ t: 'info', text: 'Overdrive cut out: the engine is too worn.' });
 }
 
+export function actBlock(world: World): string | null {
+  if (world.player.state !== 'active') return 'Knocked out';
+  if (isTowed(world)) return 'Under tow';
+  if (world.player.call) return 'On the radio';
+  return null;
+}
+
 export function playerCanAct(world: World): boolean {
-  return world.player.state === 'active' && !isTowed(world) && !world.player.call;
+  return actBlock(world) === null;
 }
 
 export function requireActivePlayer(world: World): void {

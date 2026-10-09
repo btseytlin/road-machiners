@@ -4,7 +4,7 @@ import { mountedParts } from "../sim/grid";
 import { playerVehicle } from "../sim/damage";
 import { newWorld } from "../sim/world";
 import type { PartInstance } from "../sim/types";
-import { baselinePart, chassisPortraitCell, chassisStats, compareBase, dialShare, diffStats, headlineStat, itemIconCell, partStats, toneStyle } from "./cards";
+import { baselinePart, chassisPortraitCell, chassisStats, compareBase, dialShare, diffStats, headlineStat, itemIconCell, partStats, statValue, toneStyle } from "./cards";
 import ICONS from "../data/item-icons.json";
 import { CHASSIS } from "../data/chassis";
 import { GOODS } from "../data/goods";
@@ -173,5 +173,16 @@ describe("item tones", () => {
 describe("chassis portraits", () => {
   it.each(Object.keys(CHASSIS))("crop the %s portrait to its drawing", (id) => {
     expect(chassisPortraitCell(id).box).toEqual(boxOf(ICONS.chassis[id as keyof typeof ICONS.chassis].box));
+  });
+});
+
+describe("stat values", () => {
+  it("writes the unit as plain text after the value", () => {
+    expect(statValue(partStats(world, part("mg")).find((s) => s.icon === "mass")!)).toMatch(/^[\d,]+ kg$/);
+  });
+
+  it("keeps degrees and multipliers tight to the number", () => {
+    const stats = partStats(world, part("stockEngine"));
+    expect(statValue(stats.find((s) => s.icon === "heat")!)).toMatch(/^[\d.]+×$/);
   });
 });

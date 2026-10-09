@@ -1,0 +1,14 @@
+#ui .tip {
+  display: flex;
+  gap: var(--space-6);
+  align-items: center;
+  font-size: var(--text-body);
+  z-index: var(--z-toast);
+}
+#ui .end-turn.auto {
+  border-color: var(--accent-warm);
+  color: var(--accent);
+}
+#ui:has(.dialog:not(.modal)) > .top-center > .tip {
+  visibility: hidden;
+}

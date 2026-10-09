@@ -1,6 +1,6 @@
 # Items
 
-Every chassis, part and good in the game. Value is money for a pristine item. Every price derives from it, see [economy.md](economy.md). Mass is per part in kilograms, and per unit for goods. Footprints are in grid cells. One cell is `RULES.cellMeters` meters wide.
+Every chassis, part and good in the game. Value is in M's, the basin's currency ([lore](../lore.md#ms)), for a pristine item. Every price derives from it, see [economy.md](economy.md). Mass is per part in kilograms, and per unit for goods. Footprints are in grid cells. One cell is `RULES.cellMeters` meters wide.
 
 Parts are defined in `src/data/parts.ts`, chassis in `src/data/chassis.ts` and goods in `src/data/goods.ts`. A value is a hand-set base plus a modifier from the stats the kind is bought for. The modifier numbers are `PART_PRICE_MODIFIERS` for parts and `CHASSIS_PRICE_MODIFIERS` for chassis. Core parts come built into a chassis at fixed cells and are never sold.
 

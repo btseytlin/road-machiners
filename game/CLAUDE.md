@@ -17,6 +17,7 @@ Read the doc for an area before changing it.
 - [Economy, jobs and progression](docs/architecture/economy.md): salvage, shops, wear, jobs, sites and XP.
 - [Movement](docs/architecture/movement.md): NPC driving, routes, physics turns, far NPCs, auto travel and the camera.
 - [Rendering and UI](docs/architecture/render.md): outlines, scope, props, debris, tips and audio.
+- [UI design system](docs/ui.md): the tokens, shared pieces and rules every screen and overlay style follows. Read it before any UI or overlay style change. `npm run dev` serves a live guide at <http://localhost:5173/ui.html>.
 - [Map and world](docs/architecture/map.md): the bake layers, the bridge, weather and vision.
 - [Saves](docs/architecture/saves.md): slots, boot, versions and rescue.
 - [Principles](docs/architecture/principles.md): the project's architecture principles every design answers to, like one rulebook for every truck, no hot full scans and same seed, same game.

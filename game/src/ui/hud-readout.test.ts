@@ -17,7 +17,7 @@ import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
 import { partDef } from "../data/parts";
 import { startKit } from "../data/start";
-import { newWorld } from "../sim/world";
+import { actBlock, newWorld } from "../sim/world";
 import { playerVehicle } from "../sim/damage";
 import { stowPart } from "../sim/inventory";
 import { beginSearch } from "../sim/search";
@@ -264,7 +264,7 @@ describe("critical vehicle readout", () => {
     w.player.fuel = 18.5;
     w.player.supplies = 7.25;
     expect(getHudReadout(w).resources.map((r) => r.label)).toEqual([
-      "Money",
+      "M's",
       "Fuel",
       "Supplies",
       "Driver",
@@ -273,13 +273,13 @@ describe("critical vehicle readout", () => {
       getHudReadout(w)
         .resources.slice(0, 3)
         .map((r) => r.value),
-    ).toEqual(["1,235", "93 / 200 L", "7.3"]);
+    ).toEqual(["1,235 M's", "93 L", "7 kg"]);
   });
   it("shows fractional driver health as a whole number", () => {
     const w = emptyWorld();
     w.player.health = 41.123456789;
     const [, , , driver] = getHudReadout(w).resources.map((r) => r.value);
-    expect(driver).toBe(`42 / ${RULES.maxHealth}`);
+    expect(driver).toBe('42');
   });
   it("warns at the actual fuel speed-limit threshold", () => {
     const w = emptyWorld();
@@ -303,7 +303,8 @@ describe("critical vehicle readout", () => {
     w.player.ranks.toughness = 5;
     w.player.health = RULES.maxHealth;
     const driver = getHudReadout(w).resources.find((r) => r.label === "Driver")!;
-    expect(driver).toEqual({ label: "Driver", value: `${RULES.maxHealth} / ${maxHealthOf(w)}`, warning: true });
+    expect(driver).toMatchObject({ label: "Driver", value: String(RULES.maxHealth), warning: true });
+    expect(maxHealthOf(w)).toBeGreaterThan(RULES.maxHealth);
   });
 
   it("keeps parked jobs out of the survival instruments", () => {
@@ -314,11 +315,20 @@ describe("critical vehicle readout", () => {
       turnsLeft: 2,
       total: 4,
     };
-    expect(getHudReadout(w).survival.map((r) => r.label)).toEqual([
-      "Heat",
-      "Engine",
-      "Weather",
-    ]);
+    expect(getHudReadout(w).survival.map((r) => r.label)).toEqual(["Heat", "Engine"]);
+  });
+  it("shows the weather only when it is not clear", () => {
+    const w = emptyWorld();
+    expect(getHudReadout(w).survival.map((r) => r.label)).not.toContain("Weather");
+    w.weather = [{ id: "h", kind: "heatwave", turnsLeft: 9, born: w.turn } as World["weather"][number]];
+    expect(getHudReadout(w).survival).toContainEqual({ label: "Weather", value: "Heat wave", warning: false });
+  });
+  it("marks low fuel on the fuel readout with its cause", () => {
+    const w = emptyWorld();
+    w.player.fuel = 1;
+    const fuel = getHudReadout(w).resources[1];
+    expect(fuel).toMatchObject({ warning: true, icon: "fuel" });
+    expect(fuel.tip).toMatch(/^Low fuel: max \d+ km\/h$/);
   });
   it("shows the game clock once, outside the survival instruments", () => {
     const w = emptyWorld();
@@ -339,16 +349,31 @@ describe("critical vehicle readout", () => {
   });
 });
 
+describe("act block", () => {
+  it("names why the player cannot act", () => {
+    const w = emptyWorld();
+    expect(actBlock(w)).toBeNull();
+    w.player.state = "knockedOut";
+    expect(actBlock(w)).toBe("Knocked out");
+  });
+});
+
 describe("rescue readout", () => {
-  it("shows negative money as debt with a warning", () => {
+  it("shows negative money as a negative amount with a warning", () => {
     const w = emptyWorld();
     w.player.money = -120050;
     expect(getHudReadout(w).resources[0]).toMatchObject({
-      value: "Debt 1,201",
+      value: "−1,201 M's",
+      balance: -120050,
       warning: true,
     });
   });
-  it("tells a stranded player to install a spare engine it carries", () => {
+  it("gives only the M's entry a balance", () => {
+    const { resources } = getHudReadout(emptyWorld());
+    expect(resources[0]).toHaveProperty("balance");
+    expect(resources.slice(1).every((r) => !("balance" in r))).toBe(true);
+  });
+  it("names a missing engine without telling the player what to do", () => {
     const w = newWorld(1337, startKit("combat"), TEST_MAP, defaultSetup('roaming'));
     const me = playerVehicle(w);
     const engine = me.items.find((it) => it.kind === "part" && partDef(it.part.defId).kind === "engine");
@@ -356,7 +381,7 @@ describe("rescue readout", () => {
     me.items = me.items.filter((it) => it.kind === "part" && partDef(it.part.defId).kind === "core");
     expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine." });
     expect(stowPart(w, me, engine.part)).toBe(true);
-    expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine. Install the spare [I]." });
+    expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine." });
   });
   it("follows the player from stranded to tow, and leaves an open offer to the radio", () => {
     const w = emptyWorld();
@@ -545,13 +570,13 @@ describe('overdrive switch', () => {
     const w = wornTo(6);
     w.player.overdrive = true;
     const s = overdriveSwitch(w);
-    expect(s).toMatchObject({ checked: false, blocked: true });
-    expect(s.title).toBe(`Engine too worn for overdrive: repair it above ${RULES.overdriveMinEngineShare * 100}% [O]`);
+    const reason = `Repair engine above ${RULES.overdriveMinEngineShare * 100}%`;
+    expect(s).toEqual({ checked: false, reason, title: reason });
   });
 
   it('is open one HP above 15% and shows the flag', () => {
     const w = wornTo(7);
-    expect(overdriveSwitch(w)).toEqual({ checked: false, blocked: false, title: 'Engine overdrive: faster, but the engine heats fast [O]' });
+    expect(overdriveSwitch(w)).toEqual({ checked: false, reason: null, title: 'Faster, but the engine heats fast [O]' });
     w.player.overdrive = true;
     expect(overdriveSwitch(w).checked).toBe(true);
   });

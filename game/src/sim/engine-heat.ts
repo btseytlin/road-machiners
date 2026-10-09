@@ -54,8 +54,14 @@ function heatedEngines(v: Vehicle): PartInstance[] {
   return mountedParts(v).filter((p) => partDef(p.defId).kind === 'engine' && p.hp > 0);
 }
 
+export function douseBlock(world: World): string | null {
+  if (world.player.supplies < ENGINE_HEAT.douseSupplies) return `Need ${ENGINE_HEAT.douseSupplies} supplies`;
+  if (world.player.engineHeat <= 0) return 'Engine is cool';
+  return null;
+}
+
 export function canDouse(world: World): boolean {
-  return world.player.supplies >= ENGINE_HEAT.douseSupplies && world.player.engineHeat > 0;
+  return douseBlock(world) === null;
 }
 
 export function douseEngine(world: World): World {

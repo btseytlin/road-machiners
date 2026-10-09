@@ -179,13 +179,13 @@ describe("harpoon log", () => {
     s.w.lines = [{ id: "l1", from: s.me.id, fromPart: s.harpoon.id, to: s.trader.id, toPart: s.engine.id, length: 10, turnsLeft: 3 }];
     s.shot = { ...(s.shot as Extract<GameEvent, { t: "shot" }>), rounds: [{ hit: true, crit: false, offset: 0, struck: s.trader.id, hits: [{ part: s.engine.id, damage: 2 }], blast: [], burst: null }] };
 
-    expect(eventText(s.w, s.shot)?.text).toBe(`Harpoon → ${vehicleName(s.w, s.trader.id)}: line on Stock engine (40%): Stock engine −2`);
+    expect(eventText(s.w, s.shot)?.text).toBe(`Harpoon fires at ${vehicleName(s.w, s.trader.id)}: line on Stock engine (40%): Stock engine −2`);
   });
 
   it("reads a harpoon that holds nothing as a miss", () => {
     const s = harpooned([{ hit: false, crit: false, offset: 3, struck: null, hits: [], blast: [], burst: null }]);
 
-    expect(eventText(s.w, s.shot)?.text).toBe(`Harpoon → ${vehicleName(s.w, s.trader.id)}: missed (40%)`);
+    expect(eventText(s.w, s.shot)?.text).toBe(`Harpoon fires at ${vehicleName(s.w, s.trader.id)}: missed (40%)`);
   });
 
   it("tells the player its truck tore free of a line", () => {
@@ -365,7 +365,7 @@ describe("shot log", () => {
     const { w, raider, cab, shot } = duel();
     cab.hp = maxHp(cab);
     const line = eventText(w, shot([{ part: cab.id, damage: 2 }]))!;
-    expect(line.text).toMatch(/^.+ → .+, 1\/2 hit \(40%\): .+ −2$/);
+    expect(line.text).toMatch(/^.+ fires at .+, 1\/2 hit \(40%\): .+ −2$/);
     expect(line.text).toContain(raider.name);
   });
 
@@ -429,20 +429,28 @@ describe("NPC names in the log", () => {
 describe("money text", () => {
   it("reads a money event in M with its sign", () => {
     const w = emptyWorld();
-    expect(eventText(w, { t: "money", amount: 4067, reason: "Sold salt" })).toEqual({ text: "+41 M: Sold salt", cls: "good" });
-    expect(eventText(w, { t: "money", amount: -100, reason: "Fuel" })).toEqual({ text: "-1 M: Fuel", cls: "bad" });
+    expect(eventText(w, { t: "money", amount: 4067, reason: "Sold salt" })).toEqual({ text: "+41 M's: Sold salt", cls: "good" });
+    expect(eventText(w, { t: "money", amount: -100, reason: "Fuel" })).toEqual({ text: "−1 M: Fuel", cls: "bad" });
   });
 });
 
 describe("tow text", () => {
+  it("reads the currency as M's in money lines and one-unit fees", () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const npc = addVehicle(w, "traders", "scout", ["stockEngine"], { x: 34, y: 30 });
+    const town = REGION.towns[0].id;
+    expect(eventText(w, { t: "money", amount: 12000, reason: "contract" })).toMatchObject({ text: "+120 M's: contract", cls: "good" });
+    expect(eventText(w, { t: "money", amount: -4000, reason: "failed haul contract" })).toMatchObject({ text: "−40 M's: failed haul contract", cls: "bad" });
+    expect(eventText(w, { t: "towOffer", by: npc.id, town, fee: 100 })?.text).toMatch(/ for 1 M\.$/);
+  });
   it("says free for a fee of 0 and keeps the price otherwise", () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const npc = addVehicle(w, "traders", "scout", ["stockEngine"], { x: 34, y: 30 });
     const town = REGION.towns[0].id;
     expect(eventText(w, { t: "towOffer", by: npc.id, town, fee: 0 })?.text).toMatch(/ for free\.$/);
-    expect(eventText(w, { t: "towOffer", by: npc.id, town, fee: 4000 })?.text).toMatch(/ for 40 M\.$/);
+    expect(eventText(w, { t: "towOffer", by: npc.id, town, fee: 4000 })?.text).toMatch(/ for 40 M's\.$/);
     expect(eventText(w, { t: "towDone", by: npc.id, client: w.player.vehicleId, fee: 0 })).toMatchObject({ text: expect.stringMatching(/tows you into town for free\.$/), cls: "" });
-    expect(eventText(w, { t: "towDone", by: npc.id, client: w.player.vehicleId, fee: 4067 })).toMatchObject({ text: expect.stringMatching(/takes 41 M\.$/), cls: "bad" });
+    expect(eventText(w, { t: "towDone", by: npc.id, client: w.player.vehicleId, fee: 4067 })).toMatchObject({ text: expect.stringMatching(/takes 41 M's\.$/), cls: "bad" });
     const other = addVehicle(w, "roamers", "buggy", ["stockEngine"], { x: 50, y: 30 });
     expect(eventText(w, { t: "towDone", by: npc.id, client: other.id, fee: 0 })?.text).toMatch(/ in for free\.$/);
   });
@@ -477,7 +485,7 @@ describe("saleEstimate", () => {
     const e = saleEstimate(11, 1200, 2000);
     expect(e).toEqual({ kind: "loss", perUnit: 800, avgCost: 2000 });
     expect(estimateText(e)).toBe("\u22128");
-    expect(estimateTitle(e)).toBe("Avg cost 20");
+    expect(estimateTitle(e)).toBe("Avg cost 20 M's");
   });
 
   it("words a gain", () => {
@@ -525,18 +533,19 @@ describe("saleEstimate", () => {
 
 describe("goods table words", () => {
   it("has terse column heads", () => {
-    expect(GOODS_COLUMNS).toEqual({ good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit/unit" });
+    expect(GOODS_COLUMNS).toEqual({ good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit" });
   });
 
   it("explains the profit head in a hover title without turns", () => {
+    expect(PROFIT_HEAD_TITLE).toContain("Per unit");
     expect(PROFIT_HEAD_TITLE).toContain("average cost");
     expect(PROFIT_HEAD_TITLE).toContain("usual value");
     expect(PROFIT_HEAD_TITLE).not.toMatch(/turn/i);
   });
 
   it("words lot totals", () => {
-    expect(lotTitle("buy", 5, 180)).toBe("Buy 5 for 2 total");
-    expect(lotTitle("sell", 11, 31200)).toBe("Sell all 11 for 312 total");
+    expect(lotTitle("buy", 5, 180)).toBe("Buy 5 for 2 M's total");
+    expect(lotTitle("sell", 11, 31200)).toBe("Sell all 11 for 312 M's total");
   });
 });
 

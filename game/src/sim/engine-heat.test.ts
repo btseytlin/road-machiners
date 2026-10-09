@@ -9,7 +9,7 @@ import { TIME } from '../data/time';
 import { ENGINE_HEAT } from '../data/wear';
 import { SKILL_EFFECTS } from '../data/skills';
 import { playerVehicle } from './damage';
-import { advanceEngineHeat, douseEngine, engineOverheating } from './engine-heat';
+import { advanceEngineHeat, douseBlock, douseEngine, engineOverheating } from './engine-heat';
 import { mountedParts } from './grid';
 import { route } from './path';
 import { nearestPad } from './sites';
@@ -348,5 +348,19 @@ describe('desert rat', () => {
     me.speed = vehicleStats(w, me).maxSpeed;
     advanceEngineHeat(w);
     expect(practiceOf(w, 'heat')[0].difficulty).toBeCloseTo((heatAt(w, me.pos) - 1) / (TIME.sunHeat - 1));
+  });
+});
+
+describe('douse reasons', () => {
+  it('names what blocks cooling the engine', () => {
+    const w = emptyWorld();
+    w.player.supplies = 0;
+    w.player.engineHeat = 0.5;
+    expect(douseBlock(w)).toBe(`Need ${ENGINE_HEAT.douseSupplies} supplies`);
+    w.player.supplies = ENGINE_HEAT.douseSupplies;
+    w.player.engineHeat = 0;
+    expect(douseBlock(w)).toBe('Engine is cool');
+    w.player.engineHeat = 0.5;
+    expect(douseBlock(w)).toBeNull();
   });
 });
