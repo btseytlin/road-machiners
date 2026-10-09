@@ -48,7 +48,7 @@ A branch that changes only Markdown docs cannot change the game, so it runs no t
 
 Screenshots never block a card. A card with no screenshot still runs the post checkpoint, and its approval post is text that says it has no screenshot. [evidence.md](evidence.md) has the rules.
 
-A failed job never moves a card. A card stage that fails resumes once on the next tick in its own sessions, and its agent gets the error. A second failure labels the issue `factory-stuck`, and the card waits in its column until Hermes removes the label. An empty budget or a question for the committee labels it at once. A run that hits the Claude weekly usage limit pauses the factory instead, and its card takes no label.
+A failed job never moves a card. A card stage that fails resumes once on the next tick in its own sessions, and its agent gets the error. A second failure labels the issue `factory-stuck`, and the card waits in its column until Hermes removes the label. An empty budget or a question for the committee labels it at once. Each tick's stuck sweep records why every stuck card waits, and removes the label itself only for a mechanical cause: a stale merge in the card's work clone, a GitHub outage or full disk that has passed, and a merge batch that timed out. [operations.md](operations.md#stuck-sweep) has the rules. A run that hits the Claude weekly usage limit pauses the factory instead, and its card takes no label.
 
 A member or Hermes can hold one card with `factory pause-card N`, so its worker goes to other work, like release tasks. The hold stops the card's job and keeps its work clone and agent sessions. The card waits in its column with no label until `factory resume-card N`, and then the stopped stage continues where it stopped. [state.md](state.md) has the rules.
 
@@ -69,7 +69,7 @@ Testing is one job. The testing session merges the base, plays the build, fixes 
 
 Approve moves a card to Hardening. The hardening session merges the base, attacks the change, runs `/code-review` and fixes every finding. No checks run there. Then the card moves to Merging.
 
-A merge job takes every Merging card of one base at that moment. It merges them into a clone of the base, and the merge session resolves any conflict. The merge checkpoint runs the full suite, the typecheck, the playtest and the build on the result. A failure goes back into the merge session. The base takes only a result that passed. If the base moved during the checks, the job merges it in and checks again. A failed batch labels each of its cards `factory-stuck`.
+A merge job takes every Merging card of one base at that moment. It merges them into a clone of the base, and the merge session resolves any conflict. The merge checkpoint runs the full suite, the typecheck, the playtest and the build on the result. A failure goes back into the merge session. The base takes only a result that passed. If the base moved during the checks, the job merges it in and checks again. A failed batch labels each of its cards `factory-stuck`. When the batch timed out or its job died, the stuck sweep sends half of its cards back at a time, each time no other card of that base waits, until a batch passes or a single card fails alone.
 
 ![Hardening and Merging columns](diagrams/hardening.svg)
 
@@ -137,7 +137,7 @@ These jobs run beside the cards.
 
 ## Tick and queues
 
-A timer runs one tick at a time. A tick never waits for a job. Each job runs as its own process. Check jobs resumes a dead card job once, and kills a card job past its time limit and resumes it once. A second death or timeout, and any branch job past its limit, fails.
+A timer runs one tick at a time. A tick never waits for a job. Before it picks jobs, it sweeps the stuck cards of the board it read, and a sweep that crashes only records its error. Each job runs as its own process. Check jobs resumes a dead card job once, and kills a card job past its time limit and resumes it once. A second death or timeout, and any branch job past its limit, fails.
 
 ![One tick](diagrams/tick.svg)
 

@@ -23,10 +23,11 @@ digraph hardening {
   MM -> MM [label="conflict: the merge\nsession resolves it"];
   MC -> MM [label="failure: back into\nthe merge session"];
   MP -> MM [label="base moved:\nmerge it in, check again"];
+  XS -> MM [label="timed out or died:\nthe stuck sweep releases\nhalf the batch"];
   edge [color="#6b7280", fontcolor="#6b7280"];
   XA -> HM;
   HM -> MM [label="docs only:\nno session"];
   XO -> MM;
-  MC -> XS [label="budget spent"];
+  MC -> XS [label="budget spent,\ntimeout or death"];
   MP -> XN;
 }

@@ -42,7 +42,7 @@ Fields that belong to one position:
 
 Flags hold on any position:
 
-- `factory-stuck`: a job failed twice, spent its budget or asked the committee. The card waits in its column until `retry N` removes the label. A card stage that fails the first time takes no label: its issue stays in `interrupted`, its sessions keep the error, and the next tick resumes the stage.
+- `factory-stuck`: a job failed twice, spent its budget or asked the committee. The card waits in its column until `retry N` removes the label, or the stuck sweep removes it for a mechanical cause. A card stage that fails the first time takes no label: its issue stays in `interrupted`, its sessions keep the error, and the next tick resumes the stage.
 - Held: `held` in `state.json` holds who held the card, why, when, and the stage of the job the hold stopped. The tick starts no job on the issue, a queued approval included, until `resume-card N` lifts it. A hold is no failure, so the card takes no label and Hermes gets no incident. `move` keeps it but forgets the stopped stage, since the move clears the sessions. `move N done` drops it.
 - `needs-info`: the author owes answers. The tick removes it when someone answers, or when `FACTORY_NEEDS_INFO_HOURS` pass since the questions.
 - Approved: the card merges after hardening. It shows as `approvedResolving` or a queued approval.
@@ -90,7 +90,9 @@ The release tracking card has the label `release`. It waits in Approval for the 
 
 ## Health records
 
-- `failures`: failed jobs of the last day. `factory failures` prints them. `retry N` clears a card's failure and its stuck label.
+- `failures`: failed jobs of the last day. `factory failures` prints them. `retry N` clears a card's failure and its stuck label. A merge failure holds `batch`, the issues of its batch. `decision` marks a spent budget or a committee question.
+- `stuck`: the stuck sweep's record of each open stuck card, by issue: `incident`, `kind`, `column`, the cause in `stage`, `cause`, `log`, `since`, `decision` and `batch` (the size of its failed merge batch), `tries` (the sweep's actions on it in this column), `released` and `refused`. Written only by the tick's sweep. `factory stuck` prints them. [operations.md](operations.md#stuck-sweep) has the rules.
+- `sweepError`: the last crash of the stuck sweep, cleared by the next sweep that passes. The incident watch prints it.
 - `lastTickError`: the last tick crash. `factory status` shows it.
 - `devFailed`: the short hash of a `dev` whose build failed. The tick skips it until `dev` moves or Hermes clears it. `devError` holds what broke, and the incident watch prints its first line, so Hermes fixes `dev` or reverts the merge that broke it.
 - Review pending: `$FACTORY_HOME/review-pending` names the issue of a finished waste review. Hermes's incident watch prints it, and Hermes deletes it once handled.
@@ -116,7 +118,7 @@ The release tracking card has the label `release`. It waits in Approval for the 
 
 ## Commands
 
-Read: `factory status`, `cards`, `card N`, `jobs`, `queues`, `release`, `failures`, `log N [stage]`, `audit` and `help`.
+Read: `factory status`, `cards`, `card N`, `jobs`, `queues`, `release`, `failures`, `stuck`, `log N [stage]`, `audit` and `help`.
 
 Write, each with `--by` and `--reason`:
 
