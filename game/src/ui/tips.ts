@@ -1,5 +1,6 @@
 // First-time tips for driving and the horn, and a farewell once the player heads out. A tip shows while its moment lasts, one at a time. It goes away for good
 // once the player closes it or does what it says. Seen tips stay in browser storage across saves, and a new game clears them.
+// The player can switch all tips off. Done tips still count as seen while off, so turning tips back on from the Menu shows only what is still new.
 // A new game first runs the opening tips: reach the opening wreck, search it, loot it, patch the engine and mount the
 
 import { isKnockedOut } from "../sim/defeat";
@@ -18,6 +19,7 @@ import { playerCanAct, hostileToPlayer, startPose } from "../sim/world";
 import { el, panel } from "./dom";
 
 const TIPS_KEY = "roam.tips";
+const TIPS_OFF_KEY = "roam.tipsOff";
 
 export type OpeningStep = "wreck" | "search" | "loot" | "patch" | "install";
 export type TipId = OpeningStep | "waypoint" | "drive" | "autoStop" | "stop" | "stopAt" | "manual" | "zones" | "aim" | "honk" | "farewell";
@@ -209,7 +211,23 @@ export function tipToShow(world: World, auto: boolean, seen: ReadonlySet<TipId>,
 
 export function clearTips(storage: Storage): void {
   storage.removeItem(TIPS_KEY);
+  storage.removeItem(TIPS_OFF_KEY);
 }
+
+export function tipsOff(storage: Storage): boolean {
+  const raw = storage.getItem(TIPS_OFF_KEY);
+  if (raw === null) return false;
+  if (raw !== "1") throw new Error(`Stored tips switch is not "1": ${raw}`);
+  return true;
+}
+
+export function setTipsOff(storage: Storage, off: boolean): void {
+  if (off) storage.setItem(TIPS_OFF_KEY, "1");
+  else storage.removeItem(TIPS_OFF_KEY);
+}
+
+// What the Menu sees of the tips: whether they show, and a way to flip that.
+export type TipSwitch = { isOn: () => boolean; setOn: (on: boolean) => void };
 
 function readSeen(storage: Storage): Set<TipId> {
   const raw = storage.getItem(TIPS_KEY);
@@ -227,15 +245,30 @@ export class Tips {
   private shown: TipId | null = null;
   private moment: { world: World; auto: boolean } | null = null;
 
-  constructor(private readonly storage: Storage, parent: HTMLElement) {
+  private off: boolean;
+
+  constructor(
+    private readonly storage: Storage,
+    parent: HTMLElement,
+    private readonly onTurnedOff: () => void,
+  ) {
     this.box = panel("tip", parent);
     this.seen = readSeen(storage);
+    this.off = tipsOff(storage);
     this.box.style.display = "none";
   }
 
   update(world: World, auto: boolean): void {
     this.moment = { world, auto };
     for (const id of doneTips(world, this.seen)) this.markSeen(id);
+    if (this.off) {
+      // Being switched off is not the end of the tip's moment, so nothing passes.
+      if (this.shown !== null) {
+        this.shown = null;
+        this.render();
+      }
+      return;
+    }
     const next = tipToShow(world, auto, this.seen, this.shown);
     if (next === this.shown) return;
     this.passShown();
@@ -243,6 +276,21 @@ export class Tips {
     this.render();
   }
 
+  isOn(): boolean {
+    return !this.off;
+  }
+
+  setOn(on: boolean): void {
+    if (on === !this.off) return;
+    setTipsOff(this.storage, !on);
+    this.off = !on;
+    this.shown = null;
+    this.render();
+    if (on && this.moment) this.update(this.moment.world, this.moment.auto);
+    if (!on) this.onTurnedOff();
+  }
+
+  // The shown tip leaves the screen. A tip marked seenWhenOver has done its job.
   private passShown(): void {
     const tip = TIPS.find((t) => t.id === this.shown);
     if (tip?.seenWhenOver) this.markSeen(tip.id);
@@ -268,8 +316,9 @@ export class Tips {
     if (!tip) return;
     this.box.classList.toggle("opening-tip", tip.opening === true);
     this.box.replaceChildren(
-      el("span", {}, tip.text),
-      el("button", { class: "tip-close", title: "Close", onclick: () => this.close() }, "×"),
+      el("span", { class: "tip-text" }, tip.text),
+      el("button", { class: "tip-close", title: "Close this tip", "aria-label": "Close this tip", onclick: () => this.close() }, "×"),
+      el("div", { class: "tip-actions" }, el("button", { class: "tip-off", onclick: () => this.setOn(false) }, "Turn off tips")),
     );
   }
 }

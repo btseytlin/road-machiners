@@ -14,7 +14,7 @@ import { OPENING_WRECK_ID } from "../sim/opening";
 import { startSearch } from "../sim/search";
 import type { World } from "../sim/types";
 import { TEST_MAP } from "../test/map";
-import { doneTips, openingStep, tipToShow, type TipId } from "./tips";
+import { clearTips, doneTips, openingStep, setTipsOff, tipsOff, tipToShow, type TipId } from "./tips";
 
 describe("driving tips", () => {
   it("walks the player from a waypoint to Space, stopping, stop waypoints and manual mode", () => {
@@ -268,5 +268,41 @@ describe("opening tips", () => {
 
   it("has no opening step in a game without the opening wreck, like an old save", () => {
     expect(openingStep(emptyWorld())).toBeNull();
+  });
+});
+
+function memoryStorage(): Storage {
+  const m = new Map<string, string>();
+  return {
+    getItem: (k: string) => m.get(k) ?? null,
+    setItem: (k: string, v: string) => void m.set(k, v),
+    removeItem: (k: string) => void m.delete(k),
+  } as Storage;
+}
+
+describe("tips switch", () => {
+  it("reads absent as on and 1 as off, and throws on anything else", () => {
+    const s = memoryStorage();
+    expect(tipsOff(s)).toBe(false);
+    s.setItem("roam.tipsOff", "1");
+    expect(tipsOff(s)).toBe(true);
+    s.setItem("roam.tipsOff", "yes");
+    expect(() => tipsOff(s)).toThrow();
+  });
+
+  it("round-trips through storage", () => {
+    const s = memoryStorage();
+    setTipsOff(s, true);
+    expect(tipsOff(s)).toBe(true);
+    setTipsOff(s, false);
+    expect(s.getItem("roam.tipsOff")).toBeNull();
+  });
+
+  it("clears with the seen tips for a new game", () => {
+    const s = memoryStorage();
+    s.setItem("roam.tips", "[]");
+    setTipsOff(s, true);
+    clearTips(s);
+    expect([s.getItem("roam.tips"), s.getItem("roam.tipsOff")]).toEqual([null, null]);
   });
 });

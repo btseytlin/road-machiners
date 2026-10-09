@@ -24,7 +24,7 @@ import { createIcon, createSpeedDial } from "./cards";
 import { aimMarks, TURN_PLAYING, type AimState } from "./weapons";
 import { token } from "./tokens";
 import { createSwitch } from "./switch";
-import { Tips } from "./tips";
+import { Tips, type TipSwitch } from "./tips";
 import { moneyEl } from "./units";
 import { playerVehicle } from "../sim/damage";
 import { affordableRanks, pendingPerkPairs } from "../sim/progress";
@@ -128,7 +128,7 @@ export class Hud {
   private stranded = panel("stranded notice", this.truckStack);
   private recenter = panel("recenter", bottomLeft());
   private cameraSwitch = panel("camera-mode", topRight());
-  private tips = new Tips(window.localStorage, topCenter());
+  private tips = new Tips(window.localStorage, topCenter(), () => this.toast("Tips are off. Menu, Show tips turns them back on."));
   cameraMode: CameraMode = "auto";
   private toastTimer: number | null = null;
 
@@ -212,6 +212,10 @@ export class Hud {
 
   showRecenter(on: boolean): void {
     this.recenter.style.display = on ? "" : "none";
+  }
+
+  tipSwitch(): TipSwitch {
+    return { isOn: () => this.tips.isOn(), setOn: (on) => this.tips.setOn(on) };
   }
 
   getInspectionRoot(): HTMLElement {
