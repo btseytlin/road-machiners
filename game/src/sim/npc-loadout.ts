@@ -1,6 +1,6 @@
 import { chassisDef } from '../data/chassis';
 import { GOODS } from '../data/goods';
-import { GEAR_DRAWS, GEAR_LEVELS, GEAR_LEVEL_IDS, GEAR_WHIM, MAX_GUN_SLOWDOWN, NPC_UPKEEP, NPC_WEAR, PRIORITY_TOP, SCRAP_ARMOR, type CargoRoll, type GearLevel, type LoadoutPriorities, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
+import { GEAR_DRAWS, GEAR_LEVELS, GEAR_LEVEL_IDS, GEAR_WHIM, MAX_GUN_SLOWDOWN, NPC_UPKEEP, NPC_WEAR, PRIORITY_TOP, SCRAP_ARMOR, type CargoRoll, type GearLevel, type Load, type LoadoutPriorities, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
 import { NPC_UTILITY_PARTS, type UtilityRoll } from '../data/npc-utilities';
 import { partDef, type EngineDef, type PartKind } from '../data/parts';
 import { CONDITION } from '../data/wear';
@@ -9,7 +9,7 @@ import { makePart, makeVehicle, newId, type PartSpec } from './factory';
 import { freeCells, mountedItems, type Cell } from './grid';
 import { addGoods, mountPart, stowPart } from './inventory';
 import { vehicleMass } from './mass';
-import { gearBaseline, gearScore, type Load } from './npc-gear-score';
+import { gearBaseline, gearScore } from './npc-gear-score';
 import { gunDrag, meetsSpeedFloor, npcMassRoom, speedShare } from './stats';
 import { nextRandom, type Rng } from './rng';
 import type { GridItem, Vehicle, World } from './types';
@@ -101,6 +101,7 @@ function validateSpareTable(spares: NpcLoadoutTable['spares']): void {
 }
 
 function validateTable(table: NpcLoadoutTable): void {
+  for (const reserve of Object.values(table.haul)) if (!Number.isInteger(reserve) || reserve < 0) throw new Error('NPC haul reserves must be non-negative integers');
   if (!Number.isFinite(table.budget) || table.budget <= 0) throw new Error('NPC equipment budget must be positive and finite');
   validateWeights(table.chassis);
   for (const entry of table.chassis) chassisDef(entry.value);
@@ -140,11 +141,18 @@ function tryMountChoice(world: World, v: Vehicle, id: string, budget: number, mo
   return everyGunFires(candidate) ? candidate : null;
 }
 
-type Plan = { budget: number; share: number };
+type Plan = { budget: number; share: number; keep: Load; keepShare: number };
+
+const NO_RESERVE: Load = { kg: 0, cells: 0 };
+
+function keepsHaul(v: Vehicle, plan: Plan): boolean {
+  return freeCells(v) >= plan.keep.cells && npcMassRoom(v, plan.keepShare) >= plan.keep.kg;
+}
 
 function tryMountExtra(world: World, v: Vehicle, id: string, plan: Plan, mount?: Cell[]): Vehicle | null {
   const next = tryMountChoice(world, v, id, plan.budget, mount);
-  return next && meetsSpeedFloor(next, plan.share) ? next : null;
+  if (!next || !meetsSpeedFloor(next, plan.share)) return null;
+  return !keepsHaul(v, plan) || keepsHaul(next, plan) ? next : null;
 }
 
 function rollWear(world: World, rng: Rng, level: Level, v: Vehicle): void {
@@ -254,25 +262,26 @@ function chooseGoods(rng: Rng, table: NpcLoadoutTable, level: Level, room: Room)
 function chooseCargo(world: World, rng: Rng, wearRng: Rng, table: NpcLoadoutTable, level: Level, v: Vehicle): { spares: PartSpec[]; carried: Record<string, number> } {
   const load = { ...v, items: [...v.items] };
   const share = speedShare(table.priorities);
-  const massLeft = () => Math.min(chassisDef(v.chassisId).ratedMass - vehicleMass(load), npcMassRoom(load, share));
+  const massLeft = () => Math.max(0, Math.min(chassisDef(v.chassisId).ratedMass - vehicleMass(load), npcMassRoom(load, share)) - table.haul.kg);
+  const cellsLeft = () => Math.max(0, freeCells(load) - table.haul.cells);
   const carried: Record<string, number> = {};
   const addGood = (good: string, n: number) => {
     const added = addGoods(world, load, good, n);
     if (added > 0) carried[good] = (carried[good] ?? 0) + added;
   };
-  addGood('parts', Math.min(NPC_UPKEEP.repairParts, Math.floor(massLeft() / GOODS.parts.mass)));
-  const cargo = chooseGoods(rng, table, level, { cells: freeCells(load), mass: massLeft() });
+  addGood('parts', Math.min(NPC_UPKEEP.repairParts, Math.floor(massLeft() / GOODS.parts.mass), cellsLeft()));
+  const cargo = chooseGoods(rng, table, level, { cells: cellsLeft(), mass: massLeft() });
   if (cargo) addGood(cargo.good, cargo.count);
-  return { spares: addSpareParts(world, wearRng, table, level, load, massLeft), carried };
+  return { spares: addSpareParts(world, wearRng, table, level, load, { mass: massLeft, cells: cellsLeft }), carried };
 }
 
-function addSpareParts(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, load: Vehicle, massLeft: () => number): PartSpec[] {
+function addSpareParts(world: World, rng: Rng, table: NpcLoadoutTable, level: Level, load: Vehicle, left: { mass: () => number; cells: () => number }): PartSpec[] {
   if (!table.spares) return [];
   const added: PartSpec[] = [];
   const count = Math.round(sampleWeighted(rng, table.spares.count) * level.cargo);
   for (let i = 0; i < count; i++) {
     const defId = sampleWeighted(rng, table.spares.pool);
-    if (defId === null || partDef(defId).mass > massLeft()) continue;
+    if (defId === null || partDef(defId).mass > left.mass() || partDef(defId).w * partDef(defId).h > left.cells()) continue;
     const part = makePart(world, defId, wearOf(rng, level));
     if (stowPart(world, load, part)) added.push({ defId, wear: part.wear });
   }
@@ -285,12 +294,12 @@ function chooseVehicle(probe: World, rng: Rng, wearRng: Rng, template: NpcTempla
   const engineWear = wearOf(wearRng, level);
   const choices = fastChoices(probe, rng, template, chassisId, table.budget, engineWear);
   let v = wearEngine(probe, withFreshIds(probe, chooseRequiredParts(rng, table, choices)), engineWear);
-  const whole = { budget: table.budget, share: 0 };
-  v = chooseOptionalPart(probe, rng, v, whole, table.cargoPart);
-  v = chooseOptionalPart(probe, rng, v, whole, utilityRollsAt(utilityPoolOf(template), gear), withinGunDraw);
+  const keepShare = speedShare(table.priorities);
+  v = chooseOptionalPart(probe, rng, v, { budget: table.budget, share: 0, keep: NO_RESERVE, keepShare }, table.cargoPart);
+  v = chooseOptionalPart(probe, rng, v, { budget: table.budget, share: 0, keep: table.haul, keepShare }, utilityRollsAt(utilityPoolOf(template), gear), withinGunDraw);
   const base = computeEquipmentCost(v);
   const budget = base + level.budget * Math.max(0, table.budget - base);
-  return pickGear(probe, rng, table, v, { budget, share: speedShare(table.priorities) }, biggestLoad(table, level));
+  return pickGear(probe, rng, table, v, { budget, share: keepShare, keep: table.haul, keepShare }, biggestLoad(table, level));
 }
 
 function fastChoices(probe: World, rng: Rng, template: NpcTemplate, chassisId: string | null, budget: number, wear: number): ArmedChoice[] {
@@ -299,7 +308,12 @@ function fastChoices(probe: World, rng: Rng, template: NpcTemplate, chassisId: s
   const all = chassis.map((entry) => ({ value: armedChoices(probe, template, entry.value, budget), weight: entry.weight }));
   if (all.every((entry) => entry.value.length === 0)) throw new Error(`No valid required NPC loadout for ${template.id}`);
   const fast = (c: ArmedChoice) => meetsSpeedFloor(wearEngine(probe, c.vehicle, wear), 0);
+  const roomy = (c: ArmedChoice) => keepsHaul(wearEngine(probe, c.vehicle, wear), { budget, share: 0, keep: table.haul, keepShare: speedShare(table.priorities) });
   const choices = all.map((entry) => ({ ...entry, value: entry.value.filter(fast) })).filter((entry) => entry.value.length > 0);
+  if (table.haul.kg > 0 || table.haul.cells > 0) {
+    const roomyChoices = choices.map((entry) => ({ ...entry, value: entry.value.filter(roomy) })).filter((entry) => entry.value.length > 0);
+    if (roomyChoices.length > 0) return sampleWeighted(rng, roomyChoices);
+  }
   if (!choices.length) throw new Error(`No ${template.id} build on ${chassisId ?? 'any chassis'} keeps MIN_NPC_SPEED on an engine at wear ${wear}`);
   return sampleWeighted(rng, choices);
 }

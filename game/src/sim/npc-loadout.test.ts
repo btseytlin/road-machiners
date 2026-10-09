@@ -623,11 +623,52 @@ describe('loadout fingerprint', () => {
   it('rolls the same loadouts and RNG streams for every template', () => {
     const w = emptyWorld();
     const loadouts = Object.values(NPCS).flatMap((template) => Array.from({ length: 5 }, () => generateNpcLoadout(w, template)));
-    expect(sha({ loadouts, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('5567917b7ce31784');
+    expect(sha({ loadouts, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('2632d8f7c0544f55');
   }, budget(180_000));
 
   it('populates a new world the same way', () => {
     const w = newWorld(7, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
-    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('fd7d53679332c8ea');
+    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('19a76af549836b34');
   }, budget(60_000));
+});
+
+describe('raider haul room', () => {
+  const RAIDERS = ['buggy', 'gunwagon'];
+  const rolled = (id: string, level: GearLevel, seed: number) => {
+    const world = { ...structuredClone(fixture), vehicles: [], rngState: seed * 7919 + 1, marketRng: { rngState: seed * 104729 + 1 } };
+    const template = NPCS[id];
+    return { template, v: spawnAt(world, template, generateNpcLoadout(world, template, null, level), { x: 40, y: 30 }) };
+  };
+
+  it.each(RAIDERS)('keeps room for the reserve after its own load on at least 95%% of %s rolls, armed', (id) => {
+    let kept = 0;
+    let rolls = 0;
+    for (const level of ['standard', 'heavy', 'loaded'] as const) {
+      for (let seed = 1; seed <= 40; seed++, rolls++) {
+        const { template, v } = rolled(id, level, seed);
+        if (freeCells(v) >= template.loadout.haul.cells && npcMassRoom(v) >= template.loadout.haul.kg) kept++;
+        expect(mountedItems(v, 'weapon').length).toBeGreaterThan(0);
+      }
+    }
+    expect(kept / rolls).toBeGreaterThanOrEqual(0.95);
+  }, budget(240_000));
+
+  it('rolls the same loadouts for a table with no reserve as before the reserve existed', () => {
+    const rows: unknown[] = [];
+    for (const template of Object.values(NPCS)) {
+      if (RAIDERS.includes(template.id)) continue;
+      for (let seed = 1; seed <= 6; seed++) {
+        const world = { ...structuredClone(fixture), vehicles: [], rngState: seed * 7919 + 1, marketRng: { rngState: seed * 104729 + 1 } };
+        rows.push([template.id, generateNpcLoadout(world, template), world.rngState, world.marketRng.rngState]);
+      }
+    }
+    expect(createHash('sha1').update(JSON.stringify(rows)).digest('hex')).toBe('10b4021a26c6984802a365800a989002844508de');
+  }, budget(240_000));
+
+  it('rejects a negative or fractional reserve', () => {
+    const template = { ...NPCS.buggy, loadout: { ...NPCS.buggy.loadout, haul: { kg: -1, cells: 0 } } };
+    expect(() => generateNpcLoadout({ ...fixture }, template)).toThrow(/haul reserves/);
+    const fractional = { ...NPCS.buggy, loadout: { ...NPCS.buggy.loadout, haul: { kg: 0, cells: 1.5 } } };
+    expect(() => generateNpcLoadout({ ...fixture }, fractional)).toThrow(/haul reserves/);
+  });
 });

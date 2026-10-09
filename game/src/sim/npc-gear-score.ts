@@ -1,5 +1,5 @@
 import { chassisDef } from '../data/chassis';
-import { GEAR_THREAT_SPEED, PRIORITY_TOP, type LoadoutPriorities } from '../data/npcs';
+import { GEAR_THREAT_SPEED, PRIORITY_TOP, type Load, type LoadoutPriorities } from '../data/npcs';
 import type { WeaponDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { SIDES } from './armor';
@@ -9,7 +9,6 @@ import { vehicleMass } from './mass';
 import { vehicleStats } from './stats';
 import type { Vehicle, World } from './types';
 
-export type Load = { kg: number; cells: number };
 
 export type GearBaseline = { rival: number; rear: number; load: Load; rivalTarget: Target; rivalKills: Map<string, number> };
 

@@ -13,6 +13,7 @@ export const NPC_RESOURCES = {
 export type TraitId = 'trader' | 'scavenger' | 'raider' | 'scumbag' | 'coward' | 'lawman' | 'courier' | 'roamer' | 'vulture' | 'supplier' | 'guard' | 'merc' | 'brave';
 
 export type Weighted<T> = { value: T; weight: number };
+export type Load = { kg: number; cells: number };
 export type CargoRoll = { good: string; count: number };
 export type SpareTable = { pool: Weighted<string | null>[]; count: Weighted<number>[] };
 export type GearLevel = 'poor' | 'light' | 'standard' | 'heavy' | 'loaded';
@@ -30,6 +31,7 @@ export type NpcLoadoutTable = {
   goods: Weighted<CargoRoll | null>[];
   spares: SpareTable | null;
   targets: { guns: [number, number]; armor: [number, number] };
+  haul: Load;
 };
 
 export type LoadoutPriorities = { speed: number; firepower: number; armor: number; cargo: number };
@@ -185,6 +187,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
     targets: { guns: [1.85, 2.85], armor: [0.2, 0.35] },
+    haul: { kg: 200, cells: 3 },
     spares: null,
   },
   gunwagon: {
@@ -235,6 +238,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 2 }, weight: 1 },
     ],
     targets: { guns: [2.15, 3.25], armor: [0.4, 0.7] },
+    haul: { kg: 400, cells: 5 },
     spares: null,
   },
   trader: {
@@ -289,6 +293,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 4 }, weight: 1 },
     ],
     targets: { guns: [2.65, 4.05], armor: [0.4, 0.7] },
+    haul: { kg: 0, cells: 0 },
     spares: TRADER_SPARES,
   },
   scavenger: {
@@ -339,6 +344,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
     targets: { guns: [2, 3.1], armor: [0.2, 0.4] },
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   bowlPatrol: {
@@ -357,6 +363,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
     targets: { guns: [2.5, 3.8], armor: [0.5, 0.85] },
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   nosePatrol: {
@@ -374,6 +381,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
     targets: { guns: [2.55, 3.85], armor: [0.5, 0.85] },
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   courier: {
@@ -414,6 +422,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "meds", count: 2 }, weight: 2 },
     ],
     targets: { guns: [2.05, 3.1], armor: [0.15, 0.3] },
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   roamer: {
@@ -459,6 +468,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "tools", count: 1 }, weight: 1 },
     ],
     targets: { guns: [2.05, 3.15], armor: [0.2, 0.35] },
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   vulture: {
@@ -506,6 +516,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 1 }, weight: 2 },
     ],
     targets: { guns: [2.25, 3.4], armor: [0.5, 0.8] },
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   convoy: {
@@ -545,6 +556,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "water", count: 6 }, weight: 1 },
     ],
     targets: { guns: [3.65, 5.55], armor: [0.55, 0.85] },
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   convoyGuard: {
@@ -582,6 +594,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
     targets: { guns: [2.6, 3.9], armor: [0.4, 0.65] },
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   merc: {
@@ -625,6 +638,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
     targets: { guns: [2.8, 4.3], armor: [0.5, 0.85] },
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
 };
