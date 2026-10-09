@@ -10,9 +10,10 @@ import { mountPart } from "../sim/inventory";
 import { maxHp } from "../sim/wear";
 import { workOf, addState } from "../sim/states";
 import { startAid } from "../sim/aid";
-import { contractDue, heldContractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel, conditionTier, conditionStatus, showsCondition, GOODS_COLUMNS, PROFIT_HEAD_TITLE, saleEstimate, estimateText, estimateTitle, lotTitle } from "./format";
+import { contractDue, heldContractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel, conditionTier, conditionStatus, showsCondition, CRATE_NOTE, GOODS_COLUMNS, PROFIT_HEAD_TITLE, saleEstimate, estimateText, estimateTitle, lotTitle } from "./format";
 import { mountedParts } from "../sim/grid";
-import { fuelLiters } from "./units";
+import { fuelLiters, kg } from "./units";
+import { CRATE_MASS } from "../data/goods";
 import { wreckVehicle } from "../sim/combat";
 
 function part(wear: number): PartInstance {
@@ -102,6 +103,12 @@ describe("contract text", () => {
     const haul: Contract = { id: "c3", shop: "bowl", kind: "haul", good: "salt", units: 3, to: "nose", reward: 100, deadline: 100, window: 100, rush: false, tier: 1 };
     expect(contractSummary(haul).startsWith("Haul 3")).toBe(true);
     expect(contractSummary({ ...haul, rush: true }).startsWith("Rush: Haul 3")).toBe(true);
+  });
+
+  it("counts a haul in crates", () => {
+    const haul: Contract = { id: "c4", shop: "bowl", kind: "haul", good: "salt", units: 5, to: "nose", reward: 100, deadline: 100, window: 100, rush: false, tier: 1 };
+    expect(contractSummary(haul)).toBe("Haul 5 crates of Salt to Nose");
+    expect(contractSummary({ ...haul, units: 1 })).toBe("Haul 1 crate of Salt to Nose");
   });
 
   it("shows the window in whole game hours, at least one", () => {
@@ -525,7 +532,12 @@ describe("saleEstimate", () => {
 
 describe("goods table words", () => {
   it("has terse column heads", () => {
-    expect(GOODS_COLUMNS).toEqual({ good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit/unit" });
+    expect(GOODS_COLUMNS).toEqual({ good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit/crate" });
+  });
+
+  it("says prices are per crate of the one crate mass", () => {
+    expect(CRATE_NOTE).toBe(`Prices are per ${kg(CRATE_MASS)} crate. One crate fills one cargo cell.`);
+    expect(CRATE_NOTE).toContain("50 kg");
   });
 
   it("explains the profit head in a hover title without turns", () => {

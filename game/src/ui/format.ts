@@ -1,6 +1,6 @@
 // Event log lines.
 
-import { GOODS } from '../data/goods';
+import { CRATE_MASS, GOODS } from '../data/goods';
 import { CONTRACTS } from '../data/market';
 import { partDef } from '../data/parts';
 import type { Contract } from '../sim/market';
@@ -86,7 +86,7 @@ function aidWorkLabel(world: World, v: Vehicle, s: NpcState): string {
 export function workProgress(work: WorkLeft): number {
   return 1 - work.turnsLeft / work.total;
 }
-import { damage, fuelLiters, hp, moneyAmount, moneyText } from './units';
+import { damage, fuelLiters, hp, kg, moneyAmount, moneyText } from './units';
 import { npcName } from '../sim/spawn';
 
 export function wearLabel(part: PartInstance): string {
@@ -512,8 +512,13 @@ function contractText(c: Contract, outcome: keyof typeof CONTRACT_OUTCOME): { te
   return { text: `${label}: ${contractSummary(c)}${tail}`, cls };
 }
 
+function haulSummary(c: Extract<Contract, { kind: 'haul' }>): string {
+  const crates = c.units === 1 ? 'crate' : 'crates';
+  return `${c.rush ? 'Rush: ' : ''}Haul ${c.units} ${crates} of ${GOODS[c.good].name} to ${siteName(c.to)}`;
+}
+
 export function contractSummary(c: Contract): string {
-  if (c.kind === 'haul') return `${c.rush ? 'Rush: ' : ''}Haul ${c.units} ${GOODS[c.good].name} to ${siteName(c.to)}`;
+  if (c.kind === 'haul') return haulSummary(c);
   if (c.kind === 'fetch') {
     const rebuilt = CONTRACTS.fetch.maxWear === 1 ? 'rebuilt at most once' : `rebuilt at most ${CONTRACTS.fetch.maxWear} times`;
     return `Bring ${partDef(c.defId).name} to ${siteName(c.shop)}: working, ${rebuilt}`;
@@ -697,7 +702,9 @@ export type SaleEstimate =
   | { kind: "gain" | "loss"; perUnit: number; avgCost: number }
   | { kind: "even"; avgCost: number };
 
-export const GOODS_COLUMNS = { good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit/unit" } as const;
+export const GOODS_COLUMNS = { good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit/crate" } as const;
+
+export const CRATE_NOTE = `Prices are per ${kg(CRATE_MASS)} crate. One crate fills one cargo cell.`;
 
 export const PROFIT_HEAD_TITLE = "Sell price here minus your average cost. Salvaged and hauled goods count at their usual value.";
 

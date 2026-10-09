@@ -47,7 +47,7 @@ import type { PartInstance, Vehicle, World } from "../sim/types";
 import { chassisMap, chassisPortrait, chassisStats, compareBase, createIcon, createItemIcon, diffStats, statGrid, type IconName } from "./cards";
 import { PartRows, type PartRow } from "./part-rows";
 import { el, panel } from "./dom";
-import { contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, heldContractDue, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
+import { contractSummary, contractWindow, CRATE_NOTE, estimateText, estimateTitle, GOODS_COLUMNS, heldContractDue, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
 import { InventoryView, truckChips } from "./inventory";
 import type { UiHost } from "./host";
 import { fuelLiters, moneyAmount, moneyText } from "./units";
@@ -468,9 +468,9 @@ function caption(text: string): HTMLElement {
   return el("span", { class: "cap" }, text);
 }
 
-function goodsHead(withTheirs: boolean): HTMLElement {
+function goodsHead(withTheirs: boolean): DocumentFragment {
   const c = GOODS_COLUMNS;
-  return el(
+  const head = el(
     "div",
     { class: "goods-head dim" },
     el("span", {}, c.good),
@@ -480,6 +480,9 @@ function goodsHead(withTheirs: boolean): HTMLElement {
     el("span", {}, c.held),
     el("span", { title: PROFIT_HEAD_TITLE, "aria-label": PROFIT_HEAD_TITLE }, c.profit),
   );
+  const fragment = document.createDocumentFragment();
+  fragment.append(head, el("div", { class: "goods-note dim" }, CRATE_NOTE));
+  return fragment;
 }
 
 function countCell(cls: "theirs" | "held", n: number): HTMLElement {

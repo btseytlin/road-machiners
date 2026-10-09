@@ -1569,6 +1569,20 @@ body {
   overflow: hidden;
   clip-path: inset(50%);
 }
+/* The crate mass on a goods cell, along its bottom edge over the icon. */
+.inv-item-mass {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  font-size: 9px;
+  line-height: 11px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  color: #d8d2bc;
+  background: rgba(20, 26, 29, 0.72);
+}
 .inv-item.mounted {
   border-color: #a4a074;
 }
@@ -2400,6 +2414,11 @@ canvas.view {
 }
 .goods-head {
   font-size: 12px;
+}
+.goods-note {
+  font-size: 11px;
+  padding: 2px 6px 4px;
+  border-bottom: 1px solid #3b454b;
 }
 .goods-head span:nth-last-child(-n + 2),
 .goods.truck .goods-head span:nth-child(2) {

@@ -72,6 +72,7 @@ export function itemBox(it: GridItem, chassisId: string, mounted: boolean, cell:
     el("span", { class: "inv-item-name" }, itemLabel(it).short),
   );
   if (it.kind === "part") node.append(conditionBar(it.part));
+  else node.append(el("span", { class: "inv-item-mass" }, kg(CRATE_MASS)));
   return node;
 }
 
@@ -126,7 +127,7 @@ export function itemLabel(it: GridItem): { short: string } {
 }
 
 export function itemTitle(it: GridItem, mounted: boolean): string {
-  if (it.kind === "good") return GOODS[it.good].name;
+  if (it.kind === "good") return `${GOODS[it.good].name}, crate of ${kg(CRATE_MASS)}`;
   if (partDef(it.part.defId).kind === "core")
     return `${partTitle(it.part)}\nBuilt in`;
   return `${partTitle(it.part)}\n${mounted ? "Mounted" : "Spare"}`;
