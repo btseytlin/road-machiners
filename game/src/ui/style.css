@@ -1823,13 +1823,16 @@ body {
   #ui .right-top {
     max-height: calc(100dvh - 80px - 264px);
   }
-  /* The instruments fill the width here, so the opening tip takes the free band under them, over the end turn button. */
+  /* The instruments fill the bottom here, so the opening tip takes a band above them and the modal gives up that height. */
   #ui:has(.modal:not([style*="display: none"])) > .right-top > .opening-tip {
     left: 14px;
     right: auto;
-    bottom: 8px;
+    bottom: 226px;
     width: calc(100vw - 28px);
     font-size: 13px;
+  }
+  #ui:has(.modal:not([style*="display: none"])):has(.opening-tip:not([style*="display: none"])) .modal {
+    height: calc(100dvh - 344px);
   }
   #ui .modal {
     padding: 20px 16px;
