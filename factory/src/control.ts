@@ -4,7 +4,7 @@ import { readCommittee } from './committee';
 import { holdCard, releaseHold } from './hold';
 import { killJob } from './jobs';
 import { appendLedger, recordJob } from './ledger';
-import { CARD_JOBS, MOVE_TARGETS, type MoveTarget } from './position';
+import { CARD_JOBS, MOVE_TARGETS, isMerging, type MoveTarget } from './position';
 import { withStatus } from './post-status';
 import { dropReplyMedia } from './reply-media';
 import { clearSessions } from './sessions';
@@ -12,12 +12,11 @@ import { readState, updateState } from './state';
 import { agentHome, workDir } from './stages/common';
 import { closeCard } from './stages/approval';
 import { moveCard, type CardStep } from './card-events';
-import { BRANCH, GAME_DIR, NEEDS_INFO_LABEL, OUT_DIR, RELEASE_LABEL, STUCK_LABEL, TASK_FILE, isCleanupTask, type Card, type Column, type Ctx, type FactoryState, type ReleaseState, type TestPhase } from './types';
+import { BRANCH, GAME_DIR, NEEDS_INFO_LABEL, RELEASE_LABEL, STUCK_LABEL, TASK_FILE, isCleanupTask, type Card, type Column, type Ctx, type FactoryState, type ReleaseState } from './types';
 
 export const DROP_QUEUES = ['approval', 'removal', 'ship', 'change', 'incident'] as const;
 export type DropQueue = (typeof DROP_QUEUES)[number];
 
-// One order that changes the factory state, written by the `factory` CLI into $FACTORY_HOME/inbox.
 export type ControlAction =
   | { action: 'move'; issue: number; to: MoveTarget }
   | { action: 'merge'; issue: number }
@@ -30,10 +29,8 @@ export type ControlAction =
   | { action: 'unhold'; issue: number };
 export type ControlCommand = ControlAction & { by: string; reason: string };
 
-// What an action did: the issue it concerns, if any, and a sentence for the issue comment.
 type Outcome = { issue: number | null; text: string };
 
-// Writes by temp file and rename, so the tick never reads half a command. The temp name has no .json ending, so the inbox skips it.
 export function writeControl(home: string, command: ControlCommand, now: Date): string {
   const dir = join(home, 'inbox');
   mkdirSync(dir, { recursive: true });
@@ -90,8 +87,6 @@ export function parseControl(raw: unknown): ControlCommand {
   return { ...(SHAPES[name as ControlAction['action']](data) as ControlAction), by, reason };
 }
 
-// `hermes` is Hermes's own name for mechanical actions it takes on its judgment. Any other actor must be a committee member.
-// Hermes passes the sender's telegram id, which the committee file matches exactly. A display name matches only when it equals the name in the file.
 export function resolveActor(ctx: Ctx, by: string, gated: boolean): string {
   if (by === 'hermes') {
     if (gated) throw new Error('This action needs a committee member, not Hermes. Pass --by <member>.');
@@ -103,8 +98,6 @@ export function resolveActor(ctx: Ctx, by: string, gated: boolean): string {
   return member.name ?? member.github ?? member.telegram;
 }
 
-// Product decisions need a member: Ship, a Remove, a merge of factory code, and an approval. A move to Hardening approves the card, so it is gated like a merge.
-// A merge or a move to Hardening of a card the committee already approved needs none. Route, retry, cut and the other moves are mechanical.
 export function isGated(ctx: Ctx, command: ControlCommand): boolean {
   if (command.action === 'ship' || command.action === 'remove' || command.action === 'merge-change') return true;
   if (!approves(command)) return false;
@@ -114,7 +107,7 @@ export function isGated(ctx: Ctx, command: ControlCommand): boolean {
 }
 
 function approves(command: ControlCommand): command is Extract<ControlCommand, { action: 'merge' | 'move' }> {
-  return command.action === 'merge' || (command.action === 'move' && command.to === 'harden');
+  return command.action === 'merge' || (command.action === 'move' && APPROVES.includes(command.to));
 }
 
 type Handlers = { [A in ControlAction['action']]: (ctx: Ctx, command: Extract<ControlCommand, { action: A }>, by: string) => Promise<Outcome> };
@@ -129,7 +122,6 @@ const HANDLERS: Handlers = {
   unhold: async (ctx, command) => ({ issue: command.issue, text: releaseHold(ctx, command.issue) }),
 };
 
-// Runs inside the tick's guard, so no job starts between the checks and the changes. A command that cannot apply throws before it changes anything.
 export async function applyControl(ctx: Ctx, command: ControlCommand): Promise<string> {
   const by = resolveActor(ctx, command.by, isGated(ctx, command));
   const handler = HANDLERS[command.action] as (ctx: Ctx, command: ControlCommand, by: string) => Promise<Outcome>;
@@ -139,18 +131,12 @@ export async function applyControl(ctx: Ctx, command: ControlCommand): Promise<s
   return text;
 }
 
-const COLUMN: Record<MoveTarget, Column> = { triage: 'Triage', design: 'Design', implement: 'Implementation', verify: 'Testing', checks: 'Testing', approval: 'Testing', harden: 'Hardening', done: 'Done' };
-const PHASE: Partial<Record<MoveTarget, TestPhase>> = { checks: 'checks', approval: 'post' };
-// A card put back before its build or its preview, or finished, no longer holds the approval it had.
-const DROPS_APPROVAL: MoveTarget[] = ['triage', 'design', 'implement', 'verify', 'done'];
+const COLUMN: Record<MoveTarget, Column> = { triage: 'Triage', design: 'Design', implement: 'Implementation', verify: 'Testing', approval: 'Testing', harden: 'Hardening', merging: 'Merging', done: 'Done' };
+const DROPS_APPROVAL: MoveTarget[] = ['triage', 'design', 'implement', 'verify', 'approval', 'done'];
+const APPROVES: MoveTarget[] = ['harden', 'merging'];
 
-// An approved card runs its checks or its build in Hardening, since an approved card in Testing would skip hardening.
 function isApproved(state: FactoryState, card: Card): boolean {
   return String(card.issue) in state.approvedResolving || isCleanupTask(card.labels);
-}
-
-function targetColumn(ctx: Ctx, card: Card, to: MoveTarget): Column {
-  return (to === 'checks' || to === 'approval') && isApproved(readState(ctx.statePath), card) ? 'Hardening' : COLUMN[to];
 }
 
 async function requireCard(ctx: Ctx, issue: number): Promise<Card> {
@@ -167,16 +153,14 @@ function cardPosts(state: FactoryState, issue: number): string[] {
   return Object.entries(state.approvalPosts).filter(([, number]) => number === issue).map(([id]) => id);
 }
 
-// Checked before a card leaves its position, so a refused order changes nothing.
-// A running merge is never killed, since it may stop between its push and its deploy. Hermes repeats the order after the merge.
-function requireLeavable(ctx: Ctx, issue: number): void {
+function requireLeavable(ctx: Ctx, card: Card): void {
+  const { issue } = card;
   const state = readState(ctx.statePath);
-  if (state.jobs.some((job) => job.issue === issue && job.stage === 'approve')) throw new Error(`Issue #${issue} is merging now. Repeat the order after the merge.`);
+  if (isMerging(state, card)) throw new Error(`Issue #${issue} is merging now. Repeat the order after the merge.`);
   const missing = cardPosts(state, issue).find((id) => state.postCaptions[id] === undefined);
   if (missing !== undefined) throw new Error(`No caption is recorded for post ${missing}`);
 }
 
-// Edits every open post of the card with the status line, and forgets them with the reply images kept for them.
 async function closePosts(ctx: Ctx, issue: number, status: string): Promise<void> {
   const before = readState(ctx.statePath);
   for (const id of cardPosts(before, issue)) {
@@ -188,7 +172,6 @@ async function closePosts(ctx: Ctx, issue: number, status: string): Promise<void
   }
 }
 
-// The kill comes first, so the dying job cannot write to a store after it is cleared.
 async function stopJobs(ctx: Ctx, issue: number): Promise<void> {
   const jobs = readState(ctx.statePath).jobs.filter((job) => job.issue === issue && CARD_JOBS.includes(job.stage));
   for (const job of jobs) {
@@ -198,13 +181,11 @@ async function stopJobs(ctx: Ctx, issue: number): Promise<void> {
   updateState(ctx.statePath, (state) => ({ ...state, jobs: state.jobs.filter((job) => !jobs.some((stopped) => stopped.id === job.id)) }));
 }
 
-// Clears what a position keeps in the state. The failures go too, so Hermes's incident watch does not report the old position.
 function clearCardState(state: FactoryState, issue: number, dropsApproval: boolean): FactoryState {
   const key = String(issue);
   return {
     ...state,
-    testPhase: omitKey(state.testPhase, key),
-    patching: omitKey(state.patching, key),
+    postOnly: state.postOnly.filter((number) => number !== issue),
     interrupted: state.interrupted.filter((number) => number !== issue),
     pendingApprovals: omitKey(state.pendingApprovals, key),
     approvedResolving: dropsApproval ? omitKey(state.approvedResolving, key) : state.approvedResolving,
@@ -217,7 +198,6 @@ async function clearFlags(ctx: Ctx, card: Card): Promise<void> {
   for (const label of [STUCK_LABEL, NEEDS_INFO_LABEL]) if (card.labels.includes(label)) await ctx.github.removeLabel(card.issue, label);
 }
 
-// The work clone and the branch hold what a position needs. A missing one throws with the position that makes it.
 async function requireBranch(ctx: Ctx, issue: number): Promise<void> {
   await ctx.repo.fetch();
   try {
@@ -225,13 +205,6 @@ async function requireBranch(ctx: Ctx, issue: number): Promise<void> {
   } catch (error) {
     throw new Error(`Issue #${issue} has no branch ${BRANCH(issue)} on GitHub (${(error as Error).message}); move it to design, which creates the branch.`);
   }
-}
-
-// An approved card merges with no post, so it needs no approval file.
-async function requireApprovalFile(ctx: Ctx, issue: number): Promise<void> {
-  if (isApproved(readState(ctx.statePath), await requireCard(ctx, issue))) return;
-  const path = join(agentHome(workDir(ctx, issue), GAME_DIR), OUT_DIR, 'approval.json');
-  if (!existsSync(path)) throw new Error(`Issue #${issue} has no ${path}; move it to verify, which writes the approval.`);
 }
 
 async function requireTaskFile(ctx: Ctx, issue: number): Promise<void> {
@@ -243,12 +216,11 @@ type Need = (ctx: Ctx, issue: number) => Promise<void>;
 const NEEDS: Partial<Record<MoveTarget, Need[]>> = {
   implement: [requireTaskFile],
   verify: [requireBranch],
-  checks: [requireBranch, requireApprovalFile],
-  approval: [requireBranch, requireApprovalFile],
+  approval: [requireBranch],
   harden: [requireBranch],
+  merging: [requireBranch],
 };
 
-// The release flow owns the tracking card.
 async function requireWorkCard(ctx: Ctx, issue: number): Promise<Card> {
   const found = await requireCard(ctx, issue);
   if (found.labels.includes(RELEASE_LABEL)) throw new Error(`Issue #${issue} is the release tracking card. The release flow owns it.`);
@@ -257,11 +229,9 @@ async function requireWorkCard(ctx: Ctx, issue: number): Promise<Card> {
 
 type Relocation = { column: Column; step: CardStep; status: string; dropsApproval: boolean; enter: (state: FactoryState) => FactoryState };
 
-// Every check comes first, so a refused order changes nothing. Then the writes run in an order a repeat of the same order can finish:
-// jobs, board, state, posts, labels. Each step skips what an earlier run did.
 async function relocate(ctx: Ctx, card: Card, needs: Need[], plan: Relocation): Promise<void> {
   const { issue } = card;
-  requireLeavable(ctx, issue);
+  requireLeavable(ctx, card);
   for (const need of needs) await need(ctx, issue);
   await stopJobs(ctx, issue);
   await moveCard(ctx, issue, plan.column, plan.step);
@@ -274,45 +244,39 @@ async function relocate(ctx: Ctx, card: Card, needs: Need[], plan: Relocation): 
 async function move(ctx: Ctx, command: Extract<ControlCommand, { action: 'move' }>, by: string): Promise<Outcome> {
   const { issue, to } = command;
   const card = await requireWorkCard(ctx, issue);
-  const phase = PHASE[to];
   const key = String(issue);
   await relocate(ctx, card, NEEDS[to] ?? [], {
-    column: targetColumn(ctx, card, to),
-    // A drop to Done ends the card the way Deny does, so its line says so.
+    column: COLUMN[to],
     step: to === 'done' ? 'dropped' : 'moved',
     status: `↪️ Moved to ${to} by ${by}: ${command.reason}`,
     dropsApproval: DROPS_APPROVAL.includes(to),
     enter: (state) => {
-      const phased = phase === undefined ? state : { ...state, testPhase: { ...state.testPhase, [key]: phase } };
-      const kept = { ...phased, held: keptHold(phased.held, key, to) };
-      // A move to Hardening is an approval, like a merge order. A card approved already keeps its approver.
-      return to === 'harden' && !isApproved(kept, card) ? { ...kept, approvedResolving: { ...kept.approvedResolving, [key]: by } } : kept;
+      const posted = to === 'approval' ? { ...state, postOnly: [...state.postOnly, issue] } : state;
+      const kept = { ...posted, held: keptHold(posted.held, key, to) };
+      return APPROVES.includes(to) && !isApproved(kept, card) ? { ...kept, approvedResolving: { ...kept.approvedResolving, [key]: by } } : kept;
     },
   });
   if (to === 'done') await closeCard(ctx, issue, `Dropped by ${by}: ${command.reason}`, 'dropped');
   return { issue, text: `Moved to ${to}.` };
 }
 
-// A hold outlives other moves, since it is a decision of its own. The move clears the sessions, so the stage starts fresh and no stopped job resumes.
-// Done runs nothing, so a hold there means nothing.
 function keptHold(held: FactoryState['held'], key: string, to: MoveTarget): FactoryState['held'] {
   if (!(key in held)) return held;
   return to === 'done' ? omitKey(held, key) : { ...held, [key]: { ...held[key], stage: null } };
 }
 
-// The approve job merges at once for a card in Approval that holds an approval, so the merge needs no post and no hardening.
 async function merge(ctx: Ctx, command: Extract<ControlCommand, { action: 'merge' }>, by: string): Promise<Outcome> {
   const { issue } = command;
   const card = await requireWorkCard(ctx, issue);
   const key = String(issue);
   await relocate(ctx, card, [requireBranch], {
-    column: 'Approval',
+    column: 'Merging',
     step: 'merge-ordered',
     status: `↪️ Merge ordered by ${by}: ${command.reason}`,
     dropsApproval: false,
-    enter: (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [key]: by }, pendingApprovals: { ...state.pendingApprovals, [key]: by } }),
+    enter: (state) => ({ ...state, approvedResolving: { ...state.approvedResolving, [key]: by } }),
   });
-  return { issue, text: 'The merge into its base is queued.' };
+  return { issue, text: 'The card joins the merge queue.' };
 }
 
 export function openRelease(ctx: Ctx): ReleaseState {
@@ -321,7 +285,6 @@ export function openRelease(ctx: Ctx): ReleaseState {
   return release;
 }
 
-// Ship acts on the current candidate post alone. The job checks the release tasks when it runs.
 export function queueShip(ctx: Ctx, issue: number, by: string): string {
   const release = openRelease(ctx);
   if (release.issue !== issue) throw new Error(`Issue #${issue} is not the open release, #${release.issue} is.`);
@@ -346,7 +309,6 @@ async function remove(ctx: Ctx, command: Extract<ControlCommand, { action: 'remo
   return { issue: command.issue, text: queueRemoval(ctx, command.issue, by, command.reason) };
 }
 
-// The release cut is due when lastRelease is empty and no release is open.
 async function cut(ctx: Ctx): Promise<Outcome> {
   const release = readState(ctx.statePath).release;
   if (release !== null) throw new Error(`Release ${release.day} is open on #${release.issue}. Ship it before a new cut.`);
@@ -363,10 +325,8 @@ const DROPS: Record<DropQueue, Drop> = {
   change: { has: (state, id) => state.pendingChanges.some((item) => item.id === id), without: (state, id) => ({ ...state, pendingChanges: state.pendingChanges.filter((item) => item.id !== id) }) },
   incident: { has: (state, id) => state.pendingIncidents.includes(id), without: (state, id) => ({ ...state, pendingIncidents: state.pendingIncidents.filter((item) => item !== id) }) },
 };
-// Entries named by an issue number. The others are named by a change id or by nothing.
 const ISSUE_QUEUES: DropQueue[] = ['approval', 'removal', 'incident'];
 
-// The ship queue holds one entry and has no id. Its checks ignore the number.
 function requireEntryId(queue: DropQueue, id: number | null): number {
   if (id !== null) return id;
   if (queue !== 'ship') throw new Error(`The ${queue} queue needs an id.`);

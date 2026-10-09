@@ -11,11 +11,8 @@ import { DIRT_ROAD_STYLE, paintRoadMask, REGION_ROAD_STYLE } from './roadPaint';
 const sun = REGION.locations.filter(isTerritory).find((l) => l.id === 'fallen-sun')!;
 const SPUR_FADE = TERRITORIES['fallen-sun'].wreck!.spurFade;
 
-// One stroke of the mask painter in canvas pixels, with the paint it laid.
 type Stroke = { style: unknown; alpha: number; width: number; lines: Vec[][] };
 
-// The part of a 2D context the road mask painter uses. It keeps each stroke as geometry, so a test can ask which
-// paint lands on a point. Node has no canvas, and the painted pixels follow from that geometry.
 class RecordingContext {
   strokes: Stroke[] = [];
   fillStyle: unknown = null;
@@ -50,7 +47,6 @@ function paintedMask(): { canvas: PaintCanvas; strokes: Stroke[] } {
   const from = -TERRAIN_MARGIN;
   const ctx = new RecordingContext();
   const canvas: PaintCanvas = {
-    // The recorder covers every call the painter makes; the painter never reads anything else off the context.
     ctx: ctx as unknown as CanvasRenderingContext2D,
     size: 64,
     res,
@@ -61,7 +57,6 @@ function paintedMask(): { canvas: PaintCanvas; strokes: Stroke[] } {
   return { canvas, strokes: ctx.strokes };
 }
 
-// The strongest paint of one channel's strokes over a map point, 0 to 1.
 function channelAt(mask: { canvas: PaintCanvas; strokes: Stroke[] }, style: string, p: Vec): number {
   const px = { x: mask.canvas.toPx(p.x), y: mask.canvas.toPx(p.y) };
   let most = 0;
@@ -72,7 +67,6 @@ function channelAt(mask: { canvas: PaintCanvas; strokes: Stroke[] }, style: stri
   return most;
 }
 
-// A point d tiles back from a line's last point, measured along the line.
 function backFromEnd(line: readonly Vec[], d: number): Vec {
   let left = d;
   for (let i = line.length - 1; i > 0; i--) {

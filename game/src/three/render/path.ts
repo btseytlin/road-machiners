@@ -1,8 +1,6 @@
 // Multi-turn plan preview: thick lines lying on the ground, first turn in the caller's color, later turns
 // fainter in PAL.plan, with a marker at each turn's end. A thin faint line continues along the rest of
 // the course to its point. Depth-tested, so trucks drive over them.
-// The order's point lies on the ground as an icon: a ring with an arrow means drive through, and a ring
-// with a stop sign means stop there. The icon stays shown while turns play out, unlike the preview.
 
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
@@ -20,21 +18,20 @@ import { playerCanAct } from '../../sim/world';
 const S = PHYSICS.metersPerTile;
 
 const LINE_WIDTH_PX = 4;
-const LIFT = 0.12; // meters above the ground, so bumps between samples do not swallow the line
+const LIFT = 0.12;
 const COURSE_WIDTH_PX = 2;
 const OPACITY = { first: 0.75, later: 0.35, course: 0.3 };
-const COURSE_STEP = 0.5; // tiles between ground samples, so the course line follows hills
-const MARKER_OUTER = 1.2; // meters, matches the driving physics test's order marker
+const COURSE_STEP = 0.5;
+const MARKER_OUTER = 1.2;
 const MARKER_INNER = 0.8;
-const ORDER_R = 1.5; // meters; half the radius where a click switches the order, so the icon stays small next to the truck
-const ORDER_LIFT = LIFT + 0.02; // just over the preview line
+const ORDER_R = 1.5;
+const ORDER_LIFT = LIFT + 0.02;
 const ORDER_OPACITY = 0.85;
-const ORDER_RING_INNER = 0.85; // share of ORDER_R
-const ORDER_SIGN = 0.55; // share of ORDER_R the arrow and the stop sign reach from the center
-const SLOPE_STEP = 0.25; // tiles to each side where the ground is sampled for its tilt under an icon
+const ORDER_RING_INNER = 0.85;
+const ORDER_SIGN = 0.55;
+const SLOPE_STEP = 0.25;
 const UP = new THREE.Vector3(0, 1, 0);
 
-// An arrowhead pointing along +X, with its tip ORDER_SIGN * ORDER_R from the center.
 function arrowShape(): THREE.Shape {
   const k = ORDER_SIGN * ORDER_R;
   const pts: [number, number][] = [[1, 0], [-0.2, 0.9], [-0.6, 0.9], [0.45, 0], [-0.6, -0.9], [-0.2, -0.9]];
@@ -50,7 +47,6 @@ function flatIcon(geometry: THREE.BufferGeometry, color: number): THREE.Mesh {
   return mesh;
 }
 
-// The player's order to mark on the ground. Manual driving shows no waypoint, only the line to the click.
 function waypointOf(world: World): Exclude<MoveOrder, { kind: 'brake' }> | null {
   const me = playerVehicle(world);
   if (me.direct || !playerCanAct(world) || !me.order || me.order.kind === 'brake') return null;
@@ -69,7 +65,6 @@ export class PathView {
 
   constructor(private readonly terrain: Terrain) {
     this.through.add(flatIcon(new THREE.RingGeometry(ORDER_R * ORDER_RING_INNER, ORDER_R, 32), PAL.plan), this.arrow);
-    // Eight sides turned half a side, so the octagon stands flat like a stop sign.
     this.stop.add(
       flatIcon(new THREE.RingGeometry(ORDER_R * ORDER_RING_INNER, ORDER_R, 32), PAL.dest),
       flatIcon(new THREE.CircleGeometry(ORDER_SIGN * ORDER_R, 8, Math.PI / 8), PAL.dest),
@@ -78,8 +73,6 @@ export class PathView {
     this.root.add(this.preview, this.order);
   }
 
-  // world: the world whose player order to show. While a turn plays, that is the world the turn began in,
-  // so the icon stays even when the turn reaches the point.
   show(preview: boolean, world: World, orderHidden: boolean): void {
     this.preview.visible = preview;
     const me = playerVehicle(world);
@@ -91,16 +84,13 @@ export class PathView {
     this.order.quaternion.copy(this.tilt(dest.x, dest.y));
     this.through.visible = order.kind === 'through';
     this.stop.visible = order.kind === 'stopAt';
-    // The arrow points the way the truck goes. Map y is 3D z, so a map bearing turns the other way around Y.
     this.arrow.rotation.y = -bearing(me.pos, dest);
   }
 
-  // A frame's point dropped onto the ground under it.
   private ground(p: { x: number; z: number }): [number, number, number] {
     return [p.x, heightAt(this.terrain, p.x / S, p.z / S) * S + LIFT, p.z];
   }
 
-  // Turns a flat icon at a map point so it lies along the ground's slope there.
   private tilt(x: number, y: number): THREE.Quaternion {
     const dx = heightAt(this.terrain, x + SLOPE_STEP, y) - heightAt(this.terrain, x - SLOPE_STEP, y);
     const dy = heightAt(this.terrain, x, y + SLOPE_STEP) - heightAt(this.terrain, x, y - SLOPE_STEP);
@@ -108,7 +98,6 @@ export class PathView {
     return new THREE.Quaternion().setFromUnitVectors(UP, normal);
   }
 
-  // A marker ring lying on the ground at a point in 3D meters.
   private marker(at: { x: number; z: number }, color: number, opacity: number): void {
     const marker = new THREE.Mesh(
       new THREE.RingGeometry(MARKER_INNER, MARKER_OUTER, 24).rotateX(-Math.PI / 2),
@@ -121,8 +110,6 @@ export class PathView {
     this.markers.push(marker);
   }
 
-  // course: map points from the end of the last turn to the order's point, or null without one.
-  // waypoint: whether a marker ring shows at the course's end.
   set(turns: VehicleFrame[][], firstColor: number, course: Vec[] | null, waypoint: boolean): void {
     this.clear();
     if (course) this.addCourse(course, waypoint);

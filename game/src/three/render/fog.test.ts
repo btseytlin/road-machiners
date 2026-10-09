@@ -5,7 +5,7 @@ import { FogView } from './fog';
 import { SightLimit } from './scope';
 import { TERRAIN_CHUNK, type TerrainChunk } from './terrain';
 
-const SIZE = 70; // two full chunks and a partial one per side
+const SIZE = 70;
 
 function random(seed: number): () => number {
   let s = seed >>> 0;
@@ -15,13 +15,11 @@ function random(seed: number): () => number {
   };
 }
 
-// Only the fields FogView reads.
 function fogWorld(visible: number[], explored: boolean[]): World {
   const heights = Array.from({ length: (SIZE + 1) ** 2 }, (_, i) => (i % 7) * 0.1);
   return { size: SIZE, terrain: { size: SIZE, heights, types: [] }, player: { visible, explored } } as unknown as World;
 }
 
-// Bare ground chunks: FogView only adds its attribute to each geometry and patches the shared material.
 function groundChunks(): TerrainChunk[] {
   const material = new THREE.MeshLambertMaterial();
   const out: TerrainChunk[] = [];
@@ -63,7 +61,6 @@ describe('fog diff update', () => {
     for (let step = 0; step < 40; step++) {
       const visible = disk(rnd() * SIZE, rnd() * SIZE, 1 + rnd() * 12);
       for (const t of visible) explored[t] = true;
-      // Explored tiles can also be forgotten when a script applies an edited world.
       if (step % 5 === 4) for (let i = 0; i < 50; i++) explored[Math.floor(rnd() * SIZE * SIZE)] = false;
       const world = fogWorld(visible, [...explored]);
       view.update(world);

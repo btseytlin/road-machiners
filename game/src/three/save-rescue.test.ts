@@ -4,33 +4,24 @@ import { playerVehicle } from '../sim/damage';
 import { TEST_MAP } from '../test/map';
 import { townAt } from '../sim/sites';
 import { carriedWorld, newWorld } from '../sim/world';
-import { loadWorld, saveOf } from './save';
+import { loadWorld, saveOf, savedRunId } from './save';
+import { memoryBackend, SaveSlots } from './save-db';
 import { readCarried, rescueSave } from './save-rescue';
 import FORMAT_2_0 from './save-fixtures/format-2-0.json';
 import FORMAT_2_1 from './save-fixtures/format-2-1.json';
 import FORMAT_2_9 from './save-fixtures/format-2-9.json';
 import { MIGRATIONS } from './save-migrations';
+import { defaultSetup } from '../sim/settings';
 
 const KIT = startKit('standard');
 const fresh = () => 5;
-
-function makeStorage(): Storage {
-  const values = new Map<string, string>();
-  return {
-    get length() { return values.size; },
-    clear: () => values.clear(),
-    getItem: (key) => values.get(key) ?? null,
-    key: (index) => [...values.keys()][index] ?? null,
-    removeItem: (key) => { values.delete(key); },
-    setItem: (key, value) => { values.set(key, value); },
-  };
-}
+const freshRun = () => 'new-run';
+const makeSlots = () => new SaveSlots(memoryBackend(), new Map());
 
 type SavedWorld = { mapHash: string; player: { vehicleId: string; money: number }; vehicles: { id: string; items: { x: number }[] }[] };
 
-// A current save of a played world, as JSON.
 function currentSave(): { format: unknown; world: SavedWorld } {
-  const world = newWorld(1337, KIT, TEST_MAP);
+  const world = newWorld(1337, KIT, TEST_MAP, defaultSetup('roaming'));
   world.player.money = 4321;
   world.player.xp = 150;
   world.player.ranks.driving = 2;
@@ -67,9 +58,21 @@ describe('readCarried', () => {
   it('reads old formats and a fake major format', () => {
     for (const world of [FORMAT_2_0, FORMAT_2_1]) {
       const carried = readCarried({ format: { major: 2, minor: 0 }, world });
-      expect(carried.money).toBe(world.player.money);
+      expect(carried.money).toBe(Math.round((world.player.money * 100) / 3));
     }
     expect(readCarried({ format: { major: 99, minor: 0 }, world: FORMAT_2_1 }).money).toBe(FORMAT_2_1.player.money);
+  });
+
+  it('turns money and cost basis from before format 2.30 into cents, as the 29 to 30 step does', () => {
+    const world = { player: { money: 1000, costBasis: { scrap: 10.5 } } };
+    for (const format of [undefined, { major: 1, minor: 20 }, { major: 2, minor: 29 }]) {
+      const carried = readCarried({ format, world });
+      expect(carried.money, JSON.stringify(format)).toBe(33333);
+      expect(carried.costBasis.scrap, JSON.stringify(format)).toBeCloseTo(350);
+    }
+    const current = readCarried({ format: { major: 2, minor: 30 }, world });
+    expect(current.money).toBe(1000);
+    expect(current.costBasis).toEqual({ scrap: 10.5 });
   });
 
   it('reads garbage without throwing and keeps what is valid', () => {
@@ -92,36 +95,71 @@ describe('readCarried', () => {
 });
 
 describe('rescueSave', () => {
-  it('turns a save from another map into a world that then loads', () => {
-    const storage = makeStorage();
+  it('turns a save from another map into a world that then loads, in the same run', () => {
+    const slots = makeSlots();
     const save = currentSave();
     save.world.mapHash = 'other';
-    storage.setItem('roam.save', JSON.stringify(save));
-    expect(() => loadWorld(storage, 'auto', TEST_MAP)).toThrow();
-    const rescued = rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)!;
+    slots.put('auto', { ...save, runId: 'old-run' });
+    expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow();
+    const rescued = rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 1000)!;
     expect(townAt(rescued.world)).not.toBeNull();
     expect(rescued.world.player.money).toBe(4321);
-    const loaded = loadWorld(storage, 'auto', TEST_MAP)!;
+    expect(rescued.runId).toBe('old-run');
+    expect(savedRunId(slots.get('auto'))).toBe('old-run');
+    const loaded = loadWorld(slots, 'auto', TEST_MAP)!;
     expect(loaded.player.xp).toBe(150);
     expect(loaded.player.ranks.driving).toBe(2);
     expect(playerVehicle(loaded).chassisId).toBe(KIT.chassis);
   });
 
   it('reads and writes the slot it is given', () => {
-    const storage = makeStorage();
-    storage.setItem('roam.save:slot2', JSON.stringify(currentSave()));
-    const rescued = rescueSave(storage, 'slot2', TEST_MAP, KIT, fresh, 1234)!;
-    expect(JSON.parse(storage.getItem('roam.save:slot2')!).savedAt).toBe(1234);
-    expect(loadWorld(storage, 'slot2', TEST_MAP)!.player.money).toBe(rescued.world.player.money);
-    expect(storage.getItem('roam.save')).toBeNull();
+    const slots = makeSlots();
+    slots.put('slot2', currentSave());
+    const rescued = rescueSave(slots, 'slot2', TEST_MAP, KIT, fresh, freshRun, 1234)!;
+    expect((slots.get('slot2') as { savedAt: number }).savedAt).toBe(1234);
+    expect(loadWorld(slots, 'slot2', TEST_MAP)!.player.money).toBe(rescued.world.player.money);
+    expect(slots.has('auto')).toBe(false);
+  });
+
+  it('carries valid world settings over to the new world and its save', () => {
+    const slots = makeSlots();
+    const save = currentSave() as ReturnType<typeof currentSave> & { world: { setup: unknown } };
+    save.world.mapHash = 'other';
+    save.world.setup = { mode: 'roaming', settings: { damage: 1.5, fuelUse: 2, supplyUse: 0.75 } };
+    slots.put('auto', save);
+    const rescued = rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 1000)!;
+
+    expect(rescued.report.settingsReset).toEqual([]);
+    expect(loadWorld(slots, 'auto', TEST_MAP)!.setup).toEqual(save.world.setup);
+  });
+
+  it('resets bad world settings to their defaults, keeps the good ones and reports each reset', () => {
+    const slots = makeSlots();
+    const save = currentSave() as ReturnType<typeof currentSave> & { world: { setup: unknown } };
+    save.world.setup = { mode: 'roaming', settings: { damage: null, fuelUse: 1.5, supplyUse: 40 } };
+    slots.put('auto', save);
+    expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(/Invalid world settings/);
+    const rescued = rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 1000)!;
+
+    expect(rescued.report.settingsReset).toEqual(['damage', 'supplyUse']);
+    expect(loadWorld(slots, 'auto', TEST_MAP)!.setup.settings).toEqual({ damage: 1, fuelUse: 1.5, supplyUse: 1 });
+  });
+
+  it('gives a save from before world settings the default Roaming setup and reports no reset', () => {
+    const slots = makeSlots();
+    slots.put('auto', { format: { major: 2, minor: 1 }, world: FORMAT_2_1 });
+    const rescued = rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 1000)!;
+
+    expect(rescued.world.setup).toEqual(defaultSetup('roaming'));
+    expect(rescued.report.settingsReset).toEqual([]);
   });
 
   it('gives nothing for an unparsable or non-object save', () => {
-    const storage = makeStorage();
-    expect(rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)).toBeNull();
-    storage.setItem('roam.save', '{"nope');
-    expect(rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)).toBeNull();
-    storage.setItem('roam.save', '[1]');
-    expect(rescueSave(storage, 'auto', TEST_MAP, KIT, fresh, 1000)).toBeNull();
+    const slots = makeSlots();
+    expect(rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 1000)).toBeNull();
+    slots.put('auto', '{"nope');
+    expect(rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 1000)).toBeNull();
+    slots.put('auto', [1]);
+    expect(rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 1000)).toBeNull();
   });
 });

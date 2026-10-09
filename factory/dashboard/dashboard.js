@@ -1,19 +1,45 @@
-const stages = { triage: 'Triage', design: 'Design', implement: 'Implement', patch: 'Patch', verify: 'Verify', harden: 'Harden', checks: 'Test', approve: 'Approval', adhoc: 'Private task', change: 'Factory change', candidate: 'Candidate', release: 'Release', ship: 'Ship', remove: 'Removal', incident: 'Incident', dev: 'Dev build', waste: 'Review' };
-const actions = { starting: 'Starting', model: 'Waiting for model', reading: 'Reading code', editing: 'Editing code', command: 'Running command', tests: 'Running tests', typecheck: 'Typechecking', playtest: 'Running playtest', build: 'Building', publish: 'Publishing', install: 'Installing dependencies', git: 'Git operation', lock: 'Waiting for repository lock', review: 'Reviewing', design: 'Designing', investigate: 'Investigating', waiting: 'Waiting', finished: 'Finished' };
-const reasons = { 'queue-full': 'Queue occupied', 'issue-running': 'Already running', 'daily-cap': 'Daily job limit', 'card-budget': 'Card job limit','needs-info': 'Needs author reply', failed: 'Failed job needs attention', approval: 'Needs committee approval', held: 'Held until resumed' };
-const columns = ['Triage', 'Design', 'Implementation', 'Testing', 'Approval', 'Hardening', 'Done'];
-const queueNames = { branch: 'Branch', triage: 'Triage', design: 'Design', implement: 'Implement', verify: 'Verify', test: 'Test' };
+// Labels arrive with each snapshot from src/dashboard/labels.ts. A key with no label, like a stage from an old ledger line, shows as itself.
+/** @param {Record<string, string>} labels @returns {Record<string, string>} */
+function showRawKeys(labels) { return new Proxy(labels, { get: (target, key) => (typeof key === 'string' && Object.hasOwn(target, key) ? target[key] : String(key)) }); }
+/** @typedef {import('../src/dashboard/analytics').PanelRows} PanelRows */
+/** @typedef {NonNullable<ReturnType<typeof readOperations>>} Operations */
+/** @typedef {ReturnType<typeof getRelease>} Release */
+let stages = showRawKeys({});
+let actions = showRawKeys({});
+let reasons = showRawKeys({});
+let queueNames = showRawKeys({});
+let dwellNames = showRawKeys({});
+let loopNames = showRawKeys({});
+let gateNames = showRawKeys({});
+/** @type {Record<string, string>} */
+let columnNames = {};
+/** @param {import('../src/dashboard/labels').Labels} labels */
+function readLabels(labels) {
+  stages = showRawKeys(labels.stages);
+  actions = showRawKeys(labels.activities);
+  reasons = showRawKeys(labels.reasons);
+  queueNames = showRawKeys(labels.queues);
+  dwellNames = showRawKeys(labels.dwell);
+  loopNames = showRawKeys(labels.loops);
+  gateNames = showRawKeys(labels.gates);
+  columnNames = labels.columns;
+}
 const pages = new Map();
 const compact = new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 });
 const money = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' });
-let snapshot = null;
+/** @type {import('../src/dashboard/snapshot').Snapshot} */
+let snapshot = /** @type {any} */ (null);
 let selectedDays = 7;
 let metric = 'cost';
 let grouping = 'stage';
 let connected = false;
 let renderPending = false;
 let renderFailed = false;
+/** @type {HTMLElement | null} */
 let detailOwner = null;
+/** @param {string} selector @returns {HTMLElement[]} */
+function queryAll(selector) { return /** @type {HTMLElement[]} */ ([...document.querySelectorAll(selector)]); }
+/** @param {string} id @returns {any} The page's own ids exist, so a missing one throws at its first use. */
 function getElement(id) { return document.getElementById(id); }
 function createNode(tag, text = '', className = '') { const node = document.createElement(tag); node.textContent = text; node.className = className; return node; }
 function setText(id, value) { getElement(id).textContent = value; }
@@ -45,7 +71,7 @@ function createLink(text, href) {
 function getIssueUrl(issue) { return `${snapshot.repoUrl}/issues/${issue}`; }
 function replaceContents(id, nodes) {
   const target = getElement(id);
-  const key = target.contains(document.activeElement) ? document.activeElement.dataset.key : null;
+  const key = target.contains(document.activeElement) ? /** @type {HTMLElement} */ (document.activeElement).dataset.key : null;
   target.replaceChildren(...nodes);
   if (key) target.querySelector(`[data-key="${CSS.escape(key)}"]`)?.focus({ preventScroll: true });
 }
@@ -127,6 +153,7 @@ function readQueueWaits() {
   const decisions = readLive()?.scheduler?.decisions ?? [];
   return decisions.filter((item) => item.reasons.length > 0 && !item.reasons.includes('issue-running'));
 }
+/** @param {Operations | null} operations */
 function readWaitingStatus(operations) {
   if (!operations) return 'State unavailable';
   if (operations.status === 'paused') return 'Starts paused';
@@ -138,6 +165,7 @@ function readSchedulerAvailability(scheduler) {
   if (scheduler.status !== 'ready') return readSchedulerStatus(scheduler.status);
   return null;
 }
+/** @param {Operations | null} operations */
 function renderFreeSlots(operations) {
   if (!operations) {
     setText('free-count', '');
@@ -155,6 +183,7 @@ function createWaitingRow(item) {
   row.append(createNode('span', item.issue === null ? stages[item.stage] : `#${item.issue} ${stages[item.stage]}`), createNode('span', item.reasons.map((reason) => reasons[reason]).join(', ')));
   return row;
 }
+/** @param {Operations | null} operations */
 function renderCapacity(operations) {
   renderFreeSlots(operations);
   const status = readWaitingStatus(operations);
@@ -167,10 +196,10 @@ function renderCapacity(operations) {
 }
 function renderFunnel() {
   const cards = snapshot.github.status === 'ok' ? snapshot.github.value?.cards : null;
-  replaceContents('funnel', columns.map((column) => {
+  replaceContents('funnel', Object.keys(columnNames).map((column) => {
     const item = createNode('div');
     const value = cards ? cards.filter((card) => card.column === column).length : null;
-    item.append(createNode('span', column.replace('Implementation', 'Implement').replace('Testing', 'Test')), createNode('strong', formatNumber(value)));
+    item.append(createNode('span', columnNames[column]), createNode('strong', formatNumber(value)));
     item.lastChild.title = value === null ? 'Unavailable' : value.toLocaleString();
     return item;
   }));
@@ -200,6 +229,7 @@ function createReleaseItem(feature) {
   item.append(createLink(`#${feature.issue} ${feature.title}`, getIssueUrl(feature.issue)));
   return item;
 }
+/** @param {Release | null} release */
 function renderReleaseItems(release) {
   const features = release?.features ?? [];
   setText('release-count', release ? `${features.length} changes` : '');
@@ -213,6 +243,7 @@ function readDialogCapacity(id) {
   if (!Number.isFinite(row) || row <= 0) throw new Error('Invalid dialog row height');
   return Math.max(1, Math.floor(list.clientHeight / row));
 }
+/** @param {Release | null} release */
 function renderReleaseDialog(release) {
   const features = release?.features ?? [];
   setText('release-dialog-count', release ? `${features.length} changes` : '');
@@ -224,6 +255,7 @@ function renderReleaseDialogItems(features, available) {
   const empty = available ? 'No changes on dev' : 'Contents unavailable';
   replaceContents('release-dialog-rows', visible.length ? visible.map(createReleaseItem) : [createNode('li', empty, 'muted')]);
 }
+/** @param {Release | null} release */
 function renderReleaseLinks(release) {
   const operations = readOperations();
   const tracking = operations?.release;
@@ -280,7 +312,23 @@ function createServerTotals(host) {
   return [createReading('CPU', cpu), createReading('RAM', readRam(host)), createReading('GPU', readGpu(host))];
 }
 function readStorageNote(host) { return host?.ssd.value ? `Disk free ${formatBytes(host.ssd.value.free)}. Container usage only.` : 'Disk reading unavailable'; }
-function readSummary() { return snapshot.analytics.value?.ranges.find((range) => range.days === selectedDays) ?? null; }
+/** @type {Record<keyof PanelRows, string>} */
+const panelTitles = {
+  problems: 'Ledger check', coverage: 'Coverage', counters: 'Totals', usage_buckets: 'Usage chart', stage_time: 'Running time', waiting: 'Waiting time',
+  waiting_stages: 'Waiting by stage', retries: 'Repeat attempts', stage_models: 'Tokens by stage and model', activity: 'Event log',
+  delivery_coverage: 'Card coverage', lead: 'Lead time', dwell: 'Stage time', loops: 'Loops', rejections: 'Rejections', delivery_retries: 'Card retries',
+};
+/** @template {keyof PanelRows} K @param {K} name @param {1 | 7 | 30} days @returns {{ rows: PanelRows[K][] | null, problem: string }} */
+function readPanel(name, days) {
+  const result = snapshot.analytics.value?.[name];
+  if (!result) return { rows: null, problem: 'Unavailable' };
+  if (result.error !== null) return { rows: null, problem: `${panelTitles[name]} failed: ${result.error}` };
+  return { rows: result.ranges[days], problem: '' };
+}
+/** @template {keyof PanelRows} K @param {K} name */
+function readSelected(name) { return readPanel(name, /** @type {1 | 7 | 30} */ (selectedDays)); }
+/** @template {keyof PanelRows} K @param {K} name @returns {{ row: PanelRows[K] | null, problem: string }} */
+function readRow(name) { const { rows, problem } = readSelected(name); return { row: rows?.[0] ?? null, problem }; }
 function createEvent(event) {
   const node = createNode('div', '', 'event');
   node.append(createNode('time', event.at.slice(11, 16)), createNode('span', `${stages[event.stage]} ${event.outcome}`));
@@ -288,7 +336,7 @@ function createEvent(event) {
   node.title = event.at;
   return node;
 }
-function readEvents() { return snapshot.analytics.value?.ranges.find((range) => range.days === 30)?.activity ?? null; }
+function readEvents() { const events = readPanel('activity', 30); return snapshot.analytics.value ? events : { rows: null, problem: 'Events unavailable' }; }
 function createDialogEvent(event) {
   const row = createNode('div', '', 'event-row');
   const time = createNode('time', `${event.at.slice(0, 16).replace('T', ' ')} UTC`);
@@ -302,27 +350,55 @@ function createDialogEvent(event) {
   return row;
 }
 function renderEventDialog(events) {
-  setText('event-dialog-count', events ? `${events.length} events` : '');
-  const visible = selectPage('event-dialog', events ?? [], readDialogCapacity('event-dialog-rows'));
-  replaceContents('event-dialog-rows', visible.length ? visible.map(createDialogEvent) : [createNode('p', events ? 'No recorded events' : 'Events unavailable', 'empty')]);
+  setText('event-dialog-count', events.rows ? `${events.rows.length} events` : '');
+  const visible = selectPage('event-dialog', events.rows ?? [], readDialogCapacity('event-dialog-rows'));
+  replaceContents('event-dialog-rows', visible.length ? visible.map(createDialogEvent) : [createNode('p', events.rows ? 'No recorded events' : events.problem, 'empty')]);
 }
 function renderEvents() {
   const events = readEvents();
   const width = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--event-width'));
   const capacity = Math.max(1, Math.floor(getElement('event-log').clientWidth / width));
-  const visible = selectPage('event', events ?? [], capacity);
-  replaceContents('event-log', visible.length ? visible.map(createEvent) : [createNode('span', events ? 'No recorded events' : 'Events unavailable', 'muted')]);
+  const visible = selectPage('event', events.rows ?? [], capacity);
+  replaceContents('event-log', visible.length ? visible.map(createEvent) : [createNode('span', events.rows ? 'No recorded events' : events.problem, 'muted')]);
   if (getElement('event-dialog').open) renderEventDialog(events);
 }
-function renderCounters(summary) {
-  if (!summary) return clearCounters();
-  renderTokenCounters(summary.tokens);
-  setCounter('usage-time', summary.since ? formatDuration(summary.workerMs) : '—', summary.since ? `${summary.workerMs} ms` : null);
-  setCounter('usage-cost', formatCost(summary.cost), summary.cost);
-  setCounter('usage-wasted-cost', formatCost(summary.wasted.cost), summary.wasted.cost);
-  setCounter('usage-wasted-tokens', formatTokenCount(countTokens(summary.wasted.tokens)), countTokens(summary.wasted.tokens));
-  setCounter('usage-wait', formatDuration(summary.waitingMs), summary.waitingMs === null ? null : `${summary.waitingMs} ms`);
-  setText('coverage', summary.since ? `History from ${summary.since.slice(0, 10)} UTC, ${summary.missingUsage} runs lack token counts, ${summary.waitingGaps} wait gaps` : 'No recorded history');
+/** @param {PanelRows['counters']} row */
+function readTokens(row) { return row.input === null ? null : { input: row.input, output: Number(row.output), cacheRead: Number(row.cache_read), cacheWrite: Number(row.cache_write) }; }
+/** @param {PanelRows['counters']} row */
+function readWastedTokens(row) { return row.wasted_input === null ? null : { input: row.wasted_input, output: Number(row.wasted_output), cacheRead: Number(row.wasted_cache_read), cacheWrite: Number(row.wasted_cache_write) }; }
+function renderCounters() {
+  const { row, problem } = readRow('counters');
+  if (row) {
+    renderTokenCounters(readTokens(row));
+    setCounter('usage-time', formatDuration(row.worker_ms), `${row.worker_ms} ms`);
+    setCounter('usage-cost', formatCost(row.cost), row.cost);
+    setCounter('usage-wasted-cost', formatCost(row.wasted_cost), row.wasted_cost);
+    const wasted = countTokens(readWastedTokens(row));
+    setCounter('usage-wasted-tokens', formatTokenCount(wasted), wasted);
+  } else for (const id of ['usage-tokens', 'usage-input', 'usage-output', 'usage-time', 'usage-cost', 'usage-wasted-cost', 'usage-wasted-tokens']) setCounter(id, '—', null);
+  renderWaitCounter();
+  setText('coverage', readCoverage(problem));
+}
+function renderWaitCounter() {
+  const { row } = readRow('waiting');
+  if (!row || row.waiting_ms === null || !row.span_ms) return setCounter('usage-wait', '—', null);
+  setCounter('usage-wait', `${(row.waiting_ms / row.span_ms).toFixed(1)} cards`, `${formatDuration(row.waiting_ms)} summed card-time`);
+}
+function readHistoryParts() {
+  const { row, problem } = readRow('coverage');
+  if (!row) return [problem];
+  return [row.since ? `History from ${row.since.slice(0, 10)} UTC` : 'No recorded history', `${row.missing_usage} runs lack token counts`];
+}
+function readLeftOut() {
+  const { row, problem } = readRow('problems');
+  if (!row) return problem;
+  const left = row.unreadable + row.untimed + row.uncosted;
+  return left ? `${left} ledger records left out` : '';
+}
+function readCoverage(countersProblem) {
+  const waiting = readRow('waiting');
+  const parts = [countersProblem, ...readHistoryParts(), waiting.row ? `${waiting.row.gaps} wait gaps` : waiting.problem, readLeftOut()];
+  return [...new Set(parts.filter(Boolean))].join(', ');
 }
 function renderTokenCounters(tokens) {
   setCounter('usage-tokens', formatNumber(countTokens(tokens)), countTokens(tokens));
@@ -330,39 +406,35 @@ function renderTokenCounters(tokens) {
   setCounter('usage-output', formatNumber(tokens?.output), tokens?.output);
 }
 function setCounter(id, display, exact) { setText(id, display); getElement(id).dataset.exact = exact == null ? 'Unavailable' : String(exact); }
-function clearCounters() {
-  for (const id of ['usage-tokens', 'usage-input', 'usage-output', 'usage-time', 'usage-cost', 'usage-wasted-cost', 'usage-wasted-tokens', 'usage-wait']) setCounter(id, '—', null);
-  setText('coverage', 'Measurements unavailable');
-}
-// The 24-hour range draws one bar per UTC hour, longer ranges one bar per UTC day. A slot with no runs has no bar rather than a zero.
-function readUsageSlots(summary) {
-  const hourly = summary.days === 1;
+/** @param {PanelRows['usage_buckets'][]} rows */
+function readUsageSlots(rows) {
+  const hourly = selectedDays === 1;
   const end = new Date(snapshot.generatedAt);
   if (hourly) end.setUTCMinutes(0, 0, 0); else end.setUTCHours(0, 0, 0, 0);
-  // The range starts inside the first slot, so it spans one slot more than its length.
-  const count = hourly ? 25 : summary.days + 1;
+  const count = hourly ? 25 : selectedDays + 1;
   return Array.from({ length: count }, (_, index) => {
     const start = new Date(end.getTime() - (count - 1 - index) * (hourly ? 3600000 : 86400000)).toISOString().slice(0, hourly ? 13 : 10);
-    return { label: hourly ? `${start.slice(11)}:00` : start.slice(5), bucket: summary.buckets.find((row) => row.start === start) ?? null };
+    return { label: hourly ? `${start.slice(11)}:00` : start.slice(5), bucket: rows.filter((row) => row.start === start) };
   });
 }
-function readSegments(bucket) { return bucket === null ? {} : bucket[grouping === 'stage' ? 'stages' : 'models']; }
+/** @param {PanelRows['usage_buckets'][]} bucket @returns {Record<string, PanelRows['usage_buckets']>} */
+function readSegments(bucket) { return Object.fromEntries(bucket.filter((row) => row.grouping === grouping).map((row) => [row.key, row])); }
+/** @param {PanelRows['usage_buckets'][]} bucket @param {string} key */
 function readSegmentValue(bucket, key) {
-  if (bucket === null || (metric === 'tokens' && bucket.tokens === null)) return null;
+  if (!bucket.length || (metric === 'tokens' && bucket.every((row) => row.tokens === null))) return null;
   return readSegments(bucket)[key]?.[metric] ?? 0;
 }
 function readSegmentKeys(slots) {
   const totals = new Map();
-  for (const slot of slots) for (const [key, segment] of Object.entries(readSegments(slot.bucket))) totals.set(key, (totals.get(key) ?? 0) + segment[metric]);
+  for (const slot of slots) for (const [key, segment] of Object.entries(readSegments(slot.bucket))) totals.set(key, (totals.get(key) ?? 0) + (segment[metric] ?? 0));
   return [...totals.keys()].filter((key) => totals.get(key) > 0).sort((a, b) => totals.get(b) - totals.get(a));
 }
 function readSegmentLabel(key) {
-  if (grouping === 'stage') return stages[key] ?? key;
+  if (grouping === 'stage') return stages[key];
   return key === 'unattributed' ? 'No model data' : key.replace(/^claude-/, '');
 }
 function formatUsageValue(value) { return metric === 'tokens' ? formatNumber(value) : formatCost(value); }
 const segmentColors = ['#dac7a2', '#9db482', '#edbf78', '#e99a85', '#8fb3c4', '#b49ac4', '#c4b06a', '#7d9164', '#a5aaa7', '#c48f6a'];
-// Matches the #full-text detail popup: dark panel, gold border, readable body text. Lists every segment of the hovered bar, largest first, then the total.
 const usageTooltip = {
   backgroundColor: '#171c1f', borderColor: '#dac7a2', borderWidth: 1, cornerRadius: 0, padding: 12, boxPadding: 6,
   titleColor: '#dac7a2', titleFont: { family: 'Plex', size: 12 }, bodyColor: '#e0d8ca', bodyFont: { family: 'Barlow', size: 15 }, footerColor: '#e0d8ca', footerFont: { family: 'Barlow', size: 15, weight: 'bold' },
@@ -373,6 +445,7 @@ const usageTooltip = {
     footer: (items) => `Total: ${formatUsageValue(items.reduce((sum, item) => sum + item.raw, 0))}`,
   },
 };
+/** @type {any} */
 let usageChart = null;
 function createUsageChart() {
   Chart.defaults.color = '#a5aaa7';
@@ -385,11 +458,12 @@ function createUsageChart() {
     interaction: { mode: 'index', intersect: false },
   } });
 }
-function renderUsageChart(summary) {
+function renderUsageChart() {
   setText('usage-title', metric === 'cost' ? 'Spend' : 'Tokens');
   usageChart ??= createUsageChart();
   const hidden = new Set(usageChart.data.datasets.filter((_, index) => !usageChart.isDatasetVisible(index)).map((dataset) => dataset.label));
-  const slots = summary ? readUsageSlots(summary) : [];
+  const { rows, problem } = readSelected('usage_buckets');
+  const slots = rows ? readUsageSlots(rows) : [];
   const keys = readSegmentKeys(slots);
   usageChart.data.labels = slots.map((slot) => slot.label);
   usageChart.data.datasets = keys.map((key, index) => {
@@ -397,12 +471,13 @@ function renderUsageChart(summary) {
     return { label, hidden: hidden.has(label), data: slots.map((slot) => readSegmentValue(slot.bucket, key)), backgroundColor: segmentColors[index % segmentColors.length] };
   });
   usageChart.update();
+  setText('usage-empty', rows ? 'No recorded usage' : problem);
   getElement('usage-empty').hidden = keys.length > 0;
 }
-function readStageRows(summary) {
-  if (!summary) return [];
-  const names = new Set([...summary.stages.map((row) => row.stage), ...summary.waitingStages.map((row) => row.stage)]);
-  return [...names].map((stage) => ({ stage, run: summary.stages.find((row) => row.stage === stage)?.workerMs ?? 0, wait: summary.waitingStages.find((row) => row.stage === stage)?.workerMs ?? 0 }));
+/** @param {PanelRows['stage_time'][]} running @param {PanelRows['waiting_stages'][]} waiting */
+function readStageRows(running, waiting) {
+  const names = new Set([...running.map((row) => row.stage), ...waiting.map((row) => row.stage)]);
+  return [...names].map((stage) => ({ stage, run: running.find((row) => row.stage === stage)?.worker_ms ?? 0, wait: waiting.find((row) => row.stage === stage)?.waiting_ms ?? 0 }));
 }
 function createStageBar(row, maximum, waitingKnown) {
   const node = createNode('div', '', 'stage-row');
@@ -418,15 +493,20 @@ function createStageBar(row, maximum, waitingKnown) {
   node.dataset.detail = `${stages[row.stage]}: ${formatDuration(row.run)} running, ${wait} waiting`;
   return node;
 }
-function renderStageChart(summary) {
-  const rows = readStageRows(summary);
+function isWaitingKnown() { return readSelected('waiting_stages').rows !== null && readRow('waiting').row?.waiting_ms != null; }
+function renderStageChart() {
+  const running = readSelected('stage_time');
+  const rows = running.rows ? readStageRows(running.rows, readSelected('waiting_stages').rows ?? []) : [];
+  const waitingKnown = isWaitingKnown();
   const maximum = Math.max(1, ...rows.map((row) => row.run + row.wait));
   const capacity = Math.max(1, Math.floor(getElement('stage-chart').clientHeight / 34));
   const visible = selectPage('stage', rows, capacity);
-  replaceContents('stage-chart', visible.length ? visible.map((row) => createStageBar(row, maximum, summary.waitingMs !== null)) : [createNode('p', 'No measured time', 'empty')]);
+  const empty = running.rows ? 'No measured time' : running.problem;
+  replaceContents('stage-chart', visible.length ? visible.map((row) => createStageBar(row, maximum, waitingKnown)) : [createNode('p', empty, 'empty')]);
 }
-function createRetryRow(item) { const row = createNode('tr'); row.append(createNode('td', item.outcome), createNode('td', String(item.runs), 'numeric'), createNode('td', formatDuration(item.workerMs), 'numeric'), createNode('td', formatCost(item.cost), 'numeric')); return row; }
-function readStageModelLabel(stage) { return stage === null ? 'Total' : stage === 'verify' ? 'Verify + review' : stages[stage]; }
+/** @param {PanelRows['retries']} item */
+function createRetryRow(item) { const row = createNode('tr'); row.append(createNode('td', item.outcome), createNode('td', String(item.runs), 'numeric'), createNode('td', formatDuration(item.worker_ms), 'numeric'), createNode('td', formatCost(item.cost), 'numeric')); return row; }
+function readStageModelLabel(stage) { return stage === null ? 'Total' : stages[stage]; }
 function createStageModelCell(stage, model, usage, measure) {
   const value = usage ? measure === 'input' ? countInputTokens(usage) : usage.output : null;
   const cell = createNode('td', formatNumber(value), 'numeric');
@@ -435,11 +515,23 @@ function createStageModelCell(stage, model, usage, measure) {
     : `${readStageModelLabel(stage)}, ${model}: ${value} output`;
   return cell;
 }
-function createStageModelRow(stage, models, summary) {
+/** @param {PanelRows['stage_models']} row */
+function readModelUsage(row) { return { stage: row.stage, model: row.model, input: row.input, output: row.output, cacheRead: row.cache_read, cacheWrite: row.cache_write, cost: row.cost }; }
+/** @param {ReturnType<typeof readModelUsage>[]} rows */
+function sumModels(rows) {
+  const totals = new Map();
+  for (const row of rows) {
+    const total = totals.get(row.model) ?? { model: row.model, input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 };
+    for (const key of ['input', 'output', 'cacheRead', 'cacheWrite', 'cost']) total[key] += row[key];
+    totals.set(row.model, total);
+  }
+  return [...totals.values()];
+}
+function createStageModelRow(stage, models, totals, stageModels) {
   const row = createNode('tr');
   row.append(createNode('td', readStageModelLabel(stage)));
   for (const model of models) {
-    const usage = stage === null ? summary.models.find((item) => item.model === model) : summary.stageModels.find((item) => item.stage === stage && item.model === model);
+    const usage = stage === null ? totals.find((item) => item.model === model) : stageModels.find((item) => item.stage === stage && item.model === model);
     row.append(createStageModelCell(stage, model, usage, 'input'), createStageModelCell(stage, model, usage, 'output'));
   }
   return row;
@@ -449,9 +541,11 @@ function readStageModelNames(rows) {
   for (const row of rows) totals.set(row.stage, (totals.get(row.stage) ?? 0) + countTokens(row));
   return [...totals.keys()].sort((a, b) => totals.get(b) - totals.get(a));
 }
-function renderStageModels(summary) {
-  // Two model columns fit beside stage names at the narrowest desktop width.
-  const models = summary ? [...summary.models].sort((a, b) => countTokens(b) - countTokens(a)).map((item) => item.model) : [];
+function renderStageModels() {
+  const { rows, problem } = readSelected('stage_models');
+  const stageModels = (rows ?? []).map(readModelUsage);
+  const totals = sumModels(stageModels);
+  const models = [...totals].sort((a, b) => countTokens(b) - countTokens(a)).map((item) => item.model);
   const visible = selectPage('model-column', models, 2);
   const stageHeader = createNode('th', 'Stage');
   stageHeader.rowSpan = 2;
@@ -460,73 +554,101 @@ function renderStageModels(summary) {
   replaceContents('stage-model-header', [stageHeader, ...modelHeaders]);
   const measureHeaders = visible.flatMap(() => ['Input + cache', 'Output'].map((name) => { const header = createNode('th', name); header.scope = 'col'; return header; }));
   replaceContents('stage-model-measures', measureHeaders);
-  const rows = models.length ? [null, ...readStageModelNames(summary.stageModels)] : [];
-  renderTable('stage-model', rows, (stage) => createStageModelRow(stage, visible, summary), summary ? 'No measured model tokens' : 'Unavailable', visible.length * 2 + 1);
+  const stageRows = models.length ? [null, ...readStageModelNames(stageModels)] : [];
+  renderTable('stage-model', stageRows, (stage) => createStageModelRow(stage, visible, totals, stageModels), rows ? 'No measured model tokens' : problem, visible.length * 2 + 1);
 }
 function renderAnalytics() {
-  const summary = readSummary();
-  renderCounters(summary);
-  renderUsageChart(summary);
-  renderStageChart(summary);
-  renderTable('retry', summary?.retries ?? [], createRetryRow, summary ? 'No linked repeat attempts' : 'Unavailable', 4);
-  renderStageModels(summary);
+  renderCounters();
+  renderUsageChart();
+  renderStageChart();
+  const retries = readSelected('retries');
+  renderTable('retry', retries.rows ?? [], createRetryRow, retries.rows ? 'No linked repeat attempts' : retries.problem, 4);
+  renderStageModels();
 }
-const dwellNames = { triage: 'Triage', design: 'Design', implementation: 'Implementation', preview: 'Testing', approval: 'Committee approval', harden: 'Hardening', merge: 'Merge queue' };
-const loopNames = { questions: 'Design asks the author', rebuild: 'Visual review: rebuild', 'plan-wrong': 'Visual review: plan wrong', 'review-failed': 'Code review fails twice', patch: 'Committee patch', redesign: 'Committee redesign', 'patch-replan': 'Patch needs a new plan', conflict: 'Merge conflict', removed: 'Removed from release', unbundled: 'Bundle lead dropped' };
-const gateNames = { triage: 'Triage wont-do', design: 'Design wont-do', committee: 'Committee Deny' };
-function readDelivery() { return readSummary()?.delivery ?? null; }
 function formatRate(part, whole) { return whole ? `${Math.round(100 * part / whole)}%` : '—'; }
+/** @param {PanelRows['dwell']} row @param {number} maximum */
 function createDwellRow(row, maximum) {
   const node = createNode('tr');
   const bar = createNode('td', '', 'dwell-bar');
   const fill = createNode('span');
-  fill.style.width = `${row.meanMs === null ? 0 : 100 * row.meanMs / maximum}%`;
+  fill.style.width = `${row.mean_ms === null ? 0 : 100 * row.mean_ms / maximum}%`;
   bar.append(fill);
   bar.setAttribute('aria-hidden', 'true');
-  const open = row.open ? `${row.open}, ${formatDuration(row.openMeanMs)}` : '0';
-  node.append(createNode('td', dwellNames[row.stage]), bar, createNode('td', formatDuration(row.meanMs), 'numeric'), createNode('td', formatDuration(row.medianMs), 'numeric'), createNode('td', String(row.count), 'numeric'), createNode('td', open, 'numeric'));
-  node.lastChild.dataset.exact = `${dwellNames[row.stage]}: ${row.open} open, mean age ${formatDuration(row.openMeanMs)}. Open stages are not in the means.`;
+  const open = row.open ? `${row.open}, ${formatDuration(row.open_mean_ms)}` : '0';
+  node.append(createNode('td', dwellNames[row.stage]), bar, createNode('td', formatDuration(row.mean_ms), 'numeric'), createNode('td', formatDuration(row.median_ms), 'numeric'), createNode('td', String(row.count), 'numeric'), createNode('td', open, 'numeric'));
+  node.lastChild.dataset.exact = `${dwellNames[row.stage]}: ${row.open} open, mean age ${formatDuration(row.open_mean_ms)}. Open stages are not in the means.`;
   return node;
 }
-function createLoopRow(row) { const node = createNode('tr'); node.append(createNode('td', loopNames[row.step] ?? row.step), createNode('td', String(row.events), 'numeric'), createNode('td', String(row.issues), 'numeric')); return node; }
+function createLoopRow(row) { const node = createNode('tr'); node.append(createNode('td', loopNames[row.step]), createNode('td', String(row.events), 'numeric'), createNode('td', String(row.issues), 'numeric')); return node; }
 function createStageRetryRow(row) { const node = createNode('tr'); node.append(createNode('td', stages[row.stage]), createNode('td', String(row.runs), 'numeric'), createNode('td', String(row.issues), 'numeric')); return node; }
-function readDeliveryCoverage(delivery) {
+/** @param {{ row: PanelRows['delivery_coverage'] | null, problem: string }} coverage */
+function readDeliveryCoverage(coverage) {
   if (snapshot.analytics.status === 'unavailable') return 'Card records unavailable';
-  if (!delivery) return 'No card moves recorded yet';
+  if (!coverage.row) return coverage.problem;
+  if (coverage.row.since === null) return 'No card moves recorded yet';
   const prefix = snapshot.analytics.status === 'ok' ? '' : 'Last known: ';
-  return `${prefix}${delivery.issues} cards, records since ${delivery.since.slice(0, 10)} UTC`;
+  return `${prefix}${coverage.row.issues} cards, records since ${coverage.row.since.slice(0, 10)} UTC`;
 }
-function readDeliveryNotes(delivery) {
-  if (!delivery) return '';
-  return `${delivery.legacy} cards joined before records. ${delivery.excluded} hotfix, release or private cards left out. ${delivery.lead.missingStart} merges lack a start.`;
+/** @param {PanelRows['delivery_coverage'] | null} coverage @param {{ row: PanelRows['lead'] | null, problem: string }} lead */
+function readDeliveryNotes(coverage, lead) {
+  if (!coverage || coverage.since === null) return '';
+  const starts = lead.row ? `${lead.row.missing_start} merges lack a start.` : lead.problem;
+  return `${coverage.legacy} cards joined before records. ${coverage.excluded} hotfix, release or private cards left out. ${starts}`;
 }
-function renderDeliveryCounters(delivery) {
-  if (!delivery) return clearDeliveryCounters();
-  const { lead } = delivery;
-  setCounter('lead-mean', formatDuration(lead.meanMs), lead.count ? `${lead.meanMs} ms mean of ${lead.count} cards` : null);
-  setCounter('lead-median', formatDuration(lead.medianMs), lead.count ? `${lead.medianMs} ms median of ${lead.count} cards` : null);
-  setCounter('lead-open', String(lead.open), lead.open ? `${lead.open} cards, mean age ${formatDuration(lead.openMeanMs)}` : 0);
-  setCounter('loop-rate', formatRate(delivery.looped, delivery.issues), `${delivery.looped} of ${delivery.issues} cards`);
-  for (const row of delivery.rejections) {
+function renderIssueToDev() {
+  const merges = snapshot.github.value?.merges;
+  const end = Date.parse(snapshot.generatedAt);
+  const ages = (merges ?? []).filter((merge) => Date.parse(merge.mergedAt) > end - selectedDays * 86400000 && Date.parse(merge.mergedAt) <= end).map((merge) => Date.parse(merge.mergedAt) - Date.parse(merge.createdAt)).sort((a, b) => a - b);
+  if (!ages.length) {
+    const reason = merges ? 'No issue merged into dev in the period' : null;
+    setCounter('issue-mean', '—', reason);
+    return setCounter('issue-median', '—', reason);
+  }
+  const mean = ages.reduce((sum, age) => sum + age, 0) / ages.length;
+  const middle = Math.floor(ages.length / 2);
+  const median = ages.length % 2 ? ages[middle] : (ages[middle - 1] + ages[middle]) / 2;
+  setCounter('issue-mean', formatDuration(mean), `${mean} ms mean of ${ages.length} issues`);
+  setCounter('issue-median', formatDuration(median), `${median} ms median of ${ages.length} issues`);
+}
+function renderLeadCounter() {
+  const lead = readRow('lead').row;
+  if (lead) setCounter('lead-open', String(lead.open), lead.open ? `${lead.open} cards, mean age ${formatDuration(lead.open_mean_ms)}` : 0);
+}
+function renderRejectionCounters() {
+  for (const row of readSelected('rejections').rows ?? []) {
     setCounter(`${row.gate}-rate`, formatRate(row.rejected, row.decided), `${gateNames[row.gate]}: ${row.rejected} of ${row.decided} decided cards`);
   }
 }
-function clearDeliveryCounters() {
-  for (const id of ['lead-mean', 'lead-median', 'lead-open', 'loop-rate', 'triage-rate', 'design-rate', 'committee-rate']) setCounter(id, '—', null);
+/** @param {PanelRows['delivery_coverage'] | null} coverage */
+function renderDeliveryCounters(coverage) {
+  for (const id of ['lead-open', 'loop-rate', 'triage-rate', 'design-rate', 'committee-rate']) setCounter(id, '—', null);
+  if (coverage?.since === null) return;
+  renderLeadCounter();
+  if (coverage) setCounter('loop-rate', formatRate(coverage.looped, coverage.issues), `${coverage.looped} of ${coverage.issues} cards`);
+  renderRejectionCounters();
+}
+/** @param {boolean} noCards @param {{ rows: unknown[] | null, problem: string }} panel @param {string} empty */
+function readDeliveryEmpty(noCards, panel, empty) { return noCards ? 'No card moves recorded yet' : panel.rows ? empty : panel.problem; }
+/** @template T @param {boolean} noCards @param {{ rows: T[] | null }} panel @returns {T[]} */
+function readDeliveryRows(noCards, panel) { return noCards ? [] : panel.rows ?? []; }
+/** @param {boolean} noCards */
+function renderDeliveryTables(noCards) {
+  const dwell = readSelected('dwell');
+  const stages = readDeliveryRows(noCards, dwell);
+  const maximum = Math.max(1, ...stages.map((row) => row.mean_ms ?? 0));
+  renderTable('dwell', stages, (row) => createDwellRow(row, maximum), readDeliveryEmpty(noCards, dwell, ''), 6);
+  const loops = readSelected('loops');
+  renderTable('loop', readDeliveryRows(noCards, loops).filter((row) => row.events > 0), createLoopRow, readDeliveryEmpty(noCards, loops, 'No card sent back in the period'), 3);
+  const retries = readSelected('delivery_retries');
+  renderTable('stage-retry', readDeliveryRows(noCards, retries).filter((row) => row.runs > 0), createStageRetryRow, readDeliveryEmpty(noCards, retries, 'No failed card job in the period'), 3);
 }
 function renderDelivery() {
-  const delivery = readDelivery();
-  setText('delivery-coverage', readDeliveryCoverage(delivery));
-  getElement('delivery-coverage').dataset.exact = readDeliveryNotes(delivery);
-  renderDeliveryCounters(delivery);
-  if (!delivery) return renderDeliveryEmpty(snapshot.analytics.value ? 'No card moves recorded yet' : 'Unavailable');
-  const maximum = Math.max(1, ...delivery.stages.map((row) => row.meanMs ?? 0));
-  renderTable('dwell', delivery.stages, (row) => createDwellRow(row, maximum), '', 6);
-  renderTable('loop', delivery.loops.filter((row) => row.events > 0), createLoopRow, 'No card sent back in the period', 3);
-  renderTable('stage-retry', delivery.retries.filter((row) => row.runs > 0), createStageRetryRow, 'No failed card job in the period', 3);
-}
-function renderDeliveryEmpty(text) {
-  for (const [key, columnCount] of [['dwell', 6], ['loop', 3], ['stage-retry', 3]]) renderTable(key, [], null, text, columnCount);
+  const coverage = readRow('delivery_coverage');
+  setText('delivery-coverage', readDeliveryCoverage(coverage));
+  getElement('delivery-coverage').dataset.exact = readDeliveryNotes(coverage.row, readRow('lead'));
+  renderIssueToDev();
+  renderDeliveryCounters(coverage.row);
+  renderDeliveryTables(coverage.row?.since === null);
 }
 function readPauseNotice() {
   const operations = readOperations();
@@ -538,8 +660,8 @@ function readPauseNotice() {
 function renderFreshness() {
   if (!snapshot) return;
   if (renderFailed) return setText('connection', 'Invalid data');
-  // Stale sources are listed in source-status, so a healthy connection needs no ticking age.
   setText('connection', connected ? 'Live' : 'Reconnecting');
+  /** @type {[string, import('../src/dashboard/snapshot').Source<unknown>][]} */
   const sources = [['State', snapshot.operations], ['GitHub', snapshot.github], ['Usage', snapshot.analytics], ['Host', snapshot.host], ['Activity', snapshot.live]];
   const failures = sources.filter(([, source]) => source?.status !== 'ok').map(([name, source]) => `${name} ${source?.status ?? 'unavailable'}`);
   const pause = readPauseNotice();
@@ -558,7 +680,7 @@ function renderSnapshot() {
   updateOverflow();
 }
 function updateOverflow() {
-  for (const node of document.querySelectorAll('td,th,.event,.capacity-row span,.clamp,.clipped,.counter strong,.funnel strong,.server-totals strong,.source-status,.release-items li')) {
+  for (const node of queryAll('td,th,.event,.capacity-row span,.clamp,.clipped,.counter strong,.funnel strong,.server-totals strong,.source-status,.release-items li')) {
     if (!node.getClientRects().length) continue;
     if (node.dataset.exact) { node.dataset.detail = node.dataset.exact; node.tabIndex = 0; continue; }
     const truncated = node.scrollWidth > node.clientWidth || node.scrollHeight > node.clientHeight;
@@ -580,9 +702,9 @@ function showDetail(node) {
   node.setAttribute('aria-describedby', tooltip.id);
 }
 function hideDetail() { getElement('full-text').hidden = true; }
-const tabs = [...document.querySelectorAll('[role="tab"]')];
+const tabs = [...queryAll('[role="tab"]')];
 function selectTab(tab) {
-  for (const choice of tabs) { const selected = choice === tab; choice.setAttribute('aria-selected', String(selected)); choice.tabIndex = selected ? 0 : -1; getElement(choice.getAttribute('aria-controls')).hidden = !selected; }
+  for (const choice of tabs) { const selected = choice === tab; choice.setAttribute('aria-selected', String(selected)); choice.tabIndex = selected ? 0 : -1; getElement(String(choice.getAttribute('aria-controls'))).hidden = !selected; }
   hideDetail();
   requestRender();
 }
@@ -597,18 +719,18 @@ function navigateTabs(event, tab) {
   next.focus();
 }
 for (const tab of tabs) { tab.addEventListener('click', () => selectTab(tab)); tab.addEventListener('keydown', (event) => navigateTabs(event, tab)); }
-for (const button of document.querySelectorAll('[data-dialog]')) button.addEventListener('click', () => {
-  const dialog = getElement(button.dataset.dialog);
+for (const button of queryAll('[data-dialog]')) button.addEventListener('click', () => {
+  const dialog = getElement(String(button.dataset.dialog));
   dialog.showModal();
   if (dialog.id === 'release-dialog') renderReleaseDialog(getRelease());
   else renderEventDialog(readEvents());
 });
-for (const button of document.querySelectorAll('[data-close]')) button.addEventListener('click', () => button.closest('dialog').close());
-function selectButtons(selector, chosen, attribute) { for (const button of document.querySelectorAll(selector)) button.setAttribute('aria-pressed', String(button.dataset[attribute] === chosen)); }
-for (const button of document.querySelectorAll('[data-days]')) button.addEventListener('click', () => { selectedDays = Number(button.dataset.days); selectButtons('[data-days]', button.dataset.days, 'days'); pages.clear(); requestRender(); });
-for (const button of document.querySelectorAll('[data-metric]')) button.addEventListener('click', () => { metric = button.dataset.metric; selectButtons('[data-metric]', metric, 'metric'); requestRender(); });
-for (const button of document.querySelectorAll('[data-grouping]')) button.addEventListener('click', () => { grouping = button.dataset.grouping; selectButtons('[data-grouping]', grouping, 'grouping'); requestRender(); });
-document.addEventListener('mouseover', (event) => showDetail(event.target.closest('[data-detail]')));
+for (const button of queryAll('[data-close]')) button.addEventListener('click', () => /** @type {HTMLDialogElement} */ (button.closest('dialog')).close());
+function selectButtons(selector, chosen, attribute) { for (const button of queryAll(selector)) button.setAttribute('aria-pressed', String(button.dataset[attribute] === chosen)); }
+for (const button of queryAll('[data-days]')) button.addEventListener('click', () => { selectedDays = Number(button.dataset.days); selectButtons('[data-days]', String(button.dataset.days), 'days'); pages.clear(); requestRender(); });
+for (const button of queryAll('[data-metric]')) button.addEventListener('click', () => { metric = String(button.dataset.metric); selectButtons('[data-metric]', metric, 'metric'); requestRender(); });
+for (const button of queryAll('[data-grouping]')) button.addEventListener('click', () => { grouping = String(button.dataset.grouping); selectButtons('[data-grouping]', grouping, 'grouping'); requestRender(); });
+document.addEventListener('mouseover', (event) => showDetail(/** @type {HTMLElement} */ (event.target).closest('[data-detail]')));
 document.addEventListener('focusin', (event) => showDetail(event.target));
 document.addEventListener('mouseout', (event) => { if (event.relatedTarget !== getElement('full-text')) hideDetail(); });
 document.addEventListener('focusout', (event) => { if (event.relatedTarget !== getElement('full-text')) hideDetail(); });
@@ -617,13 +739,14 @@ document.addEventListener('keydown', (event) => {
     if (document.querySelector('dialog[open]')) { hideDetail(); return; }
     detailOwner?.focus({ preventScroll: true }); hideDetail();
   }
-  if (event.key === 'Enter' && event.target.dataset.detail) { event.preventDefault(); showDetail(event.target); getElement('full-text').focus(); }
+  const target = /** @type {HTMLElement} */ (event.target);
+  if (event.key === 'Enter' && target.dataset.detail) { event.preventDefault(); showDetail(target); getElement('full-text').focus(); }
 });
 window.addEventListener('resize', () => { hideDetail(); requestRender(); });
 document.fonts.ready.then(requestRender);
 const stream = new EventSource('/factory/api/events');
 stream.addEventListener('snapshot', (event) => {
-  try { snapshot = JSON.parse(event.data); connected = true; requestRender(); }
+  try { snapshot = JSON.parse(event.data); readLabels(snapshot.labels); connected = true; requestRender(); }
   catch (error) { renderFailed = true; console.error('Invalid dashboard snapshot', error); setText('connection', 'Invalid data'); }
 });
 stream.addEventListener('error', () => { connected = false; setText('connection', 'Reconnecting'); });

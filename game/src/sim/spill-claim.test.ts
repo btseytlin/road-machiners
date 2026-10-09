@@ -39,7 +39,6 @@ const lastRow = (v: Vehicle) => gridOf(v).h - 1;
 const onRow = (v: Vehicle, y: number) => v.items.filter((it) => itemCells(it).some((c) => c.y === y));
 const spillPile = (w: World): SalvageStock => w.salvage.find((s) => s.id.startsWith('spill-'))!;
 
-// Fills the truck's last cargo row with salt and breaks the cargo part that gives it.
 function breakLoadedCargo(w: World, v: Vehicle): void {
   const y = lastRow(v);
   v.items = v.items.filter((it) => !onRow(v, y).includes(it));
@@ -48,7 +47,6 @@ function breakLoadedCargo(w: World, v: Vehicle): void {
   for (const p of mountedParts(v, 'cargo')) p.hp = 0;
 }
 
-// A raider in a fight with the player, robbing it for its cargo, whose demand call is already behind it.
 function robbedPlayer(): { w: World; raider: Vehicle; kept: GridItem[] } {
   const w = quietWorld();
   const me = playerVehicle(w);
@@ -164,7 +162,7 @@ describe('a robber claims spilled cargo', () => {
     forceOption('threatened', 'fightBack');
     const w = quietWorld();
     const victim = addVehicle(w, 'traders', 'scout', ['stockEngine', 'mg', 'panniers'], { x: 40, y: 40 });
-    victim.brain = npcBrain('trader', victim.pos, ['raider']); // a trait that fights back when threatened
+    victim.brain = npcBrain('trader', victim.pos, ['raider']);
     const raider = npcAt(w, 'raiders', 46, 40);
     startCombat(w, raider, victim);
     breakLoadedCargo(w, victim);

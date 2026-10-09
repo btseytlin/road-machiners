@@ -4,7 +4,7 @@ import { ECONOMY, GOODS } from '../data/goods';
 import { NPC_UPKEEP, NPCS, STATE_TURNS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
-import { partTradePrice, truckPartPrice } from './economy';
+import { canTradeWith, inMeetingReach, partTradePrice, playerTrades, truckPartPrice } from './economy';
 import { makePart } from './factory';
 import { freeCells, goodsCount } from './grid';
 import { addGoods, spareParts, stowPart } from './inventory';
@@ -18,7 +18,6 @@ import {
 import type { GameEvent, Vehicle, World } from './types';
 import { endTurn, update } from './world';
 
-// A trader in the open, the given distance east of a parked player. No other trucks spawn.
 function withTrader(x: number): { w: World; npc: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
@@ -64,7 +63,6 @@ describe('trade meeting', () => {
 
   it('a meeting that never comes together lapses', () => {
     const { w: start, npc } = withTrader(80);
-    // The state alone, with no meet goal, so the driver never comes.
     const w0 = update(start, (w) => { addState(w, 'trade', npc.id, w.player.vehicleId, { kind: 'none' }); });
     const r = runUntil(w0, STATE_TURNS.trade! + 2, (x) => stateOf(x, 'trade', npc.id, x.player.vehicleId) === null);
     expect(r.events).toContainEqual(expect.objectContaining({ t: 'stateEnded', ending: 'expired' }));
@@ -89,7 +87,6 @@ describe('trade meeting', () => {
 });
 
 describe('trades', () => {
-  // A trader parked beside a parked player, with a trade agreed.
   function meeting(): { w: World; npc: Vehicle } {
     const { w: start, npc } = withTrader(34);
     const w = agreed(start, npc.id);
@@ -199,5 +196,23 @@ describe('trades', () => {
     const { w: start, npc } = withTrader(34);
     const w0 = update(start, (w) => { addGoods(w, find(w, npc.id), 'salt', 1); });
     expect(() => buyTruckGood(w0, npc.id, 'salt', 1)).toThrow('No trade agreed');
+  });
+});
+
+describe('trade reach', () => {
+  it('tells which driver the player can trade with and keeps reach apart from parking', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const far = addVehicle(w, 'traders', 'scout', [], { x: 90, y: 30 });
+    const near = addVehicle(w, 'traders', 'scout', [], { x: 34, y: 30 });
+    const a = addState(w, 'trade', far.id, w.player.vehicleId, { kind: 'none' });
+    const b = addState(w, 'trade', near.id, w.player.vehicleId, { kind: 'none' });
+    expect(playerTrades(w)).toHaveLength(2);
+    expect(inMeetingReach(w, a)).toBe(false);
+    expect(inMeetingReach(w, b)).toBe(true);
+    expect(canTradeWith(w, far.id)).toBe(false);
+    expect(canTradeWith(w, near.id)).toBe(true);
+    near.speed = RULES.parkedSpeed + 1;
+    expect(inMeetingReach(w, b)).toBe(true);
+    expect(canTradeWith(w, near.id)).toBe(false);
   });
 });

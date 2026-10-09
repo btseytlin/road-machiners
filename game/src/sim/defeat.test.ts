@@ -21,7 +21,6 @@ import { refreshVision } from './vision';
 import type { Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
 
-// Every goods unit and part id a vehicle and the stocks hold, for checking that nothing is lost or copied.
 function inventory(w: World, v: Vehicle): { goods: Record<string, number>; parts: string[] } {
   const goods: Record<string, number> = { ...goodsCount(v) };
   const parts = v.items.flatMap((it) => (it.kind === 'part' ? [it.part.id] : []));
@@ -42,11 +41,10 @@ function knockedOut(): { w: World; me: Vehicle } {
   return { w, me };
 }
 
-// A raider that dealt the knockout blow and watches the truck, so it keeps the driver down.
 function knockedOutByRaider(parts: string[] = []): { w: World; me: Vehicle; raider: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
   w.salvage = [];
-  for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER; // no new drivers, whose goals need a stock
+  for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
   const me = w.vehicles[0];
   const raider = addVehicle(w, 'raiders', 'buggy', parts, { x: 36, y: 30 });
   me.lastHitBy = raider.id;
@@ -186,7 +184,6 @@ describe('knockout', () => {
 });
 
 describe('fight through', () => {
-  // The player truck with a broken cab and health at a share of max health.
   function brokenCab(healthShare: number, perks: World['player']['perks']): World {
     const w = emptyWorld({ x: 30, y: 30 });
     w.player.perks = perks;
@@ -262,7 +259,6 @@ describe('waking', () => {
 
   it('wakes at the turn limit with the raider that fought it idling in sight', () => {
     let { w } = knockedOutByRaider();
-    // The turns spawn NPCs, and a spawned scavenger may head for a territory loot spot, which every map has.
     w.salvage = emptyWorld().salvage.filter((stock) => territoryOfStock(stock) !== null);
     let turns = 0;
     while (w.player.state === 'knockedOut') {
@@ -424,7 +420,6 @@ describe('knockout practice', () => {
 
 
 describe('cab knock of the player', () => {
-  // A working cab that dropped from half to 5% this turn, with a roll that knocks out.
   function hurtCab(health: number, perks: World['player']['perks']): World {
     const w = emptyWorld({ x: 30, y: 30 });
     w.player.perks = perks;

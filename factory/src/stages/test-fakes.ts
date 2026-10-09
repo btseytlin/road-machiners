@@ -5,10 +5,8 @@ import { dirname, join, resolve } from 'node:path';
 import { agentHome } from './common';
 import { MergeConflictError, RevertConflictError, type AgentRun, type Card, type Ctx, type FactoryConfig, type InlineButton, type MergeStep, type Resolution } from '../types';
 
-// Each test file loads its own copy of this module, so each file gets its own folder and parallel files never collide.
 export const ROOT = resolve(`tmp/factory-periodic-test/${randomUUID()}`);
 export const cfg = { home: ROOT, buildModel: 'sonnet', publicChannel: 'public', committeeChat: 'committee', repo: 'o/r', transcriptDays: 10, publicUrl: 'https://play.test/play', errorMapDays: 14 } as FactoryConfig;
-// The full commit every fake clone stands on.
 export const CLONE_SHA = 'abc1234'.padEnd(40, '0');
 
 export type Photo = { chat: string; path: string; caption: string; buttons?: InlineButton[][] };
@@ -65,7 +63,7 @@ export function fake(): Fake {
           mkdirSync(dirname(join(home, '.factory', name)), { recursive: true });
           writeFileSync(join(home, '.factory', name), text, 'latin1');
         }
-        return '';
+        return `${JSON.stringify({ type: 'result', total_cost_usd: 1, duration_ms: 1000 })}\n`;
       },
     },
     repo: {
@@ -73,7 +71,6 @@ export function fake(): Fake {
       fetch: async () => note('fetch'),
       prepareWorkClone: async (branch: string, _base: string, dir: string) => {
         note(`prepare ${branch}`);
-        // A clone's build output, as the game's build leaves it, maps included.
         mkdirSync(join(dir, 'game', 'dist', 'assets'), { recursive: true });
         writeFileSync(join(dir, 'game', 'dist', 'assets', 'index.js.map'), '{}');
       },
@@ -81,7 +78,7 @@ export function fake(): Fake {
       untrackFactoryFiles: async () => [],
       push: async (commit: string, branch: string) => note(`push ${commit} ${branch}`),
       mergeBranchIntoWork: async () => ({ commit: null, conflicts: [] }),
-      // A step named in `mergeConflicts` as "branch into" conflicts until a resolution of its two tips arrives.
+      catchUpBase: async () => ({ commit: null, conflicts: [], kept: null }),
       merge: async (steps: MergeStep[], resolutions: Resolution[] = []) => {
         for (const step of steps) {
           note(`merge ${step.branch} ${step.into}`);
@@ -101,7 +98,6 @@ export function fake(): Fake {
       isMerged: async () => true,
       headHash: async () => 'abc1234',
       createBranch: async (name: string, from: string) => note(`branch ${name} ${from}`),
-      // A branch named in `revertConflicts` conflicts until a resolution of its tip arrives.
       revertIssueMerge: async (issue: number, branch: string, resolutions: Resolution[] = []) => {
         note(`revert ${issue} ${branch}`);
         if (f.revertConflicts.includes(branch) && !resolutions.some((item) => item.base === `${branch}-tip`)) throw new RevertConflictError(issue, branch, ['game/src/a.ts'], 'boom', `${branch}-tip`, 'merge-hash');

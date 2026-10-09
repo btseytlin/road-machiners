@@ -5,7 +5,6 @@ import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
 import type { MemoryFact, Vehicle, World } from './types';
 import { endTurn } from './world';
 
-// Source files of src/ keyed by path.
 const SOURCES = import.meta.glob<string>('../**/*.ts', { query: '?raw', import: 'default', eager: true });
 
 function driver(w: World): Vehicle {
@@ -21,6 +20,15 @@ function prices(shop: string, salt = 0): MemoryFact {
 describe('driver memory', () => {
   it('names a price memory by its shop', () => {
     expect(subjectOf(prices('bowl'))).toBe('prices:bowl');
+  });
+
+  it('keeps a price and a stripped memory of one id apart', () => {
+    const w = emptyWorld();
+    const v = driver(w);
+    expect(subjectOf({ kind: 'stripped', stock: 'bowl' })).toBe('stripped:bowl');
+    remember(w, v, prices('bowl'));
+    remember(w, v, { kind: 'stripped', stock: 'bowl' });
+    expect(v.brain!.memories).toHaveLength(2);
   });
 
   it('appends new memories in turn order', () => {
@@ -89,7 +97,6 @@ describe('driver memory', () => {
   it('lets no file but memory.ts write driver memories', () => {
     const write = /\.memories\s*(?:=(?!=)|\.(?:push|splice|unshift|pop|shift|sort|reverse)\()/;
     const writers = Object.entries(SOURCES)
-      // A save step writes the saved JSON of old brains, not a live brain.
       .filter(([path]) => !path.endsWith('.test.ts') && path !== './memory.ts' && path !== '../three/save-migrations.ts')
       .filter(([, source]) => write.test(source))
       .map(([path]) => path);

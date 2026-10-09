@@ -2,7 +2,6 @@ import { moveCard } from '../card-events';
 import { BRANCH, GAME_DIR, TASK_FILE, isCleanupTask, type Ctx } from '../types';
 import { agentHome, baseBranchOf, fillPrompt, guardAndPush, prepareOutputs, runAgent, throwIfNeedsCommittee, workDir, writeIssueInput } from './common';
 
-// Subagents read the code again from scratch, and the implementer subagent runs on Opus whatever model triage picked. The agent implements inline.
 export const IMPLEMENT_DISALLOWED = ['Agent'];
 
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {

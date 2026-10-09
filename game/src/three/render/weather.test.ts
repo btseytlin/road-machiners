@@ -8,7 +8,6 @@ import { stepFade, WeatherView } from './weather';
 const FADE = WEATHER.sim.stormFadeTurns;
 type Storm = Extract<WeatherEvent, { kind: 'storm' }>;
 
-// A still storm over the player that has lived `age` turns and has `turnsLeft` to go.
 function withStorm(w: World, id: string, age: number, turnsLeft: number): Storm {
   const s: Storm = { id, kind: 'storm', pos: { ...w.vehicles[0].pos }, radius: 60, vel: { x: 0, y: 0 }, turnsLeft, born: w.turn - age };
   w.weather.push(s);
@@ -30,7 +29,6 @@ describe('stepFade', () => {
 });
 
 describe('WeatherView storm haze', () => {
-  // The dust texture draws on a canvas; Node has none, so a stand-in takes the drawing calls.
   beforeEach(() => {
     const ctx = { createRadialGradient: () => ({ addColorStop: () => {} }), fillRect: () => {}, fillStyle: '' };
     vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) });

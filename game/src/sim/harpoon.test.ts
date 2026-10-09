@@ -11,7 +11,6 @@ import { addVehicle, emptyWorld } from './testkit';
 import type { GameEvent, PartInstance, Vehicle, World } from './types';
 import { advanceUtilityEffects } from './utility';
 
-// The player facing east with a harpoon on its deck, and a trader hauler `gap` tiles east of it, broadside.
 function duel(gap = 5): { w: World; me: Vehicle; part: PartInstance; trader: Vehicle } {
   const w = emptyWorld();
   const me = w.vehicles[0];
@@ -28,7 +27,6 @@ function shotOf(w: World): Extract<GameEvent, { t: 'shot' }> {
   return shots[0];
 }
 
-// Fires the harpoon from the given random state, as the fire phase does.
 function fire(rngState: number, gap?: number): ReturnType<typeof duel> {
   const s = duel(gap);
   s.w.rngState = rngState;
@@ -38,7 +36,6 @@ function fire(rngState: number, gap?: number): ReturnType<typeof duel> {
   return s;
 }
 
-// The first random state whose shot ends as wanted. The rolls are seeded, so the search is deterministic.
 function firstFire(wanted: (s: ReturnType<typeof duel>) => boolean, gap?: number): ReturnType<typeof duel> {
   for (let seed = 1; seed < 2000; seed++) {
     const s = fire(seed, gap);
@@ -93,7 +90,6 @@ describe('firing the harpoon', () => {
     const { w } = hit();
     const [anchor] = lineAnchors(w);
 
-    // 5 tiles of 4 m between the centers, less the reach of the two anchors toward each other.
     expect(w.lines[0].length).toBeGreaterThan(10);
     expect(w.lines[0].length).toBeLessThan(20);
     expect(anchor.length).toBe(w.lines[0].length);

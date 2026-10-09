@@ -19,7 +19,6 @@ import { endTurn } from './world';
 const night = () => Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => !sunAt(t))!;
 const day = () => Array.from({ length: TIME.turnsPerDay }, (_, i) => i + 1).find((t) => sunAt(t))!;
 
-// The flare cannon's burn: radius 10 tiles for 6 turns.
 function burn(): { radius: number; turns: number } {
   const def = partDef('flareCannon');
   if (def.kind !== 'utility' || def.effect.type !== 'flare') throw new Error('flareCannon is not a flare');
@@ -32,8 +31,6 @@ function mounted(w: World, v: Vehicle, defId: string): PartInstance {
   return part;
 }
 
-// A parked trader at 100,100, the player far off. Night sight is 10 tiles and day sight 20, so a point 15 tiles east
-// lies past night sight and within day sight.
 function viewer(turn: number): { w: World; npc: Vehicle; east: Vec } {
   const w = emptyWorld({ x: 300, y: 300 });
   w.turn = turn;
@@ -92,9 +89,9 @@ describe('flare light', () => {
 
   it('does not see through a hill', () => {
     const { w, npc, east } = viewer(night());
-    w.vehicles[0].pos = { x: 100, y: 96 }; // in the live range, where hills count
+    w.vehicles[0].pos = { x: 100, y: 96 };
     const terrain = editableTerrain(w);
-    for (let y = 0; y <= w.size; y++) terrain.heights[y * (w.size + 1) + 108] = 5; // a ridge across x = 108
+    for (let y = 0; y <= w.size; y++) terrain.heights[y * (w.size + 1) + 108] = 5;
 
     launchFlare(w, w.vehicles[0], east, burn());
 
@@ -113,7 +110,6 @@ describe('flare light', () => {
 });
 
 describe('the Flare cannon', () => {
-  // The player at 100,100 with a flare cannon on its deck, at the given time of day.
   function launcher(turn: number): { w: World; me: Vehicle; part: PartInstance } {
     const w = emptyWorld({ x: 100, y: 100 });
     w.turn = turn;
@@ -160,7 +156,7 @@ describe('the Flare cannon', () => {
   it('after its launch turn shows its light: a contact at the flare that holds the launcher', () => {
     const { w, me, part } = launcher(night());
     const pos = { x: 124, y: 100 };
-    const watcher = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 184, y: 100 }); // 84 from the launcher, 60 from the flare
+    const watcher = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 184, y: 100 });
     me.utilityOrders[part.id] = { kind: 'point', pos };
     activateUtilities(w);
 

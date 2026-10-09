@@ -13,7 +13,6 @@ import { reportScheduler } from './observability';
 import { tick } from './tick';
 import { guardTick } from './tick-guard';
 
-// The process env wins, like loadEnvFile, so a job keeps what its tick passed down.
 function loadEnv(): void {
   for (const [key, value] of Object.entries(readEnvFiles('settings.env', '.env'))) process.env[key] ??= value;
 }
@@ -39,7 +38,6 @@ async function main(args: string[]): Promise<void> {
   return manage(ctx, args);
 }
 
-// A refused order is an answer for Hermes, not a crash, so it prints the reason alone and exits nonzero.
 async function manage(ctx: ReturnType<typeof realContext>, args: string[]): Promise<void> {
   try {
     await runCtl(ctx, args);
@@ -49,7 +47,6 @@ async function manage(ctx: ReturnType<typeof realContext>, args: string[]): Prom
   }
 }
 
-// Lifts a pause whose process ended, then tells whether the tick must skip.
 function paused(ctx: ReturnType<typeof realContext>): boolean {
   const lifted = liftEndedPause(ctx.cfg.home);
   if (lifted !== null) ctx.log('tick', null, `pause lifted, its process ended: ${lifted.replaceAll('\n', ' ')}`);

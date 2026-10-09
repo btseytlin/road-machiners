@@ -5,6 +5,7 @@ import { EMPTY_STATE, writeState } from '../state';
 import { appendLedger } from '../ledger';
 import { buildOperations, selectReleaseFeatures, PublicGitHub, SnapshotCollector } from './snapshot';
 import { HostSampler, type HostLoad } from './host';
+import { AnalyticsRunner } from './analytics';
 import type { DashboardConfig } from './config';
 import type { FactoryState, Run } from '../types';
 
@@ -23,7 +24,7 @@ it('publishes only explicit operational fields, never private state or raw error
 });
 
 it('only publishes a candidate link while the current candidate is valid', () => {
-  const state: FactoryState = { ...structuredClone(EMPTY_STATE), release: { issue: 3, branch: 'release/day', day: '2026-01-01', postId: null, removed: [], candidateSha: null, playtest: { seed: 1, runs: 0, streak: 0, passed: null, blocked: null, notes: [] } }, builds: { '3': 'rc' } };
+  const state: FactoryState = { ...structuredClone(EMPTY_STATE), release: { issue: 3, branch: 'release/day', day: '2026-01-01', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } }, builds: { '3': 'rc' } };
   const config = { triageWorkers: 1, designWorkers: 2, implementWorkers: 2, verifyWorkers: 2, testWorkers: 2, publicUrl: 'https://example.org' };
   expect(buildOperations(state, false, config).candidateUrl).toBeNull();
   state.release!.postId = 10;
@@ -37,9 +38,10 @@ class FixtureGithub extends PublicGitHub {
   failed = false;
   override async read(state: FactoryState) {
     if (this.failed) throw new Error('PRIVATE credential failure');
-    return { cards: [], features: [], releaseKey: JSON.stringify({ branch: state.release?.branch ?? 'dev', removed: [] }), provisional: state.release === null };
+    return { cards: [], features: [], merges: [], releaseKey: JSON.stringify({ branch: state.release?.branch ?? 'dev', removed: [] }), provisional: state.release === null };
   }
 }
+const analyticsRunner = await AnalyticsRunner.open();
 class FixtureHost extends HostSampler {
   override async sample(): Promise<HostLoad> {
     const reading = { value: null, at: null, status: 'unavailable' as const, error: 'Unavailable' };
@@ -55,10 +57,11 @@ it('retains the last good snapshot with stale markers when its sources fail', as
     writeState(path, structuredClone(EMPTY_STATE));
     const config = createConfig(home);
     const github = new FixtureGithub(config, async () => { throw new Error('No network'); });
-    const collector = new SnapshotCollector(config, github, new FixtureHost(home, 100));
+    const collector = new SnapshotCollector(config, github, new FixtureHost(home, 100), analyticsRunner);
     await collector.refreshLocal();
     await collector.refreshGithub();
     const good = collector.getSnapshot();
+    expect(good.labels.columns.Merging).toBe('Merging');
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 120_000);
     expect(collector.getSnapshot().operations.status).toBe('stale');
@@ -81,7 +84,7 @@ it('reports a safe pause reason and clears it when the pause is removed', async 
     mkdirSync(join(home, 'state'));
     writeState(join(home, 'state', 'state.json'), structuredClone(EMPTY_STATE));
     const config = createConfig(home);
-    const collector = new SnapshotCollector(config, new FixtureGithub(config, async () => { throw new Error('No network'); }), new FixtureHost(home, 100));
+    const collector = new SnapshotCollector(config, new FixtureGithub(config, async () => { throw new Error('No network'); }), new FixtureHost(home, 100), analyticsRunner);
     const pause = join(home, 'paused');
     writeFileSync(pause, 'Hermes: Claude weekly usage limit; PRIVATE committee notes');
     await collector.refreshLocal();
@@ -103,11 +106,10 @@ it('does not expose committee posts when Telegram is hidden', async () => {
     writeState(join(home, 'state', 'state.json'), structuredClone(EMPTY_STATE));
     appendLedger(home, { kind: 'post', id: 7, channel: '-1001', text: 'PRIVATE committee post', at: new Date().toISOString() });
     const config = { ...createConfig(home), channelUrl: null, publicChannel: null };
-    const collector = new SnapshotCollector(config, new FixtureGithub(config, async () => { throw new Error('No network'); }), new FixtureHost(home, 100));
+    const collector = new SnapshotCollector(config, new FixtureGithub(config, async () => { throw new Error('No network'); }), new FixtureHost(home, 100), analyticsRunner);
     await collector.refreshLocal();
     const snapshot = collector.getSnapshot();
     expect(snapshot.channelUrl).toBeNull();
-    expect(snapshot.analytics.value?.posts).toEqual([]);
     expect(JSON.stringify(snapshot)).not.toContain('PRIVATE');
   } finally { rmSync(home, { recursive: true, force: true }); }
 });
@@ -123,11 +125,12 @@ it('publishes delivery numbers from card lines in every range with no committee 
     appendLedger(home, { kind: 'route', issue: 5, route: 'redesign', by: 'PRIVATE member', at: at(3) });
     appendLedger(home, { kind: 'control', action: 'move', issue: 5, by: 'PRIVATE', reason: 'PRIVATE reason', at: at(3) });
     const config = createConfig(home);
-    const collector = new SnapshotCollector(config, new FixtureGithub(config, async () => { throw new Error('No network'); }), new FixtureHost(home, 100));
+    const collector = new SnapshotCollector(config, new FixtureGithub(config, async () => { throw new Error('No network'); }), new FixtureHost(home, 100), analyticsRunner);
     await collector.refreshLocal();
     const snapshot = collector.getSnapshot();
-    expect(snapshot.analytics.value?.ranges.map((range) => range.delivery?.issues)).toEqual([1, 1, 1]);
-    expect(snapshot.analytics.value?.ranges[0].delivery?.stages.find((row) => row.stage === 'triage')?.count).toBe(1);
+    const ranges = snapshot.analytics.value?.delivery_coverage.ranges;
+    expect([ranges?.[1][0].issues, ranges?.[7][0].issues, ranges?.[30][0].issues]).toEqual([1, 1, 1]);
+    expect(snapshot.analytics.value?.dwell.ranges?.[1].find((row) => row.stage === 'triage')?.count).toBe(1);
     expect(JSON.stringify(snapshot)).not.toContain('PRIVATE');
   } finally { rmSync(home, { recursive: true, force: true }); }
 });

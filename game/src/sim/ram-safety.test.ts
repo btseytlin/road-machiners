@@ -16,7 +16,6 @@ import { chooseOn } from './tracks';
 import { isWeak, optionWeights } from './npc-decisions';
 import type { Vehicle, World } from './types';
 
-// A raider already fighting the player, which it has decided on, so no new roll interrupts the fight.
 function fighting(world: World, raider: Vehicle): Vehicle {
   const me = world.player.vehicleId;
   raider.brain = npcBrain('buggy', raider.pos, ['raider']);
@@ -40,7 +39,7 @@ describe('ram chances', () => {
     const { world, raider } = createFight();
     raider.speed = 5;
     const light = ramWeight(world, raider)!;
-    addGoods(world, world.vehicles[0], 'scrap', 60); // 6000 kg of scrap makes the player's truck much heavier
+    addGoods(world, world.vehicles[0], 'scrap', 60);
     const heavy = ramWeight(world, raider)!;
     expect(heavy).toBeLessThan(light);
   });
@@ -49,7 +48,7 @@ describe('ram chances', () => {
     const { world, raider } = createFight();
     raider.speed = 5;
     const me = world.vehicles[0];
-    me.heading = Math.PI; // the player's nose faces the raider
+    me.heading = Math.PI;
     me.items = me.items.filter((it) => it.kind !== 'part' || partDef(it.part.defId).kind !== 'armor');
     const bare = valueOf(world, raider);
     expect(mountPart(world, me, makePart(world, 'plowRam', 0), ['F'])).toBe(true);
@@ -113,7 +112,6 @@ describe('ram chances', () => {
     expect(raider.brain!.ramChoice).toBe(me);
   });
 
-  // A parked target is routed around, not braked for.
   it('keeps clear of its target when it chose to keep', () => {
     const { world, raider } = createFight();
     raider.speed = 5;
@@ -161,7 +159,6 @@ describe('ram chances', () => {
 });
 
 describe('crippled drivers', () => {
-  // A raider with no goals and the player far off, heard but not seen.
   function createListener() {
     const world = emptyWorld({ x: 1, y: 1 });
     const raider = addVehicle(world, 'raiders', 'hauler', ['mg', 'stockEngine', 'plowRam'], { x: 30, y: 30 });
@@ -180,7 +177,6 @@ describe('crippled drivers', () => {
 
   it('rarely closes in on a heard contact when crippled, and heads for repairs', () => {
     const { world, raider, me } = createListener();
-    // A plain feud, so the contact is more than loot: a stranded driver does not hunt loot.
     addState(world, 'feud', raider.id, me, { kind: 'feud', robbery: false });
     const intact = optionWeights(world, raider, 'contactHeard', me, null).investigate!;
     mountedParts(raider, 'engine')[0].hp = 0;
