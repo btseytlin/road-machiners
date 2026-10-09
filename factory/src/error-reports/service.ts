@@ -8,21 +8,15 @@ import { mapsRoot, readPublished, type Published } from '../sourcemaps';
 import { BUG_LABEL, ERROR_REPORT_LABEL, fingerprintLine, type FactoryConfig, type FingerprintIssue, type GitHub } from '../types';
 import { commitOf, fingerprintOf, mapFrames, parseReport, Rejected, type ErrorReport, type Frame, type RejectReason } from './report';
 
-// The error service takes error reports from the game's release, dev and candidate builds. It finds the GitHub issue of
-// each error by fingerprint, or opens one that intake takes without votes, and keeps the reports for the agents that fix it.
-
 const LOCK_MS = 30_000;
 const MB = 1024 * 1024;
 
-// The service writes only in this folder, so its systemd sandbox opens only this folder for writes.
 export const errorsHome = (home: string): string => join(home, 'error-reports');
 export const storePath = (home: string): string => join(errorsHome(home), 'store.json');
 export const reportsDir = (home: string): string => join(errorsHome(home), 'reports');
 export const alertPath = (home: string): string => join(errorsHome(home), 'alert');
 
-// issue is null while an error waits for the daily cap. commits lists each commit it came from, so a new one is news.
 type Known = { issue: number | null; count: number; commits: string[] };
-// opened counts new issues per UTC day. rejects counts refused reports by reason.
 export type ErrorStore = { known: Record<string, Known>; opened: Record<string, number>; rejects: Partial<Record<RejectReason, number>> };
 
 export function readStore(home: string): ErrorStore {
@@ -44,7 +38,6 @@ export function countReject(home: string, reason: RejectReason): void {
   updateStore(home, (store) => { store.rejects[reason] = (store.rejects[reason] ?? 0) + 1; });
 }
 
-// Hermes reads this file and deletes it once handled. A line holds the day and no time, so each prints once.
 export function raiseAlert(home: string, line: string): void {
   const path = alertPath(home);
   if (existsSync(path) && readFileSync(path, 'utf8').split('\n').includes(line)) return;
@@ -54,10 +47,8 @@ export function raiseAlert(home: string, line: string): void {
 
 const dayOf = (now: Date): string => now.toISOString().slice(0, 10);
 
-// Agents of an error-report issue read its reports here. The path sits outside the clone, so nothing of it reaches a commit.
 export const REPORTS_MOUNT = '/error-reports';
 
-// The read-only mounts of an issue's report folders and the prompt part that lists their files. Empty for an issue with no reports.
 export function issueReports(home: string, issue: number): { readOnly: Record<string, string>; section: string } {
   const { known } = readStore(home);
   const fingerprints = Object.keys(known).filter((fingerprint) => known[fingerprint].issue === issue && existsSync(join(reportsDir(home), fingerprint)));
@@ -88,7 +79,6 @@ export class ErrorReports {
 
   constructor(private readonly deps: ReportDeps) {}
 
-  // Takes one gzipped report. Reports run one at a time, so two copies of a new error open one issue.
   take(body: Buffer): Promise<void> {
     const result = this.queue.then(() => this.handle(body));
     this.queue = result.catch(() => undefined);
@@ -105,14 +95,12 @@ export class ErrorReports {
     this.keep(fingerprint, published.sha, body);
     const seen = updateStore(home, (store) => record(store, fingerprint, published.sha));
     if (seen.issue !== null && !seen.newCommit) return;
-    // GitHub is the source of truth, so a lost store never hides an error.
     const found = seen.issue === null ? await this.deps.github.findByFingerprint(fingerprint) : await this.deps.github.errorIssue(seen.issue);
     if (!found) return this.open(report, frames, fingerprint);
     updateStore(home, (store) => { store.known[fingerprint].issue = found.number; });
     await this.seenAgain(found, report, published);
   }
 
-  // One report file per fingerprint and commit is enough to rerun the error. Later copies only count.
   private keep(fingerprint: string, sha: string, body: Buffer): void {
     const { home, errorDiskMb } = this.deps.cfg;
     const path = join(reportsDir(home), fingerprint, `${sha}.json.gz`);
@@ -138,7 +126,6 @@ export class ErrorReports {
     updateStore(home, (store) => { store.known[fingerprint].issue = issue; });
   }
 
-  // A closed issue reopens only when its fix was done and the error came back in a build published after the close.
   private async seenAgain(found: FingerprintIssue, report: ErrorReport, published: Published): Promise<void> {
     const build = `the ${report.build} build ${report.version}`;
     if (found.state === 'OPEN') return this.deps.github.comment(found.number, `This error came again in ${build}.`);
@@ -172,7 +159,6 @@ function unzip(body: Buffer, maxMb: number): unknown {
   }
 }
 
-// A report must come from a build the factory published, so made-up versions stop here.
 function publishedOf(home: string, short: string): Published {
   const found = readPublished(home).find((entry) => entry.sha.startsWith(short));
   if (!found) throw new Rejected('commit', 422, `No reporting build was published from commit ${short}.`);
@@ -184,9 +170,8 @@ function sizeOf(dir: string): number {
   return readdirSync(dir, { recursive: true, encoding: 'utf8' }).reduce((sum, file) => sum + statSync(join(dir, file)).size, 0);
 }
 
-// Player text reaches GitHub only here. Backticks go, so the text cannot leave its code block, and it is cut short.
-const MESSAGE_CHARS = 300; // a message longer than this is a dump, not an error line
-const TITLE_CHARS = 100; // GitHub lists show about this much
+const MESSAGE_CHARS = 300;
+const TITLE_CHARS = 100;
 const plain = (text: string, max: number): string => text.replace(/`/g, "'").slice(0, max);
 
 function issueTitle(report: ErrorReport): string {
@@ -194,7 +179,6 @@ function issueTitle(report: ErrorReport): string {
 }
 
 function issueBody(report: ErrorReport, frames: readonly Frame[], fingerprint: string): string {
-  // A map names what the frame's line calls, not the function the line is in.
   const stack = frames.map((frame) => `${frame.source}:${frame.line}:${frame.column}${frame.name ? `, calls ${frame.name}` : ''}`).join('\n');
   return [
     `A ${report.build} build of the game hit this error. The error service opened this issue from the player's report.`,
@@ -209,7 +193,6 @@ function issueBody(report: ErrorReport, frames: readonly Frame[], fingerprint: s
   ].join('\n');
 }
 
-// The HTTP side: origin, client address and size checks, then the report goes to ErrorReports.
 export type ServerConfig = Pick<FactoryConfig, 'home' | 'publicUrl' | 'errorOrigins' | 'errorBodyKb' | 'errorIpPerHour'>;
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -222,7 +205,6 @@ export class ErrorServer {
     this.origins = new Set([new URL(cfg.publicUrl).origin, ...cfg.errorOrigins.split(/\s+/).filter(Boolean)]);
   }
 
-  // systemd runs one service, so a socket file left by a crash is stale.
   async listen(socket: string): Promise<void> {
     rmSync(socket, { force: true });
     await new Promise<void>((resolve, reject) => {
@@ -284,7 +266,6 @@ export class ErrorServer {
   }
 }
 
-// Reports reach the service through the Cloudflare tunnel, which names the client in this header.
 function clientOf(request: IncomingMessage): string {
   const client = request.headers['cf-connecting-ip'];
   if (typeof client !== 'string' || client === '') throw new Rejected('address', 400, 'The request names no client address.');

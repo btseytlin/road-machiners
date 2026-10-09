@@ -25,14 +25,14 @@ describe('release cut', () => {
       'branch release/2026-09-29 dev',
       'createIssue Release 2026-09-29',
       'addCard Approval',
-      'createIssue Optimize one slow spot (release 2026-09-29)',
+      'createIssue Optimize against the speed budget (release 2026-09-29)',
       'addCard Design',
       'createIssue Code janitor pass (release 2026-09-29)',
       'addCard Design',
     ]);
     expect(f.created.map((issue) => issue.labels)).toEqual([['release'], ['release-task', 'maintenance'], ['release-task', 'maintenance']]);
     expect(f.created[0].body).toContain('- #3 faster trucks');
-    expect(f.created[1].body).toContain('slow spot');
+    expect(f.created[1].body).toContain('npm run perf');
     expect(f.created[2].body).toContain('stale doc');
     expect(readState(f.ctx.statePath).release).toEqual({ issue: 11, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, candidateSha: null, removed: [], tasks: [12, 13], playtest: { seed: 20260929, runs: 0, passed: null, blocked: null, notes: [] } });
   });

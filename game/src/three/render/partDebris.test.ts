@@ -20,7 +20,6 @@ await loadModels(async (name) => {
 const SIZE = 64;
 const S = PHYSICS.metersPerTile;
 
-// The scope, with every object added to it recorded in order.
 function trackedScope(): { scope: RenderScope; added: THREE.Group[] } {
   const scope = new RenderScope(new THREE.Group(), SIZE, new SightLimit(SIZE), true, false);
   const added: THREE.Group[] = [];

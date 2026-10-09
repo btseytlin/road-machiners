@@ -3,9 +3,6 @@
 // targets in src/data/skills.ts. It adds the wage per turn at each gear tier, the day each tier is first held, and the
 // fight and loss counts. Days show the median over seeds and the min-max range. A rank some seeds never reach shows how
 // many seeds reached it.
-// Usage: npm run progression:report [-- <dir>], with tmp/progression as the default dir.
-// With two dirs, npm run progression:report -- <a> <b> prints only the A/B comparison: each bot's summary on both sides
-// and the change in money per day by ledger key. Record both sides on the same seeds and turns.
 import { createReadStream, readdirSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { MAX_RANK, SKILL_IDS } from '../src/data/skills.ts';
@@ -17,7 +14,6 @@ import { fightTotals, ledgerTotals, TIERS, tierDays, wageByTier } from '../src/s
 
 const dirs = process.argv.slice(2).filter((a) => a !== '--');
 if (dirs.length > 2) throw new Error('Pass one dir to report on, or two to compare');
-// Traces hold money in the sim's cents. The report prints M.
 const inM = (digits) => (cents) => (cents / UNITS.centsPerM).toFixed(digits);
 
 const sides = [];
@@ -42,7 +38,6 @@ function printFull(runs) {
   printSummary(runs);
 }
 
-// One line per bot: how its runs ended, what it earned per turn against the trader, and what it lost.
 function printSummary(runs) {
   const rows = [['bot', 'runs', 'ended early', 'profit/turn M', 'net worth/turn M', 'vs trader', 'last day', 'knockouts', 'gear lost']];
   for (const a of namesOf(runs)) rows.push(summaryRow(runs, a));
@@ -50,7 +45,6 @@ function printSummary(runs) {
   printTable(rows);
 }
 
-// Each bot's summary on side A, then side B, then the change in money per day by ledger key.
 function printCompare([a, b], [dirA, dirB]) {
   requireSameRuns(a, b);
   console.log(`A is ${dirA}, B is ${dirB}`);
@@ -78,13 +72,11 @@ function sameNetWorth(a, b) {
   return ends(a) === ends(b);
 }
 
-// An A/B comparison means something only on the same bots, seeds and run length.
 function requireSameRuns(a, b) {
   const key = (runs) => runs.map((r) => `${r.archetype}-${r.seed}`).sort().join(',');
   if (key(a) !== key(b)) throw new Error(`The two sides hold different runs: ${key(a)} against ${key(b)}`);
 }
 
-// The median over runs of money moved per in-game day by ledger key.
 function ledgerPerDay(runs) {
   const each = runs.map((r) => {
     const days = r.rows.reduce((sum, row) => sum + row.turns, 0) / TIME.turnsPerDay;
@@ -104,7 +96,6 @@ function summaryRow(runs, archetype) {
   const totals = group.map((r) => fightTotals(r.rows));
   const ends = group.filter((r) => r.rows.length > 0).map((r) => r.rows[r.rows.length - 1]);
   const profits = group.filter((r) => r.rows.length > 1).map(profitPerTurn);
-  // A ratio against a trader that lost net worth would read upside down.
   const ratio = trader > 0 && gains.length ? (median(gains) / trader).toFixed(2) : '-';
   const lastDay = spreadOrDash(ends.map((row) => row.day), String);
   const money = inM(4);
@@ -115,15 +106,12 @@ function spreadOrDash(values, format) {
   return values.length ? spread(values, format) : '-';
 }
 
-// Money earned per turn by the work itself: every ledger key but gear bought and sold. Goods still aboard at the end
-// count as spent.
 function profitPerTurn(run) {
   const totals = ledgerTotals(run.rows);
   const turns = run.rows.reduce((sum, row) => sum + row.turns, 0);
   return LEDGER_KEYS.filter((key) => key !== 'gear').reduce((sum, key) => sum + totals[key], 0) / turns;
 }
 
-// Net worth gained per turn over the whole run.
 function gainPerTurn(run) {
   const first = run.rows[0];
   const last = run.rows[run.rows.length - 1];
@@ -131,7 +119,6 @@ function gainPerTurn(run) {
   return (last.netWorth - first.netWorth) / turns;
 }
 
-// A trace file, replayed with the current XP rules.
 async function readRun(path) {
   const run = parseRun(await readValues(path), path);
   const curve = replay(run.trace, run.turns);
@@ -172,7 +159,6 @@ function printSkills(group) {
   if (group.every((run) => run.misses.length === 0)) console.log('  all targets met');
 }
 
-// Wage per turn and the first day at each gear tier over seeds, then the fight totals and the end state of each seed.
 function printEconomy(group) {
   const withRows = group.filter((r) => r.rows.length > 0);
   if (withRows.length === 0) return console.log('\nNo economy rows in these traces');
@@ -194,7 +180,6 @@ function printEconomy(group) {
   printLedger(withRows);
 }
 
-// Net worth at the end of chosen days, over the seeds that reached each day.
 function printNetWorth(group) {
   const last = Math.max(...group.map((r) => r.rows[r.rows.length - 1].day));
   const days = [0, 1, 3, 5, 10, 15, 20, 30].filter((d) => d <= last);
@@ -209,7 +194,6 @@ function printNetWorth(group) {
   printTable(rows);
 }
 
-// Money moved per in-game day by key, over seeds. Negative is spent, positive earned.
 function printLedger(group) {
   const totals = group.map((r) => ({ days: r.rows.reduce((sum, row) => sum + row.turns, 0) / TIME.turnsPerDay, ledger: ledgerTotals(r.rows) }));
   const rows = [['M per day', ...LEDGER_KEYS]];
@@ -223,7 +207,6 @@ function spreadOrNone(values, format) {
   return reached.length === 0 ? 'never' : `${spread(reached, format)}${reached.length === values.length ? '' : ` [${reached.length}/${values.length}]`}`;
 }
 
-// The turns to a rank over seeds. Seeds that never reach it are counted, not averaged in.
 function levelCell(turns, seeds) {
   const reached = turns.filter((t) => t !== null);
   if (reached.length === 0) return 'never';

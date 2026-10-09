@@ -5,7 +5,6 @@ import { fake, reset, type Fake } from './test-fakes';
 
 beforeEach(reset);
 
-// A fake whose issue branch moves on GitHub: each push in `rejects` fails once, and each entry of `moves` is what the next catch-up finds.
 function moving(moves: { commit: string | null; conflicts: string[] }[], rejects: number): { f: Fake; prompts: string[] } {
   const f = fake();
   const prompts: string[] = [];

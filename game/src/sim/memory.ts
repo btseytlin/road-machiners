@@ -5,9 +5,11 @@
 import { MEMORY } from '../data/npcs';
 import type { Memory, MemoryFact, NpcBrain, Vehicle, World } from './types';
 
-// The thing a fact is about. Two facts with one subject are the same memory at different times.
 export function subjectOf(fact: MemoryFact): string {
-  return `${fact.kind}:${fact.shop}`;
+  switch (fact.kind) {
+    case 'prices': return `prices:${fact.shop}`;
+    case 'stripped': return `stripped:${fact.stock}`;
+  }
 }
 
 function brainOf(vehicle: Vehicle): NpcBrain {
@@ -15,7 +17,6 @@ function brainOf(vehicle: Vehicle): NpcBrain {
   return vehicle.brain;
 }
 
-// Remembers a fact seen this turn. The log stays oldest first with one memory per subject.
 export function remember(world: World, vehicle: Vehicle, fact: MemoryFact): void {
   const brain = brainOf(vehicle);
   const subject = subjectOf(fact);
@@ -23,15 +24,12 @@ export function remember(world: World, vehicle: Vehicle, fact: MemoryFact): void
   brain.memories.push({ turn: world.turn, fact });
 }
 
-// A driver's memories of one kind, newest first.
 export function recall<K extends MemoryFact['kind']>(vehicle: Vehicle, kind: K): (Memory & { fact: Extract<MemoryFact, { kind: K }> })[] {
   return brainOf(vehicle).memories
     .filter((m): m is Memory & { fact: Extract<MemoryFact, { kind: K }> } => m.fact.kind === kind)
     .reverse();
 }
 
-// Drops every memory that has reached its kind's lifetime. Runs once a turn, so it builds a new log only for a
-// driver that forgets something.
 export function forgetOld(world: World): void {
   const fresh = (m: Memory): boolean => world.turn - m.turn < MEMORY.turns[m.fact.kind];
   for (const v of world.vehicles) {

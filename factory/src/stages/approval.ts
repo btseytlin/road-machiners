@@ -24,15 +24,12 @@ function forgetPosts(ctx: Ctx, issue: number, dropPending: boolean): void {
     const approvedResolving = { ...state.approvedResolving };
     delete approvedResolving[String(issue)];
     const postOnly = state.postOnly.filter((n) => n !== issue);
-    // A reply to a closed post can no longer be routed, so it must not turn into a failure later.
     const unroutedReplies = Object.fromEntries(Object.entries(state.unroutedReplies).filter(([, reply]) => reply.issue !== issue));
     return { ...state, approvalPosts, pendingApprovals, builds, approvedResolving, postOnly, unroutedReplies };
   });
   dropReplyMedia(ctx.cfg.home, closed);
 }
 
-// The committee approved a preview. A card moves to Hardening under the approver, and Merging takes it from there with no new post.
-// A hotfix hardened before its post, so it ships at once. A hotfix that conflicts with main by then goes back to Testing, which merges main again.
 export async function approve(ctx: Ctx, issue: number, by: string): Promise<void> {
   await requireApproval(ctx, issue);
   const item = await ctx.github.issue(issue);
@@ -57,7 +54,6 @@ async function harden(ctx: Ctx, issue: number, by: string, base: string): Promis
   ctx.log('approve', issue, `approved by ${by}, to Hardening`);
 }
 
-// A merged card is done. Its posts, its work clone and its check clone go, and the committee chat hears of it.
 export async function closeMerged(ctx: Ctx, issue: number, labels: string[], message: string): Promise<void> {
   await moveCard(ctx, issue, 'Done', 'merged', cardFlow(labels));
   forgetPosts(ctx, issue, true);
@@ -66,11 +62,6 @@ export async function closeMerged(ctx: Ctx, issue: number, labels: string[], mes
   await ctx.telegram.sendMessage(ctx.cfg.committeeChat, message);
 }
 
-// A routed committee reply. Every route lands on the issue with its route, and the ledger records it.
-// An answer leaves the card and its post as they are. A patch or a redesign wins over an approval queued for the same issue,
-// since the card leaves Approval. Returns whether it dropped one.
-// A patch or a redesign takes the images the member sent with replies to the post. An answer leaves them for a later route.
-// A patch goes back to Testing, whose session reads the reply from the issue as its whole task.
 export async function routeFeedback(ctx: Ctx, issue: number, by: string, text: string, route: Route, post: number): Promise<boolean> {
   await requireApproval(ctx, issue);
   const state = readState(ctx.statePath);
@@ -93,7 +84,6 @@ export async function deny(ctx: Ctx, issue: number, by: string): Promise<void> {
   await closeCard(ctx, issue, `Denied by ${by} in the committee chat.`, 'denied');
 }
 
-// Drops the card from the pipeline for good: closed as not planned, in Done, with its bundle sent back to triage.
 export async function closeCard(ctx: Ctx, issue: number, comment: string, step: 'denied' | 'dropped'): Promise<void> {
   await ctx.github.comment(issue, comment);
   if ((await ctx.github.pullRequestFor(BRANCH(issue))) !== null) await ctx.github.closePullRequest(BRANCH(issue), comment);

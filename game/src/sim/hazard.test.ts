@@ -14,7 +14,6 @@ import { dist, polylineDist } from './vec';
 
 const sun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
 const hazard = TERRITORIES['fallen-sun'].reactor!.hazard!;
-// The reactor in the bow's breach, the hazard's centre.
 const core = reactorPos(sun as never);
 const outsidePos = { x: core.x + hazard.radius + 3, y: core.y };
 

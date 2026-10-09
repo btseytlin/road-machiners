@@ -1,36 +1,30 @@
 // The combat score's two accent lines over the background base. Each event plays a stab: its accent timed so the
 // sound's loudest moment lands on the event. The rest of the accent's rhythm then follows as a tail on the beat
 // grid, counted from the slot nearest the event. The lead takes heavy events, the secondary light ones, quieter
-// and to one side. A new event replaces its line's tail; the same accent again makes the tail denser. Variety
-// lives inside that structure: random rhythm variants, a rare fill at a tail's end, a little timing and level
-// jitter, and a chance for light events to sound at all.
-// Pure: the caller passes audio times in seconds and a random roll function.
 
-// Audio time of one beat of the base, the beat length in seconds, and beats per bar.
 export type Grid = { start: number; beat: number; beatsPerBar: number };
 
 export type LineId = "lead" | "secondary";
 
-// How an accent enters the score.
 export type AccentPlan = { line: LineId; weight: number; bars: number; chance: number };
 
 export type LineTuning = {
   gain: number;
-  calm: readonly string[]; // one-bar rhythms from the stab on, x for a hit and . for a rest, one character per slot
-  hot: readonly string[]; // denser rhythms, for a hot fight or a repeat of the accent that is playing
+  calm: readonly string[];
+  hot: readonly string[];
 };
 
 export type DesignerTuning = {
-  subdivision: number; // slots per beat
-  humanizeMs: number; // largest timing shift after the slot, for tail hits
-  gainJitter: number; // largest share of level change either way
-  hotHeat: number; // heat from which tails take hot rhythms
-  pauseRepeats: number; // times the last lead phrase repeats in a turn pause
-  fillChance: number; // chance of a ghost hit on a lead tail's last slot
+  subdivision: number;
+  humanizeMs: number;
+  gainJitter: number;
+  hotHeat: number;
+  pauseRepeats: number;
+  fillChance: number;
   fillGain: number;
-  secondaryPan: number; // the secondary sits this far to one side, picked per battle
-  busyFactor: number; // how far a light event's chance falls while its line still plays a tail
-  stabGapSeconds: number; // a stab this close to another on its line is dropped, so hits never stack
+  secondaryPan: number;
+  busyFactor: number;
+  stabGapSeconds: number;
   lines: Record<LineId, LineTuning>;
 };
 
@@ -38,7 +32,6 @@ export type Hit = { cue: string; time: number; gain: number; pan: number; line: 
 export type Offer = { result: "played" | "skipped" | "crowded"; stab: Hit | null };
 
 type Phrase = { cue: string; plan: AccentPlan };
-// stabbed: the first slot already sounded as the event's stab.
 type Playing = { phrase: Phrase; pattern: string; start: number; stabbed: boolean };
 type Line = { playing: Playing | null; last: Phrase | null; lastPattern: string; replays: number; lastStab: number };
 
@@ -46,7 +39,7 @@ const LINES: LineId[] = ["lead", "secondary"];
 
 export class SoundDesigner {
   private lines: Record<LineId, Line>;
-  private cursor: number; // next slot to play
+  private cursor: number;
   private pan: number;
 
   constructor(
@@ -62,8 +55,6 @@ export class SoundDesigner {
     this.pan = (roll() < 0.5 ? -1 : 1) * tuning.secondaryPan;
   }
 
-  // An event at time at: its stab, starting peak seconds early so the sound's loudest moment lands on the event,
-  // and a new tail on its line. A light event sounds by chance, lower while its line still plays a tail.
   offer(cue: string, plan: AccentPlan, at: number, peak: number, heat: number): Offer {
     const line = this.lines[plan.line];
     if (!this.sounds(plan, line)) return { result: "skipped", stab: null };
@@ -81,7 +72,6 @@ export class SoundDesigner {
     return this.roll() < plan.chance * Math.exp(-this.tuning.busyFactor * busy);
   }
 
-  // Tail hits for every slot up to until, in time order. Slots already past are skipped silently.
   step(now: number, until: number, paused: boolean, heat: number): Hit[] {
     const hits: Hit[] = [];
     for (; this.slotTime(this.cursor) <= until; this.cursor++) {
@@ -103,7 +93,6 @@ export class SoundDesigner {
     return !line.playing && id === "lead" && paused && slot % this.slotsPerBar() === 0;
   }
 
-  // In a turn pause the last lead phrase comes back from bar lines a few times.
   private replay(line: Line, slot: number, heat: number): void {
     if (!line.last || line.replays >= this.tuning.pauseRepeats) return;
     line.replays++;
@@ -119,7 +108,6 @@ export class SoundDesigner {
     line.last = phrase;
   }
 
-  // A random rhythm, never the one the line played last when there is a choice.
   private pick(pool: readonly string[], line: Line): string {
     const choices = pool.length > 1 ? pool.filter((r) => r !== line.lastPattern) : pool;
     const r = choices[Math.floor(this.roll() * choices.length)];
@@ -179,7 +167,6 @@ export class SoundDesigner {
   }
 }
 
-// An exponentially fading sum.
 export class Fading {
   private value = 0;
   private at = -Infinity;

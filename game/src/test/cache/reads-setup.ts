@@ -30,7 +30,6 @@ function wrap(target: object, name: string): void {
   };
 }
 
-// Wrapped once per worker. The ESM sync makes named imports of node:fs see the wrappers too.
 if (!(INSTALLED in store)) {
   (store as Record<symbol, unknown>)[INSTALLED] = true;
   for (const name of SYNC) wrap(fs, name);

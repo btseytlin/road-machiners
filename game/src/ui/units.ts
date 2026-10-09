@@ -9,7 +9,6 @@ export function kph(tilesPerTurn: number): number {
   return Math.round((tilesPerTurn * PHYSICS.metersPerTile) / PHYSICS.turnSeconds * MS_TO_KPH);
 }
 
-// Acceleration in tiles per turn per turn, as m/s².
 export function mps2(tilesPerTurn2: number): number {
   return Math.round((tilesPerTurn2 * PHYSICS.metersPerTile) / PHYSICS.turnSeconds ** 2 * 10) / 10;
 }
@@ -38,18 +37,14 @@ export function engineCelsius(engineHeat: number): number {
   return Math.round(UNITS.engineColdCelsius + engineHeat * (UNITS.engineHotCelsius - UNITS.engineColdCelsius));
 }
 
-// Part HP and player health are fractional in the sim. A working part never reads 0.
 export function hp(value: number): number {
   return Math.ceil(value);
 }
 
-// Damage is fractional in the sim. Any damage reads at least 1.
 export function damage(value: number): number {
   return Math.ceil(value);
 }
 
-// Money is cents in the sim. It reads in whole M, with any part of an M rounded away from zero,
-// so a price, fee or debt never reads smaller than it is. Cents round first, to drop float noise.
 const WHOLE_M = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
 export function moneyAmount(cents: number): string {
@@ -59,7 +54,6 @@ export function moneyAmount(cents: number): string {
   return WHOLE_M.format(Math.sign(whole) * m);
 }
 
-// Money in running text, with its unit: log lines, talk and titles.
 export function moneyText(cents: number): string {
   const amount = moneyAmount(cents);
   return `${amount} ${amount === '1' ? UNITS.currency.one : UNITS.currency.many}`;

@@ -22,11 +22,9 @@ function readOutput(home: string, name: string): string | null {
   return existsSync(path) ? readFileSync(path, 'utf8') : null;
 }
 
-// The rounds that leave a post behind.
 export type CloneRound = 'test';
 export const CLONE_ROUNDS: readonly CloneRound[] = ['test'];
 
-// What the factory checks after the stage and a clone cannot answer alone.
 export const HOST_ONLY_CHECKS = [
   'the guard on the pushed diff: factory paths and a SAVE_MAJOR bump',
   'the merge of the base branch into the work branch',
@@ -35,8 +33,6 @@ export const HOST_ONLY_CHECKS = [
 
 export type CloneReport = { failures: string[] };
 
-// Runs every check that reads only the clone's files, the same functions the factory calls after the stage. One run lists them all.
-// A missing image does not stop the card, but the post then leaves it out, so the check reports it for the agent to fix.
 export function checkClone(home: string): CloneReport {
   const failures: string[] = [];
   try {

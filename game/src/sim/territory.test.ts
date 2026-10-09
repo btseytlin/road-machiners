@@ -41,16 +41,12 @@ describe('territory queries', () => {
     if (fallenSun.kind !== 'territory' || !fallenSun.outline) throw new Error('The Fallen Sun has no outline');
     const at = (x: number, y: number) => ({ x: fallenSun.pos.x + x, y: fallenSun.pos.y + y });
     expect(fallenSun.radius).toBeCloseTo(Math.max(...fallenSun.outline.map((p) => Math.hypot(p.x, p.y))), 9);
-    // Down the crash furrow, past the old 44-tile circle.
     expect(territoryAt(at(-20, 80))?.id).toBe('fallen-sun');
     expect(territoryAt(at(-29, 108))?.id).toBe('fallen-sun');
-    // Out on the east floor, past the old circle.
     expect(territoryAt(at(48, 0))?.id).toBe('fallen-sun');
-    // In the north notch, and on the crag faces on either side of it, inside the old circle.
     expect(territoryAt(at(-2, -43.5))?.id).toBe('fallen-sun');
     expect(territoryAt(at(-21.7, -34.8))).toBeNull();
     expect(territoryAt(at(7.5, -42.3))).toBeNull();
-    // Beside the furrow, the land stays outside.
     expect(territoryAt(at(0, 80))).toBeNull();
   });
 
@@ -89,14 +85,12 @@ function landmarkAt(look: PropKind, pos: Vec): Obstacle {
   return { id: `${look}-0`, pos, r: 1, kind: 'landmark', look: look as LandmarkLook, yaw: 0 };
 }
 
-// What a fresh roll of the table sells for at the middle of every range.
 function midValue(table: LootTable): number {
   const mid = ([lo, hi]: [number, number]) => (lo + hi) / 2;
   const goods = Object.entries(table.goods).reduce((sum, [id, range]) => sum + mid(range) * GOODS[id].value, 0);
   return goods + mid(table.parts) * GOODS.parts.value + mid(table.fuel) * ECONOMY.supplyPrice.fuel + mid(table.supplies) * ECONOMY.supplyPrice.supplies;
 }
 
-// The summed mid value of every loot spot a territory's rules place.
 function territoryValue(id: string): number {
   const { wreck, farm } = TERRITORIES[id];
   const caches = wreck ? wreck.caches.length * midValue(SALVAGE[wreck.cacheTable]) : 0;
@@ -144,7 +138,6 @@ describe('the Old Orchard', () => {
   });
 });
 
-// A point s tiles along the orchard's road and c across it, on the map.
 function at(s: number, c: number): Vec {
   const p = onOrchardRoad(s, c);
   return { x: orchard.pos.x + p.x, y: orchard.pos.y + p.y };
@@ -154,9 +147,7 @@ describe("the Old Orchard's outline", () => {
   const poly = orchard.kind === 'territory' && orchard.outline ? orchard.outline.map((p) => ({ x: orchard.pos.x + p.x, y: orchard.pos.y + p.y })) : [];
   const edges = poly.map((a, i) => [a, poly[(i + 1) % poly.length]] as const);
   const spurEnd = REGION.roads.find((road) => dist(road[road.length - 1], at(-32, 0)) < 1)!.at(-1)!;
-  // Points every half tile along the outline.
   const rim = edges.flatMap(([a, b]) => Array.from({ length: Math.ceil(dist(a, b) * 2) }, (_, k) => ({ x: lerp(a.x, b.x, k / Math.ceil(dist(a, b) * 2)), y: lerp(a.y, b.y, k / Math.ceil(dist(a, b) * 2)) })));
-  // Every tile centre over the outline's bounding box that lies inside it.
   const inside: Vec[] = [];
   for (let y = Math.floor(orchard.pos.y - orchard.radius) + 0.5; y <= orchard.pos.y + orchard.radius; y++) for (let x = Math.floor(orchard.pos.x - orchard.radius) + 0.5; x <= orchard.pos.x + orchard.radius; x++) if (siteGap(orchard, { x, y }) < 0) inside.push({ x, y });
 
@@ -190,7 +181,6 @@ describe("the Old Orchard's outline", () => {
   it('holds the north-west pocket, and not ground inside its bounding radius past the outline', () => {
     const pocket = at(60, 30);
     expect(territoryAt(pocket)?.id).toBe('orchard');
-    // Past the south-west corner, on the far side of the west ridge.
     const beyond = at(-30, 44);
     expect(dist(beyond, orchard.pos)).toBeLessThan(orchard.radius);
     expect(territoryAt(beyond)).toBeNull();
@@ -202,7 +192,6 @@ describe("the Old Orchard's outline", () => {
   });
 });
 
-// Whether segments ab and cd cross.
 function crosses(a: Vec, b: Vec, c: Vec, d: Vec): boolean {
   const side = (p: Vec, q: Vec, r: Vec) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
   return side(a, b, c) !== side(a, b, d) && side(c, d, a) !== side(c, d, b);
@@ -217,7 +206,6 @@ describe('the Fallen Sun layout', () => {
     const p = pieces[k];
     return propBoxes({ id: `piece-${k}`, pos: p.pos, r: p.r, kind: 'landmark', look: p.look, yaw: p.yaw }).filter((b) => b.z0 < PHYSICS.truckClearance);
   };
-  // The bow holds the reactor in its breach, so it is the one piece the hazard reaches.
   const housing = pieces.findIndex((p) => p.look === 'shipBow');
   const { roads, spurs } = territoryRoads(t);
   const roadSegments = [...roads, ...spurs].flatMap((road) => road.points.slice(1).map((b, i) => [road.points[i], b] as const));
@@ -266,7 +254,6 @@ describe('the Fallen Sun layout', () => {
   });
 });
 
-// Points every quarter tile along a road's centreline.
 function along(points: readonly Vec[]): Vec[] {
   const out: Vec[] = [points[0]];
   for (let i = 1; i < points.length; i++) {
@@ -276,7 +263,6 @@ function along(points: readonly Vec[]): Vec[] {
   return out;
 }
 
-// A deck's outline or a landing strip as a box on the ground.
 function deckBox(deck: Deck): PosedBox {
   return { center: { x: (deck.from.x + deck.to.x) / 2, y: (deck.from.y + deck.to.y) / 2 }, axis: deck.axis, half: { x: deck.length / 2, y: deck.width / 2 }, z0: 0, z1: 1 };
 }
@@ -294,7 +280,6 @@ function corners(b: PosedBox): Vec[] {
   })));
 }
 
-// Tiles from a point to a road's edge, negative on the road.
 function toRoad(p: Vec, road: FarmRoad): number {
   return polylineDist(p, road.points) - road.width / 2;
 }
@@ -315,7 +300,6 @@ describe("the Fallen Sun's dirt roads, wing and flaps", () => {
   const strips = landingStrips(t);
   const nearestRoad = (p: Vec) => Math.min(...[...roads, ...spurs].map((road) => toRoad(p, road)));
   const onMap = (p: Vec) => ({ x: fallenSun.pos.x + p.x, y: fallenSun.pos.y + p.y });
-  // The piers stand under the wing; the large pieces each get an island of their own.
   const underWing = (p: Vec) => wing.some((d) => segmentDistance(p, d) < d.width / 2);
   const LARGE = new Set(['shipBow', 'shipHub', 'shipCage', 'hullShell', 'hullGantry', 'hullTower']);
   const large = pieces.map((p, k) => k).filter((k) => LARGE.has(pieces[k].look) || (pieces[k].look === 'hullDrum' && pieces[k].r >= 5 && !underWing(pieces[k].pos)));
@@ -445,7 +429,6 @@ describe("the Fallen Sun's dirt roads, wing and flaps", () => {
     expect(rules.landing).toBeGreaterThanOrEqual(12);
     for (const s of strips) {
       expect(dist(s.a, s.b)).toBeCloseTo(rules.landing, 9);
-      // Just past the lip, so the strip does not touch its own flap.
       const box = stripBox({ ...s, a: { x: s.a.x + ((s.b.x - s.a.x) / rules.landing) * 0.01, y: s.a.y + ((s.b.y - s.a.y) / rules.landing) * 0.01 } });
       for (const c of corners(box)) expect(siteGap(fallenSun, c)).toBeLessThan(0);
       pieces.forEach((p, k) => {
@@ -456,7 +439,6 @@ describe("the Fallen Sun's dirt roads, wing and flaps", () => {
   });
 });
 
-// Tiles from a point to a deck's centre line.
 function segmentDistance(p: Vec, deck: Deck): number {
   return polylineDist(p, [deck.from, deck.to]);
 }
@@ -591,8 +573,6 @@ describe('Glass Flats', () => {
     expect(dist(crossroads, mouth)).toBeLessThan(5);
   });
 
-  // The engine keeps the concept's shape, so its caches lie within the concept's 6 tiles of a road. The spread town
-  // doubles that for a compound.
   it('puts every cache within 6 tiles of a dirt road and every compound within 12', () => {
     for (const c of territoryCaches(t)) expect(nearestRoad(c), `${c.x},${c.y}`).toBeLessThanOrEqual(6);
     for (const b of wreck.buildings.flatMap((g) => g.poses)) expect(nearestRoad(onMap(b.at)), `${b.at.x},${b.at.y}`).toBeLessThanOrEqual(12);

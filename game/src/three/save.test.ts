@@ -49,7 +49,6 @@ function makeStorage(): Storage {
 
 type Saved = { player: { explored: unknown }; obstacles: { id: string }[]; vehicles: object[]; broken: object[] };
 
-// The saved world of a slot, as a script reading the database sees it.
 function savedWorldOf(slots: SaveSlots, slot: SlotId): Saved {
   return (slots.get(slot) as { world: Saved }).world;
 }
@@ -107,6 +106,19 @@ describe('game save', () => {
     expect(update(loaded, () => {}).player.overdrive).toBe(false);
   });
 
+  it('keeps a held haul with the reward and deadline it was accepted with, through a reload and a turn before its deadline', () => {
+    const slots = makeSlots();
+    const world = emptyWorld();
+    // Terms of the old rule: a tier 3 wage and a window of eight times the estimate.
+    const haul: Contract = { id: 'ct-h', shop: 'bowl', kind: 'haul', good: 'tools', units: 8, to: 'granary', reward: 1328, deadline: 934, window: 934, rush: false, tier: 3 };
+    world.player.contracts = [haul];
+    writeSave(slots, 'auto', world, RUN, 1000);
+    const loaded = loadWorld(slots, 'auto', TEST_MAP);
+    if (!loaded) throw new Error('Expected saved haul');
+    expect(loaded.player.contracts).toEqual([haul]);
+    const after = update(loaded, (d) => advanceContracts(d));
+    expect(after.player.contracts).toEqual([haul]);
+  });
   it('keeps a held bounty across a reload, and a knockout after it fulfils the bounty once', () => {
     const slots = makeSlots();
     const world = emptyWorld();
@@ -446,7 +458,6 @@ describe('game save', () => {
 describe('saved world settings', () => {
   const tuned = (damage: number, fuelUse: number) => parseSetup({ mode: 'roaming', settings: { damage, fuelUse, supplyUse: 1 } });
 
-  // A current save of a new world whose setup is replaced by `setup` as stored JSON.
   function storedWith(setup: unknown): SaveSlots {
     const slots = makeSlots();
     const save = JSON.parse(JSON.stringify(saveOf(newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')))));
@@ -469,7 +480,6 @@ describe('saved world settings', () => {
     const slots = makeSlots();
     const save = JSON.parse(JSON.stringify(saveOf(newWorld(1337, startKit('standard'), TEST_MAP, tuned(2, 2)))));
     delete save.world.setup;
-    // A save of that age still holds the last turn's events, the removed vehicles and the trails.
     save.world.events = [];
     save.world.removed = [];
     for (const vehicle of save.world.vehicles) vehicle.trail = [];

@@ -21,14 +21,12 @@ const ENTRIES: { entry: MenuEntry; label: string }[] = [
   { entry: "help", label: "Help" },
 ];
 
-// Save and New Game wait for the turn to end. Load also needs a filled slot. Help is always there.
 export function entryEnabled(entry: MenuEntry, busy: boolean, hasSave: boolean): boolean {
   if (entry === "help") return true;
   if (entry === "load") return !busy && hasSave;
   return !busy;
 }
 
-// The controls guide. It is not modal, so the player can keep driving while it is open.
 export class HelpPanel {
   constructor(private setup: () => string) {}
 
@@ -53,8 +51,8 @@ export class HelpPanel {
       el("div", {}, "Space: drive on or pause. Hold Space: fast-forward. Click your truck: brake."),
       el("div", {}, "R: manual driving, straight at the point."),
       el("div", {}, "Click a town or site: stop at its pad. E on a pad: trade, repair or loot."),
-      el("div", {}, "T: radio the truck under the cursor. 1-9: reply. H: honk."),
-      el("div", {}, "Click a truck: target it. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
+      el("div", {}, "T: radio the inspected truck. 1-9: reply. H: honk."),
+      el("div", {}, "Click a truck: inspect it, or aim a picked weapon at its body. 1-4: pick a weapon. 0: all. Q: auto fire. X: show weapons."),
       el("div", {}, "P: auto patch. C: character. I: inventory. Esc: close."),
       el("div", {}, "WASD or right-drag: pan. Wheel: zoom. F: center. V: camera. M: mute."),
       el("div", { class: "version" }, versionLabel()),

@@ -7,7 +7,7 @@ import { TERRAIN } from '../data/terrain';
 import { buildDrive, bodyState, freeDrive, initPhysics, syncDrive, TURN_STEPS, type Drive, type TurnResult } from '../phys/drive';
 import { PHYSICS } from '../data/physics';
 import { physicsMove } from '../phys/turn';
-import { advanceFar, fuelLimit, fuelLimited, isNear } from './far';
+import { advanceFar, fuelLimit, fuelLimited, isNear, lowFuelSpeed } from './far';
 import { getResources } from './resources';
 import { addState } from './states';
 import { fuelCap, vehicleStats } from './stats';
@@ -23,7 +23,6 @@ beforeAll(async () => {
 
 const LIVE = TERRAIN.vision.radius + PERF.liveMargin;
 
-// Plays n turns through the real turn pipeline with physics movement.
 function play(w: World, n: number): { w: World; d: Drive; last: TurnResult } {
   let d = buildDrive(w);
   let last: TurnResult | null = null;
@@ -43,7 +42,6 @@ function pathLength(trail: Pose[]): number {
   return total;
 }
 
-// Player at (30, 30); one NPC inside the live radius and one far beyond it.
 function mixedWorld(): World {
   const w = emptyWorld();
   const near = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 40, y: 30 });
@@ -146,6 +144,16 @@ describe('far NPC travel', () => {
     expect(fuelLimited(w, me, vehicleStats(w, me), 0, order).maxSpeed).toBeCloseTo(crawl);
   });
 
+  it('caps a low-fuel truck at lowFuelSpeed', () => {
+    const w = emptyWorld();
+    const me = w.vehicles[0];
+    w.player.fuel = fuelCap(me) * RULES.lowFuelThreshold * 0.5;
+    const s = vehicleStats(w, me);
+    const order = { kind: 'through', dest: { x: 200, y: 30 } } as const;
+    expect(fuelLimit(w, me, true)).toBe('low');
+    expect(fuelLimited(w, me, s, 0, order).maxSpeed).toBeCloseTo(lowFuelSpeed(s.maxSpeed));
+  });
+
   it('names the fuel limit: low, empty or none', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
@@ -203,7 +211,6 @@ describe('far NPC travel', () => {
       { kind: 'investigate' as const, targetId: w.player.vehicleId, destination: { x: 30 + LIVE + 60, y: 80 }, phase: 'travel' as const, reason: 'interruption' },
     ];
     npc.brain.goals = structuredClone(goals);
-    // The investigation needs a hostile target, so the NPC holds a feud toward the player.
     w.states.push({ id: 'feud-test', kind: 'feud', holder: npc.id, other: w.player.vehicleId, turnsLeft: 10, born: w.turn, data: { kind: 'feud', robbery: false } });
     const { w: after, d } = play(w, 1);
     w = after;
@@ -316,7 +323,7 @@ describe('far travel contact', () => {
   it('holds just short of a faster truck in the way and keeps its speed', () => {
     const { w, mover } = far();
     const ahead = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 122.5, y: 120 });
-    ahead.speed = 2 * vehicleStats(w, mover).maxSpeed; // faster, so the route planner does not steer around it
+    ahead.speed = 2 * vehicleStats(w, mover).maxSpeed;
     mover.order = { kind: 'through', dest: { x: 200, y: 120 } };
     advanceFar(w, mover);
     const contact = vehicleStats(w, mover).radius + vehicleStats(w, ahead).radius;
@@ -373,7 +380,6 @@ describe('far travel contact', () => {
 });
 
 describe('far NPCs and breakable props', () => {
-  // A fence line along map y at x, 60 tiles long: going around it costs far more than smashing through.
   function fenceLine(x: number, y: number): Obstacle[] {
     return Array.from({ length: 64 }, (_, k) => ({ id: `fence-${k}`, pos: { x, y: y - 30 + k * 0.95 }, r: 0.5, kind: 'landmark' as const, look: 'fence' as const, yaw: Math.PI / 2 }));
   }
@@ -396,7 +402,6 @@ describe('far NPCs and breakable props', () => {
   it('leaves a fence beside its route standing', () => {
     const w = emptyWorld();
     const x = 30 + LIVE + 50;
-    // Yaw 0 lays the fence along map x, two tiles beside the straight way.
     const fence: Obstacle = { id: 'fence-0', pos: { x, y: 80 }, r: 0.5, kind: 'landmark', look: 'fence', yaw: 0 };
     w.obstacles = [fence];
     const npc = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: x - 10, y: 82 });
@@ -410,7 +415,6 @@ describe('far NPCs and breakable props', () => {
 });
 
 describe('far tower and its rope', () => {
-  // A tower boxed in by parked trucks on three sides, with its hitched client parked behind it on the fourth.
   function boxedTower() {
     const w = emptyWorld();
     const tower = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 120, y: 120 });

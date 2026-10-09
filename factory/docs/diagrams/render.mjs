@@ -12,7 +12,6 @@ for (const name of readdirSync(dir).filter((file) => file.endsWith('.dot'))) {
   const source = readFileSync(join(dir, name), 'utf8');
   const hash = createHash('sha256').update(source).digest('hex');
   const svg = execFileSync('dot', ['-Tsvg'], { input: source, encoding: 'utf8' });
-  // The stamp goes after the XML declaration, which must stay the first line of a valid SVG.
   const [declaration, ...rest] = svg.split('\n');
   writeFileSync(join(dir, name.replace(/\.dot$/, '.svg')), [declaration, `<!-- source-sha256: ${hash} -->`, ...rest].join('\n'));
   console.log(`rendered ${name}`);

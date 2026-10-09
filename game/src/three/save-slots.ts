@@ -26,7 +26,6 @@ export function slotLabel(slot: SlotId): string {
   return `Slot ${slot.slice('slot'.length)}`;
 }
 
-// A filled slot. The turn is null when the save's JSON or its world turn does not read.
 export type SlotInfo = { slot: SlotId; savedAt: number; turn: number | null };
 
 function numberOr(value: unknown, fallback: number | null): number | null {
@@ -38,7 +37,6 @@ function infoOf(slot: SlotId, envelope: unknown): SlotInfo {
   return { slot, savedAt: numberOr(savedAt, 0) ?? 0, turn: numberOr(world?.turn, null) };
 }
 
-// The filled slots, newest first. Slots saved at the same time keep the slot order.
 export function listSaves(slots: SaveSlots, count: number): SlotInfo[] {
   const infos = allSlots(count).flatMap((slot) => slots.has(slot) ? [infoOf(slot, slots.get(slot))] : []);
   return infos.sort((a, b) => b.savedAt - a.savedAt);
@@ -48,8 +46,6 @@ export function newestSlot(slots: SaveSlots, count: number): SlotId | null {
   return listSaves(slots, count)[0]?.slot ?? null;
 }
 
-// What the next boot does: load a slot, or start a new game with the setup picked for it. The page reloads between
-// the menu click and boot, so the request waits in session storage, a slot id as plain text and a new game as JSON.
 export type BootRequest = SlotId | { new: WorldSetup };
 
 function requestKey(base: string): string {
@@ -64,8 +60,6 @@ function isSlotId(value: string): value is SlotId {
   return value === 'auto' || value === 'day' || /^slot[1-9]\d*$/.test(value);
 }
 
-// Reads the request and removes it before anything else, so it is used at most once and a later plain reload loads
-// the newest save. Throws on a request that is neither a slot nor a new game with a valid setup.
 export function takeBootRequest(session: Storage, base: string): BootRequest | null {
   const value = session.getItem(requestKey(base));
   if (value === null) return null;

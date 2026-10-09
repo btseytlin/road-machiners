@@ -11,7 +11,7 @@ function agentCtx(labels: string[], body = '', comments: { login: string; body: 
   const runs: AgentRun[] = [];
   const logs: string[] = [];
   const ctx = {
-    cfg: { home: 'tmp/factory-common-test', designModel: 'opus-id', buildModel: 'sonnet-id' },
+    cfg: { home: 'tmp/factory-common-test', designModel: 'opus-id', buildModel: 'sonnet-id', triageModel: 'haiku-id', advisorModel: 'advisor-id' },
     github: { issue: async () => ({ labels, body }), comments: async () => comments },
     fetch: fetchFn,
     run: async () => ({ code: 0, stdout: 'tok\n', stderr: '' }),
@@ -39,13 +39,11 @@ describe('runAgent network', () => {
 
 describe('runAgent sessions', () => {
   const HOME = 'tmp/factory-common-test';
-  // The tick marks the sessions of a job whose process died.
   const markedCtx = (issues: number[]) => {
     for (const issue of issues) markResumed(HOME, issue, 'verify');
     return agentCtx(['bug']);
   };
   beforeEach(() => { rmSync(`${HOME}/sessions`, { recursive: true, force: true }); });
-  // What Claude Code writes in the container once the run starts.
   const saved = (run: AgentRun) => {
     if (!run.session) throw new Error('the run had no session');
     mkdirSync(`${run.session.dir}/-work-game`, { recursive: true });
@@ -137,24 +135,24 @@ describe('prepareOutputs', () => {
 });
 
 describe('model routing', () => {
-  const cfg = { designModel: 'opus-id', buildModel: 'sonnet-id' };
+  const cfg = { designModel: 'opus-id', buildModel: 'sonnet-id', triageModel: 'haiku-id' };
   const stages = ['triage', 'design', 'implement', 'verify'] as const;
   const pick = (labels: string[]) => stages.map((stage) => modelFor(cfg, stage, labels));
 
-  it('keeps the baseline with no label: triage Sonnet, design Opus, implementation and verify Sonnet', () => {
-    expect(pick([])).toEqual(['sonnet-id', 'opus-id', 'sonnet-id', 'sonnet-id']);
+  it('keeps the baseline with no label: triage Haiku, design Opus, implementation and verify Sonnet', () => {
+    expect(pick([])).toEqual(['haiku-id', 'opus-id', 'sonnet-id', 'sonnet-id']);
   });
 
   it('design-sonnet forces Sonnet for design only', () => {
-    expect(pick(['design-sonnet'])).toEqual(['sonnet-id', 'sonnet-id', 'sonnet-id', 'sonnet-id']);
+    expect(pick(['design-sonnet'])).toEqual(['haiku-id','sonnet-id', 'sonnet-id', 'sonnet-id']);
   });
 
   it('implementation-opus changes implementation only, leaving verification on Sonnet', () => {
-    expect(pick(['implementation-opus'])).toEqual(['sonnet-id', 'opus-id', 'opus-id', 'sonnet-id']);
+    expect(pick(['implementation-opus'])).toEqual(['haiku-id','opus-id', 'opus-id', 'sonnet-id']);
   });
 
   it('both labels apply independently', () => {
-    expect(pick(['design-sonnet', 'implementation-opus'])).toEqual(['sonnet-id', 'sonnet-id', 'opus-id', 'sonnet-id']);
+    expect(pick(['design-sonnet', 'implementation-opus'])).toEqual(['haiku-id','sonnet-id', 'opus-id', 'sonnet-id']);
   });
 
   it('runAgent reads the labels at each run, so a manual change counts on the next one', async () => {
@@ -164,6 +162,16 @@ describe('model routing', () => {
     labels.length = 0;
     await runAgent(ctx, 7, 'implement', 'implement', 'p');
     expect(runs.map((run) => run.model)).toEqual(['opus-id', 'sonnet-id']);
+  });
+
+  it('runAgent gives the advisor to implementation on the build model only', async () => {
+    const labels: string[] = [];
+    const { ctx, runs } = agentCtx(labels);
+    await runAgent(ctx, 7, 'implement', 'implement', 'p');
+    await runAgent(ctx, 7, 'verify', 'test', 'p');
+    labels.push('implementation-opus');
+    await runAgent(ctx, 7, 'implement', 'implement', 'p');
+    expect(runs.map((run) => run.advisor)).toEqual(['advisor-id', undefined, undefined]);
   });
 });
 
@@ -221,7 +229,7 @@ describe('runAgent reference images', () => {
 });
 
 describe('stage prompts for reference images', () => {
-  const vars = { issue: '7', taskFile: 'f', branch: 'b', task: 'Play it.', playtest: 'npm run playtest' };
+  const vars = { issue: '7', taskFile: 'f', branch: 'b', baseNote: 'n', task: 'Play it.', playtest: 'npm run playtest' };
 
   it('tell every stage to read the images and what a missing one means', () => {
     for (const name of ['triage', 'design', 'implement', 'test']) {
@@ -256,7 +264,6 @@ describe('stage prompts for reference images', () => {
     expect(text).toContain('with or without a reference image');
     expect(text).toContain('Capture real in-game screenshots');
     expect(text).toContain('Read every screenshot with the Read tool');
-    // The agent works in game/, so the path is relative to it.
     expect(text).toContain('`docs/DESIGN.md`');
     expect(text).toContain('placeholder shapes');
     expect(text).toContain('behind it');
@@ -264,7 +271,6 @@ describe('stage prompts for reference images', () => {
     expect(text).toContain('Do not commit them');
     expect(text).toContain('Never use a drawn or invented render');
     expect(text).toContain('needs no screenshots');
-    // The reference-image rules stay.
     expect(text).toContain('Read every available image with the Read tool before you build.');
     expect(text).toContain('When the task file asks for a visual acceptance check');
   });
@@ -273,7 +279,7 @@ describe('stage prompts for reference images', () => {
 
 describe('fillPrompt', () => {
   it('fills every variable', () => {
-    const text = fillPrompt('design', { issue: '7', taskFile: 'docs/tasks/issue-7.md', branch: 'factory/issue-7' });
+    const text = fillPrompt('design', { issue: '7', taskFile: 'docs/tasks/issue-7.md', branch: 'factory/issue-7', baseNote: 'n' });
     expect(text).toContain('docs/tasks/issue-7.md');
     expect(text).not.toContain('{{');
   });

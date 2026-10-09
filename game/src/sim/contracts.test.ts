@@ -33,11 +33,11 @@ import {
   playerDefeats,
   partPristineBuyPrice,
   rollContract,
+  siteOf,
   vehicleValue,
   type Contract,
 } from './market';
 
-// A raider NPC of a spawn template, as bounties name raiders by template.
 function addRaider(w: World, templateId: string, pos = { x: 5, y: 5 }): Vehicle {
   const v = addVehicle(w, 'raiders', 'buggy', [], pos);
   v.brain = npcBrain(templateId, pos, ['raider']);
@@ -54,41 +54,120 @@ describe('estimateTurns', () => {
 
 describe('contractReward', () => {
   it('scales with turns', () => {
-    const short = contractReward(50, 1, 0, false);
-    const long = contractReward(200, 1, 0, false);
+    const short = contractReward(50, 0, false);
+    const long = contractReward(200, 0, false);
     expect(long).toBeGreaterThan(short);
   });
 
-  it('scales with tier at the same turns', () => {
-    const tier1 = contractReward(100, 1, 0, false);
-    const tier3 = contractReward(100, 3, 0, false);
-    expect(tier3).toBeGreaterThan(tier1);
+  it('adds a cut of cargo value to the reward, and nothing else depends on the good', () => {
+    const plain = contractReward(100, 0, false);
+    const withCargo = contractReward(100, 1000, false);
+    expect(withCargo - plain).toBeCloseTo(1000 * CONTRACTS.haul.valueShare, 0);
+    const rushCut = contractReward(100, 1000, true) - contractReward(100, 0, true);
+    expect(Math.abs(rushCut - 1000 * CONTRACTS.haul.valueShare * CONTRACTS.haul.rush.premium)).toBeLessThanOrEqual(1);
   });
 
-  it('adds a cut of cargo value to the reward', () => {
-    const plain = contractReward(100, 2, 0, false);
-    const withCargo = contractReward(100, 2, 1000, false);
-    expect(withCargo).toBeGreaterThan(plain);
+  it('throws on a non-finite or negative estimate or cargo value', () => {
+    expect(() => contractReward(NaN, 0, false)).toThrow();
+    expect(() => contractReward(-1, 0, false)).toThrow();
+    expect(() => contractReward(100, -5, false)).toThrow();
+    expect(() => contractReward(100, Infinity, false)).toThrow();
   });
 });
 
+describe('haulWindow', () => {
+  it('is the drive times the factor plus the slack, and the drive times the rush factor for rush', () => {
+    expect(haulWindow(100, false)).toBe(Math.round(100 * CONTRACTS.haul.durationFactor + CONTRACTS.haul.slackTurns));
+    expect(haulWindow(100, true)).toBe(Math.round(100 * CONTRACTS.haul.rush.durationFactor));
+  });
+
+  it('gives a standard haul at least twice the rush window on every shop pair', () => {
+    for (const a of SHOP_SITES) for (const b of SHOP_SITES) {
+      if (a === b) continue;
+      const turns = estimateTurns(a.pos, b.pos);
+      expect(haulWindow(turns, false)).toBeGreaterThanOrEqual(2 * haulWindow(turns, true));
+    }
+  });
+
+  it('throws on a negative or non-finite estimate', () => {
+    expect(() => haulWindow(-1, false)).toThrow();
+    expect(() => haulWindow(NaN, true)).toThrow();
+  });
+});
+
+// Slower of the standard and midgame kits, loaded with the heaviest good the source rolls and driven by the
+// hauler bot on far travel in a world with no NPCs. Measured on seed 1 at commit 4a47daf1, issue 358.
+const MEASURED_DRIVE: { from: string; to: string; slowTurns: number }[] = [
+  { from: 'bowl', to: 'nose', slowTurns: 192 }, { from: 'bowl', to: 'salvage-yard', slowTurns: 171 },
+  { from: 'bowl', to: 'granary', slowTurns: 123 }, { from: 'bowl', to: 'pump-station', slowTurns: 64 },
+  { from: 'nose', to: 'bowl', slowTurns: 199 }, { from: 'nose', to: 'salvage-yard', slowTurns: 60 },
+  { from: 'nose', to: 'granary', slowTurns: 86 }, { from: 'nose', to: 'pump-station', slowTurns: 124 },
+  { from: 'salvage-yard', to: 'bowl', slowTurns: 173 }, { from: 'salvage-yard', to: 'nose', slowTurns: 34 },
+  { from: 'salvage-yard', to: 'granary', slowTurns: 69 }, { from: 'salvage-yard', to: 'pump-station', slowTurns: 66 },
+  { from: 'granary', to: 'bowl', slowTurns: 93 }, { from: 'granary', to: 'nose', slowTurns: 78 },
+  { from: 'granary', to: 'salvage-yard', slowTurns: 64 }, { from: 'granary', to: 'pump-station', slowTurns: 28 },
+  { from: 'pump-station', to: 'bowl', slowTurns: 60 }, { from: 'pump-station', to: 'nose', slowTurns: 115 },
+  { from: 'pump-station', to: 'salvage-yard', slowTurns: 64 }, { from: 'pump-station', to: 'granary', slowTurns: 29 },
+];
+
+const SHOP_SITES = Object.keys(SHOPS).map((id) => siteOf(id));
+
+// Standard pay over twice the estimated salvage wage, as a multiple: half the reward factor.
+const BAND_FLOOR_RATIO = 11.9;
+
 describe('haul pay and rush', () => {
-  it('pays a standard haul at least double salvage over the estimated round trip', () => {
-    const towns = [...REGION.towns, ...REGION.locations];
-    for (const a of towns) {
-      for (const b of towns) {
+  it('pays a standard haul at least the band floor over the estimated round trip', () => {
+    for (const a of SHOP_SITES) {
+      for (const b of SHOP_SITES) {
         if (a === b) continue;
         const turns = estimateTurns(a.pos, b.pos);
-        for (const tier of [1, 2, 3] as const) {
-          expect(contractReward(turns, tier, 0, false)).toBeGreaterThanOrEqual(Math.floor(4 * EFFORT.wage[tier] * turns));
-        }
+        expect(contractReward(turns, 0, false) / (2 * turns * EFFORT.wage[1])).toBeGreaterThanOrEqual(BAND_FLOOR_RATIO);
       }
     }
   });
 
+  it('pays the same travel for a tier 1 and a tier 3 good, apart from the value cut', () => {
+    const turns = estimateTurns(siteOf('bowl').pos, siteOf('granary').pos);
+    const grain = contractReward(turns, 8 * GOODS.grain.value, false);
+    const tools = contractReward(turns, 8 * GOODS.tools.value, false);
+    expect(Math.abs(tools - grain - 8 * (GOODS.tools.value - GOODS.grain.value) * CONTRACTS.haul.valueShare)).toBeLessThanOrEqual(1);
+  });
+
+  it('prices the reported Bowl to Granary tools haul at the salvage wage with a window under the old 934 turns', () => {
+    const turns = estimateTurns(siteOf('bowl').pos, siteOf('granary').pos);
+    const reward = contractReward(turns, 8 * GOODS.tools.value, false);
+    const OLD_TIER_RATIO = 2.2 / 0.37;
+    const cut = 8 * GOODS.tools.value * CONTRACTS.haul.valueShare;
+    expect(reward).toBeCloseTo(turns * EFFORT.wage[1] * CONTRACTS.haul.rewardFactor + cut, 0);
+    expect(reward).toBeLessThan(turns * EFFORT.wage[1] * 5 * OLD_TIER_RATIO);
+    expect(haulWindow(turns, false)).toBeLessThan(934);
+  });
+
+  it('keeps a rush window at least 1.1 times the slowest measured loaded drive on every pair', () => {
+    for (const row of MEASURED_DRIVE) {
+      const turns = estimateTurns(siteOf(row.from).pos, siteOf(row.to).pos);
+      expect(haulWindow(turns, true), `${row.from} to ${row.to}`).toBeGreaterThanOrEqual(1.1 * row.slowTurns);
+    }
+  });
+
+  it('pays a rush haul at least 1.5 times a standard one', () => {
+    for (const a of SHOP_SITES) {
+      const turns = estimateTurns(a.pos, siteOf('granary').pos);
+      expect(contractReward(turns, 500, true)).toBeGreaterThanOrEqual(1.5 * contractReward(turns, 500, false));
+    }
+  });
+
+  it('gives the shortest pair and a zero distance no more pay per estimated turn than the median pair', () => {
+    const perTurn = (turns: number) => contractReward(turns, 0, false) / (2 * turns) / EFFORT.wage[1];
+    const all = SHOP_SITES.flatMap((a) => SHOP_SITES.filter((b) => b !== a).map((b) => estimateTurns(a.pos, b.pos))).sort((x, y) => x - y);
+    const median = perTurn(all[Math.floor(all.length / 2)]);
+    expect(perTurn(all[0])).toBeLessThanOrEqual(median * 1.05);
+    expect(perTurn(EFFORT.handlingTurns)).toBeLessThanOrEqual(median * 1.05);
+  });
+
   it('gives a rush haul a shorter window and a higher reward than a standard one', () => {
     expect(haulWindow(100, true)).toBeLessThan(haulWindow(100, false));
-    expect(contractReward(100, 1, 50, true)).toBeGreaterThan(contractReward(100, 1, 50, false));
+    expect(contractReward(100, 50, true)).toBeGreaterThan(contractReward(100, 50, false));
   });
 
   it('rolls both rush and standard hauls, and leaves the main rng alone', () => {
@@ -112,7 +191,7 @@ describe('vehicleValue', () => {
     const w = emptyWorld();
     const raider = addRaider(w, 'buggy');
     const bare = vehicleValue(raider);
-    expect(bare).toBeGreaterThanOrEqual(chassisDef('buggy').value); // core parts add on top
+    expect(bare).toBeGreaterThanOrEqual(chassisDef('buggy').value);
     stowPart(w, raider, makePart(w, 'plates', 0));
     expect(vehicleValue(raider)).toBeGreaterThan(bare);
   });
@@ -218,7 +297,7 @@ describe('rollContract', () => {
 
   it('takes a haul\'s tier from the hauled good, not a random roll', () => {
     const w = emptyWorld();
-    const dearGoods = ['tools']; // tier 3
+    const dearGoods = ['tools'];
     let haul: Contract | null = null;
     for (let i = 0; i < 50 && !haul; i++) {
       const c = rollContract(w, shop, places, dearGoods, [], []);
@@ -242,7 +321,7 @@ describe('rollContract', () => {
   it('takes a bounty\'s tier from the highest tier fitted to the target', () => {
     const w = emptyWorld();
     const raider = addRaider(w, 'buggy');
-    const stowed = stowPart(w, raider, makePart(w, 'plates', 0)); // tier 2 armor
+    const stowed = stowPart(w, raider, makePart(w, 'plates', 0));
     expect(stowed).toBe(true);
     let bounty: Contract | null = null;
     for (let i = 0; i < 50 && !bounty; i++) {
@@ -265,8 +344,8 @@ describe('rollContract', () => {
         deadlines.add(c.deadline);
       }
     }
-    expect(deadlines.size).toBeGreaterThan(1); // the window did vary
-    expect(rewards.size).toBe(1); // but the pay never did
+    expect(deadlines.size).toBeGreaterThan(1);
+    expect(rewards.size).toBe(1);
   });
 });
 
@@ -285,7 +364,6 @@ describe('bounty settlement', () => {
   const held = (id: string, template = 'buggy', shop = 'bowl'): Contract =>
     ({ id, shop, kind: 'bounty', template, targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1, fulfilled: false });
 
-  // Settles one turn whose events are the given defeats, of trucks still in the world or removed this turn.
   function settle(w: World, contracts: Contract[], events: GameEvent[], removed: Vehicle[] = []): World {
     return update(w, (d) => {
       d.player.contracts = contracts;
@@ -474,7 +552,7 @@ describe('contract boards and delivery', () => {
 
   it('takes a fetch part from garage storage', () => {
     let w = acceptContract(atBowlWithOffer(fetch()), 'ct-fetch');
-    w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', 1)); }); // wear 1, at CONTRACTS.fetch.maxWear
+    w = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', 1)); });
     const money = w.player.money;
     w = deliverContract(w, 'ct-fetch');
     expect(w.player.storage).toHaveLength(0);
@@ -500,7 +578,7 @@ describe('contract boards and delivery', () => {
   it('refuses a junk fetch part', () => {
     let w = acceptContract(atBowlWithOffer(fetch()), 'ct-fetch');
     w = update(w, (d) => {
-      const part = { ...makePart(d, 'mg', 0), wear: 99, hp: 0 }; // far past junk, however far past maxWear
+      const part = { ...makePart(d, 'mg', 0), wear: 99, hp: 0 };
       d.player.storage.push(part);
     });
     expect(() => deliverContract(w, 'ct-fetch')).toThrow(/spare/);
@@ -540,7 +618,6 @@ describe('contract boards and delivery', () => {
   const bounty = (id: string, targetName = 'Target'): Contract =>
     ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName, reward: 400, deadline: 900, window: 900, tier: 2, fulfilled: false });
 
-  // The player at bowl holding the given bounties, with one buggy raider far away.
   function holding(...held: Contract[]): { w: World; raider: Vehicle } {
     const w = emptyWorld(sitePads(bowl)[0]);
     const raider = addRaider(w, 'buggy', { x: 50, y: 50 });
@@ -580,7 +657,7 @@ describe('contract boards and delivery', () => {
     const { w: base, raider } = holding(bounty('ct-b1'), bounty('ct-b2'), bounty('ct-b3'));
     const w = update(base, kill(raider));
     expect(w.player.money).toBe(base.player.money);
-    expect(w.player.contracts.map((c) => c.id)).toEqual(['ct-b1']); // the other two lapse, the target is gone
+    expect(w.player.contracts.map((c) => c.id)).toEqual(['ct-b1']);
     expect(fulfilledOf(w)).toEqual([true]);
   });
 
@@ -650,7 +727,7 @@ describe('contract boards and delivery', () => {
 
   it('drops an expired offer from the board every turn, before any restock', () => {
     let w = atBowlWithOffer(haul('nose', 3));
-    w.shops.bowl.restockAt = 10000; // far off, so only the expiry filter runs
+    w.shops.bowl.restockAt = 10000;
     w = update(w, (d) => { d.turn = 501; advanceShops(d); });
     expect(w.shops.bowl.contracts.find((c) => c.id === 'ct-haul')).toBeUndefined();
   });
@@ -685,7 +762,6 @@ describe('bounties in a real fight', () => {
   const bounty = (id: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1, fulfilled: false });
   const contractEvents = (w: World) => w.events.filter((e) => e.t === 'contract');
 
-  // A raider one hit from breaking its cab, shot at by the player and a Bowl Farmers lawman in the same turn.
   function sharedFight(seed: number) {
     const w = emptyWorld();
     w.rngState = seed;
@@ -702,8 +778,6 @@ describe('bounties in a real fight', () => {
     return { w, raider, ally };
   }
 
-  // The first seed whose shots end with the player credited for knocking the raider out while the lawman also hit it.
-  // The fire, fate and settlement steps of the turn run alone, so the lawman's gun stays on the raider.
   function playerKnockout() {
     for (let seed = 1; seed <= 40; seed++) {
       const { w, raider, ally } = sharedFight(seed * 7919);

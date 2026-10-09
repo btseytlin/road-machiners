@@ -11,7 +11,6 @@ import { tileAt } from './terrain';
 import type { PartInstance, Vehicle, World } from './types';
 import { applyWear, carryHp, damagePart, isJunk, maxHp, rebuildJunk, restorePart, wornDef } from './wear';
 
-// Sets a vehicle's trail to a single straight segment of the given length, and its end-of-turn speed.
 function drive(v: Vehicle, len: number): void {
   v.trail = [
     { x: v.pos.x, y: v.pos.y, heading: 0 },
@@ -43,7 +42,7 @@ describe('wear', () => {
   it('wears parts over a long drive', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
-    drive(me, 1000); // pushes the odds to their clamp, so the hit is certain
+    drive(me, 1000);
     const before = totalHp(me);
     applyWear(w);
     expect(totalHp(me)).toBeLessThan(before);
@@ -94,7 +93,7 @@ describe('wear', () => {
       w.rngState = seed;
       const me = w.vehicles[0];
       for (const p of mountedParts(me)) p.hp = 1;
-      drive(me, 2000); // pushes wear and breakdown odds to their clamp
+      drive(me, 2000);
       applyWear(w);
       expect(corePart(me, 'cab').hp).toBe(1);
     }
@@ -104,7 +103,7 @@ describe('wear', () => {
     const w = emptyWorld();
     w.rngState = 3;
     const me = w.vehicles[0];
-    const tiles = 7.8; // scout top speed in tiles per turn
+    const tiles = 7.8;
     setTerrainUnder(w, me, tiles, 'hardpan');
     for (let turn = 0; turn < 2900; turn++) {
       drive(me, tiles);
@@ -145,7 +144,7 @@ describe('wear', () => {
       const w = emptyWorld();
       w.rngState = seed;
       const me = w.vehicles[0];
-      const tiles = 7.8; // scout top speed in tiles per turn
+      const tiles = 7.8;
       setTerrainUnder(w, me, tiles, 'hardpan');
       const driveParts = [mountedParts(me, 'engine')[0], corePart(me, 'transmission')];
       for (let turn = 0; turn < 2900; turn++) {
@@ -175,7 +174,6 @@ function part(defId: string, wear: number, hp = partDef(defId).hp): PartInstance
   return { id: 'p1', defId, hp, wear };
 }
 
-// Source files of src/sim/ keyed by path, without tests.
 const SIM_SOURCES = import.meta.glob<string>('./**/*.ts', { query: '?raw', import: 'default', eager: true });
 
 describe('wear on break', () => {

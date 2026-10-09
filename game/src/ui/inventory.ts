@@ -80,20 +80,18 @@ import {
 import { npcName } from "../sim/spawn";
 
 const CELL_PX = 42;
-// Below this the part icons and condition bars stop being readable, so a taller grid scrolls instead.
 const MIN_CELL_PX = 28;
 
 type Drag = {
   source: ItemSource;
-  id: string; // grid item id, storage part id, loot part id, a loot good id, or a knocked-out truck's item id
-  item: GridItem; // the item as it would be placed, position updated while dragging
-  grab: { x: number; y: number }; // grabbed cell inside the item
+  id: string;
+  item: GridItem;
+  grab: { x: number; y: number };
   ghost: HTMLElement;
   start: { x: number; y: number };
   moved: boolean;
 };
 
-// A press on an installed part that has not been held long enough to start a drag.
 type Press = { timer: number; source: ItemSource; id: string; item: GridItem; grab: { x: number; y: number } };
 
 export class InventoryView {
@@ -106,12 +104,10 @@ export class InventoryView {
   private root: HTMLElement = el("div");
   private inspection = el("div", { class: "inv-inspection" });
   private selectedItem: string | null = null;
-  private loot: string | null = null; // salvage stock shown beside the grid, after a finished search
-  private truck: string | null = null; // knocked-out truck whose grid shows on the right, for looting
-  private cell = CELL_PX; // grid cell size in pixels, shrunk by fitTo()
+  private loot: string | null = null;
+  private truck: string | null = null;
+  private cell = CELL_PX;
 
-  // instant: parts move at once anywhere, in combat too, as in the full shop (src/ui/full-shop.ts), instead of by
-  // garage or field refit rules.
   constructor(
     private host: UiHost,
     private onChange: () => void,
@@ -120,7 +116,6 @@ export class InventoryView {
   ) {
     window.addEventListener("pointermove", (e) => this.onMove(e));
     window.addEventListener("pointerup", (e) => this.onDrop(e));
-    // Items and chips stop their own pointerdown, so one that reaches the root landed on empty space.
     this.root.addEventListener("pointerdown", (e) => {
       if ((e.target as HTMLElement).closest("button, .inv-inspection, .inv-item, .inv-chip")) return;
       this.select(null);
@@ -137,8 +132,6 @@ export class InventoryView {
     });
   }
 
-  // Renders the mounted view again with grid cells shrunk until the truck fits the height of box, the scrolling
-  // column that holds the view. Stops at MIN_CELL_PX.
   fitTo(box: HTMLElement): void {
     this.cell = CELL_PX;
     this.render();
@@ -151,13 +144,11 @@ export class InventoryView {
     this.render();
   }
 
-  // Shows a searched salvage stock beside the grid, or hides it with null.
   setLoot(stockId: string | null): void {
     this.loot = stockId;
     this.truck = null;
   }
 
-  // Shows a knocked-out truck's grid on the right, or hides it with null.
   setTruck(vehicleId: string | null): void {
     this.truck = vehicleId;
     this.loot = null;
@@ -188,7 +179,6 @@ export class InventoryView {
           ...this.refitBanner(me),
           this.sideList(w),
           ...(this.dumpZone ? [el("div", { class: "inv-dump", "data-drop": "dump" }, "Drop here to dump")] : []),
-          // Below the lists, so selecting an item never moves the chips a second click aims at.
           this.inspection,
         ),
         ...(this.truck ? [this.truckEl(w, this.truck)] : []),
@@ -239,7 +229,6 @@ export class InventoryView {
     if (!core)
       node.addEventListener("pointerdown", (e) => {
         if (e.button !== 0) return;
-        // The grab uses the same grid math as spotAt, so a drop where the drag began lands on the item's own spot.
         if (!this.gridEl) throw new Error("Grid item pressed without a grid");
         const r = this.gridEl.getBoundingClientRect();
         const grab = {
@@ -252,14 +241,12 @@ export class InventoryView {
     return node;
   }
 
-  // Every item on the grid. Parts in a running refit show at the spots they go to.
   private gridItems(w: World, v: Vehicle): HTMLElement[] {
     const moving = refitItems(w, v);
     const staying = v.items.filter((it) => !moving.some((m) => m.id === it.id));
     return [...staying.map((it) => this.itemEl(w, it)), ...moving.map((it) => this.refittingEl(w, v, it))];
   }
 
-  // A part in a running refit, drawn where it goes with a dashed outline. Hover shows the turns left.
   private refittingEl(w: World, v: Vehicle, item: GridItem): HTMLElement {
     const node = this.itemEl(w, item);
     const left = v.job?.kind === "refit" ? v.job.turnsLeft : 0;
@@ -268,20 +255,17 @@ export class InventoryView {
     return node;
   }
 
-  // The selected item when it is a mounted gun, whose fan stays up while nothing else is hovered.
   private selectedGun(me: Vehicle): GridItem | null {
     const it = me.items.find((item) => item.id === this.selectedItem);
     return it && it.kind === "part" && weaponDefOf(it) && isMounted(me.chassisId, it) ? it : null;
   }
 
-  // Hovering a mounted gun shows its fan. Leaving it shows the selected gun's fan again.
   private hoverFan(node: HTMLElement, me: Vehicle, it: GridItem, mounted: boolean): void {
     if (!mounted || !weaponDefOf(it)) return;
     node.addEventListener("mouseenter", () => this.showFan(me, it));
     node.addEventListener("mouseleave", () => this.showFan(me, this.selectedGun(me)));
   }
 
-  // Draws where the gun can fire and outlines the tall parts in its way. null clears both.
   private showFan(me: Vehicle, it: GridItem | null): void {
     if (!this.gridEl) return;
     clearFan(this.gridEl);
@@ -295,7 +279,6 @@ export class InventoryView {
     for (const id of blockerIds(me, it, def)) grid.querySelector(`[data-item-id="${id}"]`)?.classList.add("blocking");
   }
 
-  // The selected item wherever it lies: on the grid, in storage, in the loot stock or on the looted truck.
   private selection(w: World): { item: GridItem; mounted: boolean; own: boolean } | null {
     const id = this.selectedItem;
     if (id === null) return null;
@@ -306,7 +289,6 @@ export class InventoryView {
     return item ? { item, mounted: false, own: false } : null;
   }
 
-  // Items beside the grid: garage storage, the searched loot and the looted truck's grid.
   private otherItems(w: World): GridItem[] {
     const stock = this.loot ? w.salvage.find((s) => s.id === this.loot) : undefined;
     const target = this.truck ? w.vehicles.find((v) => v.id === this.truck) : undefined;
@@ -329,7 +311,6 @@ export class InventoryView {
     else this.showTruckItem(w, selection.item, false);
   }
 
-  // The part the player has selected, which the shop weighs its stock against. Null with nothing or cargo selected.
   selectedPart(): PartInstance | null {
     const item = this.selection(this.host.world())?.item;
     return item?.kind === "part" ? item.part : null;
@@ -346,7 +327,6 @@ export class InventoryView {
     this.onChange();
   }
 
-  // A click on an item selects it or clears it. A second click soon after runs its double click move.
   private clickItem(c: ClickedItem): void {
     const now = Date.now();
     const double = isDoubleClick(this.lastClick, c.item.id, now);
@@ -365,8 +345,6 @@ export class InventoryView {
     return { source, id, item, stockId: this.loot, truckId: this.truck };
   }
 
-  // The running refit with a button that abandons it. Nothing changes until a refit finishes, so cancelling
-  // leaves every part where it stood.
   private refitBanner(me: Vehicle): HTMLElement[] {
     if (me.job?.kind !== "refit") return [];
     const left = me.job.turnsLeft;
@@ -380,14 +358,12 @@ export class InventoryView {
     ];
   }
 
-  // Beside the grid: a searched stock to loot, the garage storage at a shop, or how parts move here.
   private sideList(w: World): HTMLElement {
     if (this.loot) return this.lootEl(w, this.loot);
     if (this.instant) return el("div", { class: "dim" }, "Parts fit at once: drag them onto a mount or off it.");
     return shopAt(w) ? this.storageEl(w) : el("div", { class: "dim" }, "Park at a shop to use garage storage. Drag onto a mount to start a refit.");
   }
 
-  // The actions come right under the name, so Patch stays on screen when a short window cuts off the stats.
   private showItem(w: World, item: GridItem, mounted: boolean): void {
     this.inspection.replaceChildren(
       el("div", { class: "card-head" }, itemIconEl(item), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
@@ -397,15 +373,12 @@ export class InventoryView {
     );
   }
 
-  // Lights up the grid cells of these mount letters, or clears the light with null.
   hintMounts(cells: readonly Cell[] | null): void {
     if (!this.gridEl) return;
     if (cells) this.gridEl.dataset.hint = cells.join(" ");
     else delete this.gridEl.dataset.hint;
   }
 
-  // The action buttons an inspected item offers: patch when mounted and damaged, repair in town,
-  // and strip when it is a spare. Scrap metal offers a weld with the Welder perk. Other goods offer none.
   private itemActions(w: World, item: GridItem, mounted: boolean): HTMLElement[] {
     if (item.kind !== "part") return this.goodActions(w, item.good);
     const buttons: (HTMLElement | null)[] = [
@@ -418,7 +391,6 @@ export class InventoryView {
     return buttons.filter((b): b is HTMLElement => b !== null);
   }
 
-  // A damaged mounted part shows a Patch button, hidden once it is already at the field cap or junk.
   private patchButton(
     w: World,
     me: Vehicle,
@@ -447,7 +419,6 @@ export class InventoryView {
     );
   }
 
-  // A junk part gets a Rebuild button only while the Rebuild perk can rebuild it.
   private repairButton(w: World, part: PartInstance): HTMLElement | null {
     if (!isJunk(part)) return this.garageButton(w, part, "Repair", `Restore to ${maxHp(part)} HP`);
     return canRebuild(w, part) ? this.garageButton(w, part, "Rebuild", "Rebuild to the last wear step, once per part") : null;
@@ -472,8 +443,6 @@ export class InventoryView {
     );
   }
 
-  // Strips a spare part for units of the parts good. Works on broken and junk spares too, which is
-  // the point: a part too far gone to sell whole still yields parts.
   private stripButton(
     w: World,
     me: Vehicle,
@@ -496,13 +465,11 @@ export class InventoryView {
     );
   }
 
-  // Scrap metal offers a weld with the Welder perk. Other goods offer nothing.
   private goodActions(w: World, good: string): HTMLElement[] {
     const me = playerVehicle(w);
     return good === "scrap" && vehicleHasPerk(w, me, "welder") ? [this.weldButton(w, me)] : [];
   }
 
-  // Welds scrap metal into a scrap armor part.
   private weldButton(w: World, me: Vehicle): HTMLElement {
     const { scrap, turns } = PERK_NUMBERS.welder;
     const reason = weldBlocker(w, me);
@@ -594,7 +561,6 @@ export class InventoryView {
     return chips;
   }
 
-  // Fuel and supplies pour into the tank and stores instead of the grid.
   private lootStoresButton(stock: SalvageStock): HTMLElement[] {
     if (!hasStores(stock)) return [];
     return [
@@ -606,8 +572,6 @@ export class InventoryView {
     ];
   }
 
-  // The revealed loot, what searches turned up. Drag a chip onto the grid to take it; the rest stays here. Hidden
-  // loot never shows.
   private lootEl(w: World, stockId: string): HTMLElement {
     const stock = w.salvage.find((s) => s.id === stockId);
     if (!stock) throw new Error(`Unknown salvage ${stockId}`);
@@ -643,7 +607,6 @@ export class InventoryView {
     );
   }
 
-  // A knocked-out truck's grid, drawn like the player's. Drag its items onto the player's grid.
   private truckEl(w: World, truckId: string): HTMLElement {
     const target = w.vehicles.find((v) => v.id === truckId);
     if (!target || !isKnockedOut(target))
@@ -701,7 +664,6 @@ export class InventoryView {
     this.beginDrag(e, source, id, item, grab);
   }
 
-  // A press on an installed part. Held for HOLD_TO_DRAG_MS it turns into a drag. Released sooner, it is a click.
   private startPress(e: PointerEvent, source: ItemSource, id: string, item: GridItem, grab: Press["grab"]): void {
     e.preventDefault();
     e.stopPropagation();
@@ -754,7 +716,6 @@ export class InventoryView {
     if (this.lastPointer) this.onMove(this.lastPointer);
   }
 
-  // R on a selected grid item turns it in place, keeping its top left cell.
   private rotateSelected(): void {
     if (!this.gridEl?.isConnected || this.selectedItem === null) return;
     const item = playerVehicle(this.host.world()).items.find(
@@ -770,7 +731,6 @@ export class InventoryView {
   private onMove(e: PointerEvent): void {
     this.lastPointer = e;
     if (!this.drag) return;
-    // A quarter-cell motion separates dragging from pointer jitter during a click.
     if (
       Math.hypot(
         e.clientX - this.drag.start.x,
@@ -784,7 +744,6 @@ export class InventoryView {
     this.paintGhost(e, spot !== null);
   }
 
-  // The ghost shows the item's footprint: green where it fits, red where it does not.
   private paintGhost(e: PointerEvent, onGrid: boolean): void {
     const d = this.drag!;
     const size = footprint(d.item);
@@ -838,11 +797,9 @@ export class InventoryView {
     this.drag = null;
     d.ghost.remove();
     if (this.finishSelection(d)) return;
-    // A drop the sim refuses leaves the item where it was and shows no error.
     this.run(this.dropCommand(e, d), true);
   }
 
-  // What dropping the dragged item where the pointer is does: place it on the grid, store it or dump it.
   private dropCommand(e: PointerEvent, d: Drag): (w: World) => World {
     if (this.gridEl !== null && this.inside(e)) return (w) => this.dropOnGrid(w, d);
     const target = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest("[data-drop]")?.getAttribute("data-drop");
@@ -864,7 +821,6 @@ export class InventoryView {
     );
   }
 
-  // A drag released without moving is a click on the item.
   private finishSelection(drag: Drag): boolean {
     if (drag.moved) return false;
     const item = drag.source === "grid" ? playerVehicle(this.host.world()).items.find((entry) => entry.id === drag.id) : drag.item;
@@ -882,7 +838,6 @@ export class InventoryView {
     );
   }
 
-  // With quiet set, a command the sim refuses changes nothing and shows no error, like a drop on an invalid spot.
   private moveGridItem(w: World, itemId: string, to: Spot): World {
     return this.instant ? instantMoveItem(w, itemId, to) : moveItem(w, itemId, to);
   }
@@ -899,13 +854,11 @@ export class InventoryView {
   }
 }
 
-// Dropping a grid item on the garage storage stores it and on the dump pile throws it away. Anywhere else changes nothing.
 function offGridCommand(target: string | null | undefined, itemId: string): (w: World) => World {
   if (target === "storage") return (w) => storePart(w, itemId);
   return target === "dump" ? (w) => dumpItem(w, itemId) : (w) => w;
 }
 
-// Standalone inventory window, opened with I.
 export class InventoryScreen {
   private root = panel("modal");
   private view: InventoryView;
@@ -913,7 +866,6 @@ export class InventoryScreen {
   constructor(private host: UiHost) {
     this.root.classList.add("inventory-screen");
     this.root.style.display = "none";
-    // The truck grid fits its cells to the window height, so a resize lays the screen out again.
     window.addEventListener("resize", () => this.render());
     this.view = new InventoryView(host, () => this.render(), true);
   }
@@ -929,14 +881,12 @@ export class InventoryScreen {
     this.render();
   }
 
-  // Opens the inventory with a searched salvage stock beside the grid.
   openLoot(stockId: string): void {
     this.view.setLoot(stockId);
     this.root.style.display = "";
     this.render();
   }
 
-  // Opens the inventory with the grid of the chosen knocked-out truck on the right. False when the player cannot loot it.
   openDowned(world: World, vehicleId: string): boolean {
     const downed = world.vehicles.find((v) => v.id === vehicleId);
     if (!downed || !canLootTruck(playerVehicle(world), downed)) return false;
@@ -946,7 +896,6 @@ export class InventoryScreen {
     return true;
   }
 
-  // Closed windows drop their contents, so hidden copies never answer clicks or drops.
   close(): void {
     this.view.clearSelection();
     this.root.style.display = "none";
@@ -965,7 +914,6 @@ export class InventoryScreen {
   }
 }
 
-// Header chips for the player's truck: chassis, money, free cells (unless left out), load and power.
 export function truckChips(w: World, opts: { freeCells: boolean } = { freeCells: true }): HTMLElement {
   const me = playerVehicle(w);
   const mass = vehicleMass(me);
@@ -986,26 +934,22 @@ export function truckChips(w: World, opts: { freeCells: boolean } = { freeCells:
   );
 }
 
-// Engine power against the working guns' draw, and what the draw costs in top speed.
 function powerChipNode(w: World, me: Vehicle): HTMLElement {
   const chip = powerChip(maxSpeedSteps(w, me), me);
   return el("span", { class: `chip${chip.over ? " bad" : ""}`, title: chip.detail, "aria-label": chip.detail }, createIcon("power"), chip.text);
 }
 
-// Why a Patch button is disabled, or null when the patch can start.
 function patchBlocker(w: World, me: Vehicle, plan: RepairPlan): string | null {
   if (!isParkedForWork(w, me)) return "Stop to patch";
   return plan.parts === 0 ? "No parts" : null;
 }
 
-// Why a Strip button is disabled, or null when stripping can start.
 function stripBlocker(w: World, me: Vehicle): string | null {
   if (!isParkedForWork(w, me)) return "Stop to strip";
   if (me.job) return "Busy";
   return null;
 }
 
-// Why a Weld button is disabled, or null when welding can start.
 function weldBlocker(w: World, me: Vehicle): string | null {
   if (!isParkedForWork(w, me)) return "Stop to weld";
   if (me.job) return "Busy";
@@ -1018,12 +962,10 @@ function fieldPatchable(part: PartInstance): boolean {
   return def.kind !== "armor" || def.fieldRepair !== "none";
 }
 
-// Armor that only a shop repairs shows a disabled Patch button while damaged, so the player learns why.
 function shopOnlyPatch(part: PartInstance): HTMLElement | null {
   return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true }, "Patch (shop only)") : null;
 }
 
-// A part's condition and stats. A spare shows the change against the mounted part of its kind.
 function partDetails(w: World, me: Vehicle, part: PartInstance, mounted: boolean): HTMLElement[] {
   const kind = partDef(part.defId).kind;
   const base = mounted ? null : baselinePart(me, kind);

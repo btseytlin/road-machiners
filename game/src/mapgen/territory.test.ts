@@ -27,8 +27,6 @@ import { defaultSetup } from '../sim/settings';
 const fallenSun = REGION.locations.find((l) => l.id === 'fallen-sun')!;
 const t = fallenSun as never;
 
-// The committed map's heights before the territory layer, baked once: the orchard grades its own ground, so the
-// committed heights cannot stand in for them.
 let groundHeights: Float32Array | undefined;
 function territoryGround(): Float32Array {
   groundHeights ??= groundForTerritories(MAPGEN.seed).heights;
@@ -55,7 +53,6 @@ function lowBoxes(p: BakedPiece, k: number) {
   return propBoxes({ id: `piece-${k}`, pos: p.pos, r: p.r, kind: 'landmark', look: p.look, yaw: p.yaw }).filter((b) => b.z0 < PHYSICS.truckClearance);
 }
 
-// Map corners under any of a piece's low boxes.
 function cornersUnder(p: BakedPiece, k: number): Vec[] {
   const boxes = lowBoxes(p, k);
   const reach = Math.max(...boxes.map((b) => dist(b.center, p.pos) + Math.hypot(b.half.x, b.half.y)));
@@ -66,7 +63,6 @@ function cornersUnder(p: BakedPiece, k: number): Vec[] {
   return out;
 }
 
-// Drawn props: debris and field spots, by their looks, off the authored pieces.
 function drawnProps(): BakedProp[] {
   return inside.filter((p) => (DEBRIS_LOOKS.has(p.kind) || p.kind === rules.spotLook) && !pieces.some((q) => q.look === p.kind && dist(q.pos, p.pos) < 1e-3));
 }
@@ -93,7 +89,6 @@ describe('the territory layer', () => {
     const ofSun = (props: readonly BakedProp[]) => props.filter((p) => siteGap(fallenSun, p.pos) < 0);
     expect(ofSun(full.props).length).toBeGreaterThan(0);
     expect(ofSun(full.props)).toEqual(ofSun(solo.props));
-    // The orchard grades its own ground and Glass Flats seats its pieces inside the Fallen Sun's bounding circle, so heights are compared over its outline.
     const w = full.size + 1;
     const sunCorners = Array.from(full.heights.keys()).filter((k) => siteGap(fallenSun, { x: k % w, y: Math.floor(k / w) }) < 1);
     expect(sunCorners.map((k) => full.heights[k])).toEqual(sunCorners.map((k) => solo.heights[k]));
@@ -110,7 +105,6 @@ describe('the territory layer', () => {
       expect(corners.length, p.look).toBeGreaterThan(0);
       for (const c of corners) expect(after.heights[c.y * w + c.x], `${p.look} ${c.x},${c.y}`).toBeCloseTo(centre, 6);
     });
-    // Far from every piece the relief is untouched.
     const far = { x: Math.round(fallenSun.pos.x - 40), y: Math.round(fallenSun.pos.y - 30) };
     expect(after.heights[far.y * w + far.x]).toBe(before.heights[far.y * w + far.x]);
   });
@@ -215,11 +209,9 @@ describe('the territory layer', () => {
     const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const cage = pieces.find((p) => p.look === 'shipCage')!;
     const along = { x: Math.cos(cage.yaw), y: Math.sin(cage.yaw) };
-    // Points 2 tiles past each open end, on the axis.
     const end = (side: number): Vec => ({ x: cage.pos.x + along.x * (cage.r + 2) * side, y: cage.pos.y + along.y * (cage.r + 2) * side });
     const path = [end(-1), ...route(w, end(-1), end(1), 0.6, [])];
     expect(dist(path.at(-1)!, end(1))).toBeLessThan(1);
-    // The route stays inside the tube: never farther from the axis than its walls.
     const offAxis = (p: Vec) => Math.abs((p.x - cage.pos.x) * along.y - (p.y - cage.pos.y) * along.x);
     const alongAxis = (p: Vec) => (p.x - cage.pos.x) * along.x + (p.y - cage.pos.y) * along.y;
     const samples = path.slice(1).flatMap((b, i) => Array.from({ length: 20 }, (_, k) => ({ x: path[i].x + ((b.x - path[i].x) * k) / 20, y: path[i].y + ((b.y - path[i].y) * k) / 20 })));
@@ -237,7 +229,6 @@ describe("the Fallen Sun's dirt roads, decks and lanes on the baked map", () => 
   const pieceAt = (p: BakedProp) => pieces.some((q) => q.look === p.kind && dist(q.pos, p.pos) < 1e-3);
   const onRegionRoad = (c: Vec) => ROAD_INDEX.nearestWithin(c.x, c.y, REGION.roadWidth / 2) < REGION.roadWidth / 2;
 
-  // Tiles whose centre lies within a road's half width of its centreline: the tiles the bake marks.
   function roadTiles(road: { points: Vec[]; width: number }): number[] {
     const out = new Set<number>();
     for (let k = 1; k < road.points.length; k++) {
@@ -252,7 +243,6 @@ describe("the Fallen Sun's dirt roads, decks and lanes on the baked map", () => 
   }
   const dirtTiles = new Set(web.flatMap(roadTiles));
 
-  // The tiles a circle overlaps, as the bake's mark test reads them.
   function touched(pos: Vec, r: number): number[] {
     const out: number[] = [];
     for (let y = Math.floor(pos.y - r); y <= Math.floor(pos.y + r); y++) {
@@ -294,9 +284,7 @@ describe("the Fallen Sun's dirt roads, decks and lanes on the baked map", () => 
         if (boxDistance(box, c) > 0) continue;
         expect(tileSteepness(terrain.heights, terrain.size, tile), `strip at ${c.x},${c.y}`).toBeLessThan(TERRAIN.drive.maxSlope / 2);
       }
-      // The pieces' low boxes keep off the strips by the layout (src/sim/territory.test.ts); every other prop by its circle.
       for (const p of TEST_MAP.props.filter((o) => !pieceAt(o))) expect(boxDistance(box, p.pos), `${p.kind} at ${p.pos.x},${p.pos.y}`).toBeGreaterThan(p.r);
-      // Just past the lip, so the strip does not count its own flap.
       for (let k = 0.25; k <= dist(s.a, s.b); k += 0.5) {
         for (let c = -s.width / 2; c <= s.width / 2; c += 0.5) {
           const at = { x: s.a.x + box.axis.x * k - box.axis.y * c, y: s.a.y + box.axis.y * k + box.axis.x * c };
@@ -322,7 +310,6 @@ describe("the Fallen Sun's dirt roads, decks and lanes on the baked map", () => 
     const decks = FALLEN_SUN_DECKS.map((d) => deckById(d.id));
     const wing = decks.filter((d) => d.lips.length === 0);
     const flaps = decks.filter((d) => d.lips.length > 0);
-    // The wing's feet, where its ramps meet the ground, and a point 3 tiles before each flap's foot.
     const goals = [wing[0].from, wing.at(-1)!.to, ...flaps.map((f) => (f.stations[0].rise === 0 ? { x: f.from.x - f.axis.x * 3, y: f.from.y - f.axis.y * 3 } : { x: f.to.x + f.axis.x * 3, y: f.to.y + f.axis.y * 3 }))];
     for (const entry of territoryEntries(t)) {
       for (const goal of goals) {
@@ -332,10 +319,6 @@ describe("the Fallen Sun's dirt roads, decks and lanes on the baked map", () => 
     }
   }, 120_000);
 
-  // IV4: from each entry, a route reaches every free point of a 5-tile grid inside the outline, at most 1.35 times the
-  // straight line at the 90th percentile and 1.8 times at worst. Round 3's layout measured 1.68 and 2.87. A free point
-  // is open to a standard truck's routes and lies outside every piece's outline on the ground, so the closed pockets
-  // inside a hull, like the bow's, are no destination.
   it('routes from each entry to a 5-tile grid of free points without long detours (IV4)', () => {
     const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const layer = navLayer(w.terrain, w.obstacles, 0.6);
@@ -361,10 +344,9 @@ describe("the Fallen Sun's dirt roads, decks and lanes on the baked map", () => 
     expect(unreached).toEqual([]);
     expect(ratios[Math.floor(ratios.length * 0.9)]).toBeLessThanOrEqual(1.35);
     expect(ratios.at(-1)).toBeLessThanOrEqual(1.8);
-  }, 300_000); // about 700 routes over the whole territory: seconds alone, minutes beside the full suite on one core
+  }, 300_000);
 });
 
-// Points at most step tiles apart along a polyline, its corners included.
 function along(points: readonly Vec[], step: number): Vec[] {
   const out: Vec[] = [points[0]];
   for (let i = 1; i < points.length; i++) {
@@ -374,7 +356,6 @@ function along(points: readonly Vec[], step: number): Vec[] {
   return out;
 }
 
-// A landing strip as a box on the ground.
 function stripBox(s: LandingStrip): PosedBox {
   const length = dist(s.a, s.b);
   const axis = { x: (s.b.x - s.a.x) / length, y: (s.b.y - s.a.y) / length };
@@ -387,26 +368,20 @@ describe('the orchard farm', () => {
   const farm = rules.farm!;
   const groves = farm.groves;
   const abs = (at: Vec): Vec => ({ x: orchard.pos.x + at.x, y: orchard.pos.y + at.y });
-  // The five main roads come first in the list; the rest are narrow tracks.
   const MAIN_ROADS = 5;
 
-  // A draft over the region with the map's heights before the territory layer, so the farm bakes on the orchard's real
-  // basin and ridges. Marks and props start empty, as no earlier layer marks or builds inside a territory.
   function groundDraft(): MapDraft {
     const d = newDraft(REGION.size);
     d.heights.set(territoryGround());
     return d;
   }
 
-  // Tiles along a frame turned turn radians off the road toward its north end, and across it toward the map's west,
-  // from the centre.
   function frameOf(pos: Vec, turn = 0): { s: number; c: number } {
     const [x, y] = [pos.x - orchard.pos.x, pos.y - orchard.pos.y];
     const yaw = ORCHARD_HEADING + turn;
     return { s: x * Math.cos(yaw) + y * Math.sin(yaw), c: x * Math.sin(yaw) - y * Math.cos(yaw) };
   }
 
-  // The tile under the prop's centre and every tile whose centre its footprint covers.
   function footprint(d: MapDraft, p: BakedProp): number[] {
     return [tileOf(d.size, p.pos), ...tilesWithin(d.size, p.pos, p.r)];
   }
@@ -416,19 +391,15 @@ describe('the orchard farm', () => {
   const trees = props.filter((p) => p.kind === groves.look);
   const buildingLooks = new Set(farm.buildings.map((b) => b.look));
   const spots = props.filter((p) => buildingLooks.has(p.kind));
-  // Clutter shares looks with runs, so a clutter piece is told by its footprint: every run segment is half its
-  // segment long.
   const runRadius = new Map(farm.runs.map((run) => [run.look, run.segment / 2]));
   const clutterLooks = new Set(farm.clutter.map((rule) => rule.look));
   const debrisLooks = new Set(farm.debris.map((rule) => rule.look));
   const loose = props.filter((p) => (clutterLooks.has(p.kind) || debrisLooks.has(p.kind)) && !(runRadius.has(p.kind) && p.r === runRadius.get(p.kind)));
   const segments = props.filter((p) => runRadius.has(p.kind) && p.r === runRadius.get(p.kind));
 
-  // The army's works: sandbag arcs, steel hedgehogs and every concrete barrier, in runs, the perimeter or loose.
   const arcs = props.filter((p) => p.kind === 'sandbags');
   const traps = props.filter((p) => p.kind === 'tankTrap');
   const barriers = props.filter((p) => p.kind === 'barrier');
-  // Tiles from an arc's chord out toward its convex front, the way it faces.
   const ahead = (arc: BakedProp, p: Vec): number => (p.x - arc.pos.x) * Math.cos(arc.yaw) + (p.y - arc.pos.y) * Math.sin(arc.yaw);
   const isPerimeter = (run: Run): boolean => run.look === PERIMETER.look && run.broken === PERIMETER.broken && run.knocked.share === PERIMETER.knocked.share;
 
@@ -454,9 +425,7 @@ describe('the orchard farm', () => {
     expect(farm.roads.slice(0, MAIN_ROADS).map((r) => r.surface)).toEqual(['oldRoad', 'track', 'track', 'track', 'track']);
     const ends = farm.roads.slice(0, MAIN_ROADS).map((road) => abs(road.points.at(-1)!));
     for (const end of ends) expect(Math.abs(siteGap(orchard, end)), `${end.x},${end.y}`).toBeLessThanOrEqual(1);
-    // They leave in five directions, at least 20 tiles apart.
     for (let i = 0; i < ends.length; i++) for (let j = i + 1; j < ends.length; j++) expect(dist(ends[i], ends[j])).toBeGreaterThan(20);
-    // The old road begins where the spur ends.
     const [entry] = territoryEntries(orchard);
     expect(dist(abs(farm.roads[0].points[0]), entry)).toBeLessThan(1);
     for (const road of farm.roads) {
@@ -466,7 +435,6 @@ describe('the orchard farm', () => {
           const p = { x: lerp(abs(road.points[k - 1]).x, abs(road.points[k]).x, t), y: lerp(abs(road.points[k - 1]).y, abs(road.points[k]).y, t) };
           const onNewRoad = ROAD_INDEX.nearestWithin(p.x, p.y, REGION.roadWidth / 2) < REGION.roadWidth / 2;
           const built = baked.built[tileOf(baked.size, p)];
-          // An earlier road keeps a tile where two cross.
           expect(onNewRoad || built === code || built === BUILT_OLD_ROAD || built === BUILT_TRACK, `road at ${p.x},${p.y}`).toBe(true);
           if (!onNewRoad && road === farm.roads[0]) expect(built, `old road at ${p.x},${p.y}`).toBe(BUILT_OLD_ROAD);
         }
@@ -502,13 +470,10 @@ describe('the orchard farm', () => {
       expect(ROAD_INDEX.nearestWithin(p.pos.x, p.pos.y, REGION.roadWidth / 2 + p.r), where).toBe(Infinity);
       expect(tileSteepness(baked.heights, baked.size, tileOf(baked.size, p.pos)), where).toBeLessThanOrEqual(TERRAIN.drive.maxSlope);
     }
-    // Loose pieces and trees keep the debris gap from every spot's edge, so a truck can park beside one.
     for (const p of [...loose, ...trees]) {
       for (const spot of spots) expect(dist(p.pos, spot.pos), `${p.kind} at ${p.pos.x},${p.pos.y} by ${spot.kind}`).toBeGreaterThanOrEqual(spot.r + p.r + rules.debrisGap);
     }
-    // Run segments lie along their lines, so their ends are tested against roads, tracks and canals.
     for (const seg of segments) {
-      // The ends are taken a hair inside, since a segment's end may meet a marked tile's edge exactly.
       for (const o of [-seg.r * 0.99, 0, seg.r * 0.99]) {
         const p = { x: seg.pos.x + Math.cos(seg.yaw) * o, y: seg.pos.y + Math.sin(seg.yaw) * o };
         expect([BUILT_OLD_ROAD, BUILT_TRACK, BUILT_CANAL, BUILT_PAD], `${seg.kind} at ${p.x},${p.y}`).not.toContain(baked.built[tileOf(baked.size, p)]);
@@ -519,8 +484,6 @@ describe('the orchard farm', () => {
   it('plants 500 trees or more in blocks and strays, within the cap', () => {
     expect(trees.length).toBeGreaterThanOrEqual(500);
     expect(trees.length).toBeLessThanOrEqual(groves.maxTrees);
-    // Every block holds trees in its rows. The bake itself throws on a block that keeps under groves.keep of the
-    // trees it plans; the test below moves one onto bad ground.
     for (const block of farm.blocks) {
       const centre = frameOf(abs(block.at), block.turn);
       const mine = trees.map((t) => frameOf(t.pos, block.turn)).filter((f) => Math.abs(f.s - centre.s) <= block.size.x / 2 + groves.jitter && Math.abs(f.c - centre.c) <= block.size.y / 2 + groves.jitter);
@@ -530,14 +493,11 @@ describe('the orchard farm', () => {
 
   it('throws on a block whose ground rejects too many of its trees', () => {
     const moved = structuredClone(rules);
-    // Over the old road and its canals, where no tree may stand.
     moved.farm!.blocks[0] = { at: onOrchardRoad(-15, 0), size: { x: 10, y: 6 }, rows: 'along', turn: 0 };
-    // The orchard's own draws, so every building stands where the bake puts it and the block is what fails.
     expect(() => fillFarm(groundDraft(), orchard, moved, moved.farm!, ruleRng(7, TERRITORY_SEED_OFFSET + TERRITORIES.orchard.seed))).toThrow(/keeps/);
   });
 
   it('leaves a lane between rows wider than the widest truck under the tree crowns', () => {
-    // The widest chassis is 0.8 tiles in radius; a lane keeps half a tile to spare.
     const lane = 2 * 0.8 + 0.5;
     for (const block of farm.blocks) {
       const yaw = ORCHARD_HEADING + block.turn;
@@ -545,7 +505,6 @@ describe('the orchard farm', () => {
       const rowOffset = (p: Vec) => (p.x - orchard.pos.x - block.at.x) * across.x + (p.y - orchard.pos.y - block.at.y) * across.y;
       const rowSpan = block.rows === 'along' ? block.size.y : block.size.x;
       const rows = Math.floor(rowSpan / groves.rowGap) + 1;
-      // Each tree's low boxes, as an interval across the rows.
       const spans = trees
         .map((t) => ({ t, k: Math.round(rowOffset(t.pos) / groves.rowGap + (rows - 1) / 2) }))
         .filter(({ t, k }) => k >= 0 && k < rows && Math.abs(rowOffset(t.pos) - (k - (rows - 1) / 2) * groves.rowGap) < 1e-6)
@@ -619,8 +578,6 @@ describe('the orchard farm', () => {
 
   it('grades each farm road so its centre line holds its grade', () => {
     const t = terrainOf(baked.size, baked.heights);
-    // Near a road of today's world the farm grading fades out, so that road keeps its own grade. Where a farm road
-    // meets one, the stretch in the fade blends graded and ungraded ground and may climb to this junction limit.
     const JUNCTION_LIMIT = 0.15;
     const inFade = (p: Vec) => [[0, 0], [1, 0], [0, 1], [1, 1]].some(([i, j]) => newRoadHold({ x: Math.floor(p.x) + i, y: Math.floor(p.y) + j }) > 0);
     for (const road of farm.roads) {
@@ -666,7 +623,6 @@ describe('the orchard farm', () => {
   });
 
   it('digs about 30 emplacements of sandbag arcs, sets 20 tank traps and stands 60 barriers', () => {
-    // Arcs within 1.5 tiles of each other belong to one emplacement.
     const group = arcs.map((_, i) => i);
     const root = (i: number): number => (group[i] === i ? i : root(group[i]));
     arcs.forEach((a, i) => arcs.forEach((b, j) => {
@@ -683,7 +639,6 @@ describe('the orchard farm', () => {
       const where = `tankTrap at ${frameOf(trap.pos).s.toFixed(1)},${frameOf(trap.pos).c.toFixed(1)}`;
       const nearest = arcs.reduce((a, b) => (dist(b.pos, trap.pos) < dist(a.pos, trap.pos) ? b : a));
       expect(ahead(nearest, trap.pos), where).toBeGreaterThan(EMPLACEMENT.arcRadius);
-      // No hedgehog stands within 2 tiles of an arc's concave side, where the guards crouch.
       expect(EMPLACEMENT.behindClear).toBe(2);
       for (const arc of arcs) if (ahead(arc, trap.pos) <= 0) expect(dist(arc.pos, trap.pos), where).toBeGreaterThanOrEqual(EMPLACEMENT.behindClear);
     }
@@ -698,7 +653,6 @@ describe('the orchard farm', () => {
     }
     for (const p of barriers) {
       const where = `barrier at ${frameOf(p.pos).s.toFixed(1)},${frameOf(p.pos).c.toFixed(1)}`;
-      // A run segment is a line; a loose barrier keeps its whole footprint clear.
       const [a, b] = [-1, 1].map((k) => ({ x: p.pos.x + k * p.r * Math.cos(p.yaw), y: p.pos.y + k * p.r * Math.sin(p.yaw) }));
       const reach = segments.includes(p) ? 0 : p.r;
       for (const spot of spots) expect(segmentDist(spot.pos, a, b), `${where} by ${spot.kind}`).toBeGreaterThanOrEqual(spot.r + reach + rules.debrisGap - 1e-9);
@@ -706,10 +660,8 @@ describe('the orchard farm', () => {
   });
 
   it('leaves the perimeter open at every main road and at least every 25 tiles along it', () => {
-    // A point of the perimeter's line is closed where a placed barrier lies within a tile of it.
     const COVER = 1;
     const closed = (p: Vec) => barriers.some((b) => segmentDist(p, ...([-1, 1].map((k) => ({ x: b.pos.x + k * b.r * Math.cos(b.yaw), y: b.pos.y + k * b.r * Math.sin(b.yaw) })) as [Vec, Vec])) < COVER);
-    // Each side is its polylines in list order, joined across the authored gaps between them.
     const lines = farm.runs.filter(isPerimeter).map((run) => run.points.map(abs));
     expect(lines.length).toBeGreaterThan(0);
     const sides: Vec[][] = [];
@@ -720,7 +672,6 @@ describe('the orchard farm', () => {
     }
     const roads = farm.roads.slice(0, MAIN_ROADS).map((road) => road.points.map(abs));
     for (const side of sides) {
-      // Walk the side in half-tile steps, noting each step's point and whether a main road crosses there.
       const walk: { p: Vec; open: boolean }[] = [];
       for (let k = 1; k < side.length; k++) {
         const steps = Math.ceil(dist(side[k - 1], side[k]) / 0.5);
@@ -730,12 +681,10 @@ describe('the orchard farm', () => {
         }
       }
       const where = (i: number) => `perimeter at ${frameOf(walk[i].p).s.toFixed(1)},${frameOf(walk[i].p).c.toFixed(1)}`;
-      // Every main road crossing the side leaves a 3-tile opening round its crossing.
       walk.forEach(({ p }, i) => {
         const onRoad = roads.some((road) => road.slice(1).some((b, k) => segmentDist(p, road[k], b) < 1.5));
         if (onRoad) expect(walk.slice(Math.max(0, i - 3), i + 4).every((w) => w.open), where(i)).toBe(true);
       });
-      // Each 25 tiles of the side hold an opening of 3 tiles or more.
       let since = 0;
       let run = 0;
       walk.forEach(({ open }, i) => {
@@ -752,7 +701,6 @@ describe('the orchard farm', () => {
     moved.farm!.runs[last].knocked = { share: 1, turn: 0.5, shift: 0.5 };
     const d = groundDraft();
     fillFarm(d, orchard, moved, moved.farm!, ruleRng(7, TERRITORY_SEED_OFFSET + TERRITORIES.orchard.seed));
-    // Props away from the knocked run's line stand exactly where they did.
     const line = farm.runs[last].points.map(abs);
     const far = (p: BakedProp) => line.slice(1).every((b, k) => segmentDist(p.pos, line[k], b) > 5);
     const before = territoryLayer(7, groundDraft()).props.filter((p) => siteGap(orchard, p.pos) < 0 && far(p) && !debrisLooks.has(p.kind));
@@ -761,7 +709,6 @@ describe('the orchard farm', () => {
 
   it('throws on a building whose ring cannot level its ground', () => {
     const moved = structuredClone(rules);
-    // The depot hangar's first pose, on the slope where its pad cut a cliff.
     moved.farm!.buildings.find((b) => b.look === 'quonset')!.poses[3].at = onOrchardRoad(51, -33);
     expect(() => fillFarm(groundDraft(), orchard, moved, moved.farm!, ruleRng(7, 1))).toThrow(/levels its ground into a cliff/);
   });
@@ -774,9 +721,6 @@ describe('the orchard farm', () => {
 });
 
 describe('a third territory', () => {
-  // A test-only wreck on open ground between Bowl and Kiln Camp, where no region road runs within 32 tiles and no site
-  // within 40. It has no basin under it, so no rim rocks, and holds a piece, a building group, a cache, a patch, a dirt
-  // road and fused glass.
   const flats: TerritoryDef = { id: 'test-flats', name: 'Test Flats', kind: 'territory', pos: { x: 200, y: 380 }, radius: 22, outline: null };
   function flatsRules(): TerritoryRules {
     return {
@@ -810,7 +754,6 @@ describe('a third territory', () => {
     };
   }
 
-  // Bakes the territory layer with the test territory added to REGION and TERRITORIES, then takes it out again.
   function withFlats(rules: TerritoryRules, draft: () => MapDraft): MapDraft {
     REGION.locations.push(flats);
     TERRITORIES[flats.id] = rules;
@@ -873,12 +816,10 @@ describe('Glass Flats on the baked map', () => {
   const isPiece = (p: BakedProp) => flatsPieces.some((q) => q.look === p.kind && dist(q.pos, p.pos) < 1e-3);
   const tileOfPoint = (c: Vec) => Math.floor(c.y) * terrain.size + Math.floor(c.x);
   const typeAt = (c: Vec) => terrain.types[tileOfPoint(c)];
-  // Every tile centre inside the outline.
   const insideTiles: Vec[] = [];
   for (let y = Math.floor(flats.pos.y - flats.radius); y <= flats.pos.y + flats.radius; y++) {
     for (let x = Math.floor(flats.pos.x - flats.radius); x <= flats.pos.x + flats.radius; x++) if (siteGap(flats, { x: x + 0.5, y: y + 0.5 }) < 0) insideTiles.push({ x: x + 0.5, y: y + 0.5 });
   }
-  // The tiles a circle overlaps, as the bake's mark test reads them.
   function touched(pos: Vec, r: number): Vec[] {
     const out: Vec[] = [];
     for (let y = Math.floor(pos.y - r); y <= Math.floor(pos.y + r); y++) {

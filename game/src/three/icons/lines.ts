@@ -2,9 +2,7 @@
 // and stripes them by rank, and blueprint.ts keeps inner lines clear of the outline.
 
 export type Pixels = { w: number; h: number; data: Uint8ClampedArray };
-// One bit per pixel, row by row.
 export type Mask = { w: number; h: number; bits: Uint8Array };
-// Drawn extent in pixels, x1 and y1 exclusive.
 export type Bounds = { x0: number; y0: number; x1: number; y1: number };
 export type Rgba = readonly [number, number, number, number];
 
@@ -12,27 +10,22 @@ export function emptyMask(w: number, h: number): Mask {
   return { w, h, bits: new Uint8Array(w * h) };
 }
 
-// Every pixel drawn more than half opaque.
 export function solidMask({ w, h, data }: Pixels): Mask {
   const mask = emptyMask(w, h);
   for (let i = 0; i < w * h; i++) mask.bits[i] = data[i * 4 + 3] > 127 ? 1 : 0;
   return mask;
 }
 
-// Every pixel within half of the silhouette's edge, inside or outside it, so the outline straddles the edge. A shape
-// thinner than the band fills solid.
 export function edgeBand(solid: Mask, half: number): Mask {
   const on = (x: number, y: number): boolean => isOn(solid, x, y);
   const edge = maskWhere(solid, (x, y) => on(x, y) && !(on(x - 1, y) && on(x + 1, y) && on(x, y - 1) && on(x, y + 1)));
   return thicken(edge, half);
 }
 
-// Every pixel within half of a mask pixel.
 export function thicken(mask: Mask, half: number): Mask {
   return grow(mask, discOf(half));
 }
 
-// Every pixel that one of the offsets reaches from a mask pixel.
 function grow(mask: Mask, offsets: readonly (readonly [number, number])[]): Mask {
   const out = emptyMask(mask.w, mask.h);
   eachOn(mask, (x, y) => {
@@ -44,7 +37,6 @@ function grow(mask: Mask, offsets: readonly (readonly [number, number])[]): Mask
   return out;
 }
 
-// The offsets within half of a pixel.
 function discOf(half: number): [number, number][] {
   const r = Math.floor(half);
   const out: [number, number][] = [];
@@ -52,7 +44,6 @@ function discOf(half: number): [number, number][] {
   return out;
 }
 
-// The index of x, y on the mask, or -1 off it.
 function indexAt({ w, h }: Mask, x: number, y: number): number {
   return x >= 0 && y >= 0 && x < w && y < h ? y * w + x : -1;
 }
@@ -72,7 +63,6 @@ function eachOn(mask: Mask, visit: (x: number, y: number) => void): void {
   for (let i = 0; i < mask.bits.length; i++) if (mask.bits[i]) visit(i % mask.w, Math.floor(i / mask.w));
 }
 
-// The mask's drawn bounds. Throws on an empty mask.
 export function boundsOf({ w, h, bits }: Mask): Bounds {
   let [x0, y0, x1, y1] = [w, h, 0, 0];
   for (let y = 0; y < h; y++) {
@@ -82,15 +72,13 @@ export function boundsOf({ w, h, bits }: Mask): Bounds {
   return { x0, y0, x1, y1 };
 }
 
-// count 45° stripes, rising to the right, each width wide, spaced evenly across box and clipped to solid.
 export function stripes(solid: Mask, box: Bounds, count: number, width: number): Mask {
   const { w, h } = solid;
   const out = emptyMask(w, h);
-  // A stripe rising to the right holds x + y constant, since y grows downward.
   const from = box.x0 + box.y0;
   const span = box.x1 + box.y1 - from;
   const at = Array.from({ length: count }, (_, k) => from + (span * (k + 1)) / (count + 1));
-  const half = (width * Math.SQRT2) / 2; // a perpendicular width of width is this far along x + y
+  const half = (width * Math.SQRT2) / 2;
   for (let y = box.y0; y < box.y1; y++) {
     for (let x = box.x0; x < box.x1; x++) {
       const i = y * w + x;

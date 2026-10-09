@@ -11,7 +11,6 @@ export function gpuArgs() {
   return [...angle, '--enable-gpu', '--ignore-gpu-blocklist'];
 }
 
-// The WebGL renderer name, for the log.
 export function rendererOf(page) {
   return page.evaluate(() => {
     const gl = document.createElement('canvas').getContext('webgl2');
@@ -19,7 +18,6 @@ export function rendererOf(page) {
   });
 }
 
-// A GPU run that fell back to software drawing measures the CPU, not the game.
 export function isSoftware(renderer) {
   return SOFTWARE_RENDERERS.test(renderer);
 }

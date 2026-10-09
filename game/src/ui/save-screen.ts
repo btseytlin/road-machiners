@@ -10,9 +10,6 @@ import { download, el, panel } from './dom';
 import { openNewGame, type NewGameActions } from './new-game';
 import { moneyText } from './money';
 
-// Shows the choice and resolves when the player picks Migrate. New game opens the New game screen over it, whose Back
-// returns here and whose Start reloads into the new game. Download save hands the player the stored save as a file,
-// for a bug report.
 export function chooseSaveFate(reason: string, canMigrate: boolean, stored: unknown, newGame: NewGameActions): Promise<void> {
   return new Promise((resolve) => {
     const root = savePanel('Your save needs migrating');
@@ -36,7 +33,6 @@ export function chooseSaveFate(reason: string, canMigrate: boolean, stored: unkn
   });
 }
 
-// Shows what the migration did. Resolves when the player drives on.
 export function showCarryReport(report: CarryReport): Promise<void> {
   return new Promise((resolve) => {
     const root = savePanel('Save migrated');
@@ -48,7 +44,6 @@ export function showCarryReport(report: CarryReport): Promise<void> {
   });
 }
 
-// A save that never parsed is stored as its text, and goes out as it is.
 function downloadSave(stored: unknown): void {
   download('roam-save.json', typeof stored === 'string' ? stored : JSON.stringify(stored), 'application/json');
 }

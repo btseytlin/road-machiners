@@ -69,7 +69,6 @@ it('hides NPC traits without the read the driver perk', () => {
   expect(formatNpcTraits(w, npc)).toBeNull();
 });
 
-// A seen hauler carrying two salt, one scrap and a spare machine gun.
 function loadedHauler() {
   const w = emptyWorld();
   const npc = addVehicle(w, 'traders', 'hauler', ['stockEngine'], { x: 32, y: 30 });

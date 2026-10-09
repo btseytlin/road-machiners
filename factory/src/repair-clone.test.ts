@@ -7,15 +7,12 @@ import { hostRepo } from './repo';
 import { EMPTY_STATE, writeState } from './state';
 import type { Ctx, FactoryConfig, FactoryState } from './types';
 
-// Each test runs real git against a local stand-in for GitHub.
 vi.setConfig({ testTimeout: 60_000 });
 
 const ID = ['-c', 'user.name=t', '-c', 'user.email=t@t'];
 const ORDER = { issue: 5, by: 'hermes', reason: 'merge left the clone dirty', backupMerge: false };
-// How many files the aborted merge of dev leaves staged.
 const DEV_FILES = 1284;
 
-// A bare repo stands in for GitHub, with dev and factory/issue-5 on it. The work clone of #5 holds the branch, and the factory is paused.
 async function setup() {
   mkdirSync('tmp', { recursive: true });
   const home = resolve(mkdtempSync(join('tmp', 'factory-repair-')));
@@ -40,7 +37,6 @@ async function setup() {
   await repo.prepareWorkClone('factory/issue-5', 'dev', work);
   writeState(statePath, structuredClone(EMPTY_STATE));
   writeFileSync(join(home, 'paused'), 'Paused with factory pause: repair\n');
-  // Pushes a commit that changes `files` to `branch` on GitHub.
   const push = async (branch: string, files: Record<string, string>) => {
     await git(author, 'fetch', 'origin');
     await git(author, 'checkout', '-q', '-B', branch, `origin/${branch}`);
@@ -54,7 +50,6 @@ async function setup() {
   return { home, ctx, git, work, push, hub, setState };
 }
 
-// The factory's ignored folders and an installed package, as a stage leaves them.
 function factoryFiles(work: string): void {
   mkdirSync(join(work, 'game', '.factory'), { recursive: true });
   writeFileSync(join(work, 'game', '.factory', 'approval.json'), '{"description":"d","howToTry":"h"}');
@@ -81,7 +76,6 @@ describe('repairClone', () => {
     await push('dev', Object.fromEntries(Array.from({ length: DEV_FILES }, (_, i) => [`d${i}.txt`, `${i}\n`])));
     await ctx.repo.fetch();
     factoryFiles(work);
-    // The merge stopped before its commit and its marks were cleared, so the tree holds dev's files with no merge open.
     await git(work, 'fetch', '-q', 'origin');
     await git(work, 'merge', '--no-commit', '--no-ff', 'origin/dev');
     for (const mark of ['MERGE_HEAD', 'MERGE_MSG', 'MERGE_MODE']) renameSync(join(work, '.git', mark), join(work, `${mark}.gone`));

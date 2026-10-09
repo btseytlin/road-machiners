@@ -42,7 +42,6 @@ try {
     await enter(page, spot);
     await page.locator('.town-screen .tabs button', { hasText: 'Buy Parts' }).click();
     const gun = () => page.locator('.inv-item.mounted', { hasText: /turret|rifle|cannon|shotgun|MG/i }).first();
-    // Mouse: select, compare, clear.
     await gun().click();
     await page.waitForTimeout(500);
     let r = await read(page);
@@ -58,7 +57,6 @@ try {
     r = await read(page);
     assert.equal(r.compares.length, 0, `${spot}: clearing the selection must clear the comparison`);
     assert.equal(r.inspect, 'Equipment', `${spot}: clearing must reset the inspection`);
-    // Keyboard: focus alone must not inspect; Enter selects and compares.
     await gun().focus();
     r = await read(page);
     assert.equal(r.inspect, 'Equipment', `${spot}: focus alone must not change the inspection`);
@@ -67,11 +65,9 @@ try {
     await page.waitForTimeout(500);
     r = await read(page);
     assert(r.deltas > 0, `${spot}: Enter must select and compare`);
-    // Labels.
     assert(!r.chips.includes('Free cargo cells'), `${spot}: garage header must not show free cells`);
     for (const t of ["M's", 'Mass against rated load']) assert(r.chips.includes(t), `${spot}: header must keep the ${t} chip`);
     assert(!r.repair.includes('Nothing broken'), `${spot}: no idle Nothing broken label`);
-    // One broken part shows the count and an enabled repair.
     await page.evaluate(async () => {
       const g = window.__ROAM__;
       const w = structuredClone(g.state);
@@ -86,14 +82,12 @@ try {
     await page.locator('.town-repair button', { hasText: 'Repair all' }).waitFor();
     await page.evaluate(() => window.__ROAM__.town.close());
   }
-  // Stall and inventory keep the chip.
   await enter(page, 'salvage-yard');
   assert((await read(page)).chips.includes('Free cargo cells'), 'stall header must keep free cells');
   await page.evaluate(() => window.__ROAM__.town.close());
   await page.keyboard.press('i');
   assert((await read(page).then(() => page.locator('.modal:visible h3 .chip[title="Free cargo cells"]').count())) === 1, 'inventory header must keep free cells');
   await page.keyboard.press('Escape');
-  // Layout at narrower widths.
   await enter(page, 'nose');
   await page.locator('.town-screen .tabs button', { hasText: 'Buy Parts' }).click();
   await mkdir('.playtest', { recursive: true });

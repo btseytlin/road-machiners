@@ -10,7 +10,7 @@ Intake runs last in each tick, so a card it adds starts on the next tick. It rea
 
 ## Triage
 
-Triage runs Sonnet at `FACTORY_TRIAGE_EFFORT`. It scores the issue on a clear goal, a checkable result, a scope of one task and a fit with `game/docs/DESIGN.md`, and writes `.factory/triage.json`.
+Triage runs Haiku, set by `FACTORY_TRIAGE_MODEL`, at `FACTORY_TRIAGE_EFFORT`. It scores the issue on a clear goal, a checkable result, a scope of one task and a fit with `game/docs/DESIGN.md`, and writes `.factory/triage.json`.
 
 - `ready` moves the card to Design and rates its complexity, as Model routing says.
 - `wont-do` comments the reason, labels the issue `wont-do`, closes it and moves the card to Done.
@@ -25,13 +25,14 @@ A `ready` issue may bundle other free Triage cards that touch the same code. Eac
 
 Design runs Opus, or Sonnet with `design-sonnet`, at `FACTORY_DESIGN_EFFORT`. It uses up:udesign and up:uplan in hands-off mode. It writes the task file `.factory-tasks/issue-N.md` in the work clone on branch `factory/issue-N`. Git ignores the task file, so design posts it to the issue as a comment, and later stages read it from the clone.
 
+- Before the agent starts, the factory merges GitHub's issue branch and the latest base into the work clone, as [process.md](process.md#branches) says. The agent cannot fetch. It never asks the author about branches or the network, and work it cannot find is an assumption.
 - `.factory/questions.md` sends the card back to Triage with the questions, as unclear triage does.
 - `.factory/wont-do.md` closes the issue as wont-do.
 - A revision reads the issue comments under "## Committee feedback". Comments under "## Committee question" are context only.
 
 ## Implementation
 
-Implementation runs Sonnet with up:uexecute on the task file. Subagents are off, so the agent implements every phase itself at the model triage picked. For a change a player can see, the agent captures real in-game screenshots, compares them with the issue, the plan and `game/docs/DESIGN.md`, and fixes until nothing obvious differs. The screenshots stay out of the commits. The stage fails when the agent made no new commit.
+Implementation runs Sonnet with up:uexecute on the task file, and Opus advises it through `claude --advisor` with `FACTORY_ADVISOR_MODEL`. A card with `implementation-opus` runs on Opus and gets no advisor. Subagents are off, so the agent implements every phase itself at the model triage picked. For a change a player can see, the agent captures real in-game screenshots, compares them with the issue, the plan and `game/docs/DESIGN.md`, and fixes until nothing obvious differs. The screenshots stay out of the commits. The stage fails when the agent made no new commit.
 
 ## Testing
 
@@ -98,7 +99,8 @@ The release cut opens two cleanup issues, for optimization and code janitor work
 
 The playtest checks that the merged features hold up together over a long run before the committee sees a candidate. It finds what the release broke, fixes it and confirms the fix in one job. It runs when no release task is open and the release head is not the commit it last passed. It runs on the tracking issue in the verify queue, counts against the daily cap and has its own time limit, `FACTORY_PLAYTEST_TIMEOUT_MINUTES`.
 
-- The job merges `main` into the release when the release lacks it, with an agent for a conflict. So the release holds all of `main` before it plays, and a later Ship has no unplayed game change to bring in.
+- The job merges `main` into the release when the release lacks it, with an agent for a conflict. So the release plays all of `main` that exists when the playtest runs.
+- A release head can skip the plays. It carries the pass of the last commit this release passed when all hold: that commit is an ancestor of the head, no file under `game/` changed between them, and the head did not move during the compare. The game builds, tests and plays only from `game/`, so the head plays the same game. The job sets the pass, comments it on the tracking issue and plays nothing. Any game change, including one `main` brought in, plays in full. A blocked release stays blocked.
 - The factory clones the release head and runs the full game suite with no cache, so the checks' test cache cannot hide a broken release. A failing suite fails the job before the first play, so it spends no play.
 - Then it runs the game's `progression:playthrough` with one seed per release, the cut day as `YYYYMMDD`, for `FACTORY_PLAYTEST_TURNS` turns. 2250 turns are 5 in-game days, so the markov bot plays several of the other bot archetypes among the NPC traffic. The log holds every game event, snapshots of the player and every NPC, how the run ended and a summary.
 - The first play also runs the seed on the baseline, side by side: the last commit this release passed, or `main` before any pass. So a replay after a pass judges only what changed since that pass.
@@ -110,6 +112,7 @@ The playtest checks that the merged features hold up together over a long run be
 - A clean verdict passes only with no important `release` finding, no commit since the play, a run that did not end in an error, and a reason for every death and every kind of missing activity. A clean verdict that misses one blocks.
 - A clean end with fixes runs the diff checks and the full checks of the merge checkpoint in the clone first. A failed check goes to the same agent, and its fix plays again. Then the factory pushes the reviewed commit to the release, so the release head is the commit the last play passed. A release that moved meanwhile gets the fixes as a merge, and its new head plays next.
 - A job plays at most `FACTORY_PLAYTEST_RUNS` times, the first play included. A blocked verdict, fixes left on the last play, or a failed check on the last play blocks the release. The job fails, so the tracking card takes `factory-stuck` and Hermes sees the failure. `factory retry <tracking> [decision]` lifts the block and hands the decision to the next job's review.
+- The suite, each play and the fix checks print their phase and each step, so the worker shows what runs, like `Playing the baseline seed: running playtest`.
 - Each play keeps its logs, facts, review, report and outcome in `$FACTORY_HOME/playtest/<day>/run-<n>/`. The job comments one report on the tracking issue at its end.
 
 ## Candidate
@@ -120,7 +123,7 @@ The post records the commit it was built from. The candidate does not post when 
 
 ## Ship
 
-Ship runs on the current candidate post only, with no release task open and the release still at the commit of the post. It checks the changelog again before it merges, as [process.md](process.md#branches) shows. A change to `game/` on `main` that the release lacks was never played. Ship merges `main` into the release, with an agent for a conflict, and stops. The release moved, so the tick drops the post and builds a new candidate. The factory builds a fresh clone of `main` with an empty save scope and runs `butler push` on the host, the only step that gets `BUTLER_API_KEY`. A GitHub release tagged `release-<day>` gets the changelog. The public post waits in `releasePost` with the changelog and the screenshot. Hermes drafts it with `factory_release_draft`, the draft goes to the committee chat with a Publish button, and a member's Publish posts it to the public channel. A reply to the draft goes to Hermes, who sends a new one. Each shipped issue loses `release-candidate` and closes.
+Ship runs on the current candidate post only, with no release task open and the release still at the commit of the post. It checks the changelog again before it merges, as [process.md](process.md#branches) shows. Ship merges `main` into the release, with an agent for a conflict, and goes on. A change on `main` never stops it, game changes included. The factory builds a fresh clone of `main` with an empty save scope and runs `butler push` on the host, the only step that gets `BUTLER_API_KEY`. A GitHub release tagged `release-<day>` gets the changelog. The public post waits in `releasePost` with the changelog and the screenshot. Hermes drafts it with `factory_release_draft`, the draft goes to the committee chat with a Publish button, and a member's Publish posts it to the public channel. A reply to the draft goes to Hermes, who sends a new one. Each shipped issue loses `release-candidate` and closes.
 
 ## Hotfix
 
@@ -140,11 +143,11 @@ A member can ask Hermes for one-off work, like "simulate 10 battles and tell me 
 
 ## Model routing
 
-The baseline is triage Sonnet, design Opus, implementation Sonnet and testing Sonnet. `FACTORY_DESIGN_MODEL` is the Opus id and `FACTORY_BUILD_MODEL` the Sonnet id. The issue's labels at the moment an agent starts decide its model.
+The baseline is triage Haiku, design Opus, implementation Sonnet with an Opus advisor, and testing Sonnet. `FACTORY_DESIGN_MODEL` is the Opus id, `FACTORY_BUILD_MODEL` the Sonnet id and `FACTORY_TRIAGE_MODEL` the Haiku id. The issue's labels at the moment an agent starts decide its model.
 
 - `design-sonnet` runs design on Sonnet.
 - `implementation-opus` runs implementation on Opus. Testing and hardening stay on Sonnet.
-- The release playtest, candidate, incident and factory change agents always run Opus. Triage, merge, ad hoc and waste review agents always run Sonnet.
+- The release playtest, candidate, incident and factory change agents always run Opus. Triage always runs Haiku. Merge, ad hoc and waste review agents always run Sonnet.
 - The triage prompt aims for about 20% Opus and 80% Sonnet in measured agent tokens. It is a rule of thumb, never a cap.
 
 Triage rates each `ready` issue once and comments the rating under `Model routing from triage:`.

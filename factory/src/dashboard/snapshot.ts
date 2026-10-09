@@ -6,10 +6,11 @@ import { ghClient } from '../github';
 import { must } from '../exec';
 import { readState } from '../state';
 import { featureMerges, type Feature } from '../stages/release-common';
-import { DashboardHistory } from './history';
+import { LABELS, type Labels } from './labels';
 import { createWorkerKey, readLiveOperations } from './live';
-import { ADHOC_LABEL, QUEUE_OF, RELEASE_TASK_LABEL, STUCK_LABEL } from '../types';
+import { ADHOC_LABEL, QUEUE_OF, RELEASE_CANDIDATE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL } from '../types';
 import type { Card, FactoryState, GitHub, Queue, Run, RunResult } from '../types';
+import type { AnalyticsRunner, Analytics } from './analytics';
 import type { DashboardConfig } from './config';
 import type { HostSampler, HostLoad } from './host';
 
@@ -18,16 +19,21 @@ export type Source<T> = { value: T | null; at: string | null; status: 'ok' | 'st
 type PauseReason = 'agent-usage-limit' | 'operator';
 export type Operations = ReturnType<typeof buildOperations> & { pauseReason: PauseReason | null };
 export type PublicCard = { issue: number; title: string; column: string; blocked: boolean; releaseTask: boolean };
-export type GithubSnapshot = { cards: PublicCard[]; features: Feature[]; releaseKey: string; provisional: boolean };
-export type Analytics = { ranges: ReturnType<DashboardHistory['summarize']>[]; posts: ReturnType<DashboardHistory['readPosts']> };
+export type DevMerge = { issue: number; createdAt: string; mergedAt: string };
+export type GithubSnapshot = { cards: PublicCard[]; features: Feature[]; merges: DevMerge[]; releaseKey: string; provisional: boolean };
 export type Snapshot = {
   generatedAt: string; repoUrl: string; playUrl: string; channelUrl: string | null;
   operations: Source<Operations>; github: Source<GithubSnapshot>; analytics: Source<Analytics>; host: Source<HostLoad>;
   live: Source<ReturnType<typeof readLiveOperations>>;
+  labels: Labels;
 };
 export type Commit = { sha: string; parents: { sha: string }[]; commit: { message: string } };
 type ComparePage = { total_commits: number; commits: Commit[] };
 type PublicIssue = { number: number; title: string; labels: { name: string }[]; pull_request?: unknown };
+type MergedIssue = { number: number; createdAt: string; labels: string[]; mergedAt: string | null };
+
+const MERGES_QUERY = `query($owner:String!,$name:String!,$endCursor:String){repository(owner:$owner,name:$name){issues(labels:["${RELEASE_CANDIDATE_LABEL}"],states:[OPEN,CLOSED],first:50,after:$endCursor){pageInfo{hasNextPage endCursor}nodes{number createdAt labels(first:20){nodes{name}}timelineItems(first:100,itemTypes:[LABELED_EVENT]){nodes{...on LabeledEvent{createdAt label{name}}}}}}}}`;
+const MERGES_JQ = `.data.repository.issues.nodes[]|{number,createdAt,labels:[.labels.nodes[].name],mergedAt:([.timelineItems.nodes[]|select(.label.name=="${RELEASE_CANDIDATE_LABEL}")|.createdAt]|sort|first)}`;
 
 function createSource<T>(): Source<T> { return { value: null, at: null, status: 'unavailable' }; }
 function recordFailure<T>(source: Source<T>, name: string, error: unknown): Source<T> {
@@ -81,6 +87,15 @@ export class PublicGitHub {
     const output = await this.query(['api', `repos/${this.config.repo}/issues?state=open&per_page=100`, '--paginate', '--jq', '.[] | {number,title,labels,pull_request}']);
     return output.split('\n').filter(Boolean).map((line) => JSON.parse(line) as PublicIssue);
   }
+  private async readMerges(): Promise<DevMerge[]> {
+    const [owner, name] = this.config.repo.split('/');
+    const output = await this.query(['api', 'graphql', '--paginate', '-f', `query=${MERGES_QUERY}`, '-f', `owner=${owner}`, '-f', `name=${name}`, '--jq', MERGES_JQ]);
+    const issues = output.split('\n').filter(Boolean).map((line) => JSON.parse(line) as MergedIssue);
+    return issues.filter((issue) => !issue.labels.includes(RELEASE_TASK_LABEL) && !issue.labels.includes(ADHOC_LABEL)).map((issue) => {
+      if (issue.mergedAt === null) throw new Error(`Issue ${issue.number} has ${RELEASE_CANDIDATE_LABEL} but no label event`);
+      return { issue: issue.number, createdAt: issue.createdAt, mergedAt: issue.mergedAt };
+    });
+  }
   private async readHead(branch: string): Promise<string> {
     const head = (await this.query(['api', `repos/${this.config.repo}/commits/${encodeURIComponent(branch)}`, '--jq', '.sha'])).trim();
     if (!/^[a-f0-9]{40}$/.test(head)) throw new Error('Invalid GitHub head');
@@ -102,8 +117,8 @@ export class PublicGitHub {
   async read(state: FactoryState): Promise<GithubSnapshot> {
     const visibility = (await this.query(['api', `repos/${this.config.repo}`, '--jq', '.visibility'])).trim();
     if (visibility !== 'public') throw new Error('Dashboard requires a public repository');
-    const [cards, issues, features] = await Promise.all([this.github.cards(), this.readIssues(), this.readFeatures(state)]);
-    return { cards: selectPublicCards(cards, issues), features, releaseKey: getReleaseKey(state), provisional: state.release === null };
+    const [cards, issues, features, merges] = await Promise.all([this.github.cards(), this.readIssues(), this.readFeatures(state), this.readMerges()]);
+    return { cards: selectPublicCards(cards, issues), features, merges, releaseKey: getReleaseKey(state), provisional: state.release === null };
   }
 }
 
@@ -155,10 +170,7 @@ export class SnapshotCollector {
   private analytics = createSource<Analytics>();
   private host = createSource<HostLoad>();
   private live = createSource<ReturnType<typeof readLiveOperations>>();
-  private readonly history: DashboardHistory;
-  constructor(private readonly config: DashboardConfig, private readonly publicGithub: PublicGitHub, private readonly hostSampler: HostSampler) {
-    this.history = new DashboardHistory(config.home, config.tickIntervalMs);
-  }
+  constructor(private readonly config: DashboardConfig, private readonly publicGithub: PublicGitHub, private readonly hostSampler: HostSampler, private readonly analyticsRunner: AnalyticsRunner) {}
   private refreshState(): void {
     try {
       const path = join(this.config.home, 'state', 'state.json');
@@ -170,10 +182,8 @@ export class SnapshotCollector {
   }
   private async refreshAnalytics(): Promise<void> {
     try {
-      const now = new Date();
-      await this.history.refresh(now);
-      const ranges = [1, 7, 30].map((days) => this.history.summarize(now, days));
-      this.analytics = recordSuccess({ ranges, posts: this.config.publicChannel === null ? [] : this.history.readPosts(now, this.config.publicChannel) });
+      const panels = await this.analyticsRunner.read(join(this.config.home, 'ledger.jsonl'), new Date(), this.config.tickIntervalMs * 3);
+      this.analytics = recordSuccess(panels);
     } catch (error) { this.analytics = recordFailure(this.analytics, 'analytics', error); }
   }
   private refreshLive(): void {
@@ -199,6 +209,7 @@ export class SnapshotCollector {
       generatedAt: new Date().toISOString(), repoUrl: `https://github.com/${this.config.repo}`, playUrl: this.config.playUrl, channelUrl: this.config.channelUrl,
       live: expireSource(this.live, localBudget), operations: expireSource(this.operations, localBudget), analytics: expireSource(this.analytics, localBudget), host: expireSource(this.host, localBudget),
       github: expireSource(this.github, this.config.githubRefreshMs + this.config.commandTimeoutMs),
+      labels: LABELS,
     };
   }
 }

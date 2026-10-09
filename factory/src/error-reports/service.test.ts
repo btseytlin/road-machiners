@@ -7,7 +7,6 @@ import { alertPath, ErrorReports, ErrorServer, issueReports, readStore, reportsD
 
 const SHA = 'abc1234'.padEnd(40, '0');
 const NEW_SHA = 'def5678'.padEnd(40, '0');
-// Column 1 of line 1 maps to the start of damage.ts, column 10 to the call of vehicleById.
 const MAP = JSON.stringify({ version: 3, sources: ['../../src/sim/damage.ts'], names: ['vehicleById'], mappings: 'AAAA,SAASA' });
 
 type World = { home: string; deps: ReportDeps; calls: string[]; issues: Map<number, FingerprintIssue> };

@@ -34,4 +34,5 @@ Run these from `factory/`. Run `npm ci` first.
 - Jobs share the host clone and the state file, so every state update runs under its lock.
 - Hermes's SOUL.md repeats no process detail. It points to `docs/process.md` and `docs/state.md`.
 - A change to factory state, like a new state field, queue or card position, updates `docs/state.md`, `src/position.ts` and the `factory` CLI in `src/ctl.ts` in the same commit.
+- A new column, job stage, queue, activity or wait reason needs a label in `src/dashboard/labels.ts`. `npm run typecheck` fails until it has one.
 - The factory never imports game code.

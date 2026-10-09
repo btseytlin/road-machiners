@@ -1,10 +1,6 @@
 // Bowl's interior (C1): a terraced crater farm. Crop rows and fruit trees stand on the terraces, stairs climb the
 // risers, and the crater floor holds houses in two rings around an off-center pond, a turning windmill, two stilt
 // tanks and a greenhouse. Two sheds stand on bastion platforms. The crater itself is baked terrain (pitDepth).
-//
-// Offsets are site tiles: x is map x, z is map y. Houses, trees and crop rows stand only where every height corner
-// of the tiles under their footprint is at one pit depth, so none stands on a riser (IV18). The authored floor pieces
-// throw when they do not; the repeated ones are skipped.
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../../data/physics';
@@ -19,31 +15,27 @@ import type { SiteBuilder } from '../sites';
 
 const S = PHYSICS.metersPerTile;
 
-// The pond, off center toward the camera's right as in C1, and what stands around it, in tiles.
 const POND = { x: 2, z: 0.5, r: 2.6 };
-const WINDMILL = { x: 4.1, z: 2.7 }; // on the pond's near shore
+const WINDMILL = { x: 4.1, z: 2.7 };
 const TANKS = [
   { x: 5.6, z: -1.7 },
   { x: 6.2, z: -3.8 },
 ];
-const GREENHOUSE = { x: -4, z: 5, yaw: 0.4, scale: 0.6 }; // the reused quonset, 13 m long
-// Houses in two rings around the pond: ring radius in tiles and the tiles between neighbours along it.
+const GREENHOUSE = { x: -4, z: 5, yaw: 0.4, scale: 0.6 };
 const HOUSE_RINGS = [
   { r: 5.4, gap: 2.6 },
   { r: 8.4, gap: 2.6 },
 ];
-const HOUSE_JITTER = { angle: 0.3, radius: 1.2, turn: 0.6 }; // share of a gap, tiles, radians
-const HOUSE_SPAN = 2.4; // tiles, a house's footprint with its eaves (8.7 m by 6.7 m) turned any way
+const HOUSE_JITTER = { angle: 0.3, radius: 1.2, turn: 0.6 };
+const HOUSE_SPAN = 2.4;
 const HOUSES: ModelName[] = ['bowl_house_rust', 'bowl_house_red', 'bowl_house_grey'];
-// Every flat pit tile out to FIELD_REACH tiles in from the curtain is planted, as C1's terraces are: two crop rows
-// along the nearest curtain side, or a fruit tree. Each row piece is a short hedge of crops that stays in its tile.
 const FIELD_REACH = 12.5;
 const ROW = { length: 0.7, width: 0.26, height: 0.3, apart: 0.5 };
-const TREE_SHARE = 0.16; // share of planted tiles that hold a tree
-const TREE_SPAN = 0.9; // tiles, a fruit tree's crown
-const STAIR = { at: 0.32, from: 1, to: 11.4, step: 0.3, width: 0.9, height: 0.3 }; // `at`: share along each side
-const SHEDS = [4, 2]; // the bastions that carry a shed, by core corner index
-const SHED_OUT = 1.2; // tiles out of the enclosure's corner toward the bastion's salient, onto its platform
+const TREE_SHARE = 0.16;
+const TREE_SPAN = 0.9;
+const STAIR = { at: 0.32, from: 1, to: 11.4, step: 0.3, width: 0.9, height: 0.3 };
+const SHEDS = [4, 2];
+const SHED_OUT = 1.2;
 const FENCE = { r: POND.r + 0.5, posts: 14, height: 0.28 };
 
 const CROP = mix(FACTION_COLORS.bowl.top, PAL.palm, 0.3);
@@ -61,7 +53,6 @@ export function buildBowl(b: SiteBuilder, site: Site): void {
   addSheds(b, site);
 }
 
-// The pond, its fence, the windmill, the tanks and the greenhouse. Each claims its ground first.
 function buildFloor(b: SiteBuilder, site: Site, taken: Disc[]): void {
   requireFlat(site, POND.x, POND.z, 2 * POND.r + 1, 'pond');
   b.addTank(POND.x, POND.z, POND.r, 0.05, PAL.water);
@@ -80,7 +71,6 @@ function buildFloor(b: SiteBuilder, site: Site, taken: Disc[]): void {
   taken.push({ ...GREENHOUSE, r: 2.6 });
 }
 
-// A rail on posts around the pond, open on the windmill's side.
 function addPondFence(b: SiteBuilder): void {
   const gap = Math.atan2(WINDMILL.z - POND.z, WINDMILL.x - POND.x);
   const step = (2 * Math.PI) / FENCE.posts;
@@ -95,7 +85,6 @@ function addPondFence(b: SiteBuilder): void {
   }
 }
 
-// The windmill faces the camera a little from the side, so its wheel reads as a turning disc.
 function addWindmill(b: SiteBuilder, site: Site): void {
   requireFlat(site, WINDMILL.x, WINDMILL.z, 1.2, 'windmill');
   const tower = b.addModel('windmill_tower', WINDMILL.x, WINDMILL.z, -Math.PI / 4 + 0.4);
@@ -106,7 +95,6 @@ function addWindmill(b: SiteBuilder, site: Site): void {
   b.addMover(rotor, spin(new THREE.Vector3(1, 0, 0), 3));
 }
 
-// Houses on the flat floor in rings around the pond, front doors toward the water. Returns how many stand.
 function addHouses(b: SiteBuilder, site: Site, taken: Disc[]): number {
   const spots = HOUSE_RINGS.flatMap((ring, k) => ringSpots(ring.r, ring.gap, k * 0.5)).filter((s) => isFloorSpot(site, s, HOUSE_SPAN, taken));
   for (const s of spots) taken.push({ x: s.x, z: s.z, r: HOUSE_SPAN / 2 + 0.3 });
@@ -117,8 +105,6 @@ function addHouses(b: SiteBuilder, site: Site, taken: Disc[]): number {
   return spots.length;
 }
 
-// Spots on a ring around the pond, each turned so its +x faces the pond. Each is shifted and turned a little by a
-// fixed hash, so the rings read as a village rather than a pattern.
 function ringSpots(r: number, gap: number, offset: number): Spot[] {
   const count = Math.floor((2 * Math.PI * r) / gap);
   return Array.from({ length: count }, (_, i) => {
@@ -133,7 +119,6 @@ function isFloorSpot(site: Site, s: Spot, span: number, taken: Disc[]): boolean 
   return flatDepth(site, s.x, s.z, span) !== null && !taken.some((d) => Math.hypot(d.x - s.x, d.z - s.z) < d.r + span / 2);
 }
 
-// Stairs down every curtain side, then crops and trees on every flat terrace tile clear of them and the floor pieces.
 function addTerraces(b: SiteBuilder, site: Site, taken: Disc[]): void {
   const sides = curtainSides(site);
   const stairs = sides.flatMap((side) => sideStair(site, side));
@@ -146,7 +131,6 @@ function addTerraces(b: SiteBuilder, site: Site, taken: Disc[]): void {
   b.addInstances('fruit_tree', trees).name = 'bowl-trees';
 }
 
-// The sides of the main enclosure with their direction and the normal into the site. The pit follows them.
 function curtainSides(site: Site): Side[] {
   const outline = fortressCore(site);
   return outline.map((a, i) => {
@@ -159,13 +143,10 @@ function curtainSides(site: Site): Side[] {
   });
 }
 
-// The site offset `s` tiles along a side and `d` tiles in from it.
 function onSide(site: Site, side: Side, s: number, d: number): Vec {
   return { x: side.a.x + side.along.x * s + side.inward.x * d - site.pos.x, y: side.a.y + side.along.y * s + side.inward.y * d - site.pos.y };
 }
 
-// The centers of the flat pit tiles within FIELD_REACH of the curtain and clear of the floor pieces, as spots turned
-// along their nearest curtain side.
 function fieldTiles(site: Site, sides: Side[], clear: Disc[]): Spot[] {
   const tiles: Spot[] = [];
   const reach = Math.ceil(site.radius);
@@ -186,7 +167,6 @@ function fieldTile(site: Site, sides: Side[], c: Vec): Spot | null {
   return { x: c.x - site.pos.x, z: c.y - site.pos.y, yaw: -Math.atan2(near.side.along.y, near.side.along.x) };
 }
 
-// A tree, or two crop rows across the tile, each kept only where the pit depth is one across its footprint.
 function plantTile(site: Site, tile: Spot, rows: Spot[], trees: Spot[]): void {
   const h = hash2(tile.x + site.pos.x, tile.z + site.pos.y);
   if (h < TREE_SHARE) {
@@ -200,7 +180,6 @@ function plantTile(site: Site, tile: Spot, rows: Spot[], trees: Spot[]): void {
   }
 }
 
-// Whether the pit depth is one at the corners and center of a w by d footprint turned by the spot's yaw.
 function levelUnder(site: Site, s: Spot, w: number, d: number): boolean {
   const ax = Math.cos(s.yaw);
   const az = -Math.sin(s.yaw);
@@ -211,7 +190,6 @@ function levelUnder(site: Site, s: Spot, w: number, d: number): boolean {
   return new Set(points.map((p) => pitDepth(site, p))).size === 1;
 }
 
-// Steps down the risers from the rim to the floor, one flight per side. Flat ground between risers gets no step.
 function sideStair(site: Site, side: Side): Spot[] {
   const yaw = -Math.atan2(side.along.y, side.along.x);
   const steps: Spot[] = [];
@@ -222,7 +200,6 @@ function sideStair(site: Site, side: Side): Spot[] {
   return steps;
 }
 
-// Scrap sheds on two bastion platforms, facing the crater.
 function addSheds(b: SiteBuilder, site: Site): void {
   const core = fortressCore(site);
   for (const corner of SHEDS) {
@@ -233,7 +210,6 @@ function addSheds(b: SiteBuilder, site: Site): void {
   }
 }
 
-// One instanced mesh of boxes, one per spot, standing on the ground with their width along the spot's yaw.
 function boxes(name: string, spots: Spot[], size: { w: number; h: number; d: number }, color: number, b: SiteBuilder): THREE.InstancedMesh {
   const mesh = new THREE.InstancedMesh(new THREE.BoxGeometry(size.w * S, size.h * S, size.d * S), new THREE.MeshLambertMaterial({ color, flatShading: true }), spots.length);
   mesh.name = name;
@@ -256,13 +232,10 @@ function requireFlat(site: Site, x: number, z: number, span: number, what: strin
   if (flatDepth(site, x, z, span) === null) throw new Error(`Bowl ${what} at ${x},${z} does not stand on one flat pit level`);
 }
 
-// The pit depth under a square of span tiles centered at site offset (x, z), or null when its tiles are not flat.
 function flatDepth(site: Site, x: number, z: number, span: number): number | null {
   return flatRect(site, { x, z, yaw: 0 }, span, span);
 }
 
-// The pit depth under a w by d rectangle turned by the spot's yaw, or null when any height corner of the tiles
-// under it lies at another depth.
 function flatRect(site: Site, s: Spot, w: number, d: number): number | null {
   const ax = Math.cos(s.yaw);
   const az = -Math.sin(s.yaw);

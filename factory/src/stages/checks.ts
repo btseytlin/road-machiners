@@ -10,11 +10,6 @@ import { BRANCH, GAME_DIR, OUT_DIR, type Ctx, type InlineButton } from '../types
 import { bundleOf } from './bundle';
 import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, playtestCommand, workDir } from './common';
 
-// Each step logs its start time, so the log shows where the time goes.
-// The typecheck runs beside the tests. The build ends the script, so a passing check leaves dist/ ready to publish.
-// Only the build gets SAVE_SCOPE, since the tests expect the default save key.
-// The game's cached runner skips test files whose inputs already passed, with its cache mounted at /test-cache.
-// A branch cut before the runner reached dev has no test:cached script and runs the full suite. Remove that path once no open branch lacks the script.
 export const checkScript = (playtest: string) => `set -e
 step() { echo "[checks] $(date -u +%T) $1"; }
 mkdir -p tmp
@@ -52,7 +47,6 @@ SAVE_SCOPE="$BUILD_SCOPE" npm run build
 step "done"
 `;
 
-// The checkpoint before a committee post: the typecheck, the playtest and the build, with no suite. The suite runs once, before the merge.
 export const previewScript = (playtest: string) => `set -e
 step() { echo "[checks] $(date -u +%T) $1"; }
 mkdir -p tmp
@@ -81,7 +75,6 @@ SAVE_SCOPE="$BUILD_SCOPE" npm run build
 step "done"
 `;
 
-// The build alone, for a card a control move put in Approval and for a docs change. No test, typecheck or playtest runs.
 export const buildScript = `set -e
 step() { echo "[checks] $(date -u +%T) $1"; }
 mkdir -p tmp
@@ -92,8 +85,6 @@ SAVE_SCOPE="$BUILD_SCOPE" npm run build
 step "done"
 `;
 
-// A control move put the card in Approval. The branch head is built and posted once, with no checks and no agent. A failed build throws.
-// The post says no checks ran. A clone with no approval text gets one that points to the pull request.
 export async function runStage(ctx: Ctx, issue: number): Promise<void> {
   if (!readState(ctx.statePath).postOnly.includes(issue)) throw new Error(`Issue #${issue} is not waiting for a post with no checks`);
   const home = agentHome(workDir(ctx, issue), GAME_DIR);
@@ -112,7 +103,6 @@ function approvalOrDefault(home: string): Approval {
   return existsSync(`${home}/${OUT_DIR}/approval.json`) ? readApproval(home) : DEFAULT_APPROVAL;
 }
 
-// Publishes the build the checkpoint left in the check clone, posts it to the committee and moves the card to Approval.
 export async function publishAndPost(ctx: Ctx, issue: number, approval: Approval, home: string, base: string, build: string, unchecked: boolean): Promise<void> {
   const url = publishBuild(ctx, checkDir(ctx, issue), build);
   recordBuild(ctx.statePath, issue, build);
@@ -124,9 +114,6 @@ function checkDir(ctx: Ctx, issue: number): string {
   return `${ctx.cfg.home}/work/check-issue-${issue}`;
 }
 
-// The checkpoint before a post, in a fresh clone of the pushed branch. Agent claims do not count.
-// A docs change only builds. A hotfix ships on approval, so it also runs the suite. Timeouts alone rerun with no agent.
-// Passing checks leave the build of scope `build` in the clone. Returns null on a pass, or the tail of the log.
 export async function postCheckpoint(ctx: Ctx, issue: number, base: string, build: string, kind: 'docs' | 'preview' | 'full'): Promise<string | null> {
   if (kind === 'docs') return runScript(ctx, issue, base, build, buildScript);
   const playtest = playtestCommand(ctx.cfg, false);
@@ -134,7 +121,6 @@ export async function postCheckpoint(ctx: Ctx, issue: number, base: string, buil
   return checkUntilReal(() => runScript(ctx, issue, base, build, script), (run) => ctx.log('verify', issue, `the checks only timed out, run ${run} of ${CHECK_RUNS}, running them again`));
 }
 
-// Every run of checkScript mounts the shared test cache, so passes recorded by one job skip tests in the next.
 export function testCacheMount(ctx: Ctx): Record<string, string> {
   const cache = `${ctx.cfg.home}/test-cache`;
   mkdirSync(cache, { recursive: true });
@@ -156,21 +142,15 @@ async function runScript(ctx: Ctx, issue: number, base: string, build: string, s
   }
 }
 
-// Vitest's messages when a test, a hook or the runner itself ran out of time.
 const TIMEOUT_LINE = /(Test|Hook) timed out in \d+ms|Timeout calling "onTaskUpdate"/;
 
-// Whether every error in a check failure is a timeout. Such a failure says the machine was slow, not that the code is wrong.
-// A failure with no error line at all, like a failed playtest or typecheck, is a real one.
 export function timeoutOnly(failure: string): boolean {
   const errors = failure.split('\n').filter((line) => /Error:|timed out in/.test(line));
   return errors.length > 0 && errors.every((line) => TIMEOUT_LINE.test(line));
 }
 
-// Two reruns ride out a burst of load. A third timeout means the load stays, and Hermes has to look.
 export const CHECK_RUNS = 3;
 
-// Runs the checks until they pass or fail for a real reason. Timeouts alone rerun the checks with no agent round,
-// since an agent would only raise the time limits. Returns null on a pass, or the real failure. Throws after CHECK_RUNS timeouts.
 export async function checkUntilReal(check: () => Promise<string | null>, onTimeout: (run: number) => void): Promise<string | null> {
   for (let run = 1; ; run++) {
     const failure = await check();
@@ -188,16 +168,11 @@ export function checkFailure(log: string, error: unknown): string {
   return stripAnsi(tail);
 }
 
-// The start of the issue comment of each post. Feedback after the last one belongs to the build it posted.
 export const POST_MARK = 'Ready for approval:';
 
-// Telegram caps a photo caption at 1024 characters.
 export const CAPTION_LIMIT = 1024;
 const TRIM_MARK = '…';
 
-// The approval post is the primary photo with everything in its caption, and the only post with buttons. The full notes also go on the issue.
-// Further evidence images follow as a reply photo or album, which no command acts on.
-// A post with no screenshot is a text message with the same buttons, mapping and reply routing. It says up front that it has no screenshot.
 export async function post(ctx: Ctx, issue: number, approval: Approval, shown: Shown, url: string, base: string, unchecked = false): Promise<void> {
   const { evidence, problem } = shown;
   const item = await ctx.github.issue(issue);
@@ -221,7 +196,6 @@ function omit<T>(record: Record<string, T>, key: number): Record<string, T> {
   return Object.fromEntries(Object.entries(record).filter(([name]) => name !== String(key)));
 }
 
-// A feedback round reuses the pull request of the first round.
 async function pullRequestUrl(ctx: Ctx, issue: number, title: string, approval: Approval, base: string): Promise<string> {
   const open = await ctx.github.pullRequestFor(BRANCH(issue));
   if (open !== null) return open;
@@ -237,7 +211,6 @@ export function approvalButtons(issue: number, base: string): InlineButton[][] {
 
 const UNCHECKED_NOTICE = '⚠️ No factory checks ran on this build.';
 
-// A hotfix skips dev and the release, so its post opens with a warning the committee cannot miss.
 function warningsOf(base: string, noScreenshot: boolean, unchecked: boolean): string {
   const hotfix = base === HOTFIX_BASE ? '⚠️ HOTFIX. Approve merges into main and ships to players at once. Play it with care.\n\n' : '';
   const unseen = noScreenshot ? '⚠️ No screenshot. Judge it by playing.\n\n' : '';
@@ -253,7 +226,6 @@ export function approvalCaption(title: string, url: string, link: string, pr: st
   return [head, description, `How to try: ${howToTry}`].join('\n\n');
 }
 
-// Shortens the two texts to fit the room, cutting the longer one first. The full texts are on the issue.
 function fitBoth(first: string, second: string, room: number): [string, string] {
   if (first.length + second.length <= room) return [first, second];
   const half = Math.floor(room / 2);

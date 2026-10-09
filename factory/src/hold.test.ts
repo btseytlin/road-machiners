@@ -8,7 +8,6 @@ import { chooseJobs } from './tick';
 import type { Card, Column, Ctx, FactoryConfig, FactoryState, Job } from './types';
 
 const killed: string[] = [];
-// Runs inside the fake kill, like a job that ends on its own while the hold stops it.
 let duringKill: () => void = () => undefined;
 vi.mock('./jobs', async (original) => ({ ...(await original<object>()), killJob: async (_run: unknown, pid: number, id: string) => { killed.push(`${pid} ${id}`); duringKill(); } }));
 const { applyControl } = await import('./control');
@@ -41,7 +40,6 @@ const order = (action: 'hold' | 'unhold', issue = 4, by = 'Ann') => applyControl
 const jobLines = () => readLedger(ROOT, new Date(0)).filter((line) => line.kind === 'job');
 const controlLines = () => readLedger(ROOT, new Date(0)).filter((line) => line.kind === 'control');
 
-// An implement card mid-run, with a session saved and a cap slot taken.
 function runningCard(): void {
   cards = [card(4, 'Implementation'), card(6, 'Implementation', ['release-task'])];
   seed({ jobs: [JOB, { ...JOB, id: 'verify-5-x', stage: 'verify', issue: 5, pid: 78 }], jobStarts: [STARTED], cardStarts: { 4: [STARTED] } });

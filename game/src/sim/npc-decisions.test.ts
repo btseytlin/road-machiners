@@ -41,7 +41,6 @@ describe('decision weights', () => {
     const shares = optionChances({ keep: 3, flee: 1 });
     expect(shares.keep).toBeCloseTo(MIN_CHANCE + (1 - 2 * MIN_CHANCE) * 0.75);
     expect(shares.flee).toBeCloseTo(MIN_CHANCE + (1 - 2 * MIN_CHANCE) * 0.25);
-    // With no weight at all, the options share equally.
     for (const share of Object.values(optionChances({ trade: 0, scavenge: 0, wait: 0, raid: 0 }))) expect(share).toBeCloseTo(0.25);
   });
 
@@ -78,7 +77,6 @@ describe('decision weights', () => {
   it('keeps with no roll when keep is the only available option', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: 60, y: 30 });
-    // With an empty tank the driver can neither close in on a contact nor drive off.
     raider.resources!.fuel = 0;
     expect(Object.keys(optionWeights(w, raider, 'contactHeard', w.player.vehicleId, null))).toEqual(['keep']);
     const rng = w.rngState;
@@ -90,7 +88,6 @@ describe('decision weights', () => {
     const w = emptyWorld({ x: 80, y: 80 });
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 14, y: 10 });
-    // A miss with no weight and no damage taken gives flee a factor of 0.
     const missFlee = NPC_BEHAVIOR.missFlee;
     NPC_BEHAVIOR.missFlee = 0;
     onTestFinished(() => { NPC_BEHAVIOR.missFlee = missFlee; });
@@ -105,7 +102,6 @@ describe('decision weights', () => {
     expect(optionWeights(w, npc, 'hostileSeen', raider.id, judgeDanger(w, npc, raider))).not.toHaveProperty('fight');
   });
 
-  // The foes stand out of gun range, so running gets the driver away.
   it('raises flee weight when outgunned or damaged', () => {
     const w = emptyWorld({ x: 80, y: 80 });
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 }, ['mg', 'stockEngine']);
@@ -143,7 +139,6 @@ describe('decision weights', () => {
     const flees = (traits: TraitId[]) => {
       const w = emptyWorld({ x: 80, y: 80 });
       const npc = addNpc(w, 'scavengers', 'scavenger', traits, { x: 10, y: 10 });
-      // Out of gun range, so running gets the driver away.
       addNpc(w, 'raiders', 'buggy', ['raider'], { x: 24, y: 10 });
       let count = 0;
       for (let seed = 0; seed < 100; seed++) {
@@ -262,7 +257,6 @@ describe('fit to hunt', () => {
 });
 
 describe('aid decisions', () => {
-  // A driver with the given traits and full tanks beside a player low on fuel, so it can spare some.
   function aidChances(traits: TraitId[], decision: 'aidAsked' | 'needySeen'): Record<string, number> {
     const w = emptyWorld({ x: 30, y: 30 });
     const npc = addNpc(w, 'traders', 'trader', traits, { x: 36, y: 30 });
@@ -302,8 +296,6 @@ describe('aid decisions', () => {
 describe('fight back', () => {
   const round = (struck: string, damage: number) => ({ hit: true, crit: false, offset: 0, struck, hits: [{ part: 'x', damage }], blast: [], burst: null });
 
-  // A trader shot this turn by a raider in sight for `damage`. A base goal is set, so only the attacked decision
-  // rolls. 18 damage is 30% of a cab, three times the hit that gives flee its base weight.
   function shotTrader(traits: TraitId[], damage: number) {
     const w = emptyWorld({ x: 80, y: 80 });
     const trader = addNpc(w, 'traders', 'trader', traits, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
@@ -312,7 +304,6 @@ describe('fight back', () => {
     w.events = [{ t: 'shot', shooter: raider.id, weapon: 'w', target: trader.id, aim: 'body', chance: 1, damageChance: 1, side: 'front', rounds: [round(trader.id, damage)] }];
     noteHurt(w);
     w.events = [];
-    // The shot's attack record, as combat leaves it.
     trader.brain!.attackers = { [raider.id]: false };
     return { w, trader, raider };
   }
@@ -361,12 +352,11 @@ describe('fight back', () => {
 
 describe('decision points', () => {
   it('the same hostile in sight fires one roll', () => {
-    const w = emptyWorld({ x: 50, y: 50 }); // inside the live range, so the cover rock hides the raider
+    const w = emptyWorld({ x: 50, y: 50 });
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
     const chosen = () => trackOf(npc, raider.id)?.choice ?? null;
     npc.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' }];
-    // The first sighting rolls. Start from a seed on which it keeps, so later turns show only whether a roll fires.
     const keeps = (seed: number) => {
       const x = cloneWorld(w);
       x.rngState = seed;
@@ -384,12 +374,10 @@ describe('decision points', () => {
     thinkNpc(w, npc);
     thinkNpc(w, npc);
     expect(w.rngState).toBe(rng);
-    // Briefly out of sight, the raider is still tracked, so it fires no new roll.
     w.obstacles.push({ id: 'cover', kind: 'rock', pos: { x: 12, y: 10 }, r: 1 });
     w.turn += NPC_BEHAVIOR.noticeMemory;
     thinkNpc(w, npc);
     expect(chosen()).toBe('keep');
-    // Out of sight and earshot past the memory, it is forgotten. Back in sight, it fires again.
     w.turn += 1;
     thinkNpc(w, npc);
     expect(trackOf(npc, raider.id)).toBeUndefined();
@@ -428,11 +416,10 @@ describe('decision points', () => {
 
   it('a raider investigates a contact, and a scavenger rarely does', () => {
     const w = emptyWorld({ x: 30, y: 30 });
-    w.vehicles[0].speed = 4; // loud enough to be heard past sight range
-    const beyond = 30 + TERRAIN.vision.radius + 5; // just past sight
+    w.vehicles[0].speed = 4;
+    const beyond = 30 + TERRAIN.vision.radius + 5;
     const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: beyond, y: 30 });
-    const scav = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 60 - beyond, y: 30 }); // the other side, out of the raider's sight
-    // The player is hostile to the scavenger through a feud, so both hear a hostile contact.
+    const scav = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 60 - beyond, y: 30 });
     addState(w, 'feud', scav.id, w.player.vehicleId, { kind: 'feud', robbery: false });
     expect(optionWeights(w, raider, 'contactHeard', w.player.vehicleId, null).investigate).toBeGreaterThan(0);
     expect(optionWeights(w, scav, 'contactHeard', w.player.vehicleId, null).investigate).toBe(0);
@@ -445,7 +432,6 @@ describe('decision points', () => {
       if (thinkNpc(x, find(x, scav.id)).kind === 'investigate') scavInvestigated++;
     }
     expect(investigated).toBeGreaterThan(100);
-    // Investigating is available to anyone, so a scavenger picks it at about MIN_CHANCE.
     expect(scavInvestigated).toBeLessThan(10);
   });
 
@@ -509,13 +495,11 @@ describe('truce answers', () => {
   });
 });
 
-// The parts a hard ram takes out: the guns, the engine and the wheels.
 function brokenInRam(def: PartDef): boolean {
   return def.kind === 'weapon' || def.kind === 'engine' || (def.kind === 'core' && def.role === 'wheel');
 }
 
 describe('truce offers', () => {
-  // A hurt raider gunwagon beside the player's scout. The scout's gun and engine can be broken.
   function duel(playerBroken: boolean, raiderCab: number | null) {
     const w = emptyWorld({ x: 80, y: 80 });
     const me = find(w, w.player.vehicleId);
@@ -565,7 +549,6 @@ describe('hunting grounds', () => {
   it('lie on lonely road stretches and at the pads of salvage sites', () => {
     expect(lootPads.length).toBeGreaterThan(0);
     for (const pad of lootPads) expect(grounds).toContainEqual(pad);
-    // Glass Flats' outline spans 95 tiles and swallows the road stretches inside it, so fewer lonely stretches remain.
     expect(grounds.filter(onRoad).length).toBeGreaterThanOrEqual(4);
   });
 
@@ -602,7 +585,6 @@ describe('hunting grounds', () => {
       expect(goals.filter((g) => isOrchardGround(g.destination!)).length).toBeGreaterThan(0);
     });
 
-    // Which camps' raiders wait in the orchard, and at how many of its grounds. Each ground belongs to its nearest camp.
     it('are shared by the raiders of Scrapjaw and Kiln', () => {
       const camps = REGION.locations.filter((l) => l.kind === 'camp');
       const w = emptyWorld();
@@ -630,7 +612,7 @@ describe('raider grounds', () => {
     const posts = huntingGrounds().map((g) => watchPost(w, g));
     expect(lawmanTowns().map((t) => t.id).sort()).toEqual(['bowl', 'nose']);
     for (const camp of [scrapjaw, kiln]) {
-      expect(raiderGrounds(w, camp).length).toBeGreaterThanOrEqual(2); // Scrapjaw keeps 2 on the current map
+      expect(raiderGrounds(w, camp).length).toBeGreaterThanOrEqual(2);
       for (const p of raiderGrounds(w, camp)) {
         expect(posts).toContainEqual(p);
         for (const gate of lawGates()) expect(dist(gate, p)).toBeGreaterThan(HUNT.lawReach);
@@ -654,7 +636,6 @@ describe('raider grounds', () => {
 });
 
 describe('a driver that gave its word', () => {
-  // A scumbag pulling over to trade with the player, with a loaded truck passing by.
   function meeting() {
     const w = emptyWorld({ x: 80, y: 80 });
     const me = w.vehicles[0];
@@ -687,8 +668,6 @@ describe('a driver that gave its word', () => {
 });
 
 describe('warn-off decisions', () => {
-  // The chances of a driver with the given traits answering the player's warning off its wreck. The player's danger
-  // is its real value, so only the traits differ between calls.
   function warnChances(traits: TraitId[], parts = ['mg', 'stockEngine']): Record<string, number> {
     const w = emptyWorld({ x: 30, y: 30 });
     const npc = addNpc(w, 'scavengers', 'scavenger', traits, { x: 36, y: 30 }, parts);

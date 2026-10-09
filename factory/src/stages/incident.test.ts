@@ -19,7 +19,6 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
-// The agent writes its output file and, for an entry, the log in the clone.
 function fakeCtx(outcome: string | null, log = 'ID: R6\nrepo: game\n'): Ctx {
   const record = (name: string) => async (...args: unknown[]) => { calls.push(`${name} ${args.join(' ')}`); };
   const fake = {
