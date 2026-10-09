@@ -13,9 +13,11 @@ const cpu = process.argv.includes('--cpu');
 const turns = Number(arg('turns', cpu ? '4' : '12'));
 const fpsGate = !cpu && !process.argv.includes('--no-fps-gate');
 const MIN_FPS = 50;
-const timeoutsOff = process.env.TEST_TIMEOUTS === 'shared';
-const TURN_LIMIT_MS = timeoutsOff ? 0 : cpu ? 60000 : 10000;
-const BOOT_LIMIT_MS = timeoutsOff ? 0 : 30000;
+const testTimeouts = process.env.TEST_TIMEOUTS ?? '';
+if (testTimeouts !== '' && testTimeouts !== 'shared') throw new Error(`TEST_TIMEOUTS must be unset or "shared", got "${testTimeouts}".`);
+const sharedServer = testTimeouts === 'shared';
+const TURN_LIMIT_MS = sharedServer ? 0 : cpu ? 60000 : 10000;
+const BOOT_LIMIT_MS = sharedServer ? 0 : 30000;
 
 const GPU_ARGS = {
   darwin: ['--use-angle=metal'],
@@ -33,7 +35,7 @@ function launchArgs() {
 mkdirSync('.playtest', { recursive: true });
 const browser = await chromium.launch({ args: launchArgs() });
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
-if (timeoutsOff) page.setDefaultTimeout(0);
+if (sharedServer) page.setDefaultTimeout(0);
 const renderer = await page.evaluate(() => {
   const gl = document.createElement('canvas').getContext('webgl2');
   return gl ? gl.getParameter(gl.getExtension('WEBGL_debug_renderer_info')?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER) : 'no WebGL2';
