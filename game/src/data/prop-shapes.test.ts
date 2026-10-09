@@ -266,3 +266,17 @@ describe('ship debris models', () => {
     expect(under.length).toBeGreaterThan(0);
   });
 });
+
+describe('loot section models', () => {
+  const SECTIONS = ['hull_bay', 'cargo_pod', 'engine_section'] as const;
+
+  it.each(SECTIONS)('%s fits the footprint of the crate heap it replaces, 2.4 to 3.2 m out from its centre', (model) => {
+    const reach = Math.max(...shapeBoxes(model).map((b) => Math.hypot(Math.max(Math.abs(b.x0), Math.abs(b.x1)), Math.max(Math.abs(b.y0), Math.abs(b.y1)))));
+    expect(reach).toBeGreaterThanOrEqual(2.4);
+    expect(reach).toBeLessThanOrEqual(3.2);
+  });
+
+  it.each(SECTIONS)('%s is low enough to see over, so its load shows from the camera', (model) => {
+    expect(Math.max(...shapeBoxes(model).map((b) => b.z1))).toBeLessThan(TERRAIN.vision.eyeHeight * PHYSICS.metersPerTile);
+  });
+});
