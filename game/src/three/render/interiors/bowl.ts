@@ -36,12 +36,13 @@ const TREE_SPAN = 0.9;
 const STAIR = { at: 0.32, from: 1, to: 11.4, step: 0.3, width: 0.9, height: 0.3 };
 const SHEDS = [4, 2];
 const SHED_OUT = 1.2;
-const MAST = 2.5;
+const MAST = 3.3;
 const LIGHTS = [
-  { x: 7.4, z: 7.4, aim: { x: 2.5, z: 2.5 } },
-  { x: 0.5, z: 10.5, aim: { x: -3.5, z: 4.5 } },
-  { x: 10.5, z: 0.5, aim: { x: 5.5, z: -3.5 } },
-  { x: -8, z: 8, aim: { x: -9, z: 2 } },
+  { x: 7.4, z: 7.4, aim: { x: 4.1, z: 2.7, lift: 2 } },
+  { x: 9, z: 0.5, aim: { x: 6, z: -2.7, lift: 2 } },
+  { x: -1.5, z: 7.5, aim: { x: -4, z: 5, lift: 1 } },
+  { x: -8, z: 8, aim: { x: -9, z: 2, lift: 1 } },
+  { x: 2, z: 4.5, aim: { x: 2, z: 0.5, lift: 0.5 } },
 ];
 const FENCE = { r: POND.r + 0.5, posts: 14, height: 0.28 };
 

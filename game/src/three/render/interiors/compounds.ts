@@ -27,10 +27,10 @@ const SHED_DOOR = {
 };
 const SHED_LAMP = { reach: 0.12, size: 0.14, lift: 0.66 };
 const PIPE = { size: 0.08, lift: 0.12, support: 0.6 };
-const MAST = 2.3;
+const MAST = 3.3;
 const DUSTWELL_LIGHTS = [
-  { x: 1.5, z: 1.5, aim: { x: -0.2, z: -0.2 } },
-  { x: 1.5, z: -1.3, aim: { x: 0.3, z: -0.8 } },
+  { x: 1.6, z: 1.4, aim: { x: -1.6, z: 0.4, lift: 2.5 } },
+  { x: 2.4, z: 1.0, aim: { x: 1.2, z: -2.1, lift: 2 } },
 ];
 
 export function buildDustwell(b: SiteBuilder): void {
@@ -40,6 +40,7 @@ export function buildDustwell(b: SiteBuilder): void {
   addShed(b, 'dustwell', SHED);
   addPipes(b);
   for (const l of DUSTWELL_LIGHTS) b.addWorkLight('flood', l.x, l.z, MAST, l.aim, PAL.siteLight.sodium);
+  b.addWash(0.65, PAL.siteLight.sodium);
 }
 
 function addPumpjack(b: SiteBuilder): void {
@@ -97,9 +98,9 @@ const STACK_SACK = { w: 0.24, h: 0.12, d: 0.16 };
 const STACK_ROWS = [4, 3, 2];
 
 const GRANARY_LIGHTS = [
-  { x: 1.5, z: 2.0, aim: { x: -0.2, z: -0.2 } },
-  { x: 2.4, z: -0.4, aim: { x: 0.6, z: -1.6 } },
-  { x: -1.0, z: 2.6, aim: { x: -1.8, z: 0.4 } },
+  { x: 1.5, z: 2.0, aim: { x: -1.5, z: -0.9, lift: 2.5 } },
+  { x: 2.4, z: -0.4, aim: { x: -0.4, z: -1.8, lift: 3 } },
+  { x: -0.6, z: 2.4, aim: { x: -1.4, z: 0.8, lift: 0.8 } },
 ];
 const GRAIN = FACTION_COLORS.bowl.cab;
 const SACK_COLOR = PAL.wall.top;
@@ -201,9 +202,9 @@ function addBin(b: SiteBuilder, x: number, z: number): void {
 }
 
 const SALVAGE_LIGHTS = [
-  { x: 1.8, z: 1.8, aim: { x: -0.3, z: -0.3 } },
-  { x: -0.2, z: 2.2, aim: { x: -1.6, z: 0.4 } },
-  { x: 2.2, z: 0.2, aim: { x: 0.8, z: -1.4 } },
+  { x: 1.6, z: 2.0, aim: { x: -0.4, z: 1.1, lift: 4 } },
+  { x: 0.2, z: -0.3, aim: { x: -2.0, z: -2.0, lift: 2 } },
+  { x: 0.3, z: 2.2, aim: { x: -1.2, z: 0.4, lift: 0.8 } },
 ];
 const CRANE = { x: 0.1, z: 1.3, yaw: (160 * Math.PI) / 180 };
 const SLEW = { amplitude: (35 * Math.PI) / 180, period: 14 };
@@ -236,6 +237,7 @@ export function buildSalvageYard(b: SiteBuilder): void {
   for (const w of WRECKS) b.addModel('wreck', w.x, w.z, w.yaw).name = 'salvage-wreck';
   for (const p of YARD_PROPS) b.addModel(p.name, p.x, p.z, p.yaw);
   for (const l of SALVAGE_LIGHTS) b.addWorkLight('flood', l.x, l.z, MAST, l.aim, PAL.siteLight.sodium);
+  b.addWash(0.65, PAL.siteLight.sodium);
 }
 
 function addCrane(b: SiteBuilder): void {

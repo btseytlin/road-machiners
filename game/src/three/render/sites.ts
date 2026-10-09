@@ -28,7 +28,7 @@ const WING_DECK_LENGTH = 156;
 const WING_DECK_WIDTH = 24;
 
 export type Mover = { node: THREE.Object3D; motion: Motion };
-type Fixture = { kind: SiteLightKind; head: THREE.Object3D; home: THREE.Vector3; aim: { x: number; z: number }; color?: number };
+type Fixture = { kind: SiteLightKind; head: THREE.Object3D; home: THREE.Vector3; aim: { x: number; z: number; lift?: number }; color?: number };
 const MOTION_PHASE_SPAN = 60;
 
 export class SiteBuilder {
@@ -92,11 +92,14 @@ export class SiteBuilder {
     this.addBox(x, z, 0.18, height + SINK, 0.18, PAL.metal, -SINK, yaw);
     return this.addLampHead(x, z, height, yaw);
   }
-  addWorkLight(kind: SiteLightKind, x: number, z: number, height: number, aim: { x: number; z: number }, color: number): void {
+  addWorkLight(kind: SiteLightKind, x: number, z: number, height: number, aim: { x: number; z: number; lift?: number }, color: number): void {
     this.addLight(kind, this.addMast(x, z, height, 0), aim, color);
   }
+  addWash(reach: number, color: number): void {
+    this.addWorkLight('wash', WASH.mast * reach, WASH.mast * reach, WORK_MAST, { x: -WASH.aim * reach, z: -WASH.aim * reach, lift: WASH.lift }, color);
+  }
   // Registers a work light at a lamp head. The aim is a ground point in site tiles, relative to the site centre.
-  addLight(kind: SiteLightKind, head: THREE.Object3D, aim: { x: number; z: number }, color?: number): void {
+  addLight(kind: SiteLightKind, head: THREE.Object3D, aim: { x: number; z: number; lift?: number }, color?: number): void {
     let root: THREE.Object3D | null = head;
     while (root && root !== this.root) root = root.parent;
     if (!root) throw new Error(`Light head of ${this.site.id} is not inside its site root`);
@@ -189,8 +192,9 @@ const LAMP_REACH = 0.3;
 const SINK = 0.3;
 const DOOR_THICKNESS = 0.4;
 const GATE_APRON_AIM = 2.5;
-const WORK_MAST = 2.3;
+const WORK_MAST = 3.3;
 const FIRE_MAST = 0.7;
+const WASH = { mast: 2.4, aim: 3.8, lift: 3.3 };
 
 function edgeStyle(site: Site): WallStyle {
   const edge = 'edge' in site ? site.edge : undefined;
@@ -322,7 +326,8 @@ function buildPump(b: SiteBuilder): void {
   b.addRuin(-1.7, 0, 3, 3.8);
   b.addModel('pump_station', 2.5, 0);
   b.addBox(-2, 0, 1.2, 0.85, 2, PAL.rust.side);
-  b.addWorkLight('flood', 3.2, 2.6, WORK_MAST, { x: -0.8, z: -1 }, PAL.siteLight.warm);
+  b.addWorkLight('flood', 3.2, 2.6, WORK_MAST, { x: 2.5, z: 0, lift: 1.5 }, PAL.siteLight.warm);
+  b.addWash(1, PAL.siteLight.warm);
 }
 
 function buildLock(b: SiteBuilder): void {
@@ -330,7 +335,8 @@ function buildLock(b: SiteBuilder): void {
   b.addBox(0, 0, 2.6, 0.05, 3.8, PAL.water);
   b.addModel('lock_gate', 0, 0, Math.PI / 2);
   b.addRuin(3.7, 0, 1.7, 2);
-  b.addWorkLight('flood', 2.4, 2.4, WORK_MAST, { x: 0, z: -1 }, PAL.siteLight.warm);
+  b.addWorkLight('flood', 2.4, 2.4, WORK_MAST, { x: 0, z: 0, lift: 1 }, PAL.siteLight.warm);
+  b.addWash(0.9, PAL.siteLight.warm);
 }
 
 function sampleSightOnDeck(obj: THREE.Object3D, deck: Deck): void {
@@ -381,7 +387,8 @@ function buildOasis(b: SiteBuilder): void {
     const a = i * Math.PI * 2 / 9;
     b.addModel('palm', Math.cos(a) * 4, Math.sin(a) * 4, a * 2.3);
   }
-  b.addWorkLight('flood', 1.9, 3.1, WORK_MAST, { x: -0.5, z: -0.8 }, PAL.siteLight.warm);
+  b.addWorkLight('flood', 1.9, 3.1, WORK_MAST, { x: -1.5, z: -2.5, lift: 1.5 }, PAL.siteLight.warm);
+  b.addWash(1, PAL.siteLight.warm);
 }
 
 function buildWrecks(b: SiteBuilder, id: string): void {
@@ -423,6 +430,7 @@ function buildCamp(b: SiteBuilder, id: string): void {
   b.addHull(Math.cos(turn + 3.1) * 3.6, Math.sin(turn + 3.1) * 3.6, 3, 1.4, turn + 1.6);
   b.addModel('crates', Math.cos(turn + 5.2) * 3.5, Math.sin(turn + 5.2) * 3.5, turn);
   b.addLight('fire', b.addMast(0, 0, FIRE_MAST, 0), { x: -0.4, z: -0.4 }, PAL.siteLight.fire);
+  b.addWash(1, PAL.siteLight.warm);
 }
 
 function closeSite(b: SiteBuilder, site: Site, t: Terrain): void {
@@ -507,7 +515,8 @@ function resolveLights(b: SiteBuilder, site: Site, t: Terrain): SiteLight[] {
     const x = site.pos.x + f.aim.x + shift.x / S;
     const z = site.pos.y + f.aim.z + shift.z / S;
     const at = f.head.position;
-    return { id: `${site.id}:${f.kind}:${i}`, siteId: site.id, kind: f.kind, at: { x: at.x, y: at.y, z: at.z }, aim: { x: x * S, y: heightAt(t, x, z) * S, z: z * S }, color: f.color };
+    const ground = heightAt(t, x, z) * S;
+    return { id: `${site.id}:${f.kind}:${i}`, siteId: site.id, kind: f.kind, at: { x: at.x, y: at.y, z: at.z }, aim: { x: x * S, y: ground + (f.aim.lift ?? 0) * S, z: z * S }, ground, color: f.color };
   });
   if (!isFortress(site)) {
     if (lights.length > 0) throw new Error(`Abandoned site ${site.id} has work lights`);

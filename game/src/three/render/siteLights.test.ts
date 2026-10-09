@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { sunAt } from '../../sim/sun';
 import { groundHits, SITE_LIGHT_FADE_S, SITE_LIGHT_POOL, siteLightOrder, SiteLights, LOOKS, type SiteLight } from './siteLights';
 
-const light = (id: string, x: number, siteId = 'a'): SiteLight => ({ id, siteId, kind: 'flood', at: { x, y: 8, z: 0 }, aim: { x, y: 0, z: -5 } });
+const light = (id: string, x: number, siteId = 'a'): SiteLight => ({ id, siteId, kind: 'flood', at: { x, y: 8, z: 0 }, aim: { x, y: 0, z: -5 }, ground: 0 });
 const all = () => true;
 const FOCUS = { x: 0, y: 0, z: 0 };
 
@@ -100,8 +100,8 @@ const spots = (pool: SiteLights) => pool.spots();
 
 describe('groundHits', () => {
   it('is a circle of radius h tan(angle) under a straight-down cone', () => {
-    const l: SiteLight = { id: 'x', siteId: 'a', kind: 'flood', at: { x: 3, y: 6, z: -2 }, aim: { x: 3, y: 0, z: -2 } };
-    const hits = groundHits(l, 0, 16);
+    const l: SiteLight = { id: 'x', siteId: 'a', kind: 'flood', at: { x: 3, y: 6, z: -2 }, aim: { x: 3, y: 0, z: -2 }, ground: 0 };
+    const hits = groundHits(l, 16);
     expect(hits).toHaveLength(48);
     const r = 6 * Math.tan(LOOKS.flood.angle);
     for (const h of hits.slice(-16)) expect(Math.hypot(h.x - 3, h.z + 2)).toBeCloseTo(r);
@@ -109,8 +109,8 @@ describe('groundHits', () => {
   });
 
   it('drops rays that miss the ground or fall beyond the range', () => {
-    const l: SiteLight = { id: 'x', siteId: 'a', kind: 'flood', at: { x: 0, y: 6, z: 0 }, aim: { x: 40, y: 5, z: 0 } };
-    const hits = groundHits(l, 0, 16);
+    const l: SiteLight = { id: 'x', siteId: 'a', kind: 'flood', at: { x: 0, y: 6, z: 0 }, aim: { x: 40, y: 5, z: 0 }, ground: 0 };
+    const hits = groundHits(l, 16);
     expect(hits.length).toBeLessThan(48);
     for (const h of hits) expect(Math.hypot(h.x, 6, h.z)).toBeLessThanOrEqual(LOOKS.flood.range + 1e-6);
   });

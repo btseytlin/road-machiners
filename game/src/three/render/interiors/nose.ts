@@ -57,12 +57,12 @@ const CRATES = [
   { u: 12.5, v: -17 },
   { u: 10.5, v: 15.5 },
 ];
-const MAST = 2.5;
-const LIGHTS = [
-  { mast: { u: 0, v: -3 }, aim: { u: 0, v: 5 } },
-  { mast: { u: -6, v: -4 }, aim: { u: -6, v: 2 } },
-  { mast: { u: 12, v: -9 }, aim: { u: 16, v: -6 } },
-  { mast: { u: 2, v: -8 }, aim: { u: 6, v: -3.5 } },
+const MAST = 3.3;
+const LIGHTS: { kind: 'flood' | 'wash'; mast: { u: number; v: number }; aim: { u: number; v: number; lift: number } }[] = [
+  { kind: 'wash', mast: { u: -2, v: 3 }, aim: { u: -4.2, v: 9.5, lift: 8 } },
+  { kind: 'flood', mast: { u: -6, v: -4 }, aim: { u: -5.5, v: 0.2, lift: 1.2 } },
+  { kind: 'flood', mast: { u: 12, v: -9 }, aim: { u: 16, v: -6, lift: 1.5 } },
+  { kind: 'flood', mast: { u: 2, v: -8 }, aim: { u: 6, v: -3.5, lift: 0.8 } },
 ];
 const RUBBLE = { count: 44, scale: [2, 6], reach: 29.3 };
 const ROCK_SINK = 0.25 * 1.1;
@@ -95,7 +95,7 @@ export function buildNose(b: SiteBuilder, site: Site): void {
   b.root.userData.structures = taken;
   for (const l of LIGHTS) {
     const at = placeAt(f, l.mast.u, l.mast.v);
-    b.addWorkLight('flood', at.x, at.z, MAST, placeAt(f, l.aim.u, l.aim.v), PAL.siteLight.cold);
+    b.addWorkLight(l.kind, at.x, at.z, MAST, { ...placeAt(f, l.aim.u, l.aim.v), lift: l.aim.lift }, PAL.siteLight.cold);
   }
 }
 

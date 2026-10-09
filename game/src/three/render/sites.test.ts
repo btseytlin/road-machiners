@@ -659,7 +659,7 @@ describe('site work lights (#402)', () => {
     const leaks: string[] = [];
     for (const site of FORTS) {
       for (const light of of(site.id).filter((l) => l.kind !== 'gate')) {
-        for (const hit of groundHits(light, light.aim.y, 16)) {
+        for (const hit of groundHits(light, 16)) {
           const p = tiles(hit);
           if (!insideCurtain(site, p) && !onFortressRock(site, p)) leaks.push(`${light.id} hits ${(p.x - site.pos.x).toFixed(1)},${(p.y - site.pos.y).toFixed(1)}`);
         }
@@ -674,7 +674,7 @@ describe('site work lights (#402)', () => {
       for (const light of of(site.id).filter((l) => l.kind === 'gate')) {
         const at = tiles(light.at);
         const gate = gates.reduce((a, b) => (Math.hypot(a.face.x - at.x, a.face.y - at.y) < Math.hypot(b.face.x - at.x, b.face.y - at.y) ? a : b));
-        for (const hit of groundHits(light, light.aim.y, 16)) {
+        for (const hit of groundHits(light, 16)) {
           const p = tiles(hit);
           const out = (p.x - gate.face.x) * gate.out.x + (p.y - gate.face.y) * gate.out.y;
           expect(out, `${light.id} behind its gate`).toBeGreaterThanOrEqual(-0.01);
@@ -689,7 +689,7 @@ describe('site work lights (#402)', () => {
       for (const light of of(site.id)) {
         const p = tiles(light.at);
         expect(insideCurtain(site, p) || light.kind === 'gate' || onFortressRock(site, p), light.id).toBe(true);
-        expect(light.at.y, light.id).toBeGreaterThan(light.aim.y);
+        expect(light.at.y, light.id).toBeGreaterThan(light.ground);
       }
     }
   });

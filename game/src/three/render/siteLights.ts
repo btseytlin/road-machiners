@@ -8,8 +8,8 @@ import { PAL } from '../../render/palette';
 import { DEG } from '../../sim/vec';
 import { lampsOn } from './daylight';
 
-export type SiteLightKind = 'flood' | 'gate' | 'fire';
-export type SiteLight = { id: string; siteId: string; kind: SiteLightKind; at: V3; aim: V3; color?: number };
+export type SiteLightKind = 'flood' | 'wash' | 'gate' | 'fire';
+export type SiteLight = { id: string; siteId: string; kind: SiteLightKind; at: V3; aim: V3; ground: number; color?: number };
 
 type Look = { color: number; intensity: number; range: number; angle: number; penumbra: number; decay: number };
 
@@ -18,8 +18,9 @@ export const SITE_LIGHT_FADE_S = 1.5;
 export const GATE_APRON_MARGIN = 3;
 
 export const LOOKS: Record<SiteLightKind, Look> = {
-  flood: { color: PAL.siteLight.sodium, intensity: 150, range: 14, angle: 30 * DEG, penumbra: 0.5, decay: 1 },
-  gate: { color: PAL.siteLight.sodium, intensity: 70, range: 22, angle: 36 * DEG, penumbra: 0.5, decay: 1 },
+  flood: { color: PAL.siteLight.sodium, intensity: 50, range: 18, angle: 32 * DEG, penumbra: 0.5, decay: 1 },
+  wash: { color: PAL.siteLight.sodium, intensity: 85, range: 40, angle: 18 * DEG, penumbra: 0.6, decay: 1 },
+  gate: { color: PAL.siteLight.sodium, intensity: 70, range: 22, angle: 30 * DEG, penumbra: 0.5, decay: 1 },
   fire: { color: PAL.siteLight.fire, intensity: 30, range: 12, angle: 60 * DEG, penumbra: 0.8, decay: 1 },
 };
 
@@ -30,7 +31,7 @@ export function lookOf(light: SiteLight): Look {
 // Where the cone meets flat ground, edge rays plus inner rings. The inner rings catch the range arc of a cone that rises over the ground.
 const CONE_RINGS = [0.4, 0.7, 1];
 
-export function groundHits(light: SiteLight, groundY: number, bearings: number): V3[] {
+export function groundHits(light: SiteLight, bearings: number): V3[] {
   const look = lookOf(light);
   const axis = new THREE.Vector3(light.aim.x - light.at.x, light.aim.y - light.at.y, light.aim.z - light.at.z).normalize();
   const side = new THREE.Vector3().crossVectors(axis, new THREE.Vector3(0, 1, 0));
@@ -41,9 +42,9 @@ export function groundHits(light: SiteLight, groundY: number, bearings: number):
     for (let k = 0; k < bearings; k++) {
       const edge = axis.clone().applyAxisAngle(side, look.angle * ring).applyAxisAngle(axis, (k / bearings) * Math.PI * 2);
       if (edge.y >= -1e-9) continue;
-      const t = (groundY - light.at.y) / edge.y;
+      const t = (light.ground - light.at.y) / edge.y;
       if (t < 0 || t > look.range) continue;
-      hits.push({ x: light.at.x + edge.x * t, y: groundY, z: light.at.z + edge.z * t });
+      hits.push({ x: light.at.x + edge.x * t, y: light.ground, z: light.at.z + edge.z * t });
     }
   }
   return hits;
