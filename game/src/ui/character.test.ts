@@ -48,16 +48,42 @@ describe("character screen", () => {
   it("gives a disabled rank button its reason", () => {
     const root = openCharacter(emptyWorld());
     const button = rankButtons(root)[0];
-    expect(button.attrs.get("disabled")).toBe("");
-    expect(button.attrs.get("title")).toMatch(/XP/);
+    expect(button.attrs.get("aria-disabled")).toBe("true");
+    expect(button.attrs.get("data-reason")).toMatch(/XP/);
   });
 
   it("prints a rank price as one plain phrase", () => {
     const world = emptyWorld();
     world.player.xp = 1000;
     const button = rankButtons(openCharacter(world))[0];
-    expect(button.text()).toMatch(/^Buy rank 1 for \d+ XP$/);
-    expect(button.attrs.has("disabled")).toBe(false);
+    expect(button.text()).toMatch(/^Buy \d+ XP$/);
+    expect(button.attrs.has("aria-disabled")).toBe(false);
+  });
+
+  it("has one row per skill and says today and the cap once", () => {
+    const root = openCharacter(emptyWorld());
+    expect(root.all((n) => n.className.includes("skill-row"))).toHaveLength(5);
+    expect(root.text().match(/Today/g)).toHaveLength(1);
+    expect(root.text()).toContain("max 150 XP");
+    expect(root.all((n) => n.className === "skill-name")[0].attrs.get("title")).toMatch(/^Earns XP from /);
+  });
+
+  it("marks a row with an open perk pair and shows both perks as buttons", () => {
+    const world = emptyWorld();
+    world.player.ranks.driving = 2;
+    const root = openCharacter(world);
+    const pending = root.all((n) => n.className.includes("pending"));
+    expect(pending).toHaveLength(1);
+    expect(pending[0].all((n) => n.tag === "button" && n.className.includes("perk"))).toHaveLength(2);
+  });
+
+  it("blocks a perk pick while knocked out and says why", () => {
+    const world = emptyWorld();
+    world.player.ranks.driving = 2;
+    world.player.state = "knockedOut";
+    const perk = openCharacter(world).all((n) => n.tag === "button" && n.className === "perk")[0];
+    expect(perk.attrs.get("aria-disabled")).toBe("true");
+    expect(perk.attrs.get("data-reason")).toBe("You are knocked out");
   });
 
   it("prints the XP pool as a number and a unit", () => {
