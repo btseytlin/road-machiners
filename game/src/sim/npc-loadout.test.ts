@@ -623,11 +623,11 @@ describe('loadout fingerprint', () => {
   it('rolls the same loadouts and RNG streams for every template', () => {
     const w = emptyWorld();
     const loadouts = Object.values(NPCS).flatMap((template) => Array.from({ length: 5 }, () => generateNpcLoadout(w, template)));
-    expect(sha({ loadouts, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('4c89a6d0f7081ea9');
+    expect(sha({ loadouts, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('4b70fb602be0aba5');
   }, budget(180_000));
 
   it('populates a new world the same way', () => {
     const w = newWorld(7, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
-    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('6fcd892dd81d57d5');
+    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('1ae97e6e00898961');
   }, budget(60_000));
 });

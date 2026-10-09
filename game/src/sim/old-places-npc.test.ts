@@ -151,6 +151,7 @@ describe('a scavenger at an old-world loot spot', () => {
     for (const good of Object.keys(stock.goods)) stock.goods[good] = 0;
     stock.fuel = 0;
     stock.supplies = 0;
+    stock.hidden = { goods: {}, parts: [], fuel: 0, supplies: 0 };
     npc.brain!.goals = [scavengeGoal(building)];
     const { w: after, reasons } = runGoal(w, npc.id, stock.id);
     expect(reasons).toContain('salvage exhausted');

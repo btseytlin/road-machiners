@@ -146,11 +146,9 @@ function showNoWebGL(err: WebGLUnavailable): void {
   shown = true;
   const text = noWebGLText(err, navigator.userAgent);
   const box = document.createElement('div');
-  box.style.cssText =
-    'position:fixed;inset:0;z-index:100000;background:#261c14;color:#e8d8c0;padding:40px;overflow:auto;' +
-    'font:16px/1.6 system-ui,sans-serif;';
+  box.className = 'crash-screen';
   const title = document.createElement('div');
-  title.style.cssText = 'font-size:28px;color:#f0b860;margin-bottom:20px;';
+  title.className = 'crash-title';
   title.textContent = text.title;
   box.append(title);
   for (const line of text.lines) {
@@ -160,7 +158,7 @@ function showNoWebGL(err: WebGLUnavailable): void {
   }
   if (text.detail) {
     const detail = document.createElement('div');
-    detail.style.cssText = 'margin-top:24px;color:#a89880;font:12px ui-monospace,Menlo,monospace;';
+    detail.className = 'crash-hint';
     detail.textContent = text.detail;
     box.append(detail);
   }
