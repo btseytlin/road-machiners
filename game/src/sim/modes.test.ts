@@ -4,7 +4,7 @@ import { startKit } from '../data/start';
 import { TEST_MAP } from '../test/map';
 import { defaultSetup, modeKit, modeRules } from './settings';
 import { highwayMap } from './highway';
-import { gauntletWorld } from './testkit';
+import { furyRoadWorld } from './testkit';
 import { newWorld } from './world';
 import type { World } from './types';
 
@@ -25,8 +25,8 @@ describe('game mode rules', () => {
     expect(Object.values(modeRules(world)).every((on) => on)).toBe(true);
   });
 
-  it('turns every open-world rule off in a Gauntlet world', () => {
-    const world = gauntletWorld(7);
+  it('turns every open-world rule off in a Fury Road world', () => {
+    const world = furyRoadWorld(7);
 
     expect(Object.values(modeRules(world)).some((on) => on)).toBe(false);
   });
@@ -38,18 +38,18 @@ describe('game mode rules', () => {
     expect(() => modeRules(world)).toThrow(/Unknown game mode fury/);
   });
 
-  it('gives Roaming the configured kit and Gauntlet its own', () => {
+  it('gives Roaming the configured kit and Fury Road its own', () => {
     expect(modeKit('roaming', 'standard')).toBe('standard');
-    expect(modeKit('gauntlet', 'standard')).toBe('gauntlet');
-    expect(GAME_MODES.gauntlet.name).toBe('Gauntlet');
+    expect(modeKit('furyRoad', 'standard')).toBe('furyRoad');
+    expect(GAME_MODES.furyRoad.name).toBe('Fury Road');
   });
 });
 
 describe('a new world by mode', () => {
-  it('builds a Roaming world exactly as before the Gauntlet mode', () => {
+  it('builds a Roaming world exactly as before the Fury Road mode', () => {
     const world = newWorld(7, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
 
-    expect(world.gauntlet).toBeNull();
+    expect(world.furyRoad).toBeNull();
     expect(fingerprint(world)).toEqual({
       streams: [1952458593, -794062549, 1468231572, 1936023925],
       nextId: 964,
@@ -59,18 +59,18 @@ describe('a new world by mode', () => {
     });
   });
 
-  it('starts a Gauntlet world with no traffic, salvage, shops or road wrecks', () => {
-    const world = gauntletWorld(7);
+  it('starts a Fury Road world with no traffic, salvage, shops or road wrecks', () => {
+    const world = furyRoadWorld(7);
 
     expect(world.vehicles.map((v) => v.faction)).toEqual(['player']);
     expect(world.salvage).toEqual([]);
     expect(world.shops).toEqual({});
     expect(world.obstacles.some((o) => /^wreck\d+$/.test(o.id))).toBe(false);
-    expect(world.gauntlet?.window).toBe(0);
+    expect(world.furyRoad?.window).toBe(0);
   });
 
-  it('gives the Gauntlet player the Gauntlet kit with no opening', () => {
-    const world = gauntletWorld(7);
+  it('gives the Fury Road player the Fury Road kit with no opening', () => {
+    const world = furyRoadWorld(7);
 
     expect(world.player.money).toBe(20000);
     expect(world.player.autoRepair).toBe(true);
@@ -83,7 +83,7 @@ describe('a world and its map', () => {
     expect(() => newWorld(7, startKit('standard'), highwayMap(7, 0), defaultSetup('roaming'))).toThrow(/needs towns/);
   });
 
-  it('refuses a Gauntlet world on Icarus', () => {
-    expect(() => newWorld(7, startKit('gauntlet'), TEST_MAP, defaultSetup('gauntlet'))).toThrow(/highway window 0/);
+  it('refuses a Fury Road world on Icarus', () => {
+    expect(() => newWorld(7, startKit('furyRoad'), TEST_MAP, defaultSetup('furyRoad'))).toThrow(/highway window 0/);
   });
 });

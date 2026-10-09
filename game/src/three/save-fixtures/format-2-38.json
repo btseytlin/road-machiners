@@ -1,0 +1,15 @@
+{
+  "seed": 12,
+  "mapHash": "highway:1:12:1",
+  "setup": { "mode": "gauntlet", "settings": { "damage": 1, "fuelUse": 1, "supplyUse": 1 } },
+  "gauntlet": {
+    "window": 1,
+    "outposts": [
+      { "milestone": 1, "stock": [], "paid": true },
+      { "milestone": 2, "stock": [{ "id": "p91", "defId": "plates", "wear": 1, "hp": 40 }], "paid": false }
+    ],
+    "groups": [],
+    "earned": 300,
+    "wrecks": 2
+  }
+}

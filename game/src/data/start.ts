@@ -54,7 +54,7 @@ export const START_KITS: Record<string, StartKit> = {
     autoRepair: true,
     opening: null,
   },
-  gauntlet: {
+  furyRoad: {
     name: 'Your truck',
     chassis: 'hauler',
     parts: ['cannon', 'heavyMg', 'mg', 'workhorseDiesel', 'ram', 'plates', 'plates', 'rack'],

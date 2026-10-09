@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { ECONOMY, GOODS } from '../data/goods';
-import { GAUNTLET } from '../data/gauntlet';
+import { FURY_ROAD } from '../data/fury-road';
 import { REPAIR } from '../data/wear';
 import { playerVehicle } from './damage';
-import { outpostPad } from './gauntlet';
+import { outpostPad } from './fury-road';
 import { milestoneAt, roadPoint } from './highway';
-import { gauntletWorld } from './testkit';
+import { furyRoadWorld } from './testkit';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { startRepair } from './jobs';
 import { repairPlan } from './repair';
@@ -17,7 +17,7 @@ import { endTurn } from './world';
 const still = () => {};
 
 function atOutpost(): World {
-  const w = gauntletWorld();
+  const w = furyRoadWorld();
   const me = playerVehicle(w);
   me.pos = outpostPad(w, 1);
   me.speed = 0;
@@ -66,13 +66,13 @@ describe('outpost services', () => {
   it('sells a stock part onto the truck and off the shelf', () => {
     const w = atOutpost();
     w.player.money = 10_000_000;
-    const post = w.gauntlet!.outposts[0];
+    const post = w.furyRoad!.outposts[0];
     const part = post.stock[0];
     const price = outpostPartPrice(w, part);
 
     const after = outpostBuyPart(w, part.id);
 
-    expect(after.gauntlet!.outposts[0].stock.map((p) => p.id)).not.toContain(part.id);
+    expect(after.furyRoad!.outposts[0].stock.map((p) => p.id)).not.toContain(part.id);
     expect(playerVehicle(after).items.some((it) => it.kind === 'part' && it.part.id === part.id)).toBe(true);
     expect(after.player.money).toBe(w.player.money - price);
   });
@@ -85,20 +85,20 @@ describe('outpost services', () => {
 
     expect(goodsCount(playerVehicle(after)).parts).toBe(held + 2);
     expect(after.player.money).toBe(w.player.money - outpostGoodPrice() * 2);
-    expect(outpostGoodPrice()).toBe(Math.ceil(GOODS.parts.value * GAUNTLET.goodsMarkup));
+    expect(outpostGoodPrice()).toBe(Math.ceil(GOODS.parts.value * FURY_ROAD.goodsMarkup));
   });
 
   it('carries a bought part into the next stretch', () => {
     let w = atOutpost();
     w.player.money = 10_000_000;
-    const part = w.gauntlet!.outposts[0].stock[0];
+    const part = w.furyRoad!.outposts[0].stock[0];
     w = outpostBuyPart(w, part.id);
     const me = playerVehicle(w);
-    me.pos = roadPoint(w.seed, w.gauntlet!.window, milestoneAt(1) + 30, GAUNTLET.laneOffsets[1]);
+    me.pos = roadPoint(w.seed, w.furyRoad!.window, milestoneAt(1) + 30, FURY_ROAD.laneOffsets[1]);
 
     w = endTurn(w, still);
 
-    expect(w.gauntlet!.window).toBe(1);
+    expect(w.furyRoad!.window).toBe(1);
     expect(playerVehicle(w).items.some((it) => it.kind === 'part' && it.part.id === part.id)).toBe(true);
   });
 
@@ -123,7 +123,7 @@ describe('outpost commands off the pad', () => {
     ['repair all', outpostRepairAll],
     ['repair basics', outpostRepairBasics],
     ['buy fuel', (w) => outpostBuySupply(w, 'fuel', 1)],
-    ['buy a part', (w) => outpostBuyPart(w, w.gauntlet!.outposts[0].stock[0].id)],
+    ['buy a part', (w) => outpostBuyPart(w, w.furyRoad!.outposts[0].stock[0].id)],
     ['buy parts', (w) => outpostBuyGood(w, 1)],
   ];
 
@@ -135,7 +135,7 @@ describe('outpost commands off the pad', () => {
   });
 
   it.each(commands)('refuse to %s at an outpost not reached yet', (_name, command) => {
-    const w = gauntletWorld();
+    const w = furyRoadWorld();
     const me = playerVehicle(w);
     me.pos = outpostPad(w, 1);
     me.speed = 0;

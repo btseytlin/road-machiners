@@ -26,8 +26,8 @@ export function flatTerrain(size: number): Terrain {
   return { size, heights: new Array((size + 1) * (size + 1)).fill(0), types: new Array(size * size).fill('road'), atlas: ICARUS_KEY };
 }
 
-export function gauntletWorld(seed = 3): World {
-  return newWorld(seed, startKit('gauntlet'), highwayMap(seed, 0), defaultSetup('gauntlet'));
+export function furyRoadWorld(seed = 3): World {
+  return newWorld(seed, startKit('furyRoad'), highwayMap(seed, 0), defaultSetup('furyRoad'));
 }
 
 export function editableTerrain(w: World): Terrain {

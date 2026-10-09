@@ -1,7 +1,7 @@
 import type { BakedMap } from '../sim/terrain';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
-import { reachedOutpostAt } from '../sim/gauntlet';
+import { reachedOutpostAt } from '../sim/fury-road';
 import { highwayMap } from '../sim/highway';
 export { newMapFor } from '../sim/highway';
 import type { BrokenProp, Obstacle, Player, Vehicle, World, WorldSetup } from '../sim/types';
@@ -67,15 +67,15 @@ type SavedWorld = Omit<World, 'terrain' | 'events' | 'removed' | 'broken' | 'veh
 
 type ViewField = 'visible' | 'contacts' | 'clouds';
 
-export function mapFor(saved: Pick<World, 'mapHash' | 'seed' | 'setup' | 'gauntlet'>, icarus: BakedMap): BakedMap {
+export function mapFor(saved: Pick<World, 'mapHash' | 'seed' | 'setup' | 'furyRoad'>, icarus: BakedMap): BakedMap {
   const highway = saved.mapHash.startsWith('highway:');
-  if (saved.setup.mode !== 'gauntlet') {
+  if (saved.setup.mode !== 'furyRoad') {
     if (highway) throw new SaveError(`A ${saved.setup.mode} save names highway map ${saved.mapHash}`);
     return icarus;
   }
-  if (!saved.gauntlet) throw new SaveError('This Gauntlet run was laid on Icarus roads, and the highway has replaced them');
-  if (!highway) throw new SaveError(`A Gauntlet save names map ${saved.mapHash}, which is no highway`);
-  const map = highwayMap(saved.seed, saved.gauntlet.window);
+  if (!saved.furyRoad) throw new SaveError('This Fury Road run was laid on Icarus roads, and the highway has replaced them');
+  if (!highway) throw new SaveError(`A Fury Road save names map ${saved.mapHash}, which is no highway`);
+  const map = highwayMap(saved.seed, saved.furyRoad.window);
   if (map.hash !== saved.mapHash) throw new SaveError(`Game save was made on map ${saved.mapHash}, not on the current highway ${map.hash}`);
   return map;
 }

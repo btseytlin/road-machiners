@@ -43,6 +43,7 @@ import FORMAT_2_32 from './save-fixtures/format-2-32.json';
 import FORMAT_2_33 from './save-fixtures/format-2-33.json';
 import FORMAT_2_35 from './save-fixtures/format-2-35.json';
 import FORMAT_2_37 from './save-fixtures/format-2-37.json';
+import FORMAT_2_38 from './save-fixtures/format-2-38.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -795,6 +796,21 @@ describe('save migration 37 to 38', () => {
     const roaming = { ...FORMAT_2_37, setup: { ...FORMAT_2_37.setup, mode: 'roaming' }, gauntlet: null };
 
     expect(MIGRATIONS[37](structuredClone(roaming))).toEqual(roaming);
+  });
+});
+
+describe('save migration 38 to 39', () => {
+  it('renames the Gauntlet mode and its run to Fury Road and keeps the run', () => {
+    const { gauntlet, ...rest } = structuredClone(FORMAT_2_38);
+
+    expect(MIGRATIONS[38](structuredClone(FORMAT_2_38))).toEqual({ ...rest, setup: { ...rest.setup, mode: 'furyRoad' }, furyRoad: gauntlet });
+  });
+
+  it('keeps a Roaming world as it is but for the run key', () => {
+    const { gauntlet: _run, ...rest } = structuredClone(FORMAT_2_38);
+    const roaming = { ...rest, setup: { ...rest.setup, mode: 'roaming' }, gauntlet: null };
+
+    expect(MIGRATIONS[38](structuredClone(roaming))).toEqual({ ...rest, setup: roaming.setup, furyRoad: null });
   });
 });
 

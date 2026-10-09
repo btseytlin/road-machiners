@@ -3,7 +3,7 @@ import { partDef } from '../../data/parts';
 import { inCombat } from '../combat';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder } from '../world';
 import { basicsRepairCost, repairCost, supplyRoom, type Supply } from '../economy';
-import { abandonRun, canAbandonRun, nextOutpost, payOf, reachedOutpostAt, type Outpost } from '../gauntlet';
+import { abandonRun, canAbandonRun, nextOutpost, payOf, reachedOutpostAt, type Outpost } from '../fury-road';
 import { corePart, goodsCount, mountedParts } from '../grid';
 import { canStowPart, installSpot } from '../inventory';
 import { outpostBuyGood, outpostBuyPart, outpostBuySupply, outpostGoodPrice, outpostGoodRoom, outpostPartPrice, outpostRepairAll, outpostRepairBasics } from '../outposts';
@@ -85,7 +85,7 @@ function buyPatchGoods(o: Orders): void {
 }
 
 function buyBestPart(o: Orders, post: Outpost): void {
-  const reserve = payOf((o.world.gauntlet?.window ?? 0) + 1, 0);
+  const reserve = payOf((o.world.furyRoad?.window ?? 0) + 1, 0);
   const fits = post.stock.filter((part) => mountable(o, part) && outpostPartPrice(o.world, part) <= o.world.player.money - reserve);
   const best = fits.sort((a, b) => partValue(b) - partValue(a))[0];
   if (!best) return;

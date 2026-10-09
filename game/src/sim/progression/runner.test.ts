@@ -1,22 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { playerVehicle } from '../damage';
 import { goodsCount, mountedParts } from '../grid';
-import { outpostPad } from '../gauntlet';
-import { gauntletWorld } from '../testkit';
+import { outpostPad } from '../fury-road';
+import { furyRoadWorld } from '../testkit';
 import type { World } from '../types';
 import { maxHp } from '../wear';
 import { endTurn } from '../world';
 import { botOrders } from './bot';
 
 function atFirstOutpost(): World {
-  const w = gauntletWorld();
+  const w = furyRoadWorld();
   const me = playerVehicle(w);
   me.pos = outpostPad(w, 1);
   me.speed = 0;
   return endTurn(w, () => {});
 }
 
-describe('the Gauntlet runner bot', () => {
+describe('the Fury Road runner bot', () => {
   it('repairs, restocks patch parts and drives on to the next outpost', () => {
     const w = atFirstOutpost();
     for (const part of mountedParts(playerVehicle(w))) part.hp = Math.ceil(maxHp(part) * 0.6);
@@ -34,7 +34,7 @@ describe('the Gauntlet runner bot', () => {
   });
 
   it('ends the run when stranded with no way to patch', () => {
-    const w = gauntletWorld();
+    const w = furyRoadWorld();
     w.player.fuel = 0;
 
     const turn = botOrders(w, 'runner');

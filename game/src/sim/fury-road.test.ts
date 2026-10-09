@@ -1,22 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { GAUNTLET, HIGHWAY } from '../data/gauntlet';
+import { FURY_ROAD, HIGHWAY } from '../data/fury-road';
 import { playerVehicle } from './damage';
-import { abandonRun, advanceGauntlet, canAbandonRun, gauntletReadout, moveWindow, outpostPad, payOf, reachedOutpostAt, runEarnings, stockSizeOf, waveOf, WINDOW_MOVE } from './gauntlet';
+import { abandonRun, advanceFuryRoad, canAbandonRun, furyRoadReadout, moveWindow, outpostPad, payOf, reachedOutpostAt, runEarnings, stockSizeOf, waveOf, WINDOW_MOVE } from './fury-road';
 import { highwayHash, milestoneAt, roadPoint, STRIDE } from './highway';
 import { topGoal } from './npc-activities';
 import { addState, stateOf } from './states';
-import { gauntletWorld } from './testkit';
-import type { GauntletRun, World } from './types';
+import { furyRoadWorld } from './testkit';
+import type { FuryRoadRun, World } from './types';
 import { endTurn } from './world';
 
-function runOf(w: World): GauntletRun {
-  if (!w.gauntlet) throw new Error('No run');
-  return w.gauntlet;
+function runOf(w: World): FuryRoadRun {
+  if (!w.furyRoad) throw new Error('No run');
+  return w.furyRoad;
 }
 
 function moveTo(w: World, n: number): void {
   const me = playerVehicle(w);
-  me.pos = roadPoint(w.seed, runOf(w).window, n, GAUNTLET.laneOffsets[1]);
+  me.pos = roadPoint(w.seed, runOf(w).window, n, FURY_ROAD.laneOffsets[1]);
   me.speed = 0;
 }
 
@@ -38,27 +38,27 @@ function groupTrucks(w: World): string[] {
 
 const still = () => {};
 
-describe('Gauntlet groups', () => {
+describe('Fury Road groups', () => {
   it('spawn only once the player comes within the lead of their anchor', () => {
-    const w = gauntletWorld();
+    const w = furyRoadWorld();
     const group = runOf(w).groups[0];
 
-    moveTo(w, group.at - GAUNTLET.spawnLead - 4);
-    advanceGauntlet(w);
+    moveTo(w, group.at - FURY_ROAD.spawnLead - 4);
+    advanceFuryRoad(w);
     expect(group.spawned).toBe(false);
 
-    moveTo(w, group.at - GAUNTLET.spawnLead + 1);
-    advanceGauntlet(w);
+    moveTo(w, group.at - FURY_ROAD.spawnLead + 1);
+    advanceFuryRoad(w);
     expect(group.spawned).toBe(true);
     expect(group.vehicles).toHaveLength(group.templates.length);
   });
 
   it('spawn hostile, hunting the player, inside the window', () => {
-    const w = gauntletWorld();
+    const w = furyRoadWorld();
     const group = runOf(w).groups[0];
     moveTo(w, group.at);
 
-    advanceGauntlet(w);
+    advanceFuryRoad(w);
 
     for (const id of group.vehicles) {
       const v = w.vehicles.find((x) => x.id === id)!;
@@ -70,25 +70,25 @@ describe('Gauntlet groups', () => {
   });
 
   it('never put more than the cap of trucks on the road at once', () => {
-    let w = gauntletWorld();
+    let w = furyRoadWorld();
     for (let k = 0; k < 7; k++) w = arrive(w);
     const run = runOf(w);
     moveTo(w, Math.max(...run.groups.map((g) => g.at)) + 1);
-    advanceGauntlet(w);
+    advanceFuryRoad(w);
     const late = { ...run.groups[0], id: 'late', spawned: false, vehicles: [], templates: ['buggy'] };
     run.groups.push(late);
 
-    advanceGauntlet(w);
+    advanceFuryRoad(w);
 
-    expect(groupTrucks(w).length).toBe(GAUNTLET.maxAlive);
+    expect(groupTrucks(w).length).toBe(FURY_ROAD.maxAlive);
     expect(late.spawned).toBe(false);
   });
 
   it('keep hunting a player they meet long after they spawn', () => {
-    let w = gauntletWorld();
+    let w = furyRoadWorld();
     const group = runOf(w).groups[0];
-    moveTo(w, group.at - GAUNTLET.spawnLead + 1);
-    advanceGauntlet(w);
+    moveTo(w, group.at - FURY_ROAD.spawnLead + 1);
+    advanceFuryRoad(w);
     for (let i = 0; i < 15; i++) w = endTurn(w, still);
 
     for (const id of runOf(w).groups[0].vehicles.filter((id) => w.vehicles.some((v) => v.id === id))) {
@@ -100,7 +100,7 @@ describe('Gauntlet groups', () => {
 
 describe('arriving at an outpost', () => {
   it('pays once, moves the window north and keeps the player on the same pad and ground', () => {
-    const w = gauntletWorld();
+    const w = furyRoadWorld();
     const money = w.player.money;
     parkOnNext(w);
     const before = playerVehicle(w).pos;
@@ -121,7 +121,7 @@ describe('arriving at an outpost', () => {
   });
 
   it('pays nothing more on the next turns or after moving off and back', () => {
-    let w = arrive(gauntletWorld());
+    let w = arrive(furyRoadWorld());
     const money = w.player.money;
     w = endTurn(w, still);
     moveTo(w, milestoneAt(1) + 20);
@@ -134,24 +134,24 @@ describe('arriving at an outpost', () => {
   });
 
   it('does not complete on the move, off the pad or in combat', () => {
-    const moving = gauntletWorld();
+    const moving = furyRoadWorld();
     parkOnNext(moving);
     playerVehicle(moving).speed = 2;
-    const off = gauntletWorld();
+    const off = furyRoadWorld();
     moveTo(off, milestoneAt(1) - 20);
-    const fighting = gauntletWorld();
+    const fighting = furyRoadWorld();
     parkOnNext(fighting);
     const foe = { ...playerVehicle(fighting), id: 'v-foe' };
     fighting.vehicles.push(foe);
     addState(fighting, 'combat', foe.id, fighting.player.vehicleId, { kind: 'none' });
 
-    for (const w of [moving, off, fighting]) advanceGauntlet(w);
+    for (const w of [moving, off, fighting]) advanceFuryRoad(w);
 
     expect([moving, off, fighting].map((w) => runOf(w).window)).toEqual([0, 0, 0]);
   });
 
   it('pays the base and a bonus for each wreck of the stretch, and keeps the run totals', () => {
-    const w = gauntletWorld();
+    const w = furyRoadWorld();
     runOf(w).groups[0].wrecked = 2;
     const money = w.player.money;
 
@@ -164,22 +164,22 @@ describe('arriving at an outpost', () => {
   });
 
   it('counts a wreck of a group truck toward the stretch', () => {
-    const w = gauntletWorld();
+    const w = furyRoadWorld();
     const group = runOf(w).groups[0];
     moveTo(w, group.at);
-    advanceGauntlet(w);
+    advanceFuryRoad(w);
     w.events = [{ t: 'destroyed', vehicle: group.vehicles[0], by: w.player.vehicleId }];
 
-    advanceGauntlet(w);
+    advanceFuryRoad(w);
 
     expect(group.wrecked).toBe(1);
   });
 
   it('removes the trucks of a finished stretch and awards no XP for it', () => {
-    const w = gauntletWorld();
+    const w = furyRoadWorld();
     const group = runOf(w).groups[0];
     moveTo(w, group.at);
-    advanceGauntlet(w);
+    advanceFuryRoad(w);
     for (const v of w.vehicles) if (group.vehicles.includes(v.id)) v.pos = { x: v.pos.x + 100, y: v.pos.y };
     w.states = w.states.filter((s) => s.kind !== 'combat');
     const passing = structuredClone(w);
@@ -194,25 +194,25 @@ describe('arriving at an outpost', () => {
   });
 
   it('refuses to move the window with a group truck alive or the player off the pad', () => {
-    const off = gauntletWorld();
+    const off = furyRoadWorld();
     expect(() => moveWindow(off)).toThrow(/parked/);
 
-    const alive = gauntletWorld();
+    const alive = furyRoadWorld();
     const group = runOf(alive).groups[0];
     moveTo(alive, group.at);
-    advanceGauntlet(alive);
+    advanceFuryRoad(alive);
     parkOnNext(alive);
     expect(() => moveWindow(alive)).toThrow(/alive/);
   });
 
   it('names a move for every world field', () => {
-    expect(Object.keys(WINDOW_MOVE).sort()).toEqual(Object.keys(gauntletWorld()).sort());
+    expect(Object.keys(WINDOW_MOVE).sort()).toEqual(Object.keys(furyRoadWorld()).sort());
   });
 });
 
 describe('the endless run', () => {
   it('stays bounded over thirty stretches', () => {
-    let w = gauntletWorld();
+    let w = furyRoadWorld();
     const sizes: number[] = [];
     for (let k = 0; k < 30; k++) {
       w = arrive(w);
@@ -230,30 +230,30 @@ describe('the endless run', () => {
 
   it('escalates for eight stretches and then holds at the hardest row and the pay caps', () => {
     expect(waveOf(9)).toBe(waveOf(8));
-    expect(waveOf(40)).toBe(GAUNTLET.waves[GAUNTLET.waves.length - 1]);
-    expect(payOf(1, 0)).toBe(GAUNTLET.pay.base.first);
-    expect(payOf(2, 1)).toBe(GAUNTLET.pay.base.first + GAUNTLET.pay.base.step + GAUNTLET.pay.perWreck.first + GAUNTLET.pay.perWreck.step);
-    expect(payOf(100, 0)).toBe(GAUNTLET.pay.base.max);
-    expect(payOf(100, 1) - payOf(100, 0)).toBe(GAUNTLET.pay.perWreck.max);
+    expect(waveOf(40)).toBe(FURY_ROAD.waves[FURY_ROAD.waves.length - 1]);
+    expect(payOf(1, 0)).toBe(FURY_ROAD.pay.base.first);
+    expect(payOf(2, 1)).toBe(FURY_ROAD.pay.base.first + FURY_ROAD.pay.base.step + FURY_ROAD.pay.perWreck.first + FURY_ROAD.pay.perWreck.step);
+    expect(payOf(100, 0)).toBe(FURY_ROAD.pay.base.max);
+    expect(payOf(100, 1) - payOf(100, 0)).toBe(FURY_ROAD.pay.perWreck.max);
     expect(stockSizeOf(1)).toBe(2);
-    expect(stockSizeOf(100)).toBe(GAUNTLET.stock.max);
+    expect(stockSizeOf(100)).toBe(FURY_ROAD.stock.max);
     expect(() => waveOf(0)).toThrow(/no wave/);
   });
 
   it('reads the stretch and the distance to the next outpost, with no total', () => {
-    const w = gauntletWorld();
+    const w = furyRoadWorld();
     moveTo(w, milestoneAt(1) - 50);
 
-    const readout = gauntletReadout(w)!;
+    const readout = furyRoadReadout(w)!;
 
     expect(readout).toMatchObject({ stretch: 1, outpost: 'Outpost 1' });
     expect(readout.toOutpost).toBeCloseTo(50, 0);
   });
 });
 
-describe('a Gauntlet world on the highway', () => {
+describe('a Fury Road world on the highway', () => {
   it('shows no Icarus place in three hundred turns of the run', () => {
-    let w = gauntletWorld(5);
+    let w = furyRoadWorld(5);
     const ids = w.obstacles.map((o) => o.id);
     const events: string[] = [];
     for (let i = 0; i < 300 && w.player.state === 'active'; i++) {
@@ -270,9 +270,9 @@ describe('a Gauntlet world on the highway', () => {
   }, 120_000);
 });
 
-describe('ending a Gauntlet run', () => {
+describe('ending a Fury Road run', () => {
   it('lets only a stranded truck end the run', () => {
-    const w = gauntletWorld();
+    const w = furyRoadWorld();
 
     expect(canAbandonRun(w)).toBe(false);
     expect(() => abandonRun(w)).toThrow(/stranded/);
@@ -285,7 +285,7 @@ describe('ending a Gauntlet run', () => {
   });
 
   it('runs no more turns once the run is lost', () => {
-    const w = gauntletWorld();
+    const w = furyRoadWorld();
     w.player.fuel = 0;
     const ended = abandonRun(w);
 

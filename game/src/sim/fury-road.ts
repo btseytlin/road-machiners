@@ -1,4 +1,4 @@
-import { GAUNTLET, type Curve } from '../data/gauntlet';
+import { FURY_ROAD, type Curve } from '../data/fury-road';
 import { GARAGE_STOCK } from '../data/market';
 import { NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';
@@ -17,7 +17,7 @@ import { declareFeud } from './states';
 import { getResources } from './resources';
 import { fuelCap, isStranded } from './stats';
 import { refreshTrack } from './tracks';
-import type { GauntletRun, OutpostFacts, PartInstance, RunLossCause, Vehicle, WaveGroup, World } from './types';
+import type { FuryRoadRun, OutpostFacts, PartInstance, RunLossCause, Vehicle, WaveGroup, World } from './types';
 import { refreshVision } from './vision';
 import { dist, type Vec } from './vec';
 import { playerCommand } from './world';
@@ -25,7 +25,7 @@ import { playerCommand } from './world';
 export const OUTPOST_PAY = 'outpostPay';
 
 export type Outpost = OutpostFacts & { name: string; pad: Vec };
-export type GauntletReadout = { stretch: number; toOutpost: number; outpost: string };
+export type FuryRoadReadout = { stretch: number; toOutpost: number; outpost: string };
 
 export function outpostName(milestone: number): string {
   return `Outpost ${milestone}`;
@@ -36,24 +36,24 @@ function curveAt(c: Curve, j: number): number {
 }
 
 export function payOf(j: number, wrecks: number): number {
-  return curveAt(GAUNTLET.pay.base, j) + curveAt(GAUNTLET.pay.perWreck, j) * wrecks;
+  return curveAt(FURY_ROAD.pay.base, j) + curveAt(FURY_ROAD.pay.perWreck, j) * wrecks;
 }
 
 export function stockSizeOf(j: number): number {
-  const s = GAUNTLET.stock;
+  const s = FURY_ROAD.stock;
   return Math.min(s.max, s.base + Math.floor(j / s.every));
 }
 
-export function waveOf(j: number): (typeof GAUNTLET.waves)[number] {
+export function waveOf(j: number): (typeof FURY_ROAD.waves)[number] {
   if (!Number.isInteger(j) || j < 1) throw new Error(`Stretch ${j} has no wave`);
-  return GAUNTLET.waves[Math.min(j, GAUNTLET.waves.length) - 1];
+  return FURY_ROAD.waves[Math.min(j, FURY_ROAD.waves.length) - 1];
 }
 
 export function planStretch(seed: number, j: number): WaveGroup[] {
   const rng = stretchStream(seed, j, 'groups');
   const from = milestoneAt(j - 1);
   const span = milestoneAt(j) - from;
-  const [lo, hi] = GAUNTLET.groupSpread;
+  const [lo, hi] = FURY_ROAD.groupSpread;
   const wave = waveOf(j);
   const anchors = wave.map(() => from + span * randRange(rng, lo, hi)).sort((a, b) => a - b);
   return wave.map((plan, i) => ({
@@ -76,13 +76,13 @@ function outpostFacts(world: World, j: number): OutpostFacts {
 }
 
 export function startRun(world: World): void {
-  if (world.terrain.atlas.kind !== 'highway' || world.terrain.atlas.window !== 0) throw new Error(`A Gauntlet run starts on highway window 0, not map ${world.mapHash}`);
-  world.gauntlet = { window: 0, outposts: [outpostFacts(world, 1)], groups: planStretch(world.seed, 1), earned: 0, wrecks: 0 };
+  if (world.terrain.atlas.kind !== 'highway' || world.terrain.atlas.window !== 0) throw new Error(`A Fury Road run starts on highway window 0, not map ${world.mapHash}`);
+  world.furyRoad = { window: 0, outposts: [outpostFacts(world, 1)], groups: planStretch(world.seed, 1), earned: 0, wrecks: 0 };
 }
 
-function runOf(world: World): GauntletRun {
-  if (!world.gauntlet) throw new Error('No Gauntlet run in this world');
-  return world.gauntlet;
+function runOf(world: World): FuryRoadRun {
+  if (!world.furyRoad) throw new Error('No Fury Road run in this world');
+  return world.furyRoad;
 }
 
 export function outpostPad(world: World, milestone: number): Vec {
@@ -98,14 +98,14 @@ export function outpostFactsAt(world: World, milestone: number): OutpostFacts {
   return factsOf(runOf(world), milestone);
 }
 
-function factsOf(run: GauntletRun, milestone: number): OutpostFacts {
+function factsOf(run: FuryRoadRun, milestone: number): OutpostFacts {
   const facts = run.outposts.find((o) => o.milestone === milestone);
   if (!facts) throw new Error(`The run holds no outpost ${milestone} in window ${run.window}`);
   return facts;
 }
 
-export function advanceGauntlet(world: World): void {
-  const run = world.gauntlet;
+export function advanceFuryRoad(world: World): void {
+  const run = world.furyRoad;
   if (!run || world.player.state !== 'active') return;
   countWrecks(world, run);
   huntPlayer(world, run);
@@ -113,11 +113,11 @@ export function advanceGauntlet(world: World): void {
   else spawnDueGroups(world, run, playerProgress(world, run));
 }
 
-function playerProgress(world: World, run: GauntletRun): number {
+function playerProgress(world: World, run: FuryRoadRun): number {
   return toAbsolute(run.window, playerVehicle(world).pos.y);
 }
 
-function countWrecks(world: World, run: GauntletRun): void {
+function countWrecks(world: World, run: FuryRoadRun): void {
   for (const e of world.events) {
     if (e.t !== 'destroyed') continue;
     const group = run.groups.find((g) => g.vehicles.includes(e.vehicle));
@@ -129,11 +129,11 @@ function liveTrucks(world: World, group: WaveGroup): Vehicle[] {
   return world.vehicles.filter((v) => group.vehicles.includes(v.id));
 }
 
-function aliveCount(world: World, run: GauntletRun): number {
+function aliveCount(world: World, run: FuryRoadRun): number {
   return run.groups.reduce((n, g) => n + liveTrucks(world, g).length, 0);
 }
 
-function huntPlayer(world: World, run: GauntletRun): void {
+function huntPlayer(world: World, run: FuryRoadRun): void {
   const me = playerVehicle(world);
   for (const group of run.groups) {
     for (const v of liveTrucks(world, group)) {
@@ -149,23 +149,23 @@ function huntsPlayer(world: World, v: Vehicle): boolean {
   return top?.kind === 'fight' && top.targetId === world.player.vehicleId;
 }
 
-function spawnDueGroups(world: World, run: GauntletRun, progress: number): void {
+function spawnDueGroups(world: World, run: FuryRoadRun, progress: number): void {
   for (const group of run.groups.filter((g) => !g.spawned && isDue(g, progress))) {
-    if (aliveCount(world, run) + group.templates.length > GAUNTLET.maxAlive) return;
+    if (aliveCount(world, run) + group.templates.length > FURY_ROAD.maxAlive) return;
     spawnGroup(world, run, group, progress);
   }
 }
 
 function isDue(group: WaveGroup, progress: number): boolean {
-  return progress >= (group.from === 'ahead' ? group.at - GAUNTLET.spawnLead : group.at);
+  return progress >= (group.from === 'ahead' ? group.at - FURY_ROAD.spawnLead : group.at);
 }
 
-function spawnAlong(run: GauntletRun, group: WaveGroup, progress: number): number {
-  const along = group.from === 'ahead' ? Math.max(group.at, progress + GAUNTLET.aheadGap) : progress - GAUNTLET.behindGap;
+function spawnAlong(run: FuryRoadRun, group: WaveGroup, progress: number): number {
+  const along = group.from === 'ahead' ? Math.max(group.at, progress + FURY_ROAD.aheadGap) : progress - FURY_ROAD.behindGap;
   return Math.min(Math.max(along, milestoneAt(run.window)), milestoneAt(run.window + 1));
 }
 
-export function spawnGroup(world: World, run: GauntletRun, group: WaveGroup, progress: number): void {
+export function spawnGroup(world: World, run: FuryRoadRun, group: WaveGroup, progress: number): void {
   const along = spawnAlong(run, group, progress);
   const loadouts = group.templates.map((id) => ({ tpl: NPCS[id], loadout: { ...generateNpcLoadout(world, NPCS[id], null, group.level), cargo: {} } }));
   const spots = groupSpots(world, run, along, loadouts.map((l) => chassisDef(l.loadout.chassisId).radius));
@@ -183,7 +183,7 @@ export function spawnGroup(world: World, run: GauntletRun, group: WaveGroup, pro
   group.retryUntil = null;
 }
 
-function groupSpots(world: World, run: GauntletRun, along: number, radii: number[]): Vec[] | null {
+function groupSpots(world: World, run: FuryRoadRun, along: number, radii: number[]): Vec[] | null {
   const spots: Vec[] = [];
   for (const radius of radii) {
     const spot = laneSpot(world, run, along, radius, spots);
@@ -193,10 +193,10 @@ function groupSpots(world: World, run: GauntletRun, along: number, radii: number
   return spots;
 }
 
-function laneSpot(world: World, run: GauntletRun, along: number, radius: number, taken: Vec[]): Vec | null {
-  for (let step = 0; step < GAUNTLET.maxTries / 10; step++) {
-    const lane = GAUNTLET.laneOffsets[step % GAUNTLET.laneOffsets.length];
-    const offset = Math.floor(step / GAUNTLET.laneOffsets.length) * GAUNTLET.spawnStagger;
+function laneSpot(world: World, run: FuryRoadRun, along: number, radius: number, taken: Vec[]): Vec | null {
+  for (let step = 0; step < FURY_ROAD.maxTries / 10; step++) {
+    const lane = FURY_ROAD.laneOffsets[step % FURY_ROAD.laneOffsets.length];
+    const offset = Math.floor(step / FURY_ROAD.laneOffsets.length) * FURY_ROAD.spawnStagger;
     const pos = roadPoint(world.seed, run.window, along + (step % 2 === 0 ? offset : -offset), lane);
     if (isFree(world, pos, radius, null) && taken.every((t) => dist(t, pos) > radius * 2 + 0.5)) return pos;
   }
@@ -204,20 +204,20 @@ function laneSpot(world: World, run: GauntletRun, along: number, radius: number,
 }
 
 function retryLater(world: World, group: WaveGroup): void {
-  if (group.retryUntil === null) group.retryUntil = world.turn + GAUNTLET.spawnRetryTurns;
-  else if (world.turn > group.retryUntil) throw new Error(`Gauntlet group ${group.id} found no free lane spot for ${GAUNTLET.spawnRetryTurns} turns`);
+  if (group.retryUntil === null) group.retryUntil = world.turn + FURY_ROAD.spawnRetryTurns;
+  else if (world.turn > group.retryUntil) throw new Error(`Fury Road group ${group.id} found no free lane spot for ${FURY_ROAD.spawnRetryTurns} turns`);
 }
 
 function parkedOnPad(world: World, milestone: number): boolean {
   const me = playerVehicle(world);
-  return me.speed <= RULES.parkedSpeed && dist(me.pos, outpostPad(world, milestone)) <= GAUNTLET.outpost.padRadius;
+  return me.speed <= RULES.parkedSpeed && dist(me.pos, outpostPad(world, milestone)) <= FURY_ROAD.outpost.padRadius;
 }
 
-function arrivedAtNext(world: World, run: GauntletRun): boolean {
+function arrivedAtNext(world: World, run: FuryRoadRun): boolean {
   return parkedOnPad(world, run.window + 1) && !inCombat(world, playerVehicle(world));
 }
 
-function completeStretch(world: World, run: GauntletRun): void {
+function completeStretch(world: World, run: FuryRoadRun): void {
   const j = run.window + 1;
   const post = factsOf(run, j);
   const wrecks = run.groups.reduce((n, g) => n + g.wrecked, 0);
@@ -261,7 +261,7 @@ export const WINDOW_MOVE = {
   terrain: 'rebuild',
   mapHash: 'rebuild',
   obstacles: 'rebuild',
-  gauntlet: 'rebuild',
+  furyRoad: 'rebuild',
   broken: 'drop',
   craters: 'drop',
   dustClouds: 'drop',
@@ -283,10 +283,10 @@ const DROPPED: { [K in keyof World as (typeof WINDOW_MOVE)[K] extends 'drop' ? K
   lines: () => [],
 };
 
-function requireMovable(world: World, run: GauntletRun): void {
+function requireMovable(world: World, run: FuryRoadRun): void {
   if (aliveCount(world, run) > 0) throw new Error('The window cannot move while a group truck is alive');
   if (!parkedOnPad(world, run.window + 1)) throw new Error(`The window moves only with the player parked at ${outpostName(run.window + 1)}`);
-  if (world.salvage.length > 0 || Object.keys(world.shops).length > 0) throw new Error('A Gauntlet window holds no salvage and no shops');
+  if (world.salvage.length > 0 || Object.keys(world.shops).length > 0) throw new Error('A Fury Road window holds no salvage and no shops');
 }
 
 export function moveWindow(world: World): void {
@@ -340,7 +340,7 @@ export function endRun(world: World, cause: RunLossCause): void {
 }
 
 export function canAbandonRun(world: World): boolean {
-  return world.gauntlet !== null && !modeRules(world).rescue && world.player.state === 'active' && isStranded(world, playerVehicle(world));
+  return world.furyRoad !== null && !modeRules(world).rescue && world.player.state === 'active' && isStranded(world, playerVehicle(world));
 }
 
 export function abandonRun(world: World): World {
@@ -361,7 +361,7 @@ export function runEarnings(world: World): { pay: number; wrecks: number; reache
 }
 
 export function nextOutpost(world: World): Outpost | null {
-  const run = world.gauntlet;
+  const run = world.furyRoad;
   return run ? outpostOf(world, factsOf(run, run.window + 1)) : null;
 }
 
@@ -371,20 +371,20 @@ export function reachedOutpostAt(world: World): Outpost | null {
 }
 
 export function outpostNear(world: World): Outpost | null {
-  const run = world.gauntlet;
+  const run = world.furyRoad;
   if (!run) return null;
   const me = playerVehicle(world);
-  const facts = run.outposts.find((post) => post.paid && dist(me.pos, outpostPad(world, post.milestone)) <= GAUNTLET.outpost.padRadius);
+  const facts = run.outposts.find((post) => post.paid && dist(me.pos, outpostPad(world, post.milestone)) <= FURY_ROAD.outpost.padRadius);
   return facts ? outpostOf(world, facts) : null;
 }
 
 export function runOutposts(world: World): Outpost[] {
-  const run = world.gauntlet;
+  const run = world.furyRoad;
   return run ? run.outposts.map((facts) => outpostOf(world, facts)) : [];
 }
 
-export function gauntletReadout(world: World): GauntletReadout | null {
-  const run = world.gauntlet;
+export function furyRoadReadout(world: World): FuryRoadReadout | null {
+  const run = world.furyRoad;
   if (!run) return null;
   const j = run.window + 1;
   return { stretch: j, toOutpost: Math.max(0, outpostSite(world.seed, j).n - playerProgress(world, run)), outpost: outpostName(j) };

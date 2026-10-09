@@ -114,7 +114,7 @@ In-character and out-of-character info is separated. For example, in talking NPC
 
 Roaming is the sandbox every section above describes. Another mode is a separate world picked at New game, and it changes only the rules it names. Every mode keeps the world settings, the truck, driving and tactical combat.
 
-Gauntlet is a highway combat run on its own map, never on Icarus: an endless generated four-lane highway north, with outposts as milestones. The land ahead is generated as the player reaches each outpost, seamless with the last, and hostile groups grow and arm up for eight stretches, then hold. It has no traffic, salvage or shops. The committee approved these exceptions for Gauntlet only:
+Fury Road is a highway combat run on its own map, never on Icarus: an endless generated four-lane highway north, with outposts as milestones. The land ahead is generated as the player reaches each outpost, seamless with the last, and hostile groups grow and arm up for eight stretches, then hold. It has no traffic, salvage or shops. The committee approved these exceptions for Fury Road only:
 
 - Combat: hostile groups find the player and fight to the wreck. A fight ends when a truck is wrecked or the two part. A wreck leaves no loot, and beating a truck pays at the next outpost.
 - Defeat and recovery: nobody is knocked out. A beaten NPC is wrecked, and a beaten player ends the run. A stranded player with no way to patch ends the run. There are no tows, beacon or town patches. Restart run starts a new run with the same settings.
@@ -122,5 +122,5 @@ Gauntlet is a highway combat run on its own map, never on Icarus: an endless gen
 - Economy: money comes from outpost payouts, not loot or trade. Outposts sell repairs, fuel, supplies, a few parts and repair parts.
 - Life is valued (principle 4) does not hold: every fight is to the wreck.
 
-Details: [Gauntlet](wiki/mechanics/gauntlet.md).
+Details: [Fury Road](wiki/mechanics/fury-road.md).
 

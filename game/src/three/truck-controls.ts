@@ -7,7 +7,7 @@ import { isBusy } from "../sim/jobs";
 import { canOverdrive, inOverdrive } from "../sim/stats";
 import { canLoot, canScavenge, canUseOasis, scavenge, useOasis } from "../sim/locations";
 import { shopAt } from "../sim/market";
-import { reachedOutpostAt } from "../sim/gauntlet";
+import { reachedOutpostAt } from "../sim/fury-road";
 import type { World } from "../sim/types";
 import { playerCanAct, setAutoRepair, setDirect, setHeadlights, setOverdrive } from "../sim/world";
 import { type ContextAction, type ContextTarget } from "../ui/hud";

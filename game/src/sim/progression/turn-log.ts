@@ -15,7 +15,7 @@ import { maxHp } from '../wear';
 import { hostileToPlayer } from '../world';
 import type { Ledger } from './orders';
 import { netWorth } from './record';
-import { gauntletReadout } from '../gauntlet';
+import { furyRoadReadout } from '../fury-road';
 
 export type SeenFoe = { id: string; who: string; dist: number; odds: number; speed: number };
 
@@ -73,7 +73,7 @@ export function turnLine(world: World, events: readonly GameEvent[], ledger: Led
 }
 
 function runField(world: World): { run?: string } {
-  const run = gauntletReadout(world);
+  const run = furyRoadReadout(world);
   return run ? { run: `${run.stretch} ${Math.round(run.toOutpost)}` } : {};
 }
 

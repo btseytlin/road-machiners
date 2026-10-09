@@ -86,7 +86,7 @@ export function workProgress(work: WorkLeft): number {
   return 1 - work.turnsLeft / work.total;
 }
 import { damage, fuelLiters, hp, kph, moneyDelta, moneyNumber, moneyText, turnsText as turnsLabel } from './units';
-import { OUTPOST_PAY, outpostName } from '../sim/gauntlet';
+import { OUTPOST_PAY, outpostName } from '../sim/fury-road';
 import { npcName } from '../sim/spawn';
 
 export function wearLabel(part: PartInstance): string {

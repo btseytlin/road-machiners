@@ -43,7 +43,7 @@ import { advanceAid, readyAid } from './aid';
 import type { GridItem, MoveOrder, PartInstance, UtilityOrder, Vehicle, WeaponOrder, World, WorldSettings, WorldSetup, XpSource } from './types';
 import { defaultSetup, modeRules, parseSetup, repairSetup } from './settings';
 import { highwayStart } from './highway';
-import { advanceGauntlet, startRun } from './gauntlet';
+import { advanceFuryRoad, startRun } from './fury-road';
 import { canOverdrive, vehicleStats } from './stats';
 import { playerSees, practiceContacts, refreshVision } from './vision';
 import { noteEscape } from './escape';
@@ -140,7 +140,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
     fields: [],
     flares: [],
     lines: [],
-    gauntlet: null,
+    furyRoad: null,
   };
   world.obstacles = generateObstacles(world, map, openingObstacles(kit.opening, start));
   const truck = makeVehicle(world, {
@@ -178,7 +178,7 @@ function requireMapFits(map: BakedMap, setup: WorldSetup): void {
 
 function setUpWorldStock(world: World, map: BakedMap, truck: Vehicle, kit: StartKit, populate: boolean): void {
   const rules = modeRules(world);
-  if (world.setup.mode === 'gauntlet') startRun(world);
+  if (world.setup.mode === 'furyRoad') startRun(world);
   if (rules.salvage) initializeSalvage(world);
   setUpOpening(world, truck, kit.opening);
   world.player.storage = kit.storage.map((defId) => makePart(world, defId, 0));
@@ -188,7 +188,7 @@ function setUpWorldStock(world: World, map: BakedMap, truck: Vehicle, kit: Start
 }
 
 export function startOf(seed: number, setup: WorldSetup): { pos: Vec; heading: number } {
-  return setup.mode === 'gauntlet' ? highwayStart(seed) : startPose();
+  return setup.mode === 'furyRoad' ? highwayStart(seed) : startPose();
 }
 
 export function startPose(): { pos: Vec; heading: number } {
@@ -355,7 +355,7 @@ export function endTurn(
     advanceKnockout(w);
     checkKnockout(w);
     advanceNpcKnockouts(w);
-    advanceGauntlet(w);
+    advanceFuryRoad(w);
     spawnNpcs(w);
     advanceShops(w);
     practiceContacts(w, refreshVision(w));

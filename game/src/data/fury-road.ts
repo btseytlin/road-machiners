@@ -6,7 +6,7 @@ import type { TerrainTypeId } from './terrain';
 export type GroupPlan = { from: 'ahead' | 'behind'; templates: string[]; level: GearLevel };
 export type Curve = { first: number; step: number; max: number };
 
-export const GAUNTLET = {
+export const FURY_ROAD = {
   laneOffsets: [-2.25, -0.75, 0.75, 2.25],
   rowRadius: [0.55, 0.7] as [number, number],
   outpost: {

@@ -403,7 +403,7 @@ export type GameEvent =
   | { t: 'outpostReached'; milestone: number; pay: number; wrecks: number }
   | { t: 'runLost'; stretch: number; cause: RunLossCause };
 
-export type GameModeId = 'roaming' | 'gauntlet';
+export type GameModeId = 'roaming' | 'furyRoad';
 export type ModeRules = { traffic: boolean; salvage: boolean; knockouts: boolean; yielding: boolean; radio: boolean; rescue: boolean; roadWrecks: boolean };
 export type RunLossCause = 'wrecked' | 'abandoned';
 export type OutpostFacts = { milestone: number; stock: PartInstance[]; paid: boolean };
@@ -419,7 +419,7 @@ export type WaveGroup = {
   wrecked: number;
   retryUntil: number | null;
 };
-export type GauntletRun = { window: number; outposts: OutpostFacts[]; groups: WaveGroup[]; earned: number; wrecks: number };
+export type FuryRoadRun = { window: number; outposts: OutpostFacts[]; groups: WaveGroup[]; earned: number; wrecks: number };
 export type WorldSettings = { damage: number; fuelUse: number; supplyUse: number };
 export type WorldSetup = { mode: GameModeId; settings: WorldSettings };
 
@@ -454,5 +454,5 @@ export type World = {
   flares: Flare[];
   lines: HarpoonLine[];
   searchRng: Rng;
-  gauntlet: GauntletRun | null;
+  furyRoad: FuryRoadRun | null;
 };

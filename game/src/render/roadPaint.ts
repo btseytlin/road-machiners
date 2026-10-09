@@ -1,7 +1,7 @@
 
 import { REGION, type TerritoryDef } from "../data/region";
 import { TERRITORIES, type FarmRoad, type WreckRules } from "../data/territory";
-import { HIGHWAY } from "../data/gauntlet";
+import { HIGHWAY } from "../data/fury-road";
 import { atlasSites, type Atlas, type AtlasRoad } from "../sim/atlas";
 import { bridgeCut, deckAt } from "../sim/bridge";
 import { isTerritory, siteGap } from "../sim/sites";

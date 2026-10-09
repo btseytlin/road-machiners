@@ -1,5 +1,6 @@
 
-import { abandonRun, canAbandonRun, outpostName, runEarnings } from "../sim/gauntlet";
+import { abandonRun, canAbandonRun, outpostName, runEarnings } from "../sim/fury-road";
+import { GAME_MODES } from "../data/modes";
 import type { RunLossCause, World } from "../sim/types";
 import { disabledWith, el, panel } from "./dom";
 import { CONFIRM_NEW_GAME, openNewGame, type NewGameActions } from "./new-game";
@@ -46,7 +47,7 @@ export class DeathScreen {
         "div",
         { class: "death-buttons" },
         el("button", disabledWith(saved ? null : NO_SAVE, () => this.savePanel.openLoad()), "Load save"),
-        world.gauntlet ? el("button", { onclick: () => this.restart(world) }, "Restart run") : null,
+        world.furyRoad ? el("button", { onclick: () => this.restart(world) }, "Restart run") : null,
         el("button", { onclick: () => openNewGame(this.actions.newGame, () => {}) }, "New game"),
       ),
     );
@@ -66,12 +67,12 @@ function lossCause(world: World): RunLossCause {
 }
 
 function deathTitle(world: World): string {
-  return world.gauntlet ? RUN_TITLE[lossCause(world)] : "You died";
+  return world.furyRoad ? RUN_TITLE[lossCause(world)] : "You died";
 }
 
 function runCaption(world: World): HTMLElement[] {
-  if (!world.gauntlet) return [];
+  if (!world.furyRoad) return [];
   const { reached, north } = runEarnings(world);
   const where = reached > 0 ? `Reached ${outpostName(reached)}` : "Stretch 1";
-  return [el("div", { class: "death-caption" }, `${where}, ${distanceText(north)} north`)];
+  return [el("div", { class: "death-caption" }, `${GAME_MODES.furyRoad.name}. ${where}, ${distanceText(north)} north`)];
 }

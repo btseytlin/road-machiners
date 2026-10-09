@@ -559,7 +559,7 @@ describe("wake-up log", () => {
   });
 });
 
-describe("Gauntlet log lines", () => {
+describe("Fury Road log lines", () => {
   it("tells an outpost arrival with its pay once, and the run's end", () => {
     const w = emptyWorld();
 

@@ -11,7 +11,7 @@ const RUN: ModeRules = { traffic: false, salvage: false, knockouts: false, yield
 
 export const GAME_MODES: Record<GameModeId, GameMode> = {
   roaming: { name: 'Roaming', description: 'The open wasteland. Drive, trade, scavenge and fight as you like.', rules: OPEN_WORLD, kit: null },
-  gauntlet: { name: 'Gauntlet', description: 'A highway run between outposts. Every fight is to the wreck.', rules: RUN, kit: 'gauntlet' },
+  furyRoad: { name: 'Fury Road', description: 'An endless highway north between forts. Every fight is to the wreck.', rules: RUN, kit: 'furyRoad' },
 };
 
 export type WorldSettingDef = { name: string; description: string; default: number; min: number; max: number; step: number };

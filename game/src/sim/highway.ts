@@ -1,4 +1,4 @@
-import { GAUNTLET, HIGHWAY, type SceneryRule } from '../data/gauntlet';
+import { FURY_ROAD, HIGHWAY, type SceneryRule } from '../data/fury-road';
 import type { TerrainTypeId } from '../data/terrain';
 import type { Atlas } from './atlas';
 import { NO_DECKS } from './bridge';
@@ -119,7 +119,7 @@ export function outpostSite(seed: number, j: number): OutpostSite {
 
 export function highwayStart(seed: number): { pos: Vec; heading: number } {
   const n = milestoneAt(0);
-  return { pos: roadPoint(seed, 0, n, GAUNTLET.laneOffsets[HIGHWAY.startLane]), heading: roadHeading(seed, n) };
+  return { pos: roadPoint(seed, 0, n, FURY_ROAD.laneOffsets[HIGHWAY.startLane]), heading: roadHeading(seed, n) };
 }
 
 export function rowsOf(j: number): number {
@@ -211,7 +211,7 @@ function outpostProps(seed: number, j: number): AbsProp[] {
   const uy = Math.sin(heading);
   const nx = -uy * site.side;
   const ny = ux * site.side;
-  return GAUNTLET.outpost.props.map((p) => piece(
+  return FURY_ROAD.outpost.props.map((p) => piece(
     p.look as PropKind,
     { x: site.pad.x + ux * p.along + nx * p.across, n: site.pad.n - (uy * p.along + ny * p.across) },
     p.r,
@@ -280,13 +280,13 @@ function rowSpot(rng: Rng, j: number, i: number, own: { from: number; to: number
 }
 
 function rowPieces(rng: Rng, seed: number, j: number, n: number): AbsProp[] {
-  const lanes = GAUNTLET.laneOffsets.map((_, lane) => lane);
+  const lanes = FURY_ROAD.laneOffsets.map((_, lane) => lane);
   const blocked = randInt(rng, 1, maxBlockedOf(j));
   const heading = roadHeading(seed, n);
   return Array.from({ length: blocked }, () => {
     const lane = lanes.splice(randInt(rng, 0, lanes.length - 1), 1)[0];
     const kind = HIGHWAY.rowKinds[randInt(rng, 0, HIGHWAY.rowKinds.length - 1)];
-    return piece(kind, roadAbs(seed, n, GAUNTLET.laneOffsets[lane]), randRange(rng, ...GAUNTLET.rowRadius), heading);
+    return piece(kind, roadAbs(seed, n, FURY_ROAD.laneOffsets[lane]), randRange(rng, ...FURY_ROAD.rowRadius), heading);
   });
 }
 
@@ -386,7 +386,7 @@ export function highwayMap(seed: number, window: number): BakedMap {
 }
 
 export function newMapFor(setup: WorldSetup, seed: number, icarus: BakedMap): BakedMap {
-  return setup.mode === 'gauntlet' ? highwayMap(seed, 0) : icarus;
+  return setup.mode === 'furyRoad' ? highwayMap(seed, 0) : icarus;
 }
 
 export function highwayLine(seed: number, window: number): Vec[] {
@@ -398,7 +398,7 @@ export function highwayLine(seed: number, window: number): Vec[] {
 export function highwayAtlas(seed: number, window: number): Atlas {
   const line = highwayLine(seed, window);
   return {
-    roads: [{ points: line, width: ROAD.halfWidth * 2, lanes: GAUNTLET.laneOffsets.length }],
+    roads: [{ points: line, width: ROAD.halfWidth * 2, lanes: FURY_ROAD.laneOffsets.length }],
     roadWidth: ROAD.halfWidth * 2,
     roadIndex: new RoadIndex([line], INDEX_CELL),
     towns: [],

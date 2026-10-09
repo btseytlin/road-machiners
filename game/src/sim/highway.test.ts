@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
-import { HIGHWAY } from '../data/gauntlet';
+import { HIGHWAY } from '../data/fury-road';
 import { TERRAIN } from '../data/terrain';
 import { atlasOf } from './atlas';
 import { centerX, highwayMap, highwayStart, maxBlockedOf, milestoneAt, outpostSite, roadHeight, STRIDE, stretchRows, toLocal } from './highway';
@@ -137,7 +137,7 @@ describe('the highway road', () => {
     }
   });
 
-  it('lets the Gauntlet truck drive from the south milestone to the north outpost pad', () => {
+  it('lets the Fury Road truck drive from the south milestone to the north outpost pad', () => {
     const radius = CHASSIS.hauler.radius;
     for (const seed of [1, 2, 3, 4, 5, 6]) {
       for (const k of [0, 1, 2, 3]) {

@@ -1,7 +1,7 @@
 import { GOODS } from "../data/goods";
 import { partDef, type PartKind } from "../data/parts";
 import { playerVehicle } from "../sim/damage";
-import { reachedOutpostAt, type Outpost } from "../sim/gauntlet";
+import { reachedOutpostAt, type Outpost } from "../sim/fury-road";
 import { goodsCount, MOUNT_CELLS } from "../sim/grid";
 import { canStowPart } from "../sim/inventory";
 import { outpostBuyGood, outpostBuyPart, outpostBuySupply, outpostGoodPrice, outpostGoodRoom, outpostPartPrice, outpostRepairAll, outpostRepairBasics } from "../sim/outposts";

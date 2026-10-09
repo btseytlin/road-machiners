@@ -11,7 +11,7 @@ import { optionWeights } from './npc-decisions';
 import { renewSalvage } from './salvage';
 import { addState, advanceStates, stateOf } from './states';
 import { setBeacon } from './tow';
-import { addVehicle, emptyWorld, forceOption, gauntletWorld, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, forceOption, furyRoadWorld, npcBrain } from './testkit';
 import type { GameModeId, Vehicle, World } from './types';
 
 import { TIME } from '../data/time';
@@ -35,7 +35,7 @@ function hostile(w: World, v: Vehicle): void {
 
 describe('yielding', () => {
   it('offers no flight, truce or mercy where no driver yields', () => {
-    const w = worldIn('gauntlet');
+    const w = worldIn('furyRoad');
     const v = raider(w);
     const me = w.player.vehicleId;
 
@@ -58,7 +58,7 @@ describe('yielding', () => {
   it('never flees when attacked, even when flight is all it would pick', () => {
     forceOption('attacked', 'flee');
     const fled = Array.from({ length: 20 }, (_, seed) => {
-      const w = worldIn('gauntlet');
+      const w = worldIn('furyRoad');
       const v = raider(w);
       v.brain!.attackers = { [w.player.vehicleId]: false };
       w.rngState = seed + 1;
@@ -70,7 +70,7 @@ describe('yielding', () => {
   });
 
   it('leaves no fight for service in town', () => {
-    const w = worldIn('gauntlet');
+    const w = worldIn('furyRoad');
     const v = raider(w);
     v.resources!.fuel = 1;
     hostile(w, v);
@@ -81,9 +81,9 @@ describe('yielding', () => {
   });
 
   it('keeps a fight with no gun left, so the truck rams', () => {
-    const gauntlet = worldIn('gauntlet');
+    const furyRoad = worldIn('furyRoad');
     const roaming = worldIn('roaming');
-    const unarmed = [gauntlet, roaming].map((w) => {
+    const unarmed = [furyRoad, roaming].map((w) => {
       const v = raider(w, ['stockEngine']);
       hostile(w, v);
       thinkNpc(w, v);
@@ -104,16 +104,16 @@ describe('yielding', () => {
       thinkNpc(w, v);
       return { w, v };
     };
-    const gauntlet = run('gauntlet');
+    const furyRoad = run('furyRoad');
     const roaming = run('roaming');
 
-    expect(topGoal(gauntlet.v)?.kind).toBe('fight');
-    expect(stateOf(gauntlet.w, 'backedOff', gauntlet.v.id, gauntlet.w.player.vehicleId)).toBeNull();
+    expect(topGoal(furyRoad.v)?.kind).toBe('fight');
+    expect(stateOf(furyRoad.w, 'backedOff', furyRoad.v.id, furyRoad.w.player.vehicleId)).toBeNull();
     expect(stateOf(roaming.w, 'backedOff', roaming.v.id, roaming.w.player.vehicleId)).not.toBeNull();
   });
 
   it('lets a feud lapse without backing off', () => {
-    const w = worldIn('gauntlet');
+    const w = worldIn('furyRoad');
     const v = raider(w);
     v.pos = { x: 300, y: 300 };
     const feud = addState(w, 'feud', v.id, w.player.vehicleId, { kind: 'feud', robbery: false });
@@ -129,7 +129,7 @@ describe('yielding', () => {
 
 describe('radio', () => {
   it('opens no call, raises no hail and sounds no horn where there is no radio', () => {
-    const w = worldIn('gauntlet');
+    const w = worldIn('furyRoad');
     const v = raider(w);
 
     expect(() => callVehicle(w, v.id)).toThrow(/radio/);
@@ -141,7 +141,7 @@ describe('radio', () => {
 
 describe('salvage', () => {
   it('leaves no salvage on a wreck and renews none', () => {
-    const w = worldIn('gauntlet');
+    const w = worldIn('furyRoad');
     const v = raider(w);
     corePart(v, 'cab').hp = 0;
     w.rngState = 1;
@@ -159,7 +159,7 @@ describe('salvage', () => {
 describe('knockouts', () => {
   it('wrecks an NPC whose fate would be a knockout', () => {
     const outs = Array.from({ length: 12 }, (_, seed) => {
-      const w = worldIn('gauntlet');
+      const w = worldIn('furyRoad');
       const v = raider(w);
       corePart(v, 'cab').hp = 0;
       w.rngState = seed + 1;
@@ -172,7 +172,7 @@ describe('knockouts', () => {
   });
 
   it('ends the run when the player would be knocked out', () => {
-    const w = gauntletWorld(4);
+    const w = furyRoadWorld(4);
     corePart(playerVehicle(w), 'cab').hp = 0;
 
     checkKnockout(w);
@@ -193,7 +193,7 @@ describe('knockouts', () => {
 
 describe('rescue', () => {
   it('turns no beacon on where nobody answers it', () => {
-    const w = worldIn('gauntlet');
+    const w = worldIn('furyRoad');
     w.player.fuel = 0;
 
     expect(() => setBeacon(w, true)).toThrow(/beacon/);
@@ -203,7 +203,7 @@ describe('rescue', () => {
 
 describe('spilled cargo', () => {
   it('is lost, not piled, where nothing is looted', () => {
-    const w = worldIn('gauntlet');
+    const w = worldIn('furyRoad');
     const me = playerVehicle(w);
     const before = structuredClone(w.salvage);
     const panniers = mountedParts(me, 'cargo')[0];
@@ -219,7 +219,7 @@ describe('spilled cargo', () => {
 
 describe('dumped cargo', () => {
   it('is thrown away, not piled, where nothing is looted', () => {
-    const w = worldIn('gauntlet');
+    const w = worldIn('furyRoad');
     addGoods(w, playerVehicle(w), 'salt', 1);
     const salt = playerVehicle(w).items.find((it) => it.kind === 'good' && it.good === 'salt')!;
     const before = structuredClone(w.salvage);

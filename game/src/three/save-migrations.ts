@@ -522,6 +522,12 @@ function withoutIcarusRun_37_38(world: SavedJson): SavedJson {
   return run !== null && 'course' in run ? { ...world, gauntlet: null } : world;
 }
 
+function renamedFuryRoad_38_39(world: SavedJson): SavedJson {
+  const { gauntlet, ...rest } = world;
+  const setup = world.setup as SavedJson;
+  return { ...rest, setup: { ...setup, mode: setup.mode === 'gauntlet' ? 'furyRoad' : setup.mode }, furyRoad: gauntlet };
+}
+
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, player: { ...(world.player as SavedJson), townPatched: false } }),
   (world) => {
@@ -605,6 +611,7 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => world,
   (world) => ({ ...world, gauntlet: null }),
   withoutIcarusRun_37_38,
+  renamedFuryRoad_38_39,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

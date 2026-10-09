@@ -1,6 +1,6 @@
 
 import { atlasOf, atlasSites } from '../../sim/atlas';
-import { runOutposts } from '../../sim/gauntlet';
+import { runOutposts } from '../../sim/fury-road';
 import { groundPoint, type VehicleFrame } from '../../phys/frames';
 import type { World } from '../../sim/types';
 import type { Vec } from '../../sim/vec';

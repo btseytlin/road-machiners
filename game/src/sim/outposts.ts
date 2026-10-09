@@ -1,9 +1,9 @@
-import { GAUNTLET } from '../data/gauntlet';
+import { FURY_ROAD } from '../data/fury-road';
 import { ECONOMY, GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { playerVehicle } from './damage';
 import { basicParts, basicsRepairCost, garageParts, garageRepair, partTradePrice, pay, repairCost, supplyRoom, type Supply } from './economy';
-import { outpostFactsAt, reachedOutpostAt, type Outpost } from './gauntlet';
+import { outpostFactsAt, reachedOutpostAt, type Outpost } from './fury-road';
 import { addGoods, canStowPart, cargoRoom, stowPart } from './inventory';
 import type { PartInstance, Vehicle, World } from './types';
 import { playerCommand } from './world';
@@ -63,7 +63,7 @@ export function outpostBuyPart(world: World, partId: string): World {
 }
 
 export function outpostGoodPrice(): number {
-  return Math.ceil(GOODS[REPAIR_GOOD].value * GAUNTLET.goodsMarkup);
+  return Math.ceil(GOODS[REPAIR_GOOD].value * FURY_ROAD.goodsMarkup);
 }
 
 export function outpostGoodRoom(v: Vehicle): number {

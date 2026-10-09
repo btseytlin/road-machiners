@@ -17,7 +17,7 @@ import { buyCheapestRanks } from '../progress';
 import { clockOf } from '../sun';
 import { isTowed } from '../tow';
 import type { GameEvent, GameModeId, NpcActivity, Vehicle, World, WorldSetup, XpSource } from '../types';
-import { OUTPOST_PAY } from '../gauntlet';
+import { OUTPOST_PAY } from '../fury-road';
 import { dist, type Vec } from '../vec';
 import { canVehicleSee } from '../vision';
 import { maxHp, partValue, restorePart } from '../wear';
@@ -101,8 +101,8 @@ function dayEnds(before: World, after: World, last: boolean): boolean {
   return last || clockOf(after.turn).day > clockOf(before.turn).day;
 }
 
-const ARCHETYPE_KITS: Partial<Record<Archetype, string>> = { hunter: 'snowball', runner: 'gauntlet' };
-const ARCHETYPE_MODES: Partial<Record<Archetype, GameModeId>> = { runner: 'gauntlet' };
+const ARCHETYPE_KITS: Partial<Record<Archetype, string>> = { hunter: 'snowball', runner: 'furyRoad' };
+const ARCHETYPE_MODES: Partial<Record<Archetype, GameModeId>> = { runner: 'furyRoad' };
 
 function modeOf(archetype: Archetype): GameModeId {
   return ARCHETYPE_MODES[archetype] ?? 'roaming';

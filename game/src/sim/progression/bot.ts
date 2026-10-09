@@ -42,7 +42,7 @@ import { towData } from '../states';
 import type { Call, Faction, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
 import { dist, pointsAway, type Vec } from '../vec';
 import { canVehicleSee, playerExplored, playerSees } from '../vision';
-import { reachedOutpostAt } from '../gauntlet';
+import { reachedOutpostAt } from '../fury-road';
 import { runnerOrders } from './runner';
 import { BIGGEST_PART_CELLS, mountBought, Orders, rearm, REPAIR_PARTS, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
 

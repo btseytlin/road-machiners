@@ -4,8 +4,8 @@ import { RULES } from "../data/rules";
 import { corePart, mountedParts } from "../sim/grid";
 import { knockOutNpc } from "../sim/defeat";
 import { STATE_TURNS } from "../data/npcs";
-import { addVehicle, emptyWorld, gauntletWorld, npcBrain, startCombat } from "../sim/testkit";
-import { outpostPad } from "../sim/gauntlet";
+import { addVehicle, emptyWorld, furyRoadWorld, npcBrain, startCombat } from "../sim/testkit";
+import { outpostPad } from "../sim/fury-road";
 import { npcName } from "../sim/spawn";
 import { maxHealthOf } from "../sim/health";
 import { addState, towData } from "../sim/states";
@@ -597,8 +597,8 @@ describe('overdrive switch', () => {
   });
 });
 
-describe("Gauntlet readouts", () => {
-  const gauntlet = () => gauntletWorld();
+describe("Fury Road readouts", () => {
+  const furyRoad = () => furyRoadWorld();
   const parkAt = (w: World, milestone: number) => {
     const me = playerVehicle(w);
     me.pos = outpostPad(w, milestone);
@@ -606,7 +606,7 @@ describe("Gauntlet readouts", () => {
   };
 
   it("shows the stretch and the distance to the next outpost", () => {
-    const run = getHudReadout(gauntlet()).resources.find((r) => r.label === "Run");
+    const run = getHudReadout(furyRoad()).resources.find((r) => r.label === "Run");
 
     expect(run?.value).toMatch(/^1: \d+(\.\d)? k?m$/);
     expect(run && "tip" in run ? run.tip : "").toMatch(/^Stretch 1: .* to Outpost 1$/);
@@ -619,18 +619,18 @@ describe("Gauntlet readouts", () => {
   });
 
   it("offers to enter a reached outpost only while parked on its pad", () => {
-    const w = gauntlet();
+    const w = furyRoad();
     parkAt(w, 1);
     expect(getContextActions(w, false).some((a) => a.target.kind === "outpost")).toBe(false);
 
-    w.gauntlet!.outposts[0].paid = true;
+    w.furyRoad!.outposts[0].paid = true;
     expect(getContextActions(w, false)).toContainEqual({ label: "Enter Outpost 1", ready: true, target: { kind: "outpost" } });
     playerVehicle(w).speed = 2;
     expect(getContextActions(w, false)).toContainEqual({ label: "Enter Outpost 1", ready: false, target: { kind: "outpost" } });
   });
 
   it("offers End run instead of the beacon to a stranded truck", () => {
-    const w = gauntlet();
+    const w = furyRoad();
     w.player.fuel = 0;
 
     expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: false, reason: "Out of fuel.", canEnd: true });

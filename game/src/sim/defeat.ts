@@ -22,7 +22,7 @@ import { npcHomeSite, towOf } from "./tow";
 import { pushGoal } from "./npc-activities";
 import { liesUp } from "./npc-service";
 import { isWeak, wantsLoot } from "./npc-decisions";
-import { endRun } from "./gauntlet";
+import { endRun } from "./fury-road";
 import { modeRules } from "./settings";
 import type { SalvageStock, Vehicle, World } from "./types";
 import { wreckStockId } from "./salvage";

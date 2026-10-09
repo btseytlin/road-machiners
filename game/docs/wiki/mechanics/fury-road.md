@@ -1,10 +1,10 @@
-# Gauntlet
+# Fury Road
 
-An endless highway combat run north, with outposts as milestones, picked at New game. The principles and the exceptions to Roaming are in [DESIGN.md](../../DESIGN.md#game-modes). The numbers live in `GAUNTLET` and `HIGHWAY` in `src/data/gauntlet.ts`. The land comes from `src/sim/highway.ts`, and the run rules from `src/sim/gauntlet.ts` and `src/sim/outposts.ts`.
+An endless highway combat run north, with outposts as milestones, picked at New game. The principles and the exceptions to Roaming are in [DESIGN.md](../../DESIGN.md#game-modes). The numbers live in `FURY_ROAD` and `HIGHWAY` in `src/data/fury-road.ts`. The land comes from `src/sim/highway.ts`, and the run rules from `src/sim/fury-road.ts` and `src/sim/outposts.ts`.
 
 ## Mode rules
 
-Each mode is a row of `GAME_MODES` in `src/data/modes.ts` with a record of rule flags. `modeRules()` in `src/sim/settings.ts` is the only reader, and each gate reads one flag. Roaming sets every flag on. Gauntlet sets every flag off:
+Each mode is a row of `GAME_MODES` in `src/data/modes.ts` with a record of rule flags. `modeRules()` in `src/sim/settings.ts` is the only reader, and each gate reads one flag. Roaming sets every flag on. Fury Road sets every flag off:
 
 - `traffic`: no starting traffic, no spawn timers and no shops.
 - `salvage`: no salvage at start or on renewal, no old-world loot spots, no salvage on a wreck, and spilled or dumped cargo is gone.
@@ -18,7 +18,7 @@ A mode that turns on `traffic` or `rescue` needs a map with towns, so a new worl
 
 ## The highway
 
-Gauntlet plays on its own generated map, never on Icarus. The world seed builds the land: a four-lane asphalt highway runs north through open desert, between low ridges that rise into valley walls at the map edges. Map north is up the map, toward the upper right of the screen.
+Fury Road plays on its own generated map, never on Icarus. The world seed builds the land: a four-lane asphalt highway runs north through open desert, between low ridges that rise into valley walls at the map edges. Map north is up the map, toward the upper right of the screen.
 
 - The road is 6 tiles (24 m) wide and holds four lanes, with centers at 0.75 and 2.25 tiles each side of the middle. Faded paint marks its edges, a middle line and dashed dividers. Its line bends gently by seeded noise, never tighter than a 60 tile radius, and its height rises and falls under the road grade.
 - A hard shoulder of hardpan runs beside the asphalt. Past it the ground is sand, hardpan, scrub, gravel and scree, with rocks, crags, dead trees, car wrecks and dead trucks on the shoulders, poles and the odd billboard.
@@ -56,8 +56,8 @@ Group trucks spawn with full tanks and no cargo. Each holds a feud on the player
 
 A player knockout ends the run as Wrecked. A stranded player can end the run from the stranded panel, which is the only way out of an empty tank or a broken drive with no parts to patch. The death screen shows the last outpost reached and how far north the truck got, and offers Load save, Restart run with the same settings and a new seed, and New game.
 
-A carried-over Gauntlet save starts a fresh run at stretch 1 with its truck. So does a save from a build whose highway rules changed.
+A carried-over Fury Road save starts a fresh run at stretch 1 with its truck. So does a save from a build whose highway rules changed.
 
 ## Start
 
-The run starts at milestone 0 in the second lane, heading north. The Gauntlet kit is a hauler with a cannon, a heavy MG, an MG, a workhorse diesel, a ram, two plates and a rack, a full tank, base supplies, 4 parts for field patching and 200 M's.
+The run starts at milestone 0 in the second lane, heading north. The Fury Road kit is a hauler with a cannon, a heavy MG, an MG, a workhorse diesel, a ram, two plates and a rack, a full tank, base supplies, 4 parts for field patching and 200 M's.
