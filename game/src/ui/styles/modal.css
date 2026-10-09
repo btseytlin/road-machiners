@@ -27,6 +27,7 @@
   z-index: var(--z-over-modal);
 }
 #ui:has(.modal:not([style*="display: none"])) > .top-left,
+#ui:has(.modal:not([style*="display: none"])) > .top-right,
 #ui:has(.modal:not([style*="display: none"])) > .bottom-left > .recenter,
 #ui:has(.modal:not([style*="display: none"])) > .right-dock {
   visibility: hidden;
@@ -77,6 +78,6 @@
 }
 #ui .modal .close {
   position: absolute;
-  right: var(--space-8);
+  right: var(--space-9);
   top: var(--space-9);
 }

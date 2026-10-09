@@ -5,8 +5,8 @@ import { partDef } from "../data/parts";
 import type { PartInstance, World } from "../sim/types";
 import { conditionTag, footprint, headlineStat, partDetail, partIconEl, statChip, toneStyle } from "./cards";
 import { el } from "./dom";
-import { moneyEl } from "./units";
 import { conditionStatus, conditionTier } from "./format";
+import { moneyEl } from "./units";
 
 export type PartRow = {
   world: World;
@@ -14,7 +14,6 @@ export type PartRow = {
   base: PartInstance | null;
   price: number;
   payable: boolean;
-  unpaidTitle: string;
   action: HTMLElement;
   onHover: (on: boolean) => void;
 };
@@ -64,23 +63,21 @@ export class PartRows {
     const head = el(
       "button",
       { type: "button", class: "part-sum", "aria-expanded": String(isOpen), "aria-controls": detailId },
+      el("span", { class: "chevron" }),
       partIconEl(r.part),
       this.nameCell(r.part),
       statChip(headlineStat(r.world, r.part, r.base)),
       footprint(partDef(r.part.defId).w, partDef(r.part.defId).h),
-      el("span", { class: `price${r.payable ? "" : " bad"}`, title: r.payable ? "" : r.unpaidTitle }, moneyEl(r.price)),
-      el("span", { class: "chevron" }),
     );
     head.addEventListener("click", () => {
       head.focus({ preventScroll: true });
       this.toggle(id);
     });
-    if (!r.payable) r.action.title = r.unpaidTitle;
     const li = el(
       "li",
-      { class: `part-row tile toned k-${partDef(r.part.defId).kind}`, style: toneStyle(r.part.defId), "data-part-row": id },
-      head,
-      isOpen ? el("div", { class: "part-detail", id: detailId }, ...partDetail(r.world, r.part, r.base, r.action)) : null,
+      { class: `part-row tile toned k-${partDef(r.part.defId).kind}${isOpen ? " on" : ""}`, style: toneStyle(r.part.defId), "data-part-row": id },
+      el("div", { class: "part-line" }, head, el("span", { class: `price${r.payable ? "" : " bad"}` }, moneyEl(r.price)), r.action),
+      isOpen ? el("div", { class: "part-detail", id: detailId }, ...partDetail(r.world, r.part, r.base)) : null,
     );
     li.addEventListener("mouseenter", () => r.onHover(true));
     li.addEventListener("mouseleave", () => r.onHover(false));

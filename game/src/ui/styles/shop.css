@@ -137,7 +137,7 @@
   margin-top: auto;
   font-size: var(--text-dense);
 }
-/* Shop part list: one compact row per part, the open one shows its detail below. The box comes from .tile. */
+/* Shop part list: one row per part with its price and action at the end, the open one shows its detail below. The box comes from .tile. */
 .part-rows {
   list-style: none;
   margin: var(--space-4) 0 0;
@@ -146,10 +146,24 @@
   flex-direction: column;
   gap: var(--space-2);
 }
+.part-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--col-profit) var(--col-name);
+  align-items: center;
+  gap: var(--space-4);
+  padding-right: var(--space-4);
+}
+.part-line > .price {
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+.part-line > button {
+  justify-self: end;
+}
 #ui button.part-sum {
   display: grid;
-  grid-template-columns: var(--icon-xl) minmax(0, 1fr) auto auto auto var(--icon-xs);
-  grid-template-areas: "icon name stat foot price chev";
+  grid-template-columns: var(--icon-xs) var(--icon-xl) minmax(0, 1fr) auto var(--icon-l);
+  grid-template-areas: "chev icon name stat foot";
   align-items: center;
   gap: var(--space-2) var(--space-4);
   width: 100%;
@@ -193,19 +207,9 @@
   width: var(--icon-s);
   height: var(--icon-s);
 }
-.stat-chip small {
-  margin-left: var(--space-1);
-  color: var(--ink-muted);
-}
 .part-sum .footprint {
   grid-area: foot;
-  width: var(--icon-l);
-}
-.part-sum .price {
-  grid-area: price;
-  white-space: nowrap;
-  min-width: var(--icon-3xl);
-  text-align: right;
+  justify-self: end;
 }
 .part-sum .chevron {
   grid-area: chev;
@@ -224,23 +228,38 @@
   gap: var(--space-3);
   padding: var(--space-1) var(--space-5) var(--space-4);
 }
+.part-hp {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.part-hp > .meter {
+  flex: 1;
+}
 @container (max-width: 440px) {
-  #ui button.part-sum {
-    grid-template-columns: var(--icon-xl) minmax(0, 1fr) auto var(--icon-xs);
+  .part-line {
+    grid-template-columns: minmax(0, 1fr) auto auto;
     grid-template-areas:
-      "icon name price chev"
-      ". stat foot foot";
+      "sum sum sum"
+      ". price action";
+  }
+  .part-line > .part-sum {
+    grid-area: sum;
+  }
+  .part-line > .price {
+    grid-area: price;
+  }
+  .part-line > button:not(.part-sum) {
+    grid-area: action;
+  }
+  #ui button.part-sum {
+    grid-template-columns: var(--icon-xs) var(--icon-xl) minmax(0, 1fr) auto;
+    grid-template-areas:
+      "chev icon name name"
+      ". . stat foot";
   }
 }
 
-/* A stock part that will not fit the grid: the Buy button with a note that it goes to garage storage. */
-.buy-stored {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--space-1);
-  font-size: var(--text-dense);
-}
 /* Character screen: one card per skill with its rank pips, buy button, today's XP bar and perks. */
 .skill-level {
   display: flex;
@@ -332,14 +351,8 @@
   text-align: right;
 }
 .stat .icon svg,
-.chip .icon svg,
-.price .icon svg {
+.chip .icon svg {
   fill: none;
-}
-.stat-val small {
-  margin-left: var(--space-1);
-  font-size: var(--text-caption);
-  color: var(--ink-muted);
 }
 .delta {
   display: inline-flex;
@@ -504,12 +517,6 @@
 .service-meter .meter {
   height: var(--meter-l);
 }
-.note {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  color: var(--ink-muted);
-}
 
 /* Trucks: the layout map beside the stats. */
 .cards.trucks {
@@ -519,11 +526,31 @@
   flex-direction: row;
   gap: var(--space-6);
 }
+.tile.on,
 .truck-card.own {
-  border-color: var(--mark-own);
+  border-color: var(--accent);
+  border-left-color: var(--tone, var(--accent));
+  background: var(--accent-wash);
 }
-.truck-body .card-name {
-  flex: none;
+.tile.on:hover {
+  border-color: var(--accent);
+}
+.modal .tabs button.on {
+  background: var(--accent-wash);
+}
+#ui .modal button[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+#ui .modal button[aria-disabled="true"]:hover {
+  background: var(--surface-raised);
+  border-color: var(--line-strong);
+}
+.truck-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
 }
 .truck-body {
   flex: 1;
