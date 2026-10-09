@@ -1,0 +1,21 @@
+#ui .tip {
+  left: 50%;
+  top: 110px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 10px 8px 14px;
+  font-size: 15px;
+  z-index: 30;
+}
+#ui .tip .tip-close {
+  padding: 0 6px;
+  font-size: 16px;
+  line-height: 1.2;
+}
+#ui .end-turn.auto {
+  border-color: #d9a441;
+  color: #eed38e;
+}
+

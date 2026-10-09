@@ -1,0 +1,90 @@
+#ui .modal {
+  z-index: 20;
+  left: 50%;
+  top: 16px;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  width: min(1360px, calc(100vw - 32px));
+  height: min(760px, calc(100dvh - 250px));
+  overflow: auto;
+  padding: 24px 28px;
+  background: #272d31;
+  border: 2px solid #818787;
+  box-shadow:
+    inset 0 0 0 4px #3d4549,
+    0 0 0 100vmax #101316b8;
+  scrollbar-width: thin;
+}
+#ui:has(.modal:not([style*="display: none"]))
+  > .panel:not(.modal):not(.toast):not(.instruments):not(.log):not(.opening-tip) {
+  visibility: hidden;
+}
+/* An opening tip stays readable while a modal is open, since it names what to do in the inventory. It takes the hidden
+   weapons panel's place, between the instruments and the log. */
+#ui:has(.modal:not([style*="display: none"])) > .opening-tip {
+  top: auto;
+  left: 457px;
+  bottom: 14px;
+  transform: none;
+  max-width: calc(100vw - 457px - 282px - 32px);
+  z-index: 21;
+}
+#ui:has(.modal:not([style*="display: none"])) > .top-left,
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .recenter,
+#ui:has(.modal:not([style*="display: none"])) > .right-dock {
+  visibility: hidden;
+}
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .instruments,
+#ui:has(.modal:not([style*="display: none"])) > .log {
+  z-index: 21;
+}
+/* The hidden weapons leave the dock, so the instruments drop to the bottom line instead of wrapping above them. */
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .weapons {
+  display: none;
+}
+/* The wide modal reaches under the condition panel, which stands above the instruments. */
+#ui:has(.modal:not([style*="display: none"])) .truck-condition {
+  display: none;
+}
+#ui .modal > h3 {
+  font-size: 26px;
+  margin-bottom: 12px;
+  padding-right: 120px;
+}
+.modal .tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  border-bottom: 1px solid #636d71;
+  padding: 14px 0 12px;
+  margin-bottom: 16px;
+}
+.modal .tabs button {
+  min-width: 85px;
+}
+.modal table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+}
+.modal td,
+.modal th {
+  padding: 10px 7px;
+  text-align: left;
+  border-bottom: 1px solid #4b555b;
+}
+.modal th {
+  color: #c4b888;
+  font-weight: normal;
+  font-size: 12px;
+}
+.modal td button {
+  font-size: 12px;
+  margin: 2px 0;
+}
+#ui .modal .close {
+  position: absolute;
+  right: 20px;
+  top: 23px;
+  font-size: 12px;
+}

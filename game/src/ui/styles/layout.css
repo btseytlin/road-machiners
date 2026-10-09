@@ -1,0 +1,92 @@
+.top-left {
+  position: absolute;
+  z-index: 3;
+  left: 14px;
+  top: 14px;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+#ui .top-left > .panel {
+  position: static;
+}
+#ui .top-left > .help {
+  position: relative;
+}
+/* The weapons keep the bottom line, and the instruments go above them only when the two do not fit side by side. */
+.bottom-left {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap-reverse;
+  justify-content: flex-end;
+  align-items: stretch;
+  gap: 8px;
+  max-width: calc(100vw - 22px - var(--right-column));
+}
+#ui .bottom-left > .panel {
+  position: static;
+}
+#ui .bottom-left > .instruments {
+  order: 1;
+}
+#ui .bottom-left > .weapons {
+  order: 0;
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+#ui .bottom-left > .recenter {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  left: auto;
+  transform: none;
+}
+.top-right {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+#ui .top-right > .panel {
+  position: static;
+  padding: 6px 8px;
+}
+#ui .top-right > .game-menu,
+#ui .top-right > .camera-mode {
+  padding: 0;
+  border: 0;
+}
+.game-menu {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+}
+.game-menu [role=menu] {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 45;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-sizing: border-box;
+  min-width: 160px;
+  max-width: calc(100vw - 28px);
+  padding: 4px;
+  background: #272b2ef5;
+  border: 1px solid var(--edge);
+}
+.game-menu [role=menu][hidden] {
+  display: none;
+}
+.game-menu [role=menu] button {
+  width: 100%;
+  text-align: left;
+}
+

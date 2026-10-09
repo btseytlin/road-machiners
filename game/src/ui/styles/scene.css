@@ -1,0 +1,44 @@
+/* Color grade on the 3D view: a little more saturation and contrast after tone mapping. */
+canvas.view {
+  filter: saturate(1.12) contrast(1.06);
+}
+
+/* Darkens the screen corners, so the eye rests on the middle of the view. */
+.vignette {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(0, 0, 0, 0) 55%,
+    rgba(20, 12, 6, 0.38) 100%
+  );
+}
+
+/* Dust haze over the view while the player truck is inside a storm. */
+.storm-tint {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(157, 121, 84, 0.18),
+    rgba(120, 88, 58, 0.55)
+  );
+  /* Opacity follows the player's storm exposure each turn; the transition glides between turns. */
+  transition: opacity 1s linear;
+}
+
+/* Progress of a parked job: repair or search. */
+.job-bar {
+  display: block;
+  height: 5px;
+  margin-top: 5px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.job-bar > span {
+  display: block;
+  height: 100%;
+  background: #e0c070;
+}
+
