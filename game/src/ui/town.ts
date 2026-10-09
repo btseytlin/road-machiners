@@ -66,7 +66,7 @@ const GARAGE_ONLY: Tab[] = ["trucks"];
 const PRESSURE_HINT_AT = 0.2;
 
 export class TownScreen {
-  private root = panel("modal");
+  private root = panel("modal dialog");
   private tab: Tab = "market";
   private stockFilter: StockFilter = "all";
   private error = "";
@@ -208,7 +208,7 @@ export class TownScreen {
     const hint = pressureHint(def, state, g);
     return el(
       "div",
-      { class: "good-row" },
+      { class: "good-row row" },
       el(
         "div",
         { class: "good-name" },
@@ -348,7 +348,7 @@ export class TownScreen {
       const own = me.chassisId === id;
       return el(
         "div",
-        { class: `card truck-card${own ? " own" : ""}` },
+        { class: `card tile truck-card${own ? " own" : ""}` },
         el("div", { class: "truck-pics" }, chassisPortrait(id), chassisMap(id)),
         el(
           "div",
@@ -472,7 +472,7 @@ function goodsHead(withTheirs: boolean): HTMLElement {
   const c = GOODS_COLUMNS;
   return el(
     "div",
-    { class: "goods-head dim" },
+    { class: "goods-head row dim" },
     el("span", {}, c.good),
     withTheirs ? el("span", {}, c.theirs) : null,
     el("span", {}, c.buy),
@@ -552,7 +552,7 @@ const TRADE_TAB_ICON: Record<TradeTab, IconName> = { goods: "salt", parts: "part
 const SUPPLY_STEP = 10;
 
 export class TruckTradeScreen {
-  private root = panel("modal");
+  private root = panel("modal dialog");
   private tab: TradeTab = "goods";
   private npcId: string | null = null;
   private error = "";
@@ -666,7 +666,7 @@ export class TruckTradeScreen {
     const sell = truckGoodPrice(w, g, "sell");
     return el(
       "div",
-      { class: "good-row" },
+      { class: "good-row row" },
       el(
         "div",
         { class: "good-name" },

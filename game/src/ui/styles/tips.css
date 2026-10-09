@@ -1,21 +1,20 @@
 #ui .tip {
   left: 50%;
-  top: 110px;
+  top: var(--hud-notice-top);
   transform: translateX(-50%);
   display: flex;
-  gap: 12px;
+  gap: var(--space-6);
   align-items: center;
-  padding: 8px 10px 8px 14px;
-  font-size: 15px;
-  z-index: 30;
+  padding: var(--space-4) var(--space-5) var(--space-4) var(--space-6);
+  font-size: var(--text-body);
+  z-index: var(--z-toast);
 }
 #ui .tip .tip-close {
-  padding: 0 6px;
-  font-size: 16px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-lead);
   line-height: 1.2;
 }
 #ui .end-turn.auto {
-  border-color: #d9a441;
-  color: #eed38e;
+  border-color: var(--accent-warm);
+  color: var(--accent);
 }
-

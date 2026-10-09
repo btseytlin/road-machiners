@@ -859,7 +859,7 @@ function offGridCommand(target: string | null | undefined, itemId: string): (w: 
 }
 
 export class InventoryScreen {
-  private root = panel("modal");
+  private root = panel("modal dialog");
   private view: InventoryView;
 
   constructor(private host: UiHost) {

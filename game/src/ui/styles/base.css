@@ -1,10 +1,8 @@
 html,
 body {
-  --font-ui: "Barlow Semi Condensed", sans-serif;
-  --font-mono: "IBM Plex Mono", monospace;
   margin: 0;
   height: 100%;
-  background: #1b1c1d;
+  background: var(--color-void);
   overflow: hidden;
 }
 #game {
@@ -12,83 +10,77 @@ body {
   inset: 0;
 }
 #ui {
-  --ink: #e0d8ca;
-  --cond-pristine: #fff4d6;
-  --muted: #aaa69e;
-  --edge: #747777;
-  --metal: #33383b;
-  --inspection-width: 300px;
-  --inspection-height: 340px;
-  --log-width: 282px;
-  --right-column: calc(var(--log-width) + 16px);
-  --weapon-card: 56px;
-  --weapon-gap: 4px;
-  --weapon-icon-w: 40px;
-  --weapon-icon-h: 22px;
+  --inspection-width: var(--panel-m);
+  --inspection-height: var(--panel-m-height);
+  --right-column: calc(var(--dock-width) + var(--space-7));
+  --weapon-card: var(--icon-hero);
+  --weapon-gap: var(--space-2);
+  --weapon-icon-w: var(--icon-2xl);
+  --weapon-icon-h: var(--icon-l);
   position: absolute;
   inset: 0;
   pointer-events: none;
   color: var(--ink);
-  font: 14px / 1.4 var(--font-ui);
+  font: var(--text-body) / 1.4 var(--font-ui);
 }
 #ui .panel {
   position: absolute;
   pointer-events: auto;
-  background: #272b2ef5;
-  border: 1px solid var(--edge);
-  padding: 10px 12px;
-  box-shadow: 0 3px 9px #0005;
+  background: var(--surface-panel);
+  border: 1px solid var(--line-strong);
+  padding: var(--space-5) var(--space-6);
+  box-shadow: var(--shadow-panel);
 }
 #ui h3 {
-  margin: 0 0 8px;
-  color: #dac7a2;
-  font-size: 17px;
+  margin: 0 0 var(--space-4);
+  color: var(--ink-title);
+  font-size: var(--text-lead);
   font-weight: normal;
 }
 #ui button {
   font: inherit;
   color: var(--ink);
-  background: var(--metal);
-  border: 1px solid #737779;
-  padding: 6px 10px;
+  background: var(--surface-raised);
+  border: 1px solid var(--line-strong);
+  padding: var(--space-3) var(--space-5);
   cursor: pointer;
 }
 #ui button:hover {
-  background: #464d50;
-  border-color: #c2b08b;
+  background: var(--surface-hover);
+  border-color: var(--line-hover);
 }
 #ui button:disabled {
   opacity: 0.45;
   cursor: default;
 }
 #ui button.on {
-  border-color: #e0be77;
-  box-shadow: inset 0 0 0 1px #af9658;
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-dim);
 }
 #ui button:focus-visible,
 #ui select:focus-visible,
 #ui [tabindex]:focus-visible,
 #ui summary:focus-visible,
 #ui a:focus-visible {
-  outline: 2px solid #edc879;
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 #ui select {
   font: inherit;
   color: var(--ink);
-  background: #202529;
-  border: 1px solid var(--edge);
-  padding: 4px;
+  background: var(--surface-well);
+  border: 1px solid var(--line-strong);
+  padding: var(--space-2);
   max-width: 100%;
 }
 #ui .dim {
-  color: var(--muted);
+  color: var(--ink-muted);
 }
 #ui .bad {
-  color: #f0a080;
+  color: var(--danger-ink);
 }
 #ui .good {
-  color: #c0cf92;
+  color: var(--good);
 }
 #ui summary {
   cursor: pointer;
@@ -105,17 +97,16 @@ body {
 .icon {
   display: inline-flex;
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: var(--icon-xl);
+  height: var(--icon-xl);
   vertical-align: middle;
 }
 .icon svg {
   width: 100%;
   height: 100%;
-  fill: #6a7275;
-  stroke: #e0d1b4;
+  fill: var(--steel-6);
+  stroke: var(--ink);
   stroke-width: 1.7;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
-

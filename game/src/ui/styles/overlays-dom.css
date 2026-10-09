@@ -1,0 +1,72 @@
+/* Overlays that scripts build over the 3D view or over a failed load: the crash screen, the perf readout,
+   the world labels, the damage numbers and the weapon range icons. Scripts add these classes and set only runtime geometry. */
+.crash-screen {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-crash);
+  background: var(--crash-bg);
+  color: var(--crash-ink);
+  padding: var(--space-10);
+  overflow: auto;
+  font: var(--text-body) / 1.5 var(--font-mono);
+  white-space: pre-wrap;
+}
+.crash-title { font-size: var(--text-display); color: var(--danger-bright); margin-bottom: var(--space-8); }
+.crash-hint { margin-top: var(--space-9); color: var(--crash-hint); }
+
+.perf-panel {
+  position: absolute;
+  left: 56px;
+  top: var(--space-4);
+  background: var(--surface-overlay);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-m);
+  padding: var(--space-3) var(--space-4);
+  font: var(--text-label) / 1.35 var(--font-mono);
+  color: var(--ink-overlay);
+  white-space: pre;
+}
+
+.world-label {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  font: var(--text-lead) var(--font-mono);
+  color: var(--ink-overlay);
+  background: color-mix(in srgb, var(--surface-overlay-shade) 67%, transparent);
+  padding: var(--space-1) var(--space-3);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.float-text {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font: bold var(--text-lead) var(--font-mono);
+  text-shadow: 0 1px 2px var(--surface-overlay-shade);
+  pointer-events: none;
+  display: none;
+}
+
+.arc-icon {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--select);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface-overlay-shade) 75%, transparent);
+}
+.arc-icon.spent { border-color: var(--path-spent); }
+.arc-icon-slot {
+  position: absolute;
+  right: calc(-1 * var(--space-3));
+  bottom: calc(-1 * var(--space-3));
+  font: bold var(--text-label) var(--font-ui);
+  color: var(--ink-bright);
+  background: color-mix(in srgb, var(--surface-overlay-shade) 90%, transparent);
+  border-radius: var(--radius-s);
+  padding: 0 var(--space-1);
+  line-height: 14px;
+}

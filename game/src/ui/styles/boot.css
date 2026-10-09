@@ -1,42 +1,42 @@
-/* Boot screen: static markup in index.html, driven by src/ui/boot-screen.ts. Below the crash screen (100000). */
+/* Boot screen: static markup in index.html, driven by src/ui/boot-screen.ts. Below the crash screen (--z-crash). It runs before the game code and uses only tokens. */
 #boot {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--z-boot);
   pointer-events: none;
-  background: #1b1c1d;
-  color: #e0d8ca;
+  background: var(--color-void);
+  color: var(--ink);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 #boot[hidden] { display: none; }
 #boot.leaving { opacity: 0; transition: opacity 250ms; }
-#boot .boot-box { width: min(440px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 14px; }
+#boot .boot-box { width: min(var(--panel-l), calc(100vw - var(--space-10))); display: flex; flex-direction: column; gap: var(--space-6); }
 #boot .boot-title {
   margin: 0;
-  padding-bottom: 8px;
-  border-bottom: 2px solid #e06a3c;
-  font: 700 30px / 1.1 var(--font-ui);
-  color: #dac7a2;
+  padding-bottom: var(--space-4);
+  border-bottom: 2px solid var(--danger);
+  font: 700 var(--text-display) / 1.1 var(--font-ui);
+  color: var(--ink-title);
 }
-#boot .boot-bar { display: flex; gap: 3px; height: 8px; }
-#boot .boot-seg { flex: 1; background: #33383b; }
-#boot .boot-seg.done { background: #e06a3c; }
-#boot .boot-seg.failed { background: #ff7058; }
+#boot .boot-bar { display: flex; gap: var(--space-1); height: var(--space-4); }
+#boot .boot-seg { flex: 1; background: var(--surface-raised); }
+#boot .boot-seg.done { background: var(--danger); }
+#boot .boot-seg.failed { background: var(--danger-bright); }
 #boot .boot-seg.running {
-  background: repeating-linear-gradient(45deg, #e06a3c 0 6px, #33383b 6px 12px);
+  background: repeating-linear-gradient(45deg, var(--danger) 0 var(--space-3), var(--surface-raised) var(--space-3) var(--space-6));
   background-size: 17px 17px;
   animation: boot-stripe 1.2s linear infinite;
 }
 @keyframes boot-stripe { to { background-position: 17px 0; } }
 #boot.failed .boot-seg.running { animation: none; }
-#boot .boot-stage { margin: 0; min-height: 1.4em; font: 16px / 1.4 var(--font-ui); color: #e0d8ca; }
-#boot.failed .boot-stage { color: #ff7058; }
-#boot .boot-steps { margin: 0; padding: 0; list-style: none; font: 12px / 1.6 var(--font-mono); color: #aaa69e; }
-#boot .boot-steps li { display: flex; justify-content: space-between; gap: 12px; }
-#boot .boot-steps li.running { color: #e0d8ca; }
-#boot .boot-steps li.failed { color: #ff7058; }
+#boot .boot-stage { margin: 0; min-height: 1.4em; font: var(--text-lead) / 1.4 var(--font-ui); color: var(--ink); }
+#boot.failed .boot-stage { color: var(--danger-bright); }
+#boot .boot-steps { margin: 0; padding: 0; list-style: none; font: var(--text-dense) / 1.6 var(--font-mono); color: var(--ink-muted); }
+#boot .boot-steps li { display: flex; justify-content: space-between; gap: var(--space-6); }
+#boot .boot-steps li.running { color: var(--ink); }
+#boot .boot-steps li.failed { color: var(--danger-bright); }
 @media (prefers-reduced-motion: reduce) {
   #boot .boot-seg.running { animation: none; }
   #boot.leaving { transition: none; }

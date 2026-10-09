@@ -12,7 +12,7 @@ import type { UiHost } from './host';
 import { hp } from './units';
 
 export class CharacterScreen {
-  private root = panel('modal');
+  private root = panel('modal dialog');
 
   constructor(private host: UiHost) {
     this.root.classList.add('character-screen');
@@ -52,7 +52,7 @@ export class CharacterScreen {
   private card(world: World, id: SkillId): HTMLElement {
     const rank = world.player.ranks[id];
     const today = xpTodayOf(world, id);
-    return el('div', { class: 'card skill-card' },
+    return el('div', { class: 'card tile skill-card' },
       el('div', { class: 'card-head' },
         createIcon(SKILL_ICON[id]),
         el('div', { class: 'card-name' }, el('b', {}, SKILL_INFO[id].name), el('span', { class: 'dim' }, `Earns XP from ${SKILL_INFO[id].grows}`)),

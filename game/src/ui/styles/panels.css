@@ -1,8 +1,8 @@
 /* A modal takes the screen, so the log only grows while none is open. */
 #ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded {
-  z-index: 22;
-  width: 420px;
-  height: calc(100dvh - 112px - 72px);
+  z-index: var(--z-log-open);
+  width: var(--panel-l);
+  height: calc(100dvh - var(--hud-notice-top) - var(--icon-hero) - var(--space-7));
 }
 #ui .recenter {
   padding: 0;
@@ -10,16 +10,16 @@
 }
 #ui .debug-console {
   left: 50%;
-  top: 112px;
+  top: var(--hud-notice-top);
   transform: translateX(-50%);
-  z-index: 40;
-  width: 442px;
-  max-width: calc(100vw - 58px);
-  padding: 6px 8px;
-  font: 12px / 1.35 var(--font-mono);
+  z-index: var(--z-console);
+  width: var(--panel-l);
+  max-width: calc(100vw - var(--icon-hero));
+  padding: var(--space-3) var(--space-4);
+  font: var(--text-dense) / 1.35 var(--font-mono);
 }
 .debug-console-log {
-  max-height: 180px;
+  max-height: calc(var(--icon-hero) * 3);
   overflow: auto;
   scrollbar-width: thin;
   white-space: pre-wrap;
@@ -28,39 +28,39 @@
   display: block;
   box-sizing: border-box;
   width: 100%;
-  margin-top: 4px;
+  margin-top: var(--space-2);
   font: inherit;
   color: var(--ink);
-  background: #202529;
-  border: 1px solid var(--edge);
-  padding: 3px 5px;
+  background: var(--surface-well);
+  border: 1px solid var(--line-strong);
+  padding: var(--space-1) var(--space-2);
   outline: none;
 }
 #ui .feedback {
-  z-index: 25;
+  z-index: var(--z-feedback);
   padding: 0;
-  background: #272b2ef5;
-  font-size: 12px;
+  background: var(--surface-panel);
+  font-size: var(--text-dense);
 }
 .feedback summary {
   display: block;
-  padding: 5px 9px;
-  font-size: 16px;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-lead);
   list-style: none;
 }
 .feedback details[open] summary {
-  margin-bottom: 6px;
+  margin-bottom: var(--space-3);
 }
 .feedback details[open] {
-  padding-bottom: 5px;
+  padding-bottom: var(--space-2);
 }
 .feedback details a {
   display: block;
-  margin: 4px 9px;
+  margin: var(--space-2) var(--space-4);
   color: var(--ink);
   text-decoration: none;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--text-dense);
 }
 .feedback details a:hover,
 .feedback details a:focus-visible {
@@ -68,29 +68,29 @@
 }
 #ui .help {
   box-sizing: border-box;
-  width: calc(var(--inspection-width) - 2px);
-  height: calc(var(--inspection-height) - 2px);
-  max-width: calc(100vw - 30px);
-  padding: 8px 0 5px;
+  width: var(--inspection-width);
+  height: var(--inspection-height);
+  max-width: calc(100vw - 2 * var(--hud-inset));
+  padding: var(--space-4) 0 var(--space-2);
   overflow: auto;
-  background: #272b2ef5;
-  font-size: 12px;
+  background: var(--surface-panel);
+  font-size: var(--text-dense);
 }
 .help h3 {
-  margin: 0 9px 6px;
-  font-size: 14px;
+  margin: 0 var(--space-4) var(--space-3);
+  font-size: var(--text-body);
 }
 .help .close {
   position: absolute;
-  right: 6px;
-  top: 6px;
+  right: var(--space-3);
+  top: var(--space-3);
 }
 .help > div {
-  margin: 4px 9px;
-  color: var(--muted);
+  margin: var(--space-2) var(--space-4);
+  color: var(--ink-muted);
 }
 .help .version {
-  margin-top: 8px;
+  margin-top: var(--space-4);
   opacity: 0.6;
 }
 .help .version.world-setup {
@@ -98,134 +98,125 @@
 }
 /* The hover panel grows with the hit table down to the log, since the mouse stays on the truck and cannot scroll it. */
 .info {
-  right: 14px;
-  top: 64px;
+  right: var(--hud-inset);
+  top: var(--hud-hover-top);
   width: var(--inspection-width);
   min-height: var(--inspection-height);
   /* Stops above the log. */
-  max-height: calc(100dvh - 64px - 234px - 8px);
-  max-width: calc(100vw - 28px);
+  max-height: calc(100dvh - var(--hud-hover-top) - var(--icon-hero) * 4 - var(--space-5) - var(--hud-gap));
+  max-width: calc(100vw - 2 * var(--hud-inset));
   box-sizing: border-box;
   overflow: auto;
-  font-size: 12px;
+  font-size: var(--text-dense);
 }
 .info .aim-line {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin: 4px 0;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
   white-space: nowrap;
 }
 .info .aim-body {
   display: inline-flex;
   align-items: center;
   box-sizing: border-box;
-  padding: 0 6px;
-  height: 18px;
+  padding: 0 var(--space-3);
+  height: var(--icon-m);
   line-height: 1;
-  font-size: 11px;
+  font-size: var(--text-label);
   cursor: crosshair;
 }
 .info .aim-body[aria-pressed="true"] {
-  border-color: #fa3934;
+  border-color: var(--alarm);
 }
 .info .aim-body .condition-aim {
   position: static;
-  margin-left: 4px;
+  margin-left: var(--space-2);
 }
 /* The radio steps away while the hover panel overlaps it. Hud.keepRadioClear decides. */
 #ui .radio.away {
   visibility: hidden;
 }
-.info .bar {
-  height: 4px;
-  background: #454d50;
-  margin: 6px 0 10px;
-}
-.info .bar > div {
-  height: 100%;
-  background: #bdc6ae;
-}
 /* One row per part: icon, name, HP and a condition bar under the name. */
 .info-part {
   display: grid;
-  grid-template-columns: 18px 1fr auto;
-  column-gap: 7px;
+  grid-template-columns: var(--icon-m) 1fr auto;
+  column-gap: var(--space-3);
   align-items: center;
-  margin: 3px 0;
+  margin: var(--space-1) 0;
 }
 .info-part .icon {
   grid-row: span 2;
-  width: 18px;
-  height: 18px;
+  width: var(--icon-m);
+  height: var(--icon-m);
 }
 .info-hp {
-  font: 11px var(--font-mono);
+  font: var(--text-label) var(--font-mono);
 }
 .info-part .meter {
   grid-column: 2 / 4;
-  height: 3px;
-  margin-top: 2px;
+  height: var(--meter-s);
+  margin-top: var(--space-1);
 }
 #ui .hitcard {
-  border-top: 1px solid var(--edge);
-  margin-top: 14px;
-  padding-top: 6px;
-  font-size: 12px;
+  border-top: 1px solid var(--line-strong);
+  margin-top: var(--space-6);
+  padding-top: var(--space-3);
+  font-size: var(--text-dense);
 }
 .hitcard .hc-head {
-  margin: 6px 0 2px;
-  color: #d6c48e;
-  font-size: 11px;
+  margin: var(--space-3) 0 var(--space-1);
+  color: var(--ink-label);
+  font-size: var(--text-label);
 }
 .hitcard .hc-row {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--space-6);
 }
 .hitcard .hc-chance {
-  font-size: 16px;
-  color: #c0cf92;
+  font-size: var(--text-lead);
+  color: var(--good);
 }
 .hitcard .hc-row {
   align-items: baseline;
 }
 .hitcard .hc-cause {
-  font-size: 11px;
-  margin-bottom: 3px;
+  font-size: var(--text-label);
+  margin-bottom: var(--space-1);
 }
 #ui .toast {
   left: 50%;
-  top: 65px;
+  top: var(--hud-hover-top);
   transform: translateX(-50%);
-  color: #eed38e;
-  z-index: 30;
+  color: var(--accent);
+  z-index: var(--z-toast);
 }
 #ui .action {
   left: 50%;
-  top: 14px;
+  top: var(--hud-inset);
   transform: translateX(-50%);
   padding: 0;
   border: 0;
 }
 .action button {
-  font-size: 14px;
+  font-size: var(--text-body);
 }
 #ui .action:has(.cycle) {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-3);
 }
 .action .count {
-  font-size: 12px;
+  font-size: var(--text-dense);
   white-space: nowrap;
 }
 #ui .action button.combat {
-  color: #ff5a40;
-  border-color: #ff5a40;
+  color: var(--danger-bright);
+  border-color: var(--danger-bright);
 }
 #ui .action:has(.job-bar) {
-  padding: 8px 14px;
+  padding: var(--space-4) var(--space-6);
   text-align: center;
 }
 .action .job-label {
@@ -237,66 +228,61 @@
 }
 #ui .rescue {
   left: 50%;
-  top: 112px;
+  top: var(--hud-notice-top);
   transform: translateX(-50%);
-  min-width: 260px;
-  max-width: 360px;
+  min-width: var(--panel-s);
+  max-width: var(--panel-m);
   text-align: center;
-  background: var(--metal);
-  border-top: 2px solid #838a8d;
 }
 #ui .rescue h3 {
-  margin-bottom: 4px;
+  margin-bottom: var(--space-2);
 }
 #ui .stranded {
   left: 0;
-  bottom: calc(100% + 8px);
-  min-width: 220px;
+  bottom: calc(100% + var(--hud-gap));
+  min-width: var(--panel-s);
   text-align: center;
-  background: var(--metal);
-  border-top: 2px solid #838a8d;
 }
 #ui .stranded h3 {
-  margin-bottom: 4px;
+  margin-bottom: var(--space-2);
 }
 .rescue .rescue-buttons,
 .stranded .rescue-buttons {
   display: flex;
   justify-content: center;
-  gap: 6px;
-  margin-top: 10px;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
 }
 
 #ui .death {
   position: fixed;
   inset: 0;
-  z-index: 50;
+  z-index: var(--z-death);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  background: #101316e0;
+  gap: var(--space-6);
+  background: var(--scrim-heavy);
   border: 0;
   box-shadow: none;
 }
 #ui .death h3 {
-  font-size: 40px;
-  color: #f0a080;
+  font-size: var(--text-hero);
+  color: var(--danger-ink);
 }
 .save-screen {
   text-align: center;
   max-width: none;
 }
 .save-screen > div {
-  max-width: 560px;
+  max-width: var(--panel-xl);
 }
 .death .death-buttons {
   display: flex;
-  gap: 10px;
+  gap: var(--space-5);
 }
 .death .death-buttons button {
-  font-size: 17px;
-  padding: 10px 20px;
+  font-size: var(--text-lead);
+  padding: var(--space-5) var(--space-8);
 }
-

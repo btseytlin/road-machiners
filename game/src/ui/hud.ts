@@ -86,7 +86,7 @@ export class MaxSpeedView {
     'span',
     { class: 'speed-max', tabindex: 0, 'aria-describedby': 'speed-breakdown' },
     this.text,
-    el('div', { class: 'speed-tip', id: 'speed-breakdown', role: 'tooltip' }, this.lines),
+    el('div', { class: 'speed-tip tooltip', id: 'speed-breakdown', role: 'tooltip' }, this.lines),
   );
 
   private shown = '';
@@ -110,15 +110,15 @@ export class Hud {
   private actionSlot = el("div", { class: "instrument-actions" });
   private condition = new TruckConditionView();
   private inspected = new TruckConditionView();
-  private contracts = panel("contracts", rightDock());
+  private contracts = panel("contracts dock-panel", rightDock());
   private log = new LogPanel();
   private info = panel("info");
   private infoBody = el("div");
   private feedback = panel("feedback", topLeft());
   private action = panel("action");
   private toastBox = panel("toast");
-  private rescue = panel("rescue");
-  private stranded = panel("stranded", this.condition.root);
+  private rescue = panel("rescue notice");
+  private stranded = panel("stranded notice",this.condition.root);
   private recenter = panel("recenter", bottomLeft());
   private cameraSwitch = panel("camera-mode", topRight());
   private tips = new Tips(window.localStorage);
@@ -243,7 +243,7 @@ export class Hud {
       el(
         "span",
         {
-          class: "job-bar",
+          class: "job-bar meter progress",
           role: "progressbar",
           "aria-label": `${label} progress`,
           "aria-valuemin": "0",
@@ -450,7 +450,7 @@ export class Hud {
             ? el(
                 "span",
                 {
-                  class: "job-bar",
+                  class: "job-bar meter progress",
                   role: "progressbar",
                   "aria-valuenow": String(Math.round(entry.progress * 100)),
                 },

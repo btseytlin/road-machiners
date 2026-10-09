@@ -320,7 +320,7 @@ export function partCard(o: PartCardOptions): HTMLElement {
   const diffs = diffStats(partStats(o.world, o.part), o.base ? partStats(o.world, o.base) : null);
   const card = el(
     "div",
-    { class: `card toned k-${def.kind}`, style: toneStyle(def.id) },
+    { class: `card tile toned k-${def.kind}`, style: toneStyle(def.id) },
     el(
       "div",
       { class: "card-head" },

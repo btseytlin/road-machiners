@@ -3,6 +3,7 @@ import type { Vehicle } from "../sim/types";
 import { el } from "./dom";
 import { conditionLabel, TruckConditionReadout } from "./hud-readout";
 import { tintedIcon, truckOutline } from "./plans";
+import { token } from "./tokens";
 import "./truck-condition.css";
 
 const CELL = 30;
@@ -90,8 +91,8 @@ export class TruckConditionView {
     for (const animation of node.getAnimations()) animation.cancel();
     node.animate(
       [
-        { background: "#fa3934", offset: 0 },
-        { background: "#fa3934", offset: 0.65 },
+        { background: token("--alarm"), offset: 0 },
+        { background: token("--alarm"), offset: 0.65 },
       ],
       { duration: 300, iterations: 2 },
     );
@@ -111,7 +112,7 @@ function markAim(node: HTMLElement, partId: string, aim?: ConditionAim): void {
 }
 
 type Tone = { fill: string; shade: string; light: string };
-const BROKEN_TONE: Tone = { fill: "#262626", shade: "#151515", light: "#333333" };
+const BROKEN_TONE: Tone = { fill: token("--cond-broken-fill"), shade: token("--cond-broken-shade"), light: token("--cond-broken-light") };
 const TONE_STOPS: readonly { at: number; rgb: readonly [number, number, number] }[] = [
   { at: 0, rgb: [128, 46, 38] },
   { at: 0.5, rgb: [140, 116, 48] },
@@ -127,6 +128,7 @@ function conditionTone(percent: number): Tone {
   const [a, b] = i <= 0 ? [TONE_STOPS[0], TONE_STOPS[0]] : [TONE_STOPS[i - 1], TONE_STOPS[i]];
   const k = b.at === a.at ? 0 : (t - a.at) / (b.at - a.at);
   const rgb = a.rgb.map((v, c) => v + (b.rgb[c] - v) * k);
-  const css = (mix: number): string => `rgb(${rgb.map((v) => Math.round(mix >= 0 ? v + (255 - v) * mix : v * (1 + mix))).join(" ")})`;
-  return { fill: css(0), shade: css(-SHADE_DARKEN), light: css(LIGHT_LIGHTEN) };
+  const hex = (mix: number): string =>
+    `#${rgb.map((v) => Math.round(mix >= 0 ? v + (255 - v) * mix : v * (1 + mix)).toString(16).padStart(2, "0")).join("")}`;
+  return { fill: hex(0), shade: hex(-SHADE_DARKEN), light: hex(LIGHT_LIGHTEN) };
 }

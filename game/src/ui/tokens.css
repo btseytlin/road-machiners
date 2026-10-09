@@ -37,6 +37,7 @@
   --line-strong: #777e81;
   --line-bright: #838a8d;
   --line-hover: #c2b08b;
+  --mark-own: #a4a074;
 
   /* Text */
   --ink: #e0d8ca;
@@ -68,6 +69,8 @@
   --danger-wash: #cc775555;
   --alarm: #fa3934;
   --crash-bg: #280806f5;
+  --crash-ink: #ffd8c8;
+  --crash-hint: #c8a898;
 
   /* Good: gain, health and success */
   --good: #c0cf92;
@@ -83,6 +86,11 @@
   --path-hold: #f0d060;
   --path-accelerate: #7cc85a;
   --path-spent: #9a9a94;
+  --path-contact: #f4f1ea;
+  --path-radio: #8fe0c8;
+  --path-flare: #ff6a50;
+  --path-beacon: #ff4030;
+  --path-damage: #ff4a3a;
 
   /* Part condition, pristine to junk, then broken */
   --cond-pristine: #fff4d6;
@@ -157,6 +165,7 @@
   /* Corners */
   --radius-s: 2px;
   --radius-m: 4px;
+  --radius-pill: 8px;
 
   /* Icon boxes */
   --icon-xs: 12px;
@@ -173,6 +182,7 @@
   --meter-m: 4px;
   --meter-l: 6px;
   --pip: 10px;
+  --dial-size: 66px;
 
   /* Panel widths and heights */
   --panel-s: 260px;
@@ -183,6 +193,25 @@
   --dock-width: 282px;
   --modal-width: 1360px;
   --modal-height: 760px;
+  --modal-reserve: 250px;
+  --modal-close-gutter: 120px;
+  --tab-min-width: 85px;
+  --tip-left: 457px;
+  --inv-side-width: 235px;
+  --inv-side-min: 180px;
+  --col-name: 130px;
+  --col-trade: 148px;
+  --col-profit: 64px;
+  --card-truck-min: 340px;
+  --portrait-w: 128px;
+  --portrait-h: 80px;
+  --log-height: 122px;
+  --marker-min-width: 72px;
+  --marker-max-width: 180px;
+  --narrow-log-bottom: 176px;
+  --narrow-log-height: 80px;
+  --narrow-info-top: 190px;
+  --narrow-modal-clearance: 290px;
 
   /* HUD placement */
   --hud-inset: 14px;
@@ -191,6 +220,8 @@
   --hud-notice-top: 112px;
 
   /* Layers, bottom to top */
+  --z-outline: 1;
+  --z-badge: 2;
   --z-hud: 3;
   --z-popup: 5;
   --z-modal: 20;

@@ -1,7 +1,7 @@
 #ui .truck-condition {
   position: absolute;
   left: 0;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + var(--space-4));
 }
 /* The bare truck's outline sits behind the parts. A part's tile takes its condition color, set inline as --tone and
    --tint-line. The icon's own fill is clear, so only its lines and shading show, in the same hue. Line widths stay in
@@ -13,62 +13,62 @@
   --plan-line: none;
 }
 .condition-chassis .outline-line {
-  z-index: 1;
+  z-index: var(--z-outline);
   --plan-fill: none;
-  filter: drop-shadow(0 0 1px #000000b0);
+  filter: drop-shadow(0 0 1px var(--shade-strong));
 }
 .condition-part {
   position: absolute;
   box-sizing: border-box;
-  border: 1px solid #00000030;
+  border: 1px solid var(--shade);
   background: var(--tone) padding-box;
   --tint-fill: none;
-  --tint-shadow: #00000040;
-  --tint-glass: #ffffff40;
+  --tint-shadow: var(--shade);
+  --tint-glass: var(--bevel-light-strong);
   --tint-outer: 1px;
   --tint-inner: 0px;
 }
 .condition-part svg {
   position: absolute;
-  inset: 3px;
-  width: calc(100% - 6px);
-  height: calc(100% - 6px);
+  inset: var(--space-1);
+  width: calc(100% - var(--space-2));
+  height: calc(100% - var(--space-2));
 }
 #ui .info .truck-condition {
   position: static;
   width: fit-content;
-  margin: 8px auto 0;
+  margin: var(--space-4) auto 0;
 }
 .condition-part.aimable {
   cursor: crosshair;
 }
 .condition-part.aimable:hover {
-  border-color: #f3efde;
+  border-color: var(--ink-bright);
 }
 .condition-aim {
   position: absolute;
-  z-index: 2;
+  z-index: var(--z-badge);
   top: 1px;
   left: 1px;
-  min-width: 14px;
-  height: 14px;
+  min-width: var(--icon-xs);
+  height: var(--icon-xs);
   box-sizing: border-box;
-  padding: 0 2px;
-  border: 2px solid #fa3934;
-  border-radius: 8px;
-  background: #141a1ccc;
-  color: #f3efde;
-  font: 10px / 10px var(--font-mono);
+  padding: 0 var(--space-1);
+  border: 2px solid var(--alarm);
+  border-radius: var(--radius-pill);
+  background: var(--scrim-heavy);
+  color: var(--ink-bright);
+  font: var(--text-caption) / var(--text-caption) var(--font-mono);
   text-align: center;
 }
 .condition-tip {
   position: absolute;
-  z-index: 5;
-  padding: 2px 6px;
-  border: 1px solid #505b5d;
-  background: #141a1cf2;
-  color: #f3efde;
-  font: 12px var(--font-ui);
+  z-index: var(--z-popup);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--line-soft);
+  background: var(--scrim-heavy);
+  color: var(--ink-bright);
+  font: var(--text-dense) var(--font-ui);
   white-space: nowrap;
   pointer-events: none;
 }

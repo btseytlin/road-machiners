@@ -1,15 +1,15 @@
 #overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-#overlay .vehicle-marker { position: absolute; transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center; gap: 3px; pointer-events: none; font: 11px/1.2 var(--font-mono); color: #f0e0b8; }
-#overlay .marker-weapons { display: flex; gap: 3px; }
+#overlay .vehicle-marker { position: absolute; transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center; gap: var(--space-1); pointer-events: none; font: var(--text-label) / 1.2 var(--font-mono); color: var(--ink-overlay); }
+#overlay .marker-weapons { display: flex; gap: var(--space-1); }
 #overlay .vehicle-marker.aims-hidden .marker-weapons, #overlay .vehicle-marker.aims-hidden .marker-radio { display: none; }
-#overlay .marker-weapon { position: relative; display: flex; flex-direction: column; align-items: center; padding: 2px 4px 3px; background: #261c14ee; border: 2px solid #8a8f88; border-radius: 4px; }
-#overlay .marker-weapon.ready { border-color: #e06a3c; }
-#overlay .marker-weapon .icon { width: 30px; height: 30px; }
-#overlay .marker-weapon.ready .icon svg { fill: #b04a26; }
-#overlay .marker-weapon.blocked { color: #a8a498; }
-#overlay .marker-weapon.harpoon.ready { border-color: #e0be77; }
-#overlay .marker-weapon.harpoon.ready .icon svg { fill: #b39a3a; }
-#overlay .marker-slot { position: absolute; top: 1px; left: 3px; font-weight: bold; }
+#overlay .marker-weapon { position: relative; display: flex; flex-direction: column; align-items: center; padding: var(--space-1) var(--space-2); background: var(--surface-overlay); border: 2px solid var(--line-bright); border-radius: var(--radius-m); }
+#overlay .marker-weapon.ready { border-color: var(--danger); }
+#overlay .marker-weapon .icon { width: var(--icon-xl); height: var(--icon-xl); }
+#overlay .marker-weapon.ready .icon svg { fill: var(--danger-deep); }
+#overlay .marker-weapon.blocked { color: var(--ink-muted); }
+#overlay .marker-weapon.harpoon.ready { border-color: var(--accent-warm); }
+#overlay .marker-weapon.harpoon.ready .icon svg { fill: var(--accent-dim); }
+#overlay .marker-slot { position: absolute; top: 1px; left: var(--space-1); font-weight: bold; }
 #overlay .marker-status { white-space: nowrap; }
-#overlay .marker-job { min-width: 72px; max-width: 180px; padding: 3px 6px 4px; background: #261c14ee; border-radius: 3px; text-align: center; }
-#overlay .marker-radio, #overlay .marker-out { padding: 3px 6px; background: #261c14ee; border-radius: 3px; white-space: nowrap; }
+#overlay .marker-job { min-width: var(--marker-min-width); max-width: var(--marker-max-width); padding: var(--space-1) var(--space-3) var(--space-2); background: var(--surface-overlay); border-radius: var(--radius-s); text-align: center; }
+#overlay .marker-radio, #overlay .marker-out { padding: var(--space-1) var(--space-3); background: var(--surface-overlay); border-radius: var(--radius-s); white-space: nowrap; }

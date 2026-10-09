@@ -1,7 +1,7 @@
 .save-panel .save-exports {
   display: flex;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
 }
 .save-panel .save-exports button {
   flex: 1;
@@ -13,45 +13,40 @@
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  z-index: 70;
+  z-index: var(--z-new-game);
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--space-5);
   box-sizing: border-box;
-  width: 520px;
+  width: var(--panel-xl);
   max-width: 100vw;
   max-height: 100vh;
   overflow-y: auto;
-  padding: 20px 24px;
-  background: #272d31;
-  border: 2px solid #818787;
-  box-shadow:
-    inset 0 0 0 4px #3d4549,
-    0 0 0 100vmax #101316b8;
+  padding: var(--space-8) var(--space-9);
 }
 #ui .new-game h3 {
-  font-size: 24px;
+  font-size: var(--text-heading);
 }
 .new-game .mode-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-3);
 }
 #ui .new-game .mode-card {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-1);
   text-align: left;
-  padding: 10px 14px;
+  padding: var(--space-5) var(--space-6);
 }
 #ui .new-game .mode-card b {
-  font-size: 17px;
-  color: #dac7a2;
+  font-size: var(--text-lead);
+  color: var(--ink-title);
 }
 #ui .new-game .mode-card.selected {
-  border-color: #e0be77;
-  box-shadow: inset 0 0 0 1px #af9658;
-  background: #3a3f3c;
+  border-color: var(--accent-warm);
+  box-shadow: inset 0 0 0 1px var(--accent-dim);
+  background: var(--surface-raised);
 }
 #ui .new-game .settings-toggle {
   align-self: flex-start;
@@ -65,10 +60,10 @@
 .new-game .world-settings {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 10px 12px;
-  border: 1px solid #4b5357;
-  background: #202529;
+  gap: var(--space-6);
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--line-soft);
+  background: var(--surface-well);
 }
 .new-game .world-settings[hidden] {
   display: none;
@@ -79,45 +74,41 @@
 .new-game .setting-row label {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: var(--space-5);
 }
 .new-game .setting-row .setting-value {
   margin-left: auto;
-  font: 15px var(--font-mono);
-  color: #eed38e;
+  font: var(--text-body) var(--font-mono);
+  color: var(--accent-bright);
 }
 .new-game .setting-input {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font: 11px var(--font-mono);
+  gap: var(--space-4);
+  font: var(--text-label) var(--font-mono);
 }
 .new-game .setting-input input {
   flex: 1;
   min-width: 0;
-  accent-color: #d9a441;
+  accent-color: var(--accent-warm);
 }
 .new-game .setting-input input:focus-visible {
-  outline: 2px solid #edc879;
-  outline-offset: 2px;
+  outline: 2px solid var(--accent);
+  outline-offset: var(--space-1);
 }
 .new-game .new-game-buttons {
   display: flex;
   justify-content: flex-end;
-  gap: 10px;
-}
-#ui .new-game .new-game-buttons button {
-  font-size: 17px;
-  padding: 10px 20px;
+  gap: var(--space-5);
 }
 #ui .new-game .new-game-buttons .start {
-  border-color: #e0be77;
+  border-color: var(--accent-warm);
 }
 @media (max-width: 480px) {
   #ui .new-game {
     width: 100vw;
     height: 100vh;
-    padding: 14px 12px;
+    padding: var(--space-6);
   }
   .new-game .setting-row label {
     flex-wrap: wrap;

@@ -8,11 +8,7 @@ canvas.view {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(
-    ellipse at center,
-    rgba(0, 0, 0, 0) 55%,
-    rgba(20, 12, 6, 0.38) 100%
-  );
+  background: radial-gradient(ellipse at center, transparent 55%, var(--vignette) 100%);
 }
 
 /* Dust haze over the view while the player truck is inside a storm. */
@@ -20,25 +16,13 @@ canvas.view {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(
-    ellipse at center,
-    rgba(157, 121, 84, 0.18),
-    rgba(120, 88, 58, 0.55)
-  );
+  background: radial-gradient(ellipse at center, var(--storm-near), var(--storm-far));
   /* Opacity follows the player's storm exposure each turn; the transition glides between turns. */
   transition: opacity 1s linear;
 }
 
-/* Progress of a parked job: repair or search. */
+/* Progress of a parked job: repair or search. It is a progress meter. */
 .job-bar {
   display: block;
-  height: 5px;
-  margin-top: 5px;
-  background: rgba(255, 255, 255, 0.12);
+  margin-top: var(--space-3);
 }
-.job-bar > span {
-  display: block;
-  height: 100%;
-  background: #e0c070;
-}
-

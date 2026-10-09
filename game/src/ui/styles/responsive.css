@@ -1,67 +1,56 @@
-@media (max-width: 1100px) {
-  #ui {
-    --log-width: 246px;
-  }
-  #ui .log,
-  #ui .right-dock {
-    width: var(--log-width);
-  }
-}
 @media (max-width: 720px) {
   .speed-tip {
     position: fixed;
-    left: 12px;
+    left: var(--space-6);
     bottom: 200px;
   }
   .instrument-actions {
     flex-wrap: wrap;
   }
   #ui {
-    --log-width: 200px;
-    --right-column: calc(var(--log-width) + 14px);
+    --right-column: calc(var(--dock-width) + var(--hud-inset));
   }
   #ui .log {
     top: auto;
-    bottom: 176px;
-    right: 14px;
-    height: 80px;
+    bottom: var(--narrow-log-bottom);
+    right: var(--hud-inset);
+    height: var(--narrow-log-height);
   }
   #ui .radio {
     --radio-line: 12px;
     --radio-lines: 4;
     --knob-size: 22px;
-    gap: 4px;
-    padding: 4px 6px;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
   }
-  .radio-lcd {
-    font-size: 10px;
+  #ui .radio-lcd {
+    font-size: var(--text-caption);
   }
   /* Small enough that the four knob labels keep apart on the narrow radio. */
-  .knob-cell {
-    font-size: 7px;
+  #ui .knob-cell {
+    font-size: calc(var(--text-micro) - var(--space-1));
   }
-  /* 8px above the narrow log, whose top is 176 + 80 from the bottom. */
+  /* One gap above the narrow log, whose top is its bottom offset plus its height. */
   #ui .right-dock {
-    bottom: 264px;
-    right: 14px;
-    width: 200px;
+    bottom: calc(var(--narrow-log-bottom) + var(--narrow-log-height) + var(--hud-gap));
+    right: var(--hud-inset);
   }
   #ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded {
-    width: calc(100vw - 28px);
-    height: calc(100dvh - 176px - 72px);
+    width: calc(100vw - 2 * var(--hud-inset));
+    height: calc(100dvh - var(--narrow-log-bottom) - var(--hud-hover-top) - var(--hud-gap));
   }
   .info {
-    top: 190px;
-    max-height: calc(100dvh - 190px - 256px - 8px);
+    top: var(--narrow-info-top);
+    max-height: calc(100dvh - var(--narrow-info-top) - var(--narrow-log-bottom) - var(--narrow-log-height) - var(--hud-gap));
   }
   #ui .modal {
-    padding: 20px 16px;
-    height: calc(100dvh - 290px);
+    padding: var(--space-8) var(--space-7);
+    height: calc(100dvh - var(--narrow-modal-clearance));
   }
   .inv-wrap {
     flex-direction: column;
     align-items: center;
-    gap: 25px;
+    gap: var(--space-9);
   }
   .inv-side {
     width: 100%;
@@ -80,7 +69,6 @@
   }
   .modal td,
   .modal th {
-    padding: 7px 4px;
+    padding: var(--space-3) var(--space-2);
   }
 }
-

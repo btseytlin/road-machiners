@@ -12,13 +12,13 @@
 #ui .character-screen > h3 {
   display: flex;
   align-items: center;
-  gap: 22px;
-  margin-bottom: 4px;
+  gap: var(--space-8);
+  margin-bottom: var(--space-2);
 }
 .inv-body {
   flex: 1;
   min-height: 0;
-  margin-top: 8px;
+  margin-top: var(--space-4);
   overflow: auto;
   scrollbar-width: thin;
 }
@@ -28,46 +28,38 @@
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  font: 13px var(--font-mono);
+  gap: var(--space-4);
+  font: var(--text-data) var(--font-mono);
   color: var(--ink);
-}
-.chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 2px 9px 2px 5px;
-  background: #20272b;
-  border: 1px solid #4b555b;
 }
 .chip .icon,
 .price .icon,
 .note > .icon {
-  width: 18px;
-  height: 18px;
+  width: var(--icon-m);
+  height: var(--icon-m);
 }
 .town-shop table {
-  margin: 2px 0;
+  margin: var(--space-1) 0;
 }
 .town-shop td,
 .town-shop th {
-  padding: 2px 7px;
+  padding: var(--space-1) var(--space-3);
 }
 .town-shop td button {
   margin: 0;
-  padding: 2px 8px;
+  padding: var(--space-1) var(--space-4);
   white-space: nowrap;
 }
 .town-shop h3 {
-  margin: 10px 0 0;
+  margin: var(--space-5) 0 0;
 }
 .town-split {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, auto) minmax(420px, 1fr);
-  gap: 28px;
-  margin-top: 8px;
+  grid-template-columns: minmax(0, auto) minmax(var(--panel-l), 1fr);
+  gap: var(--space-9);
+  margin-top: var(--space-4);
 }
 .town-truck,
 .town-shop {
@@ -79,66 +71,63 @@
   container-type: inline-size;
 }
 .town-truck {
-  padding-right: 24px;
-  border-right: 1px solid #4b555b;
+  padding-right: var(--space-9);
+  border-right: 1px solid var(--line-soft);
 }
 .town-truck .inv-wrap {
   margin-top: 0;
   justify-content: flex-start;
-  gap: 24px;
-}
-.town-shop {
-  container-type: inline-size;
+  gap: var(--space-9);
 }
 .town-shop > .tabs {
-  padding: 0 0 8px;
-  margin-bottom: 8px;
+  padding: 0 0 var(--space-4);
+  margin-bottom: var(--space-4);
 }
 .modal .tabs.sub {
   border-bottom: none;
-  padding: 0 0 4px;
+  padding: 0 0 var(--space-2);
   margin-bottom: 0;
 }
 .modal .tabs.sub button {
   min-width: 0;
-  padding: 3px 8px;
-  font-size: 12px;
+  padding: var(--space-1) var(--space-4);
+  font-size: var(--text-dense);
 }
 .inv-wrap {
   display: flex;
-  gap: 38px;
+  gap: var(--space-10);
   align-items: flex-start;
   justify-content: center;
-  margin-top: 18px;
+  margin-top: var(--space-7);
 }
 .inv-truck {
   flex: none;
 }
 .inv-target h3 {
-  margin: 0 0 12px;
+  margin: 0 0 var(--space-6);
 }
 .inv-target > .dim {
-  max-width: 260px;
-  margin-top: 30px;
+  max-width: var(--panel-s);
+  margin-top: var(--space-10);
 }
 /* Room for the truck outline, which reaches past the grid. */
 .truck-shell {
-  padding: 24px 0;
+  padding: var(--space-9) 0;
 }
 .inv-grid {
   position: relative;
-  background: #20292e;
+  background: var(--cell-none);
 }
 /* The truck's outline from above. The condition panel fills it behind its parts. The inventory draws only its line,
    over the cells and under the items. */
 .truck-outline {
   position: absolute;
   pointer-events: none;
-  --plan-line: #8d9ca1;
-  --plan-fill: #20282b;
+  --plan-line: var(--map-side);
+  --plan-fill: var(--cell-none);
 }
 .inv-grid .truck-outline {
-  --plan-line: #b9c6ca;
+  --plan-line: var(--cell-plan-line);
   --plan-fill: none;
 }
 .truck-outline svg {
@@ -150,44 +139,44 @@
 .inv-cell {
   position: absolute;
   box-sizing: border-box;
-  border: 1px solid #58656b;
-  font: 10px var(--font-mono);
-  color: #a0adb2;
+  border: 1px solid var(--cell-line);
+  font: var(--text-caption) var(--font-mono);
+  color: var(--cell-ink);
   display: flex;
   align-items: center;
   justify-content: center;
 }
 .inv-cell.c-plain {
-  background: #303d44;
+  background: var(--cell-plain);
 }
 .inv-cell.c-D {
-  background: #483e36;
+  background: var(--cell-deck);
 }
 .inv-cell.c-E {
-  background: #3d4b50;
+  background: var(--cell-engine);
 }
 .inv-cell.c-F,
 .inv-cell.c-B,
 .inv-cell.c-L,
 .inv-cell.c-R {
-  background: #414c52;
+  background: var(--cell-side);
 }
 .inv-cell.c-X {
-  background: #20292e;
+  background: var(--cell-none);
 }
 /* Rows of a broken cargo part: they hold nothing until the part is repaired. */
 .inv-cell.c-dead {
   border-style: dashed;
-  border-color: #414c52;
-  background: repeating-linear-gradient(45deg, #20292e 0 4px, #303d44 4px 6px);
+  border-color: var(--cell-side);
+  background: repeating-linear-gradient(45deg, var(--cell-none) 0 var(--space-2), var(--cell-plain) var(--space-2) var(--space-3));
 }
 .inv-item {
   position: absolute;
   box-sizing: border-box;
   margin: 0;
-  border: 2px solid #232c31;
-  font-size: 11px;
-  padding: 3px;
+  border: 2px solid var(--cell-none);
+  font-size: var(--text-label);
+  padding: var(--space-1);
   overflow: hidden;
   cursor: grab;
   user-select: none;
@@ -204,7 +193,7 @@
 }
 /* Clear of the condition bar. */
 .inv-item:has(.inv-hp) {
-  padding-bottom: 6px;
+  padding-bottom: var(--space-3);
 }
 .inv-item-name {
   position: absolute;
@@ -214,19 +203,19 @@
   clip-path: inset(50%);
 }
 .inv-item.mounted {
-  border-color: #a4a074;
+  border-color: var(--mark-own);
 }
 .inv-item:hover,
 .inv-item:focus {
-  border-color: #eac779;
+  border-color: var(--accent);
 }
 .inv-item.spare {
   border-style: dashed;
-  border-color: #b9b295;
+  border-color: var(--ink-label);
 }
 .inv-item.fixed {
   cursor: pointer;
-  border-color: #707f86;
+  border-color: var(--line-strong);
 }
 .inv-fan {
   position: absolute;
@@ -236,33 +225,33 @@
   overflow: hidden;
 }
 .inv-fan path {
-  fill: rgba(234, 199, 121, 0.16);
-  stroke: #eac779;
+  fill: var(--accent-wash);
+  stroke: var(--accent);
   stroke-width: 2;
 }
 .inv-item.blocking {
-  outline: 2px solid #e0674c;
+  outline: 2px solid var(--danger);
   outline-offset: -2px;
 }
 .inv-item.selected {
-  outline: 2px solid #eac779;
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 .inv-hp {
   position: absolute;
-  left: 2px;
-  right: 2px;
-  bottom: 2px;
-  height: 3px;
-  background: #182111;
+  left: var(--space-1);
+  right: var(--space-1);
+  bottom: var(--space-1);
+  height: var(--meter-s);
+  background: var(--good-well);
   overflow: hidden;
 }
 .inv-hp > div {
   height: 100%;
-  background: #b5c78c;
+  background: var(--good);
 }
 .inv-hp.broken {
-  background: #f0a080;
+  background: var(--danger-ink);
 }
 /* Item boxes, chips and standalone item icons sit on their category tone, set inline as --tone by toneStyle() in
    cards.ts from ITEM_TONES in src/render/palette.ts. A grid icon inherits its box's tone, so nothing doubles.
@@ -274,8 +263,8 @@
 }
 .item-icon {
   box-sizing: border-box;
-  padding: 2px;
-  border-radius: 2px;
+  padding: var(--space-1);
+  border-radius: var(--radius-s);
 }
 .inv-item .item-icon {
   padding: 0;
@@ -284,113 +273,113 @@
 .inv-side {
   display: flex;
   flex-direction: column;
-  gap: 22px;
-  width: 235px;
-  min-width: 180px;
+  gap: var(--space-8);
+  width: var(--inv-side-width);
+  min-width: var(--inv-side-min);
 }
 .inv-inspection {
-  border-top: 1px solid #7b878d;
-  padding-top: 15px;
+  border-top: 1px solid var(--line-strong);
+  padding-top: var(--space-7);
 }
 .inv-inspection > .icon {
-  width: 55px;
-  height: 55px;
-  margin-bottom: 10px;
+  width: var(--icon-hero);
+  height: var(--icon-hero);
+  margin-bottom: var(--space-5);
 }
 .inv-inspection p {
-  font-size: 13px;
+  font-size: var(--text-data);
   line-height: 1.5;
 }
 .inv-storage {
-  min-height: 70px;
-  border: 1px dashed #79888f;
-  padding: 10px;
+  min-height: calc(var(--icon-hero) + var(--space-7));
+  border: 1px dashed var(--line-strong);
+  padding: var(--space-5);
 }
 .inv-chip {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 5px 0;
-  padding: 5px 8px 7px;
+  gap: var(--space-4);
+  margin: var(--space-2) 0;
+  padding: var(--space-2) var(--space-4) var(--space-3);
   cursor: grab;
   user-select: none;
-  font-size: 13px;
+  font-size: var(--text-data);
 }
 .inv-chip > span {
   flex: 1;
 }
 .inv-chip > .cond {
   flex: none;
-  font-size: 11px;
+  font-size: var(--text-label);
 }
 .inv-chip > .icon {
   flex: none;
-  width: 22px;
-  height: 22px;
+  width: var(--icon-l);
+  height: var(--icon-l);
 }
 .inv-chip > .meter {
   position: absolute;
-  left: 2px;
-  right: 2px;
-  bottom: 2px;
-  height: 3px;
+  left: var(--space-1);
+  right: var(--space-1);
+  bottom: var(--space-1);
+  height: var(--meter-s);
 }
 .inv-dump {
-  border: 1px dashed #a4835b;
-  color: #dbb284;
-  padding: 12px;
+  border: 1px dashed var(--accent-dim);
+  color: var(--accent-warm);
+  padding: var(--space-6);
   text-align: center;
-  font-size: 12px;
+  font-size: var(--text-dense);
 }
 .inv-legend {
-  margin-top: 15px;
-  max-width: 340px;
-  font-size: 12px;
+  margin-top: var(--space-7);
+  max-width: var(--panel-m);
+  font-size: var(--text-dense);
 }
 .inv-legend > div {
-  margin-top: 7px;
+  margin-top: var(--space-3);
 }
 .inv-item.refitting {
-  border: 2px dashed #eac779;
+  border: 2px dashed var(--accent);
 }
 .inv-chip.selected {
-  outline: 2px solid #eac779;
+  outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
 .inv-item.holding {
-  outline: 2px dashed #eac779;
+  outline: 2px dashed var(--accent);
   outline-offset: -2px;
 }
 .inv-ghost.held {
-  box-shadow: 0 0 0 2px #eac779;
+  box-shadow: 0 0 0 2px var(--accent);
 }
 .inv-refit {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
-  padding: 6px 8px;
-  border: 1px dashed #eac779;
-  font-size: 13px;
+  gap: var(--space-5);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px dashed var(--accent);
+  font-size: var(--text-data);
 }
 .inv-ghost {
   position: fixed;
   pointer-events: none;
-  z-index: 1000;
+  z-index: var(--z-drag);
   box-sizing: border-box;
-  border: 2px solid #e7d6a0;
-  background: #b5bc7955;
-  color: #f0e0b8;
-  font: 11px var(--font-mono);
-  padding: 3px;
+  border: 2px solid var(--ink-overlay);
+  background: var(--accent-wash);
+  color: var(--ink-overlay);
+  font: var(--text-label) var(--font-mono);
+  padding: var(--space-1);
 }
 .inv-ghost.ok {
-  border-color: #bedb87;
-  background: #a4cd7555;
+  border-color: var(--good-bright);
+  background: var(--good-wash);
 }
 .inv-ghost.no {
-  border-color: #ef9b78;
-  background: #cc775555;
+  border-color: var(--danger-ink);
+  background: var(--danger-wash);
 }

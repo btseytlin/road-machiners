@@ -9,6 +9,7 @@
 @import "./styles/components.css";
 @import "./styles/hud.css";
 @import "./styles/dock.css";
+@import "./styles/drawings.css";
 @import "./styles/panels.css";
 @import "./styles/modal.css";
 @import "./styles/inventory.css";
@@ -21,3 +22,4 @@
 @import "./styles/boot.css";
 @import "./styles/new-game.css";
 @import "./styles/overlays.css";
+@import "./styles/overlays-dom.css";

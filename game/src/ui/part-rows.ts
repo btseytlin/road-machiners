@@ -77,7 +77,7 @@ export class PartRows {
     if (!r.payable) r.action.title = r.unpaidTitle;
     const li = el(
       "li",
-      { class: `part-row toned k-${partDef(r.part.defId).kind}`, style: toneStyle(r.part.defId), "data-part-row": id },
+      { class: `part-row tile toned k-${partDef(r.part.defId).kind}`, style: toneStyle(r.part.defId), "data-part-row": id },
       head,
       isOpen ? el("div", { class: "part-detail", id: detailId }, ...partDetail(r.world, r.part, r.base, r.action)) : null,
     );

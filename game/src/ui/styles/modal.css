@@ -1,18 +1,14 @@
+/* A modal takes its frame from .dialog. This file holds its size, its place and what hides behind it. */
 #ui .modal {
-  z-index: 20;
+  z-index: var(--z-modal);
   left: 50%;
-  top: 16px;
+  top: var(--space-7);
   transform: translateX(-50%);
   box-sizing: border-box;
-  width: min(1360px, calc(100vw - 32px));
-  height: min(760px, calc(100dvh - 250px));
+  width: min(var(--modal-width), calc(100vw - var(--space-10)));
+  height: min(var(--modal-height), calc(100dvh - var(--modal-reserve)));
   overflow: auto;
-  padding: 24px 28px;
-  background: #272d31;
-  border: 2px solid #818787;
-  box-shadow:
-    inset 0 0 0 4px #3d4549,
-    0 0 0 100vmax #101316b8;
+  padding: var(--space-9);
   scrollbar-width: thin;
 }
 #ui:has(.modal:not([style*="display: none"]))
@@ -23,11 +19,11 @@
    weapons panel's place, between the instruments and the log. */
 #ui:has(.modal:not([style*="display: none"])) > .opening-tip {
   top: auto;
-  left: 457px;
-  bottom: 14px;
+  left: var(--tip-left);
+  bottom: var(--hud-inset);
   transform: none;
-  max-width: calc(100vw - 457px - 282px - 32px);
-  z-index: 21;
+  max-width: calc(100vw - var(--tip-left) - var(--dock-width) - var(--space-10));
+  z-index: var(--z-over-modal);
 }
 #ui:has(.modal:not([style*="display: none"])) > .top-left,
 #ui:has(.modal:not([style*="display: none"])) > .bottom-left > .recenter,
@@ -36,7 +32,7 @@
 }
 #ui:has(.modal:not([style*="display: none"])) > .bottom-left > .instruments,
 #ui:has(.modal:not([style*="display: none"])) > .log {
-  z-index: 21;
+  z-index: var(--z-over-modal);
 }
 /* The hidden weapons leave the dock, so the instruments drop to the bottom line instead of wrapping above them. */
 #ui:has(.modal:not([style*="display: none"])) > .bottom-left > .weapons {
@@ -47,44 +43,44 @@
   display: none;
 }
 #ui .modal > h3 {
-  font-size: 26px;
-  margin-bottom: 12px;
-  padding-right: 120px;
+  font-size: var(--text-heading);
+  margin-bottom: var(--space-6);
+  padding-right: var(--modal-close-gutter);
 }
 .modal .tabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 5px;
-  border-bottom: 1px solid #636d71;
-  padding: 14px 0 12px;
-  margin-bottom: 16px;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--line);
+  padding: var(--space-6) 0;
+  margin-bottom: var(--space-7);
 }
 .modal .tabs button {
-  min-width: 85px;
+  min-width: var(--tab-min-width);
 }
 .modal table {
   width: 100%;
   border-collapse: collapse;
-  margin: 14px 0;
+  margin: var(--space-6) 0;
 }
 .modal td,
 .modal th {
-  padding: 10px 7px;
+  padding: var(--space-5) var(--space-3);
   text-align: left;
-  border-bottom: 1px solid #4b555b;
+  border-bottom: 1px solid var(--line-soft);
 }
 .modal th {
-  color: #c4b888;
+  color: var(--ink-label);
   font-weight: normal;
-  font-size: 12px;
+  font-size: var(--text-dense);
 }
 .modal td button {
-  font-size: 12px;
-  margin: 2px 0;
+  font-size: var(--text-dense);
+  margin: var(--space-1) 0;
 }
 #ui .modal .close {
   position: absolute;
-  right: 20px;
-  top: 23px;
-  font-size: 12px;
+  right: var(--space-8);
+  top: var(--space-9);
+  font-size: var(--text-dense);
 }

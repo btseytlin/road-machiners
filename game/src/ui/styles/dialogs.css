@@ -3,40 +3,34 @@
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);
-  z-index: 60;
+  z-index: var(--z-save);
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-width: 420px;
-  padding: 20px 24px;
-  background: #272d31;
-  border: 2px solid #818787;
-  box-shadow:
-    inset 0 0 0 4px #3d4549,
-    0 0 0 100vmax #101316b8;
+  gap: var(--space-4);
+  min-width: var(--panel-l);
+  padding: var(--space-8) var(--space-9);
 }
 #ui .new-game-block {
   position: fixed;
   inset: 0;
-  z-index: 59;
+  z-index: var(--z-new-game-block);
   padding: 0;
   background: transparent;
   border: 0;
   box-shadow: none;
 }
 .new-game .mode {
-  font-size: 15px;
+  font-size: var(--text-body);
 }
 .new-game .new-game-buttons {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
 }
 .save-panel .save-row {
   display: flex;
   justify-content: space-between;
-  gap: 24px;
-  padding: 8px 12px;
+  gap: var(--space-9);
+  padding: var(--space-4) var(--space-6);
 }
-

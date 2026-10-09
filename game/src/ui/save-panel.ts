@@ -84,7 +84,7 @@ export class SavePanel {
 
   private show(title: string, rows: HTMLElement[]): void {
     this.close();
-    this.root = panel("save-panel");
+    this.root = panel("save-panel dialog");
     this.root.setAttribute("role", "dialog");
     this.root.setAttribute("aria-label", title);
     this.root.append(el("h3", {}, title), ...rows, el("button", { class: "close", onclick: () => this.close() }, "Close"));

@@ -1,87 +1,93 @@
 #ui .dialogue {
   left: 50%;
-  top: 112px;
+  top: var(--hud-notice-top);
   transform: translateX(-50%);
-  min-width: 320px;
-  max-width: 460px;
-  background: var(--metal);
-  border-left: 4px solid var(--edge);
+  min-width: var(--panel-m);
+  max-width: var(--panel-l);
+  background: var(--surface-raised);
+  border-left: 4px solid var(--line-strong);
 }
 .dialogue .dialogue-speaker {
-  color: var(--muted);
-  margin-bottom: 4px;
+  color: var(--ink-muted);
+  margin-bottom: var(--space-2);
 }
 .dialogue .dialogue-line {
-  margin-bottom: 10px;
+  margin-bottom: var(--space-5);
 }
 .dialogue .dialogue-options {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-2);
 }
 .dialogue .dialogue-option {
   text-align: left;
+}
+
+/* Small buttons inside cards, rows and tables take the .btn-s size. */
+#ui .card-foot button,
+#ui .town-repair button,
+#ui .service button,
+#ui .job button,
+#ui .trade button,
+#ui button.buy-rank {
+  padding: var(--space-1) var(--space-4);
+  font-size: var(--text-dense);
+}
+#ui .trade button,
+#ui button.buy-rank {
+  font-family: var(--font-mono);
 }
 
 /* Shop tabs carry an icon beside the label. */
 .town-shop > .tabs button {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 12px 4px 8px;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-6) var(--space-2) var(--space-4);
 }
 .town-shop > .tabs .icon {
-  width: 20px;
-  height: 20px;
+  width: var(--icon-m);
+  height: var(--icon-m);
 }
 .modal .tabs.sub button {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  min-height: 28px;
+  gap: var(--space-2);
+  min-height: var(--icon-xl);
 }
 .modal .tabs.sub .icon {
-  width: 20px;
-  height: 20px;
+  width: var(--icon-m);
+  height: var(--icon-m);
 }
 .tabs.sub .count {
-  font: 11px var(--font-mono);
-  color: var(--muted);
+  font: var(--text-label) var(--font-mono);
+  color: var(--ink-muted);
 }
 
-/* Cards: one part or truck with its icon stats. */
+/* Cards: one part or truck with its icon stats. The box comes from .tile. */
 .cards {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-  gap: 10px;
-  margin-top: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(var(--panel-m), 1fr));
+  gap: var(--space-5);
+  margin-top: var(--space-4);
 }
 .card {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-  background: #22292d;
-  border: 1px solid #4b555b;
-  border-left: 4px solid #4b555b;
-}
-.card:hover {
-  border-color: #8e8a73;
-}
-.card.toned {
-  border-left-color: var(--tone);
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
 }
 .card.k-utility {
-  border-left-color: #b39a3a;
+  border-left-color: var(--accent-dim);
 }
 .card-head {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-4);
 }
 .card-head > .icon {
-  width: 36px;
-  height: 36px;
+  width: var(--icon-2xl);
+  height: var(--icon-2xl);
 }
 .card-name {
   flex: 1;
@@ -91,35 +97,35 @@
   line-height: 1.2;
 }
 .card-name b {
-  font-size: 15px;
+  font-size: var(--text-body);
   font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .card-name .dim {
-  font-size: 12px;
+  font-size: var(--text-dense);
 }
 .card-cond {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 6px;
-  margin: 2px 0 4px;
-  font-size: 12px;
+  gap: var(--space-3);
+  margin: var(--space-1) 0 var(--space-2);
+  font-size: var(--text-dense);
 }
 .cond {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: var(--space-1);
 }
 .cond .icon {
-  width: 12px;
-  height: 12px;
+  width: var(--icon-xs);
+  height: var(--icon-xs);
 }
 .cond .icon svg {
-  width: 12px;
-  height: 12px;
+  width: var(--icon-xs);
+  height: var(--icon-xs);
 }
 .cond-pristine {
   color: var(--cond-pristine);
@@ -129,87 +135,74 @@
   stroke: var(--cond-pristine);
 }
 .cond-w1 {
-  color: #e0d8ca;
+  color: var(--cond-w1);
 }
 .cond-w2 {
-  color: #cdbfa4;
+  color: var(--cond-w2);
 }
 .cond-w3 {
-  color: #b9a888;
+  color: var(--cond-w3);
 }
 .cond-w4 {
-  color: #a8997f;
+  color: var(--cond-w4);
 }
 .cond-junk {
-  color: #909395;
+  color: var(--cond-junk);
 }
 .card-compare {
-  margin: 4px 0 6px;
-  font-size: 12px;
+  margin: var(--space-2) 0 var(--space-3);
+  font-size: var(--text-dense);
   text-align: left;
 }
 #ui button.card-compare {
-  padding: 2px 6px;
-  font-size: 12px;
+  padding: var(--space-1) var(--space-4);
+  font-size: var(--text-dense);
 }
 .card-foot {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-4);
   margin-top: auto;
-  font-size: 12px;
+  font-size: var(--text-dense);
 }
-#ui .card-foot button {
-  padding: 3px 12px;
-  font-size: 13px;
-}
-/* Shop part list: one compact row per part, the open one shows its detail below. */
+/* Shop part list: one compact row per part, the open one shows its detail below. The box comes from .tile. */
 .part-rows {
   list-style: none;
-  margin: 8px 0 0;
+  margin: var(--space-4) 0 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-}
-.part-row {
-  background: #22292d;
-  border: 1px solid #4b555b;
-  border-left: 4px solid var(--tone);
-}
-.part-row:hover {
-  border-color: #8e8a73;
-  border-left-color: var(--tone);
+  gap: var(--space-2);
 }
 #ui button.part-sum {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) auto auto auto 14px;
+  grid-template-columns: var(--icon-xl) minmax(0, 1fr) auto auto auto var(--icon-xs);
   grid-template-areas: "icon name stat foot price chev";
   align-items: center;
-  gap: 4px 8px;
+  gap: var(--space-2) var(--space-4);
   width: 100%;
-  padding: 3px 8px 3px 6px;
+  padding: var(--space-1) var(--space-4) var(--space-1) var(--space-3);
   border: 0;
   background: transparent;
   text-align: left;
-  font-size: 13px;
+  font-size: var(--text-data);
 }
 .part-sum > .icon {
   grid-area: icon;
-  width: 28px;
-  height: 28px;
+  width: var(--icon-xl);
+  height: var(--icon-xl);
 }
 .part-name {
   grid-area: name;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
   min-width: 0;
-  font-size: 12px;
+  font-size: var(--text-dense);
 }
 .part-name b {
-  font-size: 14px;
+  font-size: var(--text-body);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -222,33 +215,33 @@
   grid-area: stat;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-2);
   white-space: nowrap;
 }
 .stat-chip .icon {
-  width: 16px;
-  height: 16px;
+  width: var(--icon-s);
+  height: var(--icon-s);
 }
 .stat-chip small {
-  margin-left: 2px;
-  color: var(--muted);
+  margin-left: var(--space-1);
+  color: var(--ink-muted);
 }
 .part-sum .footprint {
   grid-area: foot;
-  width: 22px;
+  width: var(--icon-l);
 }
 .part-sum .price {
   grid-area: price;
   white-space: nowrap;
-  min-width: 44px;
+  min-width: var(--icon-3xl);
   text-align: right;
 }
 .part-sum .chevron {
   grid-area: chev;
-  width: 7px;
-  height: 7px;
-  border-right: 2px solid var(--muted);
-  border-bottom: 2px solid var(--muted);
+  width: var(--space-3);
+  height: var(--space-3);
+  border-right: 2px solid var(--ink-muted);
+  border-bottom: 2px solid var(--ink-muted);
   transform: rotate(-45deg);
 }
 .part-sum[aria-expanded="true"] .chevron {
@@ -257,12 +250,12 @@
 .part-detail {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 2px 10px 8px;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-5) var(--space-4);
 }
 @container (max-width: 440px) {
   #ui button.part-sum {
-    grid-template-columns: 28px minmax(0, 1fr) auto 14px;
+    grid-template-columns: var(--icon-xl) minmax(0, 1fr) auto var(--icon-xs);
     grid-template-areas:
       "icon name price chev"
       ". stat foot foot";
@@ -274,110 +267,94 @@
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 2px;
-  font-size: 11px;
+  gap: var(--space-1);
+  font-size: var(--text-label);
 }
 /* Character screen: one card per skill with its rank pips, buy button, today's XP bar and perks. */
 .skill-level {
   display: flex;
-  gap: 3px;
+  gap: var(--space-1);
 }
 .skill-level i {
-  width: 10px;
-  height: 10px;
-  background: #3a4246;
-  border: 1px solid #5b6468;
+  width: var(--pip);
+  height: var(--pip);
+  background: var(--steel-3);
+  border: 1px solid var(--steel-5);
 }
 .skill-level i.on {
-  background: #e0c070;
-  border-color: #e0c070;
+  background: var(--accent);
+  border-color: var(--accent);
 }
 .skill-line {
   display: flex;
   justify-content: space-between;
-  font: 12px var(--font-mono);
+  font: var(--text-dense) var(--font-mono);
 }
 .meter.today > div {
-  background: #8d9296;
+  background: var(--steel-7);
 }
 .perk {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  font-size: 12px;
+  gap: var(--space-1);
+  font-size: var(--text-dense);
   text-align: left;
 }
 .perk.picked {
-  margin-top: 4px;
-  padding: 5px 8px;
-  border-left: 2px solid #e0c070;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-left: 2px solid var(--accent);
 }
 .perk-choice {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  margin-top: 4px;
-  font-size: 12px;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: var(--text-dense);
 }
 #ui button.perk {
-  padding: 5px 8px;
-}
-#ui button.buy-rank {
-  padding: 2px 8px;
-  font: 12px var(--font-mono);
+  padding: var(--space-2) var(--space-4);
 }
 .perk.locked {
-  margin-top: 4px;
-  padding: 5px 8px;
-  border-left: 2px solid #3a4246;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-left: 2px solid var(--steel-3);
 }
 .chip.xp-pool {
-  color: #e0c070;
+  color: var(--accent);
 }
 .footprint {
   display: grid;
-  gap: 2px;
+  gap: var(--space-1);
   flex: none;
 }
 .footprint i {
-  width: 9px;
-  height: 9px;
-  background: #8d9296;
-}
-.meter {
-  height: 4px;
-  background: #182111;
-  overflow: hidden;
-}
-.meter > div {
-  height: 100%;
-  background: #b5c78c;
-}
-.meter.broken {
-  background: #f0a080;
+  width: var(--pip);
+  height: var(--pip);
+  background: var(--steel-7);
 }
 
 /* Stat cells: icon, value and the change against the player's own. */
 .stat-grid {
   display: grid;
-  grid-template-columns: 18px 1fr auto 52px;
-  gap: 3px 8px;
+  grid-template-columns: var(--icon-m) 1fr auto calc(var(--icon-3xl) + var(--space-4));
+  gap: var(--space-1) var(--space-4);
   align-items: center;
 }
 .stat {
   display: contents;
-  font: 13px/1.15 var(--font-mono);
+  font: var(--text-data) / 1.15 var(--font-mono);
 }
 .stat .icon {
-  width: 18px;
-  height: 18px;
+  width: var(--icon-m);
+  height: var(--icon-m);
 }
 .stat-name {
-  font-size: 13px;
-  color: var(--muted);
+  font-size: var(--text-data);
+  color: var(--ink-muted);
 }
 .stat-val {
-  font: 13px var(--font-mono);
+  font: var(--text-data) var(--font-mono);
   text-align: right;
 }
 .stat .delta {
@@ -389,24 +366,24 @@
   fill: none;
 }
 .stat-val small {
-  margin-left: 2px;
-  font-size: 10px;
-  color: var(--muted);
+  margin-left: var(--space-1);
+  font-size: var(--text-caption);
+  color: var(--ink-muted);
 }
 .delta {
-  font: 11px var(--font-mono);
+  font: var(--text-label) var(--font-mono);
 }
 .delta.better {
-  color: #b9d27f;
+  color: var(--good-bright);
 }
 .delta.worse {
-  color: #f0957a;
+  color: var(--danger-ink);
 }
 .delta.same {
-  color: var(--muted);
+  color: var(--ink-muted);
 }
 
-/* Market: one row per good, buy and sell each beside their price. */
+/* Market: one row per good, buy and sell each beside their price. The line under each row comes from .row. */
 .goods {
   display: flex;
   flex-direction: column;
@@ -414,75 +391,63 @@
 .goods-head,
 .good-row {
   display: grid;
-  grid-template-columns: minmax(130px, 1fr) 148px 148px 44px 64px;
-  gap: 10px;
+  grid-template-columns: minmax(var(--col-name), 1fr) var(--col-trade) var(--col-trade) var(--icon-3xl) var(--col-profit);
+  gap: var(--space-5);
   align-items: center;
-  padding: 4px 6px;
-  border-bottom: 1px solid #3b454b;
 }
 .goods.truck .goods-head,
 .goods.truck .good-row {
-  grid-template-columns: minmax(110px, 1fr) 48px 148px 148px 44px 64px;
+  grid-template-columns:
+    minmax(calc(var(--col-name) - var(--space-8)), 1fr) calc(var(--icon-3xl) + var(--space-2)) var(--col-trade) var(--col-trade)
+    var(--icon-3xl) var(--col-profit);
 }
 .goods-head {
-  font-size: 12px;
+  font-size: var(--text-dense);
 }
 .goods-head span:nth-last-child(-n + 2),
 .goods.truck .goods-head span:nth-child(2) {
   text-align: right;
 }
 .good-row:hover {
-  background: #2c3438;
+  background: var(--surface-highlight);
 }
 .good-name {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-4);
 }
 .good-name .icon {
-  width: 26px;
-  height: 26px;
+  width: var(--icon-xl);
+  height: var(--icon-xl);
 }
 .trade {
   display: flex;
   align-items: center;
-  gap: 4px;
-}
-#ui .trade button {
-  padding: 2px 8px;
-  font: 12px var(--font-mono);
+  gap: var(--space-2);
 }
 .price {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
-  min-width: 52px;
-  font: 13px var(--font-mono);
-}
-.tag {
-  padding: 0 6px;
-  font-size: 11px;
-  border: 1px solid;
+  gap: var(--space-1);
+  min-width: var(--icon-3xl);
+  font: var(--text-data) var(--font-mono);
 }
 .tag.buy {
-  color: #b9d27f;
+  color: var(--good-bright);
 }
 .tag.sell {
-  color: #e8b86a;
+  color: var(--accent-warm);
 }
 .count,
 .profit {
   text-align: right;
   white-space: nowrap;
 }
-.num {
-  font: 13px var(--font-mono);
-}
 .cap {
   display: none;
-  margin-right: 4px;
-  font-size: 11px;
-  color: var(--muted);
+  margin-right: var(--space-2);
+  font-size: var(--text-label);
+  color: var(--ink-muted);
 }
 @container (max-width: 620px) {
   .goods-head {
@@ -493,7 +458,7 @@
     grid-template-areas:
       "name held profit"
       "buy buy sell";
-    row-gap: 6px;
+    row-gap: var(--space-3);
   }
   .goods.truck .good-row {
     grid-template-columns: 1fr auto auto auto;
@@ -528,19 +493,19 @@
 /* Garage services: fuel, supplies and repair, each a meter and its buttons. */
 .services {
   display: grid;
-  grid-template-columns: 30px minmax(140px, 1fr) auto auto auto;
-  gap: 8px 10px;
+  grid-template-columns: var(--icon-xl) minmax(var(--col-name), 1fr) auto auto auto;
+  gap: var(--space-4) var(--space-5);
   align-items: center;
-  padding: 6px 0 10px;
-  border-bottom: 1px solid #3b454b;
+  padding: var(--space-3) 0 var(--space-5);
+  border-bottom: 1px solid var(--line-faint);
 }
 .town-repair {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 0 10px;
-  border-bottom: 1px solid #3b454b;
-  font: 13px var(--font-mono);
+  gap: var(--space-4);
+  padding: var(--space-3) 0 var(--space-5);
+  border-bottom: 1px solid var(--line-faint);
+  font: var(--text-data) var(--font-mono);
 }
 .town-repair > button:first-of-type {
   margin-left: auto;
@@ -548,43 +513,35 @@
 .town-repair .bad {
   flex: 1;
 }
-#ui .town-repair button {
-  padding: 3px 10px;
-  font-size: 12px;
-}
 .service {
   display: contents;
 }
 .service-meter {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  font: 13px var(--font-mono);
+  gap: var(--space-1);
+  font: var(--text-data) var(--font-mono);
 }
 .service-meter .meter {
-  height: 6px;
-}
-#ui .service button {
-  padding: 3px 10px;
-  font-size: 12px;
+  height: var(--meter-l);
 }
 .note {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: var(--muted);
+  gap: var(--space-4);
+  color: var(--ink-muted);
 }
 
 /* Trucks: the layout map beside the stats. */
 .cards.trucks {
-  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-truck-min), 1fr));
 }
 .truck-card {
   flex-direction: row;
-  gap: 12px;
+  gap: var(--space-6);
 }
 .truck-card.own {
-  border-color: #a4a074;
+  border-color: var(--mark-own);
 }
 .truck-body .card-name {
   flex: none;
@@ -593,17 +550,15 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-3);
 }
 /* The truck's portrait beside its grid. */
 .truck-pics {
-  --map-cell: 10px;
+  --map-cell: var(--pip);
   --map-gap: 1px;
-  --map-pad: 3px;
-  --portrait-w: 128px;
-  --portrait-h: 80px;
+  --map-pad: var(--space-1);
   display: flex;
-  gap: 6px;
+  gap: var(--space-3);
   align-self: flex-start;
 }
 .chassis-portrait {
@@ -624,7 +579,7 @@
   align-self: flex-start;
   width: max-content;
   padding: var(--map-pad);
-  background: #1a2125;
+  background: var(--surface-sunk);
 }
 .chassis-map i {
   width: var(--map-cell);
@@ -634,50 +589,46 @@
   background: none;
 }
 .chassis-map .c-plain {
-  background: #3a4a52;
+  background: var(--map-plain);
 }
 .chassis-map .c-D {
-  background: #b0775a;
+  background: var(--map-deck);
 }
 .chassis-map .c-E {
-  background: #6f9aac;
+  background: var(--map-engine);
 }
 .chassis-map .c-X {
-  background: #26313a;
+  background: var(--map-none);
 }
 .chassis-map .c-F,
 .chassis-map .c-B,
 .chassis-map .c-L,
 .chassis-map .c-R {
-  background: #8d9ca3;
+  background: var(--map-side);
 }
 
 /* Contracts: one row per job. */
 /* Rows share the list's columns, so a short due time or action never shifts the reward and clock. */
 .jobs {
   display: grid;
-  grid-template-columns: 26px 1fr auto auto auto;
-  column-gap: 12px;
+  grid-template-columns: var(--icon-xl) 1fr auto auto auto;
+  column-gap: var(--space-6);
 }
 .job {
   display: grid;
   grid-column: 1 / -1;
   grid-template-columns: subgrid;
   align-items: center;
-  padding: 5px 4px;
-  border-bottom: 1px solid #3b454b;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line-faint);
 }
 .job > .icon {
-  width: 24px;
-  height: 24px;
+  width: var(--icon-l);
+  height: var(--icon-l);
 }
 /* A note in place of an action wraps, so it never squeezes the contract summary. */
 .job > .dim {
   max-width: 11em;
-}
-#ui .job button {
-  padding: 3px 12px;
-  font-size: 12px;
 }
 
 /* A hovered shop card lights its mount cells on the truck grid and dims the items over them. */
@@ -690,19 +641,19 @@
 .inv-grid[data-hint~="B"] .c-B,
 .inv-grid[data-hint~="L"] .c-L,
 .inv-grid[data-hint~="R"] .c-R {
-  box-shadow: inset 0 0 0 2px #eac779;
-  color: #eac779;
+  box-shadow: inset 0 0 0 2px var(--accent);
+  color: var(--accent);
 }
 
 /* The inspection panel reuses the card parts. */
 .inv-inspection .card-head {
-  margin-bottom: 6px;
+  margin-bottom: var(--space-3);
 }
 .inv-inspection .stat-grid {
-  margin: 8px 0;
+  margin: var(--space-4) 0;
 }
 .inv-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--space-2);
 }
