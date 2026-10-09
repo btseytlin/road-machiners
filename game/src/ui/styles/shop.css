@@ -260,7 +260,52 @@
   }
 }
 
-/* Character screen: one card per skill with its rank pips, buy button, today's XP bar and perks. */
+/* Character screen: one table row per skill. Rows share the head's columns through subgrid. */
+#ui .modal.character-screen {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.skill-table {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+  align-content: start;
+  display: grid;
+  grid-template-columns: max-content max-content repeat(2, minmax(var(--panel-s), 1fr)) minmax(var(--panel-s), 1fr) max-content;
+  gap: var(--space-2) var(--space-7);
+  align-items: center;
+  margin-top: var(--space-4);
+  font-size: var(--text-dense);
+}
+.skill-head,
+.skill-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+.skill-head {
+  color: var(--ink-label);
+  font-size: var(--text-caption);
+}
+.skill-row {
+  padding: var(--space-3) 0;
+  border-left: 2px solid transparent;
+}
+.skill-row.pending {
+  border-left-color: var(--accent);
+  background: var(--accent-wash);
+}
+.skill-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--text-body);
+  color: var(--ink-title);
+  cursor: help;
+}
 .skill-level {
   display: flex;
   gap: var(--space-1);
@@ -275,13 +320,31 @@
   background: var(--accent);
   border-color: var(--accent);
 }
-.skill-line {
-  display: flex;
-  justify-content: space-between;
-  font: var(--text-dense) var(--font-mono);
+.skill-today {
+  display: grid;
+  grid-template-columns: 1fr var(--icon-xl);
+  align-items: center;
+  gap: var(--space-4);
 }
-.meter.today > div {
-  background: var(--steel-7);
+.skill-today .num {
+  text-align: right;
+}
+.skill-buy {
+  justify-self: end;
+}
+.perk-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.perk-cell.picked {
+  color: var(--ink-bright);
+}
+.perk-cell.locked {
+  color: var(--ink-faint);
+}
+.perk-choice {
+  gap: var(--space-2);
 }
 .perk {
   display: flex;
@@ -290,25 +353,8 @@
   font-size: var(--text-dense);
   text-align: left;
 }
-.perk.picked {
-  margin-top: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  border-left: 2px solid var(--accent);
-}
-.perk-choice {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  margin-top: var(--space-2);
-  font-size: var(--text-dense);
-}
 #ui button.perk {
   padding: var(--space-2) var(--space-4);
-}
-.perk.locked {
-  margin-top: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  border-left: 2px solid var(--steel-3);
 }
 .chip.xp-pool {
   color: var(--accent);
