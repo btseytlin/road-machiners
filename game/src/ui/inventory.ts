@@ -63,9 +63,9 @@ import {
   storageItem,
   footprint,
 } from "./inventory-draw";
-import { fuelLiters, kg, moneyText } from "./units";
+import { fuelLiters, kg, moneyEl, pricedEl } from "./units";
 import { maxSpeedSteps } from "../sim/stats";
-import { moneyLabel, powerChip } from "./hud-readout";
+import { powerChip } from "./hud-readout";
 import {
   doubleClickCommand,
   HOLD_TO_DRAG_MS,
@@ -431,14 +431,14 @@ export class InventoryView {
       {
         class: "inv-patch",
         disabled: w.player.money < cost,
-        title: w.player.money < cost ? "Not enough money" : title,
+        title: w.player.money < cost ? "Not enough M's" : title,
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();
           this.run((world) => repairPart(world, part.id));
         },
       },
-      `${action} ${moneyText(cost)}`,
+      pricedEl(action, cost),
     );
   }
 
@@ -921,7 +921,7 @@ export function truckChips(w: World, opts: { freeCells: boolean } = { freeCells:
     "span",
     { class: "chips" },
     el("span", { class: "chip" }, createIcon("truck"), chassisDef(me.chassisId).name),
-    el("span", { class: `chip${w.player.money < 0 ? " bad" : ""}`, title: "Money" }, createIcon("money"), moneyLabel(w.player.money)),
+    el("span", { class: "chip", title: "M's" }, moneyEl(w.player.money)),
     opts.freeCells ? el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`) : null,
     el(
       "span",

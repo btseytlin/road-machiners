@@ -6,7 +6,7 @@ import type { PartInstance, World } from "../sim/types";
 import { conditionTag, footprint, headlineStat, partDetail, partIconEl, statChip, toneStyle } from "./cards";
 import { el } from "./dom";
 import { conditionStatus, conditionTier } from "./format";
-import { moneyText } from "./units";
+import { moneyEl } from "./units";
 
 export type PartRow = {
   world: World;
@@ -76,7 +76,7 @@ export class PartRows {
     const li = el(
       "li",
       { class: `part-row tile toned k-${partDef(r.part.defId).kind}${isOpen ? " on" : ""}`, style: toneStyle(r.part.defId), "data-part-row": id },
-      el("div", { class: "part-line" }, head, el("span", { class: `price num${r.payable ? "" : " bad"}` }, moneyText(r.price)), r.action),
+      el("div", { class: "part-line" }, head, el("span", { class: `price${r.payable ? "" : " bad"}` }, moneyEl(r.price)), r.action),
       isOpen ? el("div", { class: "part-detail", id: detailId }, ...partDetail(r.world, r.part, r.base)) : null,
     );
     li.addEventListener("mouseenter", () => r.onHover(true));

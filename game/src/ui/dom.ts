@@ -57,15 +57,6 @@ export function rightDock(): HTMLElement {
   return dock;
 }
 
-export type Box = { left: number; top: number; right: number; bottom: number };
-
-const isEmpty = (b: Box): boolean => b.right <= b.left || b.bottom <= b.top;
-
-export function overlaps(a: Box, b: Box): boolean {
-  if (isEmpty(a) || isEmpty(b)) return false;
-  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-}
-
 export function panel(cls: string, parent: HTMLElement = uiRoot()): HTMLElement {
   const p = el('div', { class: `panel ${cls}` });
   p.addEventListener('pointerdown', (e) => e.stopPropagation());

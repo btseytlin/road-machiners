@@ -49,7 +49,7 @@ import { el, panel } from "./dom";
 import { contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, heldContractDue, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
 import { InventoryView, truckChips } from "./inventory";
 import type { UiHost } from "./host";
-import { fuelLiters, moneyText } from "./units";
+import { fuelLiters, moneyEl, moneyText } from "./units";
 import { fuelCap, suppliesCap } from "../sim/stats";
 import { npcName } from "../sim/spawn";
 import { vehicleHasPerk } from "../sim/progress";
@@ -324,7 +324,7 @@ export class TownScreen {
       { class: "service" },
       createIcon(k),
       el("div", { class: "service-meter" }, el("span", {}, `${amount(have)} / ${amount(cap)}`), bar(have / cap)),
-      el("span", { class: priceTone(reason) }, `${moneyText(price)} ${supplyUnit(k, amount)}`),
+      el("span", { class: priceTone(reason) }, moneyEl(price), ` ${supplyUnit(k, amount)}`),
       this.button(`+${amount(1)}`, (x) => buySupply(x, k, 1), reason),
       this.button(afford > 0 ? `Fill ${amount(afford)}` : "Fill", (x) => buySupply(x, k, afford), reason),
     );
@@ -376,7 +376,7 @@ export class TownScreen {
   private swapButton(w: World, id: string, cost: number, tradeIn: number): HTMLElement {
     const gain = cost < 0;
     const short = gain ? "" : shortBy(w.player.money, cost);
-    const price = gain ? el("span", { class: "num good" }, `+${moneyText(-cost)}`) : priceSpan(cost, short === "");
+    const price = gain ? el("span", { class: "good" }, "+", moneyEl(-cost)) : priceSpan(cost, short === "");
     const button = reasonButton(["Swap", " ", price], () => this.run((x) => buyChassis(x, id)), short);
     if (!short) button.title = `Includes ${moneyText(tradeIn)} for your truck`;
     return button;
@@ -447,7 +447,7 @@ const TAB_LABEL: Record<Tab, string> = {
 const TAB_ICON: Record<Tab, IconName> = {
   market: "salt",
   buyParts: "parts",
-  sellParts: "money",
+  sellParts: "trade",
   trucks: "truck",
   contracts: "clock",
 };
@@ -485,7 +485,7 @@ function theyLack(npc: Vehicle, price: number): string {
 }
 
 function priceSpan(price: number, payable: boolean): HTMLElement {
-  return el("span", { class: payable ? "num" : "num bad" }, moneyText(price));
+  return el("span", { class: payable ? "" : "bad" }, moneyEl(price));
 }
 
 function stockCount(stock: PartInstance[], f: StockFilter): number {
@@ -511,7 +511,7 @@ const CONTRACT_ICON: Record<Contract["kind"], IconName> = {
 };
 
 function priceEl(price: number, payable = true): HTMLElement {
-  return el("span", { class: payable ? "price" : "price bad" }, moneyText(price));
+  return el("span", { class: payable ? "price" : "price bad" }, moneyEl(price));
 }
 
 const PROFIT_TONE = { gain: "better", loss: "worse", even: "same" } as const;
@@ -565,7 +565,7 @@ function contractRow(w: World, c: Contract, action: HTMLElement, posted = false)
     { class: "job" },
     createIcon(CONTRACT_ICON[c.kind]),
     el("span", {}, contractSummary(c)),
-    el("span", { class: "price good" }, `+${moneyText(c.reward)}`),
+    el("span", { class: "price good" }, "+", moneyEl(c.reward)),
     clock,
     action,
   );
@@ -800,7 +800,7 @@ export class TruckTradeScreen {
       { class: "service" },
       createIcon(k),
       el("div", { class: "service-meter" }, el("span", {}, `${amount(have)} / ${amount(cap)}`), bar(have / cap)),
-      el("span", { class: "num dim" }, `${moneyText(price)} ${supplyUnit(k, amount)}, ${amount(offer)} on offer`),
+      el("span", { class: "num dim" }, moneyEl(price), ` ${supplyUnit(k, amount)}, ${amount(offer)} on offer`),
       this.button(`+${amount(SUPPLY_STEP)}`, (x) => buyTruckSupply(x, npc.id, k, SUPPLY_STEP), reasonFor(SUPPLY_STEP)),
       this.button(most > 0 ? `Fill ${amount(most)}` : "Fill", (x) => buyTruckSupply(x, npc.id, k, most), reasonFor(1)),
     );
@@ -813,7 +813,7 @@ function partnerChips(npc: Vehicle): HTMLElement {
     "span",
     { class: "chips" },
     el("span", { class: "dim" }, "Them"),
-    el("span", { class: money < 0 ? "chip bad" : "chip", title: "Their money" }, moneyText(money)),
+    el("span", { class: "chip", title: "Their money" }, moneyEl(money)),
     el("span", { class: "chip", title: "Their free cargo cells" }, createIcon("cells"), `${freeCells(npc)} free`),
   );
 }

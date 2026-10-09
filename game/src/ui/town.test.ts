@@ -8,10 +8,10 @@ describe("the reason a purchase is out of reach", () => {
   });
 
   it("names the missing money in whole M", () => {
-    expect(shortBy(0, 1200)).toBe("Need 12 M more");
+    expect(shortBy(0, 1200)).toBe("Need 12 M's more");
   });
 
   it("counts a debt into what is missing", () => {
-    expect(shortBy(-300, 1200)).toBe("Need 15 M more");
+    expect(shortBy(-300, 1200)).toBe("Need 15 M's more");
   });
 });

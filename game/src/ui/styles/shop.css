@@ -358,6 +358,9 @@
   fill: none;
 }
 .delta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   font: var(--text-dense) var(--font-mono);
 }
 .delta.better {
@@ -411,6 +414,11 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
+}
+.trade > .amount,
+.job > .amount {
+  min-width: var(--icon-3xl);
+  font: var(--text-dense) var(--font-mono);
 }
 .price {
   display: inline-flex;

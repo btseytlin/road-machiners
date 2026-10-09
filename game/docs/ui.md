@@ -52,6 +52,8 @@ P17. Never narrate the screen. Text is allowed only when it adds a fact the scre
 
 P18. The world is the most precious space. Every pixel a panel covers hides the desert, the trucks and the road. A panel takes the smallest area its content needs. It sits at the screen edge, never in the middle of play, and it opens only while it is needed. Transient overlays such as tooltips fit their content and never cover a value the player is comparing. A wider or taller panel needs a reason in the decision it serves. Test: in a field screenshot with every always-on panel shown, the center of the screen is clear, and no panel has an empty block wider than its content column.
 
+P19. Controls are physical things. The truck's own controls look like hardware in a cab: toggle switches, knobs, keys and LCD displays like an old Casio. A setting that stays on is a switch, a level is a knob, and a readout of the truck is a display. A flat button is for a one-time action, like Buy or End turn, and for screens that are not part of the truck, like the menu. A new truck control picks the nearest existing piece in `drawings.css` before it gets a new look. Test: every control on the truck's HUD looks like something you could touch in a cab.
+
 ## 3. Information tiers
 
 Every fact on a screen belongs to one tier for the decision that screen serves. The tier decides where the fact goes, how big it is and when it shows. The same fact can be key on one screen and supporting on another. Price is key in the shop and absent on the map.
@@ -156,7 +158,9 @@ Every event gets a level before it gets a channel. A level fires on its channels
 
 ## 8. Words and numbers
 
-- A unit is written once per value and in one style. Money is whole M. Fuel is L. Mass is kg. Speed is km/h. Work and cooldowns are in turns. Deadlines are game hours.
+- A unit is written once per value and in one style. Money is whole M's. Fuel is L. Mass is kg. Speed is km/h. Work and cooldowns are in turns. Deadlines are game hours.
+- `src/ui/units.ts` owns money. On a screen, money is `moneyEl()`: the M's coin, then the number. In a sentence, a log line or a title it is `moneyText()`, as "1 M" or "15 M's". A button with a price uses `pricedEl()`, as "Buy" then the coin and the number. Debt is a negative amount with a real minus sign, in danger ink. A change in money prints through `moneyDelta()` as "+15 M's" or "−15 M's". A test fails when a screen builds money text by hand.
+- A count of turns prints through `turnsText()` as "2 turns". Value and unit are plain text, never "2t".
 - Each fact kind has one formatter in `src/ui/format.ts` or `src/ui/units.ts`, and every screen calls it.
 - A number that the player's choice will change shows its after value before the choice, like the truck's mass before a buy.
 - A label is a noun. A button is a verb. A reason is a short fact.
@@ -224,8 +228,12 @@ Use a shared piece before writing a new rule. A screen may add its own layout to
 - `.tabs` is a row of medium tab buttons, and `.tabs.sub` the small row inside a tab.
 - `.row` is a list line with a faint line under it. `.tile` is a boxed list item edged in its `--tone`.
 - `.chip` is a small boxed value. `.tag` is an outlined word in the color of its text.
+- `.amount` is money from `moneyEl()`: the `.coin`, sized in em by the text around it, then the number. The coin colors are the `--coin-*` tokens.
 - `.meter` is a bar that fills from the left. `.s` and `.l` change its height. `.broken` turns the track to danger. `.progress` fills it with the accent for timed work and recharge.
-- `.tooltip` is a note that opens over its anchor.
+- `.selected` is the one look of a chosen item: accent border and accent wash. A pressed `button.on` uses it too. No screen draws its own selected look. Drawn hardware, like a switch or a truck instrument, keeps its metal and takes the accent edge only.
+- `[aria-disabled="true"]` dims a control that cannot be used now. It keeps hover and focus, so its tooltip can say why.
+- `.tooltip` is a note that opens over its anchor. Words use the UI face and numbers use `.num`. It also gives the reason for a disabled control, as one short fact like "Need 12 M more".
+- `.tooltip-row` is one line of a tooltip breakdown: the label on the left in the UI face and the value on the right in mono, like Base and then each cause.
 - `.num` is a number in the mono face. `.dim`, `.good` and `.bad` color a word.
 
 ## 13. How to build a screen

@@ -168,3 +168,28 @@ describe("the game's styles", () => {
     expect(found).toEqual([]);
   });
 });
+
+const MONEY_BUILT_BY_HAND = /\}\s?M\b|["'`] M["'`]/;
+
+export function handBuiltMoney(source: string): string[] {
+  return source.split("\n").flatMap((line, i) => (MONEY_BUILT_BY_HAND.test(line) ? [`${i + 1}: ${line.trim()}`] : []));
+}
+
+describe("handBuiltMoney", () => {
+  it("flags a money string built with an M suffix", () => {
+    expect(handBuiltMoney("a(`${price} M`);\nb(price + ' M');")).toEqual(["1: a(`${price} M`);", "2: b(price + ' M');"]);
+  });
+
+  it("passes the shared formatters and words that contain an M", () => {
+    expect(handBuiltMoney("a(moneyText(price));\nb('MG fires');\nc(`${n} Meters`);")).toEqual([]);
+  });
+});
+
+describe("money text", () => {
+  it("is built only in units.ts", () => {
+    const offenders: string[] = [];
+    const files = readdirSync(new URL("src/ui/", root)).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts") && f !== "units.ts");
+    for (const f of files) for (const hit of handBuiltMoney(read(`src/ui/${f}`))) offenders.push(`src/ui/${f}:${hit}`);
+    expect(offenders).toEqual([]);
+  });
+});

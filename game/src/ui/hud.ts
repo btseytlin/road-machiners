@@ -5,27 +5,27 @@ import type { Vehicle, World } from "../sim/types";
 import { setupLabel } from "../sim/settings";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
-import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
+import { bottomLeft, el, isBrowserChord, panel, rightDock, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
 import {
   heldContractDue,
   contractSummary,
   eventText,
-  formatNpcActivity,
   workLabel,
   workProgress,
   formatNpcCargo,
   formatNpcMark,
-  formatNpcStates,
   formatNpcTraits,
+  formatVehicleState,
   type LogLine,
 } from "./format";
 import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, overdriveSwitch, versionLabel, type RescueReadout } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
-import { aimLine, aimMarks, type AimState } from "./weapons";
+import { aimMarks, type AimState } from "./weapons";
+import { token } from "./tokens";
 import { createSwitch } from "./switch";
 import { Tips } from "./tips";
-import { kph, moneyText } from "./units";
+import { moneyEl, moneyText } from "./units";
 import { playerVehicle } from "../sim/damage";
 import { affordableRanks, pendingPerkPairs } from "../sim/progress";
 import { canDouse } from "../sim/engine-heat";
@@ -72,7 +72,6 @@ type HudActions = {
   dialogue: DialogueHost;
   recenter: () => void;
   aimPart: (vehicleId: string, partId: string) => void;
-  aimBody: (vehicleId: string) => void;
   aimState: (vehicleId: string) => AimState;
 };
 export type CameraMode = "centered" | "auto";
@@ -109,11 +108,13 @@ export class Hud {
   private readoutSlot = el("div", { class: "readouts" });
   private actionSlot = el("div", { class: "instrument-actions" });
   private condition = new TruckConditionView();
-  private inspected = new TruckConditionView();
+  private inspected = new TruckConditionView(true);
+  private inspectedDraw = el("div", { class: "info-draw" }, this.inspected.root);
+  private infoColumn = el("div", { class: "info-column" });
   private contracts = panel("contracts dock-panel", rightDock());
   private log = new LogPanel();
   private info = panel("info");
-  private infoBody = el("div");
+  private infoBody = el("div", { class: "info-content" });
   private feedback = panel("feedback", topLeft());
   private action = panel("action");
   private toastBox = panel("toast");
@@ -127,10 +128,13 @@ export class Hud {
 
   private readonly dialogue: DialoguePanel;
 
-  private keepRadioClear = (): void => {
-    const shown = this.info.style.display !== "none";
-    const away = shown && overlaps(this.info.getBoundingClientRect(), this.radio.root.getBoundingClientRect());
-    this.radio.root.classList.toggle("away", away);
+  private placeInfo = (): void => {
+    if (this.info.style.display === "none") return;
+    const gap = parseFloat(token("--hud-gap"));
+    const top = topRight().getBoundingClientRect().bottom + gap;
+    this.info.style.top = `${top}px`;
+    this.info.style.height = `${this.radio.root.getBoundingClientRect().top - gap - top}px`;
+    this.inspected.fitTo(this.inspectedDraw);
   };
 
   constructor(private actions: HudActions, private radio: RadioPanel) {
@@ -139,10 +143,8 @@ export class Hud {
     this.info.style.display = "none";
     this.info.append(this.infoBody);
     this.contracts.style.display = "none";
-    const observer = new ResizeObserver(this.keepRadioClear);
-    observer.observe(this.info);
-    observer.observe(rightDock());
-    window.addEventListener("resize", this.keepRadioClear);
+    new ResizeObserver(this.placeInfo).observe(rightDock());
+    window.addEventListener("resize", this.placeInfo);
     this.toastBox.style.display = "none";
     this.rescue.style.display = "none";
     this.stranded.style.display = "none";
@@ -205,6 +207,10 @@ export class Hud {
 
   getInspectionRoot(): HTMLElement {
     return this.info;
+  }
+
+  getExchangeRoot(): HTMLElement {
+    return this.infoColumn;
   }
 
   private toast(text: string): void {
@@ -423,19 +429,7 @@ export class Hud {
 
   private renderReadouts(readout: ReturnType<typeof getHudReadout>): void {
     this.readoutSlot.replaceChildren(
-      ...readout.resources.map((resource) =>
-        el(
-          "span",
-          {
-            class: `resource ${resource.warning ? "bad" : ""}`,
-            title: resource.label,
-            "aria-label": `${resource.label}: ${resource.value}${resource.warning ? ", warning" : ""}`,
-            "data-resource": resource.label,
-          },
-          el("small", {}, resource.label),
-          el("strong", {}, `${resource.warning ? "! " : ""}${resource.value}`),
-        ),
-      ),
+      ...readout.resources.map(resourceEl),
       ...readout.survival.map((entry) =>
         el(
           "span",
@@ -517,60 +511,53 @@ export class Hud {
     return { marks: aimMarks(w, v.id), pick: (partId) => this.actions.aimPart(v.id, partId) };
   }
 
-  // The aim line above the diagram, for another truck only.
-  private aimControls(w: World, v: Vehicle): HTMLElement[] {
-    if (v.id === playerVehicle(w).id) return [];
-    const line = aimLine(this.actions.aimState(v.id), () => this.actions.aimBody(v.id));
-    return line ? [line] : [];
-  }
-
   showInfo(w: World, v: Vehicle | null, hostile: boolean): void {
     if (!v) {
       this.info.style.display = "none";
       return;
     }
     this.inspected.render(v, this.aimOf(w, v));
-    const stance =
-      v.faction === "player" ? "" : hostile ? "hostile" : "neutral";
     this.info.style.display = "";
     this.infoBody.replaceChildren(
-      ...infoHeading(w, v),
-      el(
-        "div",
-        { class: hostile ? "bad" : "dim" },
-        `${v.faction} ${stance}`.trim(),
-      ),
-      el("div", {}, `Speed ${kph(v.speed)} km/h`),
-      ...npcLines(w, v),
-      ...this.aimControls(w, v),
-      this.inspected.root,
+      infoHead(v, hostile),
+      el("div", { class: "info-state" }, formatVehicleState(w, v)),
+      ...quietLines(w, v).map((line) => el("div", { class: "info-state info-quiet" }, line)),
+      el("div", { class: "info-body" }, this.inspectedDraw, this.infoColumn),
     );
+    this.placeInfo();
   }
 }
 
-function infoHeading(w: World, v: Vehicle): HTMLElement[] {
-  if (!v.brain) return [el("h3", {}, v.name)];
-  const activity = formatNpcActivity(w, v);
-  return [
-    el("h3", {}, v.brain.driver),
-    ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
-    el("div", { class: "dim" }, v.name),
-  ];
+type Resource = ReturnType<typeof getHudReadout>["resources"][number];
+
+function resourceEl(resource: Resource): HTMLElement {
+  const attrs = {
+    title: resource.label,
+    "aria-label": `${resource.label}: ${resource.value}${resource.warning ? ", warning" : ""}`,
+    "data-resource": resource.label,
+  };
+  const bad = resource.warning ? " bad" : "";
+  const mark = resource.warning ? "! " : "";
+  if (resource.balance === undefined) {
+    return el("span", { class: `resource${bad}`, ...attrs }, el("small", {}, resource.label), el("strong", {}, mark, resource.value));
+  }
+  return el("span", { class: `resource unlabeled${bad}`, ...attrs }, el("strong", {}, mark, moneyEl(resource.balance)));
 }
 
-function npcLines(w: World, v: Vehicle): HTMLElement[] {
+function infoHead(v: Vehicle, hostile: boolean): HTMLElement {
+  const quiet = [v.brain ? v.name : null, v.faction].filter((part) => part !== null).join(", ");
+  return el(
+    "div",
+    { class: "info-head" },
+    el("span", { class: "info-name" }, v.brain ? v.brain.driver : v.name),
+    el("span", { class: "info-quiet" }, quiet),
+    ...(v.faction === "player" ? [] : [el("span", { class: `tag ${hostile ? "bad" : "dim"}` }, hostile ? "hostile" : "neutral")]),
+  );
+}
+
+function quietLines(w: World, v: Vehicle): string[] {
   if (!v.brain) return [];
-  const traits = formatNpcTraits(w, v);
-  const cargo = formatNpcCargo(w, v);
-  const mark = formatNpcMark(w, v);
-  return [
-    ...(traits ? [el("div", { class: "npc-traits" }, traits)] : []),
-    ...(cargo ? [el("div", { class: "npc-cargo" }, cargo)] : []),
-    ...(mark ? [el("div", { class: "npc-mark" }, mark)] : []),
-    ...formatNpcStates(w, v).map((line) =>
-      el("div", { class: "npc-state" }, line),
-    ),
-  ];
+  return [formatNpcTraits(w, v), formatNpcCargo(w, v), formatNpcMark(w, v)].filter((line) => line !== null);
 }
 
 function shownWork(action: ContextAction | null, work: Work | null): Work | null {

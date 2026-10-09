@@ -18,7 +18,7 @@ export function chooseSaveFate(reason: string, canMigrate: boolean, stored: unkn
       resolve();
     };
     root.append(
-      el('div', {}, 'This update changed the world. Migrate keeps your skills, perks, money, truck, parts and cargo, and moves you to a town. The rest of the world starts fresh.'),
+      el('div', {}, "This update changed the world. Migrate keeps your skills, perks, M's, truck, parts and cargo, and moves you to a town. The rest of the world starts fresh."),
       el('div', { class: 'dim' }, reason),
       el(
         'div',
