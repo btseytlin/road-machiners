@@ -20,15 +20,15 @@ const DUST_COLOR = 0xd8c098;
 const TAU = Math.PI * 2;
 
 const LOOK = {
-  flash: { life: 0.2, size: { from: 0.9, to: 1.5 }, colors: [0xfff4d0, 0xffb050], alpha: { peak: 1, fadeIn: 0.05 }, drag: 0, gravity: 0, streak: 0 },
-  fireball: { life: 0.85, size: { from: 0.5, to: 1.2 }, colors: [0xfff0b0, 0xffb040, 0xc04810, 0x3a1408], alpha: { peak: 0.9, fadeIn: 0.08 }, drag: 2.2, gravity: -1.5, streak: 0 },
-  flame: { life: 0.9, size: { from: 0.5, to: 1.1 }, colors: [0xffd070, 0xff7a20, 0x7a2008], alpha: { peak: 0.95, fadeIn: 0.1 }, drag: 1.2, gravity: -1.2, streak: 0 },
-  spark: { life: 0.6, size: { from: 0.09, to: 0.05 }, colors: [0xfff0c0, 0xff9030, 0x802010], alpha: { peak: 1, fadeIn: 0.02 }, drag: 0.6, gravity: 9, streak: 0.07 },
-  metal: { life: 0.45, size: { from: 0.09, to: 0.05 }, colors: [0xffffff, 0xffc060, 0xa04018], alpha: { peak: 1, fadeIn: 0.02 }, drag: 0.5, gravity: 9, streak: 0.06 },
-  muzzleGlow: { life: 0.1, size: { from: 0.9, to: 0.4 }, colors: [PAL.flash, 0xff9030], alpha: { peak: 0.9, fadeIn: 0.1 }, drag: 0, gravity: 0, streak: 0 },
-  smoke: { life: 4, size: { from: 1, to: 3.5 }, colors: [0x5a4e42, 0x30291f], alpha: { peak: 0.5, fadeIn: 0.1 }, drag: 1, gravity: -0.35, streak: 0 },
-  soot: { life: 2, size: { from: 0.5, to: 1.8 }, colors: [0x2a2622, 0x1c1916], alpha: { peak: 0.65, fadeIn: 0.1 }, drag: 0.8, gravity: -0.4, streak: 0 },
-  dust: { life: 1.3, size: { from: 0.4, to: 1.5 }, alpha: { peak: 0.5, fadeIn: 0.1 }, drag: 2.2, gravity: -0.2, streak: 0 },
+  flash: { life: 0.2, size: { from: 0.9, to: 1.5 }, colors: [0xfff4d0, 0xffb050], alpha: { peak: 1, fadeIn: 0.05 }, drag: 0, gravity: 0, streak: 0, form: 'round' },
+  fireball: { life: 0.85, size: { from: 0.5, to: 1.2 }, colors: [0xfff0b0, 0xffb040, 0xc04810, 0x3a1408], alpha: { peak: 0.9, fadeIn: 0.08 }, drag: 2.2, gravity: -1.5, streak: 0, form: 'cloud' },
+  flame: { life: 0.9, size: { from: 0.5, to: 1.1 }, colors: [0xffd070, 0xff7a20, 0x7a2008], alpha: { peak: 0.95, fadeIn: 0.1 }, drag: 1.2, gravity: -1.2, streak: 0, form: 'cloud' },
+  spark: { life: 0.6, size: { from: 0.09, to: 0.05 }, colors: [0xfff0c0, 0xff9030, 0x802010], alpha: { peak: 1, fadeIn: 0.02 }, drag: 0.6, gravity: 9, streak: 0.07, form: 'round' },
+  metal: { life: 0.45, size: { from: 0.09, to: 0.05 }, colors: [0xffffff, 0xffc060, 0xa04018], alpha: { peak: 1, fadeIn: 0.02 }, drag: 0.5, gravity: 9, streak: 0.06, form: 'round' },
+  muzzleGlow: { life: 0.1, size: { from: 0.9, to: 0.4 }, colors: [PAL.flash, 0xff9030], alpha: { peak: 0.9, fadeIn: 0.1 }, drag: 0, gravity: 0, streak: 0, form: 'round' },
+  smoke: { life: 4, size: { from: 1, to: 3.5 }, colors: [0x5a4e42, 0x30291f], alpha: { peak: 0.5, fadeIn: 0.1 }, drag: 1, gravity: -0.35, streak: 0, form: 'cloud' },
+  soot: { life: 2, size: { from: 0.5, to: 1.8 }, colors: [0x2a2622, 0x1c1916], alpha: { peak: 0.65, fadeIn: 0.1 }, drag: 0.8, gravity: -0.4, streak: 0, form: 'cloud' },
+  dust: { life: 1.3, size: { from: 0.4, to: 1.5 }, alpha: { peak: 0.5, fadeIn: 0.1 }, drag: 2.2, gravity: -0.2, streak: 0, form: 'cloud' },
 } as const;
 
 const BLAST = {

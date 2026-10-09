@@ -3,7 +3,7 @@ import { toMap, type V3 } from '../../../phys/frames';
 import { inLiveRange } from '../../../sim/fidelity';
 import type { World } from '../../../sim/types';
 import { count } from '../../../perf';
-import { CARD_SHAPES, type CardBatch } from './cards';
+import { CARD_SHAPES, ROUND_SHAPE, type CardBatch } from './cards';
 
 export const OVERWRITE_COUNTER = 'fx.particles.overwritten';
 export const FAR_COUNTER = 'fx.particles.far';
@@ -22,6 +22,7 @@ export type ParticleLook = {
   drag: number;
   gravity: number;
   streak: number;
+  form: 'cloud' | 'round';
 };
 
 type Slot = {
@@ -76,7 +77,7 @@ export class Particles {
     slot.scale = scale;
     slot.spin = Math.random() * Math.PI * 2;
     slot.spinRate = (Math.random() - 0.5) * 2 * SPIN_RATE;
-    slot.shape = Math.floor(Math.random() * CARD_SHAPES);
+    slot.shape = look.form === 'round' ? ROUND_SHAPE : Math.floor(Math.random() * CARD_SHAPES);
     slot.look = look;
   }
 

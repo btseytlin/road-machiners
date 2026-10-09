@@ -287,8 +287,8 @@ export class Fx3D {
       const pale = tint.clone().lerp(new THREE.Color(0xffffff), 0.15);
       const colors = [tint.getHex(), pale.getHex()];
       look = {
-        dust: { life: d.life, size: d.size, colors, alpha: d.alpha, drag: d.drag, gravity: d.gravity, streak: 0 },
-        haze: { life: h.life, size: h.size, colors, alpha: h.alpha, drag: h.drag, gravity: h.gravity, streak: 0 },
+        dust: { life: d.life, size: d.size, colors, alpha: d.alpha, drag: d.drag, gravity: d.gravity, streak: 0, form: 'cloud' },
+        haze: { life: h.life, size: h.size, colors, alpha: h.alpha, drag: h.drag, gravity: h.gravity, streak: 0, form: 'cloud' },
         clod: new THREE.Color(ground.color).multiplyScalar(SPRAY.clods.shade),
       };
       this.sprayLooks.set(ground, look);

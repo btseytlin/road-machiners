@@ -4,7 +4,7 @@ import { perfSnapshot, resetPerf } from '../../../perf';
 import type { Card, CardBatch } from './cards';
 import { alphaAt, colorAt, FAR_COUNTER, OVERWRITE_COUNTER, Particles, sizeAt, type ParticleLook } from './particles';
 
-const LOOK: ParticleLook = { life: 1, size: { from: 1, to: 3 }, colors: [0xff0000, 0x0000ff], alpha: { peak: 0.6, fadeIn: 0.2 }, drag: 0, gravity: 0, streak: 0 };
+const LOOK: ParticleLook = { life: 1, size: { from: 1, to: 3 }, colors: [0xff0000, 0x0000ff], alpha: { peak: 0.6, fadeIn: 0.2 }, drag: 0, gravity: 0, streak: 0, form: 'cloud' };
 const AT = { x: 0, y: 0, z: 0 };
 const STILL = { x: 0, y: 0, z: 0 };
 const NEAR = () => true;

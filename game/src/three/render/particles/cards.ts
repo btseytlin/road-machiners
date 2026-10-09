@@ -3,6 +3,7 @@ import { count } from '../../../perf';
 import { PROP_BIT, TRUCK_BIT } from '../models';
 
 export const CARD_SHAPES = 4;
+export const ROUND_SHAPE = CARD_SHAPES;
 const ATLAS_PX = 256;
 const ATLAS_CELLS = 2;
 const SHAPE_LUMPS = { min: 4, spread: 3 };
@@ -11,6 +12,7 @@ const CARD_LIGHT = { scatter: 0.7 };
 const CARD_ORDER = { lit: 904, glow: 906 };
 const FILL_ALPHA_STEPS = 64;
 const ROUND_EDGE = '(1.0 - smoothstep(0.84, 1.0, length(vBall)))';
+const CARD_BODY = 'mix(texture2D(shapes, vUv).a, pow(max(0.0, 1.0 - dot(vBall, vBall)), 2.0), vRound)';
 export const OVERFILL_COUNTER = 'fx.cards.overfilled';
 
 export type CardLight = { sunDir: THREE.Vector3; sun: THREE.Color; sky: THREE.Color; ground: THREE.Color };
@@ -42,6 +44,7 @@ const VERTEX = `
   uniform vec3 sunDir;
   varying vec2 vUv;
   varying vec2 vBall;
+  varying float vRound;
   varying vec4 vTint;
   varying vec3 vSun;
   varying vec3 vUp;
@@ -53,6 +56,7 @@ const VERTEX = `
     float row = floor(shape / ${ATLAS_CELLS}.0);
     vUv = (turned + vec2(col, row)) / ${ATLAS_CELLS}.0;
     vBall = (uv - 0.5) * 2.0;
+    vRound = shape > ${CARD_SHAPES - 0.5} ? 1.0 : 0.0;
     vTint = tint;
     vSun = normalize((viewMatrix * vec4(sunDir, 0.0)).xyz);
     vUp = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
@@ -76,11 +80,12 @@ const LIT_FRAGMENT = `
   uniform vec3 groundColor;
   varying vec2 vUv;
   varying vec2 vBall;
+  varying float vRound;
   varying vec4 vTint;
   varying vec3 vSun;
   varying vec3 vUp;
   void main() {
-    float a = vTint.a * texture2D(shapes, vUv).a * ${ROUND_EDGE};
+    float a = vTint.a * ${CARD_BODY} * ${ROUND_EDGE};
     if (a <= 0.003) discard;
     vec3 n = normalize(vec3(vBall, sqrt(max(0.0, 1.0 - dot(vBall, vBall) * 0.5))));
     vec3 sky = mix(groundColor, skyColor, 0.5 * dot(n, vUp) + 0.5);
@@ -96,9 +101,10 @@ const GLOW_FRAGMENT = `
   uniform sampler2D shapes;
   varying vec2 vUv;
   varying vec2 vBall;
+  varying float vRound;
   varying vec4 vTint;
   void main() {
-    float a = vTint.a * texture2D(shapes, vUv).a * ${ROUND_EDGE};
+    float a = vTint.a * ${CARD_BODY} * ${ROUND_EDGE};
     if (a <= 0.003) discard;
     gl_FragColor = vec4(vTint.rgb, a);
     #include <colorspace_fragment>

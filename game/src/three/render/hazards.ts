@@ -16,7 +16,7 @@ import { shutDownTurnsLeft } from '../../sim/utility';
 import { dist, type Vec } from '../../sim/vec';
 import { playerSees } from '../../sim/vision';
 import { HarpoonLinesView } from './lines';
-import { CARD_SHAPES, type Card, type FxCards } from './particles/cards';
+import { CARD_SHAPES, ROUND_SHAPE, type Card, type FxCards } from './particles/cards';
 import { liveNear, Particles, type ParticleLook } from './particles/particles';
 import { newWake, stepWake, WakeTracker, type WakeMover, type WakeState } from './particles/wake';
 import type { VehicleView } from './vehicle';
@@ -664,8 +664,8 @@ const FLARE_FLIGHT: FlightLook = { casing: PAL.flare.casing, length: 0.09, radiu
 type FlareView = { at: THREE.Vector3; shine: FlareShine | null; igniteMs: number; bornTurn: number; emit: { sparks: number; smoke: number } };
 type FlareShine = { bright: number; haloScale: number; haloAlpha: number };
 
-const FLARE_SPARK: ParticleLook = { life: 0.9, size: { from: 0.45, to: 0.12 }, colors: [0xfff4d0, 0xffb040, 0xff5014], alpha: { peak: 1, fadeIn: 0.05 }, drag: 0.6, gravity: 9, streak: 0.14 };
-const FLARE_SMOKE: ParticleLook = { life: 4, size: { from: 1, to: 4 }, colors: [0xc89878, 0x9a928c, 0x6c6762], alpha: { peak: 0.4, fadeIn: 0.15 }, drag: 0.5, gravity: -0.9, streak: 0 };
+const FLARE_SPARK: ParticleLook = { life: 0.9, size: { from: 0.45, to: 0.12 }, colors: [0xfff4d0, 0xffb040, 0xff5014], alpha: { peak: 1, fadeIn: 0.05 }, drag: 0.6, gravity: 9, streak: 0.14, form: 'round' };
+const FLARE_SMOKE: ParticleLook = { life: 4, size: { from: 1, to: 4 }, colors: [0xc89878, 0x9a928c, 0x6c6762], alpha: { peak: 0.4, fadeIn: 0.15 }, drag: 0.5, gravity: -0.9, streak: 0, form: 'cloud' };
 const FLARE_FX = {
   sparks: { perSecond: 28, pool: 200, speed: { min: 1.5, spread: 3.5 }, up: 1.2, scale: { min: 0.6, spread: 0.8 } },
   smoke: { perSecond: 8, pool: 120, drift: 0.5, rise: 0.4, scale: { min: 0.8, spread: 0.4 } },
@@ -707,7 +707,7 @@ class FlaresView {
 
   private glow(cards: FxCards, at: THREE.Vector3, hex: number, size: number, alpha: number): void {
     this.color.set(hex);
-    cards.glow.push({ x: at.x, y: at.y, z: at.z, size, spin: 0, shape: 0, r: this.color.r, g: this.color.g, b: this.color.b, alpha, sx: 0, sy: 0, sz: 0 });
+    cards.glow.push({ x: at.x, y: at.y, z: at.z, size, spin: 0, shape: ROUND_SHAPE, r: this.color.r, g: this.color.g, b: this.color.b, alpha, sx: 0, sy: 0, sz: 0 });
   }
 
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null): void {
@@ -843,7 +843,7 @@ class PulseView {
 
   private spark(cards: FxCards, at: THREE.Vector3, hex: number, size: number, alpha: number, streak: THREE.Vector3): void {
     this.color.set(hex);
-    cards.glow.push({ x: at.x, y: at.y, z: at.z, size, spin: 0, shape: 0, r: this.color.r, g: this.color.g, b: this.color.b, alpha, sx: streak.x, sy: streak.y, sz: streak.z });
+    cards.glow.push({ x: at.x, y: at.y, z: at.z, size, spin: 0, shape: ROUND_SHAPE, r: this.color.r, g: this.color.g, b: this.color.b, alpha, sx: streak.x, sy: streak.y, sz: streak.z });
   }
 
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null): void {
