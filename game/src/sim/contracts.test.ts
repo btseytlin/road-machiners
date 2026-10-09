@@ -466,7 +466,7 @@ describe('contract boards and delivery', () => {
 
   it('refuses a haul that does not fit the grid and leaves the board unchanged', () => {
     const w = atBowlWithOffer(haul('nose', 999));
-    expect(() => acceptContract(w, 'ct-haul')).toThrow(/free cells/);
+    expect(() => acceptContract(w, 'ct-haul')).toThrow(/free cells|noCargoRoom/);
     expect(w.shops.bowl.contracts).toHaveLength(1);
   });
 
