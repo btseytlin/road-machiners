@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { LOOP_STEPS } from './delivery';
+import { LOOP_STEPS } from './vocabulary';
 import { LABELS } from './labels';
 
 it('labels every loop step and nothing else', () => {
