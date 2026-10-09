@@ -102,18 +102,18 @@ Each weapon's round:
 <!-- wiki:armor -->
 | id | name | tier | value (M) | cells (w x h) | mass (kg) | hp | armor | tall | blast armor | field repair | ram mult | claymore |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| plates | Steel plates | 2 | 102 | 1 x 3 | 225 | 80 | 12 | false | 12 | capped | 1 |  |
-| cage | Rebar cage | 1 | 73 | 1 x 2 | 110 | 60 | 2 | false | 20 | capped | 1 |  |
-| ram | Ram bar | 2 | 110 | 3 x 1 | 480 | 100 | 20 | false | 8 | capped | 2 |  |
-| scrapPanels | Scrap panels | 1 | 50 | 1 x 2 | 200 | 44 | 5 | false | 5 | full | 1 |  |
-| ceramicPlates | Ceramic plates | 2 | 150 | 1 x 2 | 100 | 36 | 22 | false | 8 | none | 1 |  |
-| spacedArmor | Spaced armor | 2 | 142 | 1 x 4 | 260 | 110 | 10 | false | 28 | capped | 1 |  |
-| reinforcedCage | Reinforced cage | 2 | 117 | 1 x 3 | 180 | 130 | 4 | false | 26 | capped | 1.2 |  |
-| plowRam | Plow ram | 3 | 201 | 3 x 1 | 420 | 170 | 25 | false | 12 | none | 2.8 |  |
+| plates | Steel plates | 2 | 102 | 1 x 3 | 112 | 80 | 12 | false | 12 | capped | 1 |  |
+| cage | Rebar cage | 1 | 73 | 1 x 2 | 55 | 60 | 2 | false | 20 | capped | 1 |  |
+| ram | Ram bar | 2 | 86 | 3 x 1 | 135 | 100 | 8 | false | 8 | capped | 2 |  |
+| scrapPanels | Scrap panels | 1 | 50 | 1 x 2 | 80 | 44 | 5 | false | 5 | full | 1 |  |
+| ceramicPlates | Ceramic plates | 2 | 150 | 1 x 2 | 50 | 36 | 22 | false | 8 | none | 1 |  |
+| spacedArmor | Spaced armor | 2 | 142 | 1 x 4 | 130 | 110 | 10 | false | 28 | capped | 1 |  |
+| reinforcedCage | Reinforced cage | 2 | 117 | 1 x 3 | 90 | 130 | 4 | false | 26 | capped | 1.2 |  |
+| plowRam | Plow ram | 3 | 167 | 3 x 1 | 126 | 170 | 10 | false | 10 | none | 2.8 |  |
 | claymoreRam | Claymore ram | 2 | 140 | 3 x 1 | 380 | 80 | 14 | false | 6 | capped | 1.5 | {"minImpact":3,"blast":{"damage":60,"pen":12,"radius":2},"selfBlast":{"damage":25,"pen":6},"throw":{"impulse":40000,"lift":0.35},"reload":20} |
-| steelPlate | Steel plate | 2 | 66 | 1 x 1 | 80 | 28 | 12 | false | 12 | capped | 1 |  |
-| scrapSheet | Scrap sheet | 1 | 34 | 1 x 1 | 100 | 22 | 5 | false | 5 | full | 1 |  |
-| ceramicTile | Ceramic tile | 2 | 87 | 1 x 1 | 50 | 18 | 22 | false | 8 | none | 1 |  |
+| steelPlate | Steel plate | 2 | 66 | 1 x 1 | 40 | 28 | 12 | false | 12 | capped | 1 |  |
+| scrapSheet | Scrap sheet | 1 | 34 | 1 x 1 | 40 | 22 | 5 | false | 5 | full | 1 |  |
+| ceramicTile | Ceramic tile | 2 | 87 | 1 x 1 | 25 | 18 | 22 | false | 8 | none | 1 |  |
 <!-- /wiki:armor -->
 
 ## Cargo
