@@ -300,7 +300,7 @@ class SmokeCloudsView {
     const shown = new Map(world.smoke.filter((c) => volleyShown(clock, 'smoke', c.id) && isShown(world, c)).map((c) => [c.id, c]));
     ageOut(this.views, shown, nowMs, SMOKE_LOOK.dissolve.ms);
     for (const c of shown.values()) (this.views.get(c.id) ?? this.makeView(world, views, c, madeThisTurn(clock, 'smoke', c.id), nowMs)).cloud = c;
-    const { movers, dt } = this.wake.update(positionsOf(views), nowMs);
+    const { movers, dt } = this.views.size > 0 ? this.wake.update(positionsOf(views), nowMs) : { movers: [], dt: 0 };
     const share = Math.floor(SMOKE_LOOK.cardBudget / Math.max(1, this.views.size));
     for (const view of this.views.values()) {
       view.limit = Math.min(view.puffs.length, share);

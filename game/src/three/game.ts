@@ -149,6 +149,7 @@ export class Game {
   private readonly radioLights = new RadioLights();
   private frames: Record<string, VehicleFrame> = {};
   private anim: Playback | null = null;
+  private turnStart: World | null = null;
   private crashCues: CollisionCues | null = null;
   private breakCues = new BreakCues([]);
   private readonly travel = new Travel(CONFIG.travelHoldMs);
@@ -697,6 +698,7 @@ export class Game {
     this.saves.logWorld(world);
     this.updateLoops();
     this.anim = playback;
+    this.turnStart = playback.before;
     this.saves.beginTurn();
     this.live = {
       visible: new Set(this.world.player.visible),
@@ -863,8 +865,8 @@ export class Game {
 
   private playBreak(b: PartBreak): void {
     if (this.eventPoint(b.vehicle) === null) return;
-    if (!this.anim) throw new Error(`Part ${b.part} of ${b.vehicle} broke outside turn playback`);
-    const p = playBreak(this.world, this.anim.before, this.obstacles.parts, this.fx, this.views.get(b.vehicle), b);
+    if (!this.turnStart) throw new Error(`Part ${b.part} of ${b.vehicle} broke before any turn played`);
+    const p = playBreak(this.world, this.turnStart, this.obstacles.parts, this.fx, this.views.get(b.vehicle), b);
     if (p) this.sound.at("part-broken", p, 0);
     playCookOff(this.combatHost(), b);
   }
