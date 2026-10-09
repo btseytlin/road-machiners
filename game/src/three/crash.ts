@@ -97,9 +97,9 @@ function onWindowError(facts: ErrorFacts): void {
 
 // The browser log and the debug console get each hidden foreign error once. No listener runs, so saves go on.
 function ignoreForeign(facts: ErrorFacts): void {
-  const text = `${FOREIGN_NOTE}: ${facts.message} ${facts.filename}`.trim();
-  if (!warned.has(text)) console.warn(FOREIGN_NOTE, facts.message, facts.filename);
-  warned.add(text);
+  const key = `${facts.message} ${facts.filename}`;
+  if (!warned.has(key)) console.warn(FOREIGN_NOTE, facts.message, facts.filename);
+  warned.add(key);
   if (!report || reported.has(FOREIGN_NOTE)) return;
   reported.add(FOREIGN_NOTE);
   report(FOREIGN_NOTE);
@@ -109,14 +109,10 @@ function onError(err: unknown, facts: ErrorFacts | null = null): void {
   for (const sink of sinks) sink(err);
   for (const listener of listeners) listener();
   if (!report) return showCrash(err, facts);
-  reportOnce(report, err instanceof Error ? err.message : String(err));
-}
-
-// The browser logs every error itself. The debug console gets each message once, so a per-frame error does not flood it.
-function reportOnce(send: (text: string) => void, text: string): void {
+  const text = err instanceof Error ? err.message : String(err);
   if (reported.has(text)) return;
   reported.add(text);
-  send(`Error: ${text}`);
+  report(`Error: ${text}`);
 }
 
 function showCrash(err: unknown, facts: ErrorFacts | null): void {
