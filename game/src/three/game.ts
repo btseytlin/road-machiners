@@ -71,8 +71,8 @@ import { ZonesView } from "./render/zones";
 import { daylightAt, enableSunShadows, lightScene, VehicleLights, sunLight, vehicleLampsOn } from "./render/daylight";
 import { markError, markVehicle } from "../sim/detect";
 import { ContactsView } from "./render/contacts";
-import { DustCloudsView } from "./render/dust";
-import { HazardViews, type TurnClock } from "./render/hazards";
+import { CloudViews } from "./render/clouds";
+import type { TurnClock } from "./render/hazards";
 import { UtilityAim } from "./utility-aim";
 import { ShadeView } from "./render/shade";
 import { BeaconPulseView } from "./render/beaconPulse";
@@ -132,8 +132,7 @@ export class Game {
   private readonly labels: Labels;
   private readonly zones = new ZonesView();
   private readonly contacts = new ContactsView();
-  private readonly dust = new DustCloudsView();
-  private readonly hazards = new HazardViews();
+  private readonly clouds = new CloudViews();
   private readonly utilityAim = new UtilityAim({ world: () => this.world, apply: (next) => this.apply(next), note: (text) => this.hud.note(this.world, text, "bad") });
   private readonly soundRing = new SoundRingView();
   private readonly beaconPulse = new BeaconPulseView();
@@ -246,8 +245,7 @@ export class Game {
       this.weaponRange.root,
       this.hoverArcs.root,
       this.contacts.root,
-      this.dust.root,
-      this.hazards.root,
+      this.clouds.root,
       this.utilityAim.root,
       this.soundRing.root,
       this.beaconPulse.root,
@@ -1068,8 +1066,7 @@ export class Game {
     this.placeHitCard();
     this.pickRing.follow(this.world, this.hovered, this.frames, hide);
     this.contacts.update(this.world.terrain, this.world.player.contacts, playerVehicle(this.world).pos, this.world.turn, performance.now());
-    this.dust.update(this.world, this.world.terrain, this.play.nowMs());
-    this.hazards.update(this.world, this.world.terrain, this.views, this.play.nowMs(), this.turnClock(), this.rig.camera);
+    this.clouds.update(this.world, this.views, this.play.nowMs(), this.turnClock(), this.rig.camera, this.fx.cards);
     this.utilityAim.draw(this.world, this.world.terrain, this.hoverGround, !steer);
     const meFrame = this.frames[playerVehicle(this.world).id];
     const listener = meFrame ? toMap(meFrame.pos) : playerVehicle(this.world).pos;

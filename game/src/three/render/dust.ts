@@ -9,6 +9,7 @@ import { PAL } from '../../render/palette';
 import { hash2, valueNoise } from '../../render/noise';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import type { DustCloud, World } from '../../sim/types';
+import type { FxCards } from './particles/cards';
 
 const S = PHYSICS.metersPerTile;
 const RENDER_ORDER = 904;
@@ -33,6 +34,8 @@ export class DustCloudsView {
   private readonly texture = createPuffTexture();
   private lastTurn = -1;
   private turnMs = 0;
+
+  draw(_cards: FxCards): void {}
 
   update(world: World, terrain: Terrain, nowMs: number): void {
     if (world.turn !== this.lastTurn) {

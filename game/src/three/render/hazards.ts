@@ -16,6 +16,7 @@ import { shutDownTurnsLeft } from '../../sim/utility';
 import { dist, type Vec } from '../../sim/vec';
 import { playerSees } from '../../sim/vision';
 import { HarpoonLinesView } from './lines';
+import type { FxCards } from './particles/cards';
 import type { VehicleView } from './vehicle';
 
 const S = PHYSICS.metersPerTile;
@@ -43,6 +44,12 @@ export class HazardViews {
     const fresh = clock === null ? NO_IDS : new Set(world.lines.filter((l) => madeThisTurn(clock, 'lines', l.id)).map((l) => l.id));
     this.lines.update(world, views, nowMs, { fresh, playing: turnClock !== null });
     this.pulses.update(world, terrain, views, nowMs, clock);
+  }
+
+  draw(cards: FxCards): void {
+    this.smoke.draw(cards);
+    this.flares.draw(cards);
+    this.pulses.draw(cards);
   }
 
   private clockOf(world: World, clock: TurnClock | null): TurnClock | null {
@@ -167,6 +174,8 @@ class FlightsView {
     this.flying.push({ flight, head, trail });
   }
 
+  draw(_cards: FxCards): void {}
+
   update(nowMs: number): void {
     for (const body of [...this.flying]) {
       const t = body.flight.share(nowMs);
@@ -242,6 +251,10 @@ class SmokeCloudsView {
 
   constructor() {
     this.root.add(this.shells.root);
+  }
+
+  draw(cards: FxCards): void {
+    this.shells.draw(cards);
   }
 
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null, cutaway: Cutaway | null): void {
@@ -619,6 +632,10 @@ class FlaresView {
     this.root.add(this.flights.root);
   }
 
+  draw(cards: FxCards): void {
+    this.flights.draw(cards);
+  }
+
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null): void {
     const shown = new Map(world.flares.filter((f) => volleyShown(clock, 'flares', f.id) && flareShown(world, f)).map((f) => [f.id, f]));
     for (const [id, view] of this.views) if (!shown.has(id)) this.drop(id, view);
@@ -722,6 +739,8 @@ class PulseView {
   private readonly sparks = new Map<string, THREE.Group>();
   private readonly glowTexture = createGlowTexture();
   private readonly sparkMaterial = new THREE.SpriteMaterial({ map: this.glowTexture, color: PAL.pulse.spark, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+
+  draw(_cards: FxCards): void {}
 
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null): void {
     if (clock === null || clock.moved) this.startZaps(world, nowMs);
