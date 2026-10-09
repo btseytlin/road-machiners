@@ -6,6 +6,7 @@ import { dropField, spillOil } from '../../sim/hazards';
 import { addVehicle, emptyWorld } from '../../sim/testkit';
 import type { Vehicle, World } from '../../sim/types';
 import { cloneWorld } from '../../sim/world';
+import type { Card, FxCards } from './particles/cards';
 import type * as Zones from './zones';
 
 const bands = vi.hoisted(() => new Set<object>());
@@ -25,6 +26,12 @@ const { HazardViews, cutShare, fieldShown, volleyShown } = await import('./hazar
 function stubCanvas(): void {
   const ctx = { createRadialGradient: () => ({ addColorStop: () => {} }), fillRect: () => {}, fillStyle: '' };
   vi.stubGlobal('document', { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) });
+}
+
+function recordedCards(): { glow: Card[]; lit: Card[]; batches: FxCards } {
+  const glow: Card[] = [];
+  const lit: Card[] = [];
+  return { glow, lit, batches: { glow: { push: (c: Card) => glow.push(c) }, lit: { push: (c: Card) => lit.push(c) } } as unknown as FxCards };
 }
 
 function droveEast(world: World): Vehicle {
@@ -154,12 +161,18 @@ describe('HazardViews', () => {
     views.update(world, world.terrain, new Map(), 1000, clock(before, 0.5), camera);
     views.update(world, world.terrain, new Map(), 1016, null, camera);
 
-    const shown: (THREE.Sprite | THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial>)[] = [];
+    const shown: THREE.Mesh<THREE.BufferGeometry, THREE.MeshLambertMaterial>[] = [];
     views.root.traverse((o) => {
-      if ((o instanceof THREE.Sprite || o instanceof THREE.Mesh) && o.visible && o.parent?.visible !== false) shown.push(o);
+      if (o instanceof THREE.Mesh && o.visible && o.parent?.visible !== false) shown.push(o);
     });
+    const cards = recordedCards();
+    views.draw(cards.batches);
     expect(shown.some((o) => o.material.color.getHex() === PAL.flare.casing)).toBe(true);
-    expect(shown.some((o) => o.material.color.getHex() === PAL.flare.core)).toBe(false);
+    expect(cards.glow).toEqual([]);
+
+    views.update(world, world.terrain, new Map(), 3000, null, camera);
+    views.draw(cards.batches);
+    expect(cards.glow.length).toBeGreaterThan(0);
   });
 
   const spikesOf = (views: InstanceType<typeof HazardViews>): THREE.Mesh[] => {
@@ -254,10 +267,13 @@ describe('HazardViews', () => {
     const views = new HazardViews();
 
     views.update(world, world.terrain, new Map(), 1000, null, new THREE.PerspectiveCamera());
+    const cards = recordedCards();
+    views.draw(cards.batches);
+    expect(cards.glow.length).toBeGreaterThan(0);
 
     const meshes: THREE.Object3D[] = [];
     views.root.traverse((o) => {
-      if (o instanceof THREE.Mesh || o instanceof THREE.Sprite) meshes.push(o);
+      if (o instanceof THREE.Mesh) meshes.push(o);
     });
     expect(meshes.length).toBeGreaterThan(0);
     expect(meshes.filter((m) => bands.has(m))).toEqual([]);
