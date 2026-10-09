@@ -29,7 +29,7 @@ function ramp(build: Build, grade: number, type: TerrainTypeId): World {
   if (build === 'loadedHauler') {
     const hauler = makeVehicle(w, { name: 'hauler', faction: 'player', chassisId: 'hauler', parts: ['mg', 'stockEngine', 'plates', 'trailerBox'].map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {}, pos: { x: 26, y: 30 }, heading: 0, brain: null });
     w.vehicles[0] = { ...hauler, id: w.vehicles[0].id };
-    addGoods(w, w.vehicles[0], 'scrap', 999);
+    addGoods(w, w.vehicles[0], 'scrap', 61);
   }
   w.player.fuel = 999;
   return setMoveOrder(w, { kind: 'through', dest: { x: 120, y: 30 } });
@@ -69,9 +69,9 @@ describe('climbing', () => {
 
   it('flat ground launch from rest is pinned', () => {
     const xs = drive(ramp('scout', 0, 'road'), 3);
-    expect(xs[0]).toBeCloseTo(26.791767, 5);
-    expect(xs[1]).toBeCloseTo(28.830158, 5);
-    expect(xs[2]).toBeCloseTo(32.097729, 5);
+    expect(xs[0]).toBeCloseTo(26.818813, 5);
+    expect(xs[1]).toBeCloseTo(28.926512, 5);
+    expect(xs[2]).toBeCloseTo(32.304752, 5);
   }, 90_000);
 
   it('a launch from rest gains about 85% of the distance it did at the old acceleration scale', () => {

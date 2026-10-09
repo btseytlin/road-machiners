@@ -23,7 +23,7 @@ A `ready` issue may bundle other free Triage cards that touch the same code. Eac
 
 ## Design
 
-Design runs Opus, or Sonnet with `design-sonnet`, at `FACTORY_DESIGN_EFFORT`. It uses up:udesign and up:uplan in hands-off mode. It writes the task file `.factory-tasks/issue-N.md` in the work clone on branch `factory/issue-N`. Git ignores the task file, so design posts it to the issue as a comment, and later stages read it from the clone.
+Design runs Opus, or Sonnet with `design-sonnet`, at `FACTORY_DESIGN_EFFORT`. It uses up:udesign and up:uplan in hands-off mode. A change to the game's UI or overlays is planned with the steps of `game/docs/ui.md`, and the task file gets a UI section with the decision, the tiers, the zone, the shared pieces and the event levels. It writes the task file `.factory-tasks/issue-N.md` in the work clone on branch `factory/issue-N`. Git ignores the task file, so design posts it to the issue as a comment, and later stages read it from the clone.
 
 - Before the agent starts, the factory merges GitHub's issue branch and the latest base into the work clone, as [process.md](process.md#branches) says. The agent cannot fetch. It never asks the author about branches or the network, and work it cannot find is an assumption.
 - `.factory/questions.md` sends the card back to Triage with the questions, as unclear triage does.
@@ -32,7 +32,7 @@ Design runs Opus, or Sonnet with `design-sonnet`, at `FACTORY_DESIGN_EFFORT`. It
 
 ## Implementation
 
-Implementation runs Sonnet with up:uexecute on the task file, and Opus advises it through `claude --advisor` with `FACTORY_ADVISOR_MODEL`. A card with `implementation-opus` runs on Opus and gets no advisor. Subagents are off, so the agent implements every phase itself at the model triage picked. For a change a player can see, the agent captures real in-game screenshots, compares them with the issue, the plan and `game/docs/DESIGN.md`, and fixes until nothing obvious differs. The screenshots stay out of the commits. The stage fails when the agent made no new commit.
+Implementation runs Sonnet with up:uexecute on the task file, and Opus advises it through `claude --advisor` with `FACTORY_ADVISOR_MODEL`. A card with `implementation-opus` runs on Opus and gets no advisor. Subagents are off, so the agent implements every phase itself at the model triage picked. For a change a player can see, the agent captures real in-game screenshots, compares them with the issue, the plan, `game/docs/DESIGN.md` and, for the UI, the principle tests of `game/docs/ui.md`, and fixes until nothing obvious differs. The screenshots stay out of the commits. The stage fails when the agent made no new commit.
 
 ## Testing
 
