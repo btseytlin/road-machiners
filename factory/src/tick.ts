@@ -86,7 +86,8 @@ function catchUpJobs(state: FactoryState, cards: Card[]): JobPick[] {
   const merge = state.jobs.find((job) => job.stage === 'merge');
   if (merge?.batch === undefined) return [];
   const next = waitingMerges(state, cards).slice(0, CATCH_UP_CARDS);
-  return openCards(state, next).filter((card) => !(merge.caughtUp ?? []).includes(card.issue)).map((card) => ({ stage: 'catch-up' as const, issue: card.issue }));
+  const failed = (card: Card): boolean => state.failures.some((failure) => failure.stage === 'catch-up' && failure.issue === card.issue);
+  return openCards(state, next).filter((card) => !(merge.caughtUp ?? []).includes(card.issue) && !failed(card)).map((card) => ({ stage: 'catch-up' as const, issue: card.issue }));
 }
 
 const has =

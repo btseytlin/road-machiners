@@ -510,6 +510,11 @@ describe('tick', () => {
       expect(chooseJobs(state({ jobs: [merging([5, 6, 7], [8])] }), queue, NOW, CFG)).toEqual([{ stage: 'catch-up', issue: 9 }]);
     });
 
+    it('skips a card whose catch-up failed within the day, so a failing merge costs no agent round per merge job', () => {
+      const failure = { stage: 'catch-up' as const, issue: 8, error: 'e', log: null, at: NOW.toISOString() };
+      expect(chooseJobs(state({ jobs: [merging([5, 6, 7])], failures: [failure] }), queue, NOW, CFG)).toEqual([{ stage: 'catch-up', issue: 9 }]);
+    });
+
     it('waits for a running catch-up before the next one', () => {
       expect(chooseJobs(state({ jobs: [merging([5, 6, 7], [8]), running('catch-up', 8)] }), queue, NOW, CFG)).toEqual([]);
     });

@@ -55,7 +55,7 @@ function getFactoryStatus(state: FactoryState, paused: boolean): string {
   if (paused) return 'paused';
   if (state.lastTickError !== null) return 'blocked';
   if (state.jobs.length) return 'working';
-  if (state.failures.length) return 'blocked';
+  if (state.failures.some((failure) => failure.stage !== 'catch-up')) return 'blocked';
   return 'idle';
 }
 export function buildOperations(state: FactoryState, paused: boolean, config: Pick<DashboardConfig, 'triageWorkers' | 'designWorkers' | 'implementWorkers' | 'verifyWorkers' | 'testWorkers' | 'publicUrl'>) {

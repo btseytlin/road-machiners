@@ -23,6 +23,13 @@ it('publishes only explicit operational fields, never private state or raw error
   expect(result.queues.implement).toEqual({ busy: 1, total: 2 });
 });
 
+it('stays idle on a catch-up failure, which blocks no card, and turns blocked on any other failure', () => {
+  const config = { triageWorkers: 1, designWorkers: 2, implementWorkers: 2, verifyWorkers: 2, testWorkers: 2, publicUrl: 'https://example.org' };
+  const failure = { stage: 'catch-up' as const, issue: 8, error: 'e', log: null, at: '2026-01-01T00:00:00Z' };
+  expect(buildOperations({ ...structuredClone(EMPTY_STATE), failures: [failure] }, false, config).status).toBe('idle');
+  expect(buildOperations({ ...structuredClone(EMPTY_STATE), failures: [failure, { ...failure, stage: 'merge' }] }, false, config).status).toBe('blocked');
+});
+
 it('only publishes a candidate link while the current candidate is valid', () => {
   const state: FactoryState = { ...structuredClone(EMPTY_STATE), release: { issue: 3, branch: 'release/day', day: '2026-01-01', postId: null, removed: [], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } }, builds: { '3': 'rc' } };
   const config = { triageWorkers: 1, designWorkers: 2, implementWorkers: 2, verifyWorkers: 2, testWorkers: 2, publicUrl: 'https://example.org' };
