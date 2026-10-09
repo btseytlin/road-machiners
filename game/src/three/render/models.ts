@@ -355,6 +355,7 @@ export function instancedModel(name: ModelName, placements: THREE.Matrix4[], tin
 
 const GLOW_MATERIAL = 'glow';
 const GLOW = { color: new THREE.Color(PAL.lamp.amber), strength: 0.4 };
+export const MODEL_GLOW = { color: GLOW.color.getHex(), emissive: GLOW.color.clone().multiplyScalar(GLOW.strength).getHex() };
 
 function toLambert(root: THREE.Object3D): THREE.Object3D {
   root.traverse((o) => {

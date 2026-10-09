@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Box3, InstancedMesh, Matrix4, Mesh, Vector3, type MeshLambertMaterial, type Object3D } from 'three';
-import { loadModels } from './models';
+import { loadModels, MODEL_GLOW } from './models';
 import { buildSites } from './sites';
 import { FORTRESS } from '../../data/fortress';
 import { PAL } from '../../render/palette';
@@ -163,7 +163,7 @@ describe('landmark scale', () => {
       if (!(o instanceof Mesh)) return;
       const material = o.material as MeshLambertMaterial;
       if (!LIT_LAMPS.has(material.color.getHex())) return;
-      expect(material.emissive.getHex(), o.parent?.name).toBe(material.color.getHex());
+      expect(material.emissive.getHex(), o.parent?.name).toBe(material.name === 'glow' ? MODEL_GLOW.emissive : material.color.getHex());
       lamps++;
     });
     expect(lamps).toBeGreaterThan(0);
@@ -337,7 +337,7 @@ describe('landmark scale', () => {
     shelter.traverse((o) => {
       if (o instanceof Mesh) glowing.push(...[o.material].flat().map((m) => (m as MeshLambertMaterial).emissive.getHex()));
     });
-    expect(glowing).toContain(PAL.lamp.on);
+    expect(glowing).toContain(MODEL_GLOW.emissive);
   });
 
   it('slews the Salvage Yard crane and hoists its grab, inside the curtain at rest and at both ends of the slew (IV8, IV20)', () => {
@@ -408,7 +408,7 @@ describe('landmark scale', () => {
     named('crane-upper')[0].traverse((o) => {
       if (o instanceof Mesh) cab.push(...[o.material].flat().map((m) => (m as MeshLambertMaterial).emissive.getHex()));
     });
-    expect(cab).toContain(PAL.lamp.on);
+    expect(cab).toContain(MODEL_GLOW.emissive);
   });
 
   it('turns the Nose radar dish as its one moving part, inside the curtain over its whole turn (IV8, IV20)', () => {
@@ -549,7 +549,7 @@ describe('landmark scale', () => {
       });
       return found;
     };
-    expect(glowsIn('nose-shelters')).toContain(PAL.lamp.on);
+    expect(glowsIn('nose-shelters')).toContain(MODEL_GLOW.emissive);
     const nose = group.getObjectByName('nose-ship')!.children[0];
     const cockpit: number[] = [];
     const dish = group.getObjectByName('nose-radar-dish')!;
@@ -558,7 +558,7 @@ describe('landmark scale', () => {
       for (let p: Object3D | null = m; p !== null; p = p.parent) if (p === dish) inDish = true;
       if (m instanceof Mesh && !inDish) cockpit.push(...[m.material].flat().map((x) => (x as MeshLambertMaterial).emissive.getHex()));
     });
-    expect(cockpit).toContain(PAL.lamp.on);
+    expect(cockpit).toContain(MODEL_GLOW.emissive);
   });
 
   it('keeps everything a truck could touch inside the edge of an abandoned site', () => {
