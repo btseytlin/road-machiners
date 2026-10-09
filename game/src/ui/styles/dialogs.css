@@ -31,3 +31,9 @@
   justify-content: space-between;
   gap: var(--space-9);
 }
+#ui .save-panel .save-when {
+  text-align: right;
+}
+#ui .save-panel .close {
+  align-self: flex-end;
+}

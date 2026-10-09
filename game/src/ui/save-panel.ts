@@ -2,7 +2,7 @@
 // filled slot, newest first, and loads the one clicked. Save writes at once. Load asks first, since it drops progress.
 // Save also downloads the game or the run log as a file.
 
-import { clockOf } from "../sim/sun";
+import { clockLabel } from "./format";
 import type { SlotId, SlotInfo } from "../three/save-slots";
 import { slotLabel } from "../three/save-slots";
 import { el, panel } from "./dom";
@@ -18,16 +18,19 @@ export type SavePanelActions = {
 
 const DAMAGED = "Old or damaged save";
 
-function clockText(turn: number): string {
-  const { day, hour } = clockOf(turn);
-  const h = Math.floor(hour);
-  const m = Math.floor((hour - h) * 60);
-  return `Day ${day}, ${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+export function slotDetail(info: SlotInfo | null): { text: string; tone: "dim" | "bad" | "num" } {
+  if (info === null) return { text: "Empty", tone: "dim" };
+  if (info.turn === null) return { text: DAMAGED, tone: "bad" };
+  return { text: clockLabel(info.turn), tone: "num" };
 }
 
-function savedText(info: SlotInfo): string {
-  const real = info.savedAt > 0 ? ` (${new Date(info.savedAt).toLocaleString()})` : "";
-  return info.turn === null ? DAMAGED : `${clockText(info.turn)}${real}`;
+export function slotRealTime(info: SlotInfo | null): string {
+  return info !== null && info.savedAt > 0 ? new Date(info.savedAt).toLocaleString() : "";
+}
+
+function detailEl(info: SlotInfo | null): HTMLElement {
+  const { text, tone } = slotDetail(info);
+  return el("span", { class: `save-when ${tone}` }, text);
 }
 
 export class SavePanel {
@@ -78,8 +81,7 @@ export class SavePanel {
   }
 
   private row(slot: SlotId, info: SlotInfo | null, onclick: () => void): HTMLElement {
-    const detail = info === null ? "Empty" : savedText(info);
-    return el("button", { class: "save-row", "data-slot": slot, onclick }, el("b", {}, slotLabel(slot)), el("span", {}, detail));
+    return el("button", { class: "save-row", "data-slot": slot, title: slotRealTime(info), onclick }, el("b", {}, slotLabel(slot)), detailEl(info));
   }
 
   private show(title: string, rows: HTMLElement[]): void {
@@ -87,7 +89,7 @@ export class SavePanel {
     this.root = panel("save-panel dialog");
     this.root.setAttribute("role", "dialog");
     this.root.setAttribute("aria-label", title);
-    this.root.append(el("h3", {}, title), ...rows, el("button", { class: "close", onclick: () => this.close() }, "Close"));
+    this.root.append(el("h3", {}, title), ...rows, el("button", { class: "close", onclick: () => this.close() }, "Close [Esc]"));
     window.addEventListener("keydown", this.onKey, true);
   }
 }
