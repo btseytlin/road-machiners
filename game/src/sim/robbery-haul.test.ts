@@ -51,7 +51,7 @@ describe('a robbery from compliance to pickup', () => {
     const { w, robber, prey } = scene({ scrap: 6, electronics: 6 });
     while (cargoRoom(robber, 'scrap') > 2) addGoods(w, robber, 'scrap', 1);
     const held = total(prey);
-    const expected = cargoHaul(w, robber, prey).length;
+    const expected = cargoHaul(robber, prey).length;
     expect(expected).toBeLessThan(held);
     thinkNpc(w, robber);
     expect(held - total(prey)).toBe(expected);
@@ -73,13 +73,13 @@ describe('a robbery from compliance to pickup', () => {
     expect(hasStrippable(w, robber, prey)).toBe(true);
     while (cargoRoom(robber, 'electronics') > 0) addGoods(w, robber, 'electronics', 1);
     const bare = hasStrippable(w, robber, prey);
-    expect(surrenderHaul(w, robber, prey).length > 0).toBe(bare);
-    expect(cargoHaul(w, robber, prey)).toEqual([]);
+    expect(surrenderHaul(robber, prey).length > 0).toBe(bare);
+    expect(cargoHaul(robber, prey)).toEqual([]);
   });
 
   it('a surrendering truck hands over cargo and mounted parts the robber can load, and no more', () => {
     const { w, robber, prey } = scene({ scrap: 1 });
-    const haul = surrenderHaul(w, robber, prey);
+    const haul = surrenderHaul(robber, prey);
     const parts = haul.filter((item) => item.kind === 'part');
     expect(parts.length).toBeLessThanOrEqual(RULES.surrenderParts);
     surrenderTo(w, prey, robber);

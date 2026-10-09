@@ -27,7 +27,7 @@ import { bearing, dist, type Vec } from './vec';
 
 function demandsOnTop(world: World, npc: Vehicle): boolean {
   const top = topGoal(npc);
-  return top?.kind === 'fight' && top.targetId === world.player.vehicleId && top.demands === true && cargoHaul(world, npc, playerVehicle(world)).length > 0;
+  return top?.kind === 'fight' && top.targetId === world.player.vehicleId && top.demands === true && cargoHaul(npc, playerVehicle(world)).length > 0;
 }
 
 export type Condition = (world: World, npc: Vehicle, vars: CallVars) => boolean;
@@ -72,7 +72,7 @@ function namesHaul(vars: CallVars): boolean {
 
 function shownHaul(world: World, npc: Vehicle, call: Call, surrender: boolean): GridItem[] {
   const me = playerVehicle(world);
-  const haul = surrender ? surrenderHaul(world, npc, me) : handedOver(world, me, npc);
+  const haul = surrender ? surrenderHaul(npc, me) : handedOver(world, me, npc);
   if (!showsHaul(call.vars.haul, haul)) throw new Error(`${npc.id} named a different haul than the one the player drops`);
   return haul;
 }
@@ -363,7 +363,7 @@ export const PREPARES: Record<PrepareId, Prepare> = {
   truceAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'truce') }, haul: haulVar(handedOver(world, playerVehicle(world), npc)) }),
   mercyAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'mercy') }, haul: haulVar(handedOver(world, playerVehicle(world), npc)) }),
   demandHaul: (world, npc) => ({ haul: haulVar(handedOver(world, playerVehicle(world), npc)) }),
-  surrenderHaul: (world, npc) => ({ haul: haulVar(surrenderHaul(world, npc, playerVehicle(world))) }),
+  surrenderHaul: (world, npc) => ({ haul: haulVar(surrenderHaul(npc, playerVehicle(world))) }),
   yieldAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersSurrender(world, npc, playerVehicle(world)) ? 'yes' : 'no' } }),
   threatAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersThreat(world, npc) } }),
   warnAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersWarning(world, npc) } }),

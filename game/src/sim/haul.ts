@@ -4,10 +4,10 @@
 import { GOODS } from '../data/goods';
 import { RULES } from '../data/rules';
 import { partSellPrice } from './economy';
-import { findSpot, gridOf, isMounted } from './grid';
+import { findSpot, freeCells, gridOf, isMounted } from './grid';
 import { cargoRoom, stowPlace } from './inventory';
 import { looseCargo, takeError } from './salvage';
-import type { CallVar, GridItem, Vehicle, World } from './types';
+import type { CallVar, GridItem, Vehicle } from './types';
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;
 type GoodItem = Extract<GridItem, { kind: 'good' }>;
@@ -52,19 +52,20 @@ function fitsAll(winner: Vehicle, items: GridItem[]): boolean {
 
 function choose(winner: Vehicle, candidates: GridItem[], chosen: GridItem[], limit: number): GridItem[] {
   const picked = [...chosen];
+  const cells = freeCells(winner);
   for (const item of candidates) {
-    if (picked.length - chosen.length >= limit) break;
+    if (picked.length - chosen.length >= limit || picked.length >= cells) break;
     if (fitsAll(winner, [...picked, item])) picked.push(item);
   }
   return picked;
 }
 
-export function cargoHaul(_world: World, winner: Vehicle, loser: Vehicle): GridItem[] {
+export function cargoHaul(winner: Vehicle, loser: Vehicle): GridItem[] {
   return inPickupOrder(choose(winner, byValue(looseCargo(loser)), [], Infinity));
 }
 
-export function surrenderHaul(world: World, winner: Vehicle, loser: Vehicle): GridItem[] {
-  const cargo = cargoHaul(world, winner, loser);
+export function surrenderHaul(winner: Vehicle, loser: Vehicle): GridItem[] {
+  const cargo = cargoHaul(winner, loser);
   return inPickupOrder(choose(winner, removableParts(loser), cargo, RULES.surrenderParts));
 }
 

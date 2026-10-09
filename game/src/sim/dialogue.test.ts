@@ -384,7 +384,7 @@ describe('demand', () => {
     const { w: start, raider } = ambush();
     const w = endTurn(start, testDrive);
     const me = playerVehicle(w);
-    const haul = cargoHaul(w, w.vehicles.find((v) => v.id === raider.id)!, me);
+    const haul = cargoHaul(w.vehicles.find((v) => v.id === raider.id)!, me);
     expect(haul.length).toBeGreaterThan(0);
     expect(showsHaul(w.player.call!.vars.haul, haul)).toBe(true);
     const next = chooseOption(w, optionIndex(w, 'Fine. Take it.'));

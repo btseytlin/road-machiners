@@ -56,7 +56,7 @@ function holdFire(v: Vehicle, target: Vehicle): void {
 }
 
 export function handedOver(world: World, loser: Vehicle, winner: Vehicle): GridItem[] {
-  return winner.brain ? cargoHaul(world, winner, loser) : looseCargo(loser);
+  return winner.brain ? cargoHaul(winner, loser) : looseCargo(loser);
 }
 
 export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, haul: GridItem[] = handedOver(world, loser, winner)): void {
@@ -83,7 +83,7 @@ function goTake(world: World, npc: Vehicle, stock: SalvageStock, warned: string[
 }
 
 export function surrenderTo(world: World, loser: Vehicle, robber: Vehicle): void {
-  const haul = robber.brain ? surrenderHaul(world, robber, loser) : [...looseCargo(loser), ...removableParts(loser).slice(0, RULES.surrenderParts)];
+  const haul = robber.brain ? surrenderHaul(robber, loser) : [...looseCargo(loser), ...removableParts(loser).slice(0, RULES.surrenderParts)];
   const mounted = haul.some((item) => item.kind === 'part' && isMounted(loser.chassisId, item));
   yieldTo(world, loser, robber, haul);
   if (mounted) applyRefitLayout(world, loser, loser.items);
@@ -359,7 +359,7 @@ export function judgedWorthOffer(world: World, npc: Vehicle): boolean {
 }
 
 export function hasStrippable(world: World, robber: Vehicle, victim: Vehicle): boolean {
-  return surrenderHaul(world, robber, victim).length > 0;
+  return surrenderHaul(robber, victim).length > 0;
 }
 
 function refusedOffer(world: World, shooter: Vehicle, prey: Vehicle): boolean {
