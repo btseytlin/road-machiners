@@ -38,8 +38,8 @@ Run these from `game/`. The repo-wide quality gate and pre-commit hook run from 
 - `npm run progression:record`, `progression:report`, `progression:analyze` and `progression:watch` are the playtest harness. Bots play the real turn pipeline headless with every NPC alive, and each run writes logs of every turn. It covers economy, progression, NPC behavior and fights at the macro level. `progression:playthrough` writes the full activity log of one markov bot run, which the factory's release playtest reads.
 - `npm run combat` plays single fights with physics, for hit rates and ram detail the recorder does not model. `npm run loadouts` rolls NPC gear.
 - `npm run perf` fails on a miss against `scripts/perf-budgets.json`.
-- `npm run map:bake` writes `public/maps/icarus.bin`. Commit it after a change to map rules.
-- `npm run models:shapes`, `npm run wiki` and `npm run save:shape` regenerate checked files. A test fails when they are stale.
+- `npm run map:bake` writes `public/maps/icarus.bin`. Commit it after a change to map rules, then run `npm run old-spots`.
+- `npm run models:shapes`, `npm run wiki`, `npm run save:shape` and `npm run old-spots` regenerate checked files. A test fails when they are stale.
 - `npm run sfx:board`, `sfx:import`, `sfx:reimport`, `sfx:report` and `sfx:gen` manage sounds. `sfx:gen` costs credits, so ask before running it.
 - `npm run itch` publishes to itch.io.
 

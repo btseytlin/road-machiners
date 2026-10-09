@@ -766,3 +766,11 @@ describe('save migration 33 to 34', () => {
     expect(MIGRATIONS[33](structuredClone(FORMAT_2_33))).toEqual(FORMAT_2_33);
   });
 });
+
+describe('save migration 34 to 35', () => {
+  it('leaves a save from before old-world loot spots as it is, for the load to stock them', () => {
+    const before = MIGRATIONS[33](structuredClone(FORMAT_2_33));
+
+    expect(MIGRATIONS[34](structuredClone(before))).toEqual(before);
+  });
+});
