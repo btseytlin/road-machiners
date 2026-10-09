@@ -12,7 +12,7 @@ import { callVehicle, chooseOption, currentOptions, hangUp, honk } from '../sim/
 import type { CallVar, CallVars, GameEvent, World } from '../sim/types';
 import { playerSees } from '../sim/vision';
 import { playerCanAct } from '../sim/world';
-import { el, isBrowserChord, panel } from './dom';
+import { el, isBrowserChord, panel, topCenter } from './dom';
 import { fuelLiters, meters, moneyText } from './units';
 import { npcName } from '../sim/spawn';
 
@@ -149,7 +149,7 @@ class Horn {
 const KEY_DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'];
 
 export class DialoguePanel {
-  private readonly root = panel('dialogue');
+  private readonly root = panel('dialogue notice', topCenter());
   private readonly horn: Horn;
 
   constructor(private readonly host: DialogueHost) {
@@ -168,7 +168,7 @@ export class DialoguePanel {
       el('button', { class: 'dialogue-option', onclick: () => this.choose(i) }, `${i + 1}. ${o.text}`),
     );
     this.root.replaceChildren(
-      el('div', { class: 'dialogue-speaker' }, `Radio: ${npcName(npc)}`),
+      el('div', { class: 'dialogue-speaker' }, npcName(npc)),
       el('div', { class: 'dialogue-line' }, `“${fillLine(call.line.text, call.line.vars)}”`),
       el('div', { class: 'dialogue-options' }, ...options),
     );

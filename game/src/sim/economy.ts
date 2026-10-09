@@ -5,6 +5,7 @@
 import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
 import { ECONOMY, GOODS } from "../data/goods";
 import { shopDef } from "../data/market";
+import { UNITS } from "../data/units";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { NPC_UPKEEP } from "../data/npcs";
@@ -96,7 +97,7 @@ export function tradeGoods(
 
 function buyGoods(world: World, vehicle: Vehicle, good: string, count: number, total: number): void {
   const resources = getResources(world, vehicle);
-  if (resources.money < total) throw new Error("Not enough money");
+  if (resources.money < total) throw new Error(`Not enough ${UNITS.currency.many}`);
   if (cargoRoom(vehicle, good) < count) throw new Error("Not enough cargo space");
   if (vehicle.id === world.player.vehicleId) noteCostBasis(world, good, total / count, count);
   const added = addGoods(world, vehicle, good, count);
@@ -366,7 +367,7 @@ function repairMult(world: World): number {
 
 function pay(world: World, amount: number, reason: string): void {
   if (world.player.money < 0 || amount > world.player.money)
-    throw new Error(`Not enough money for ${reason}`);
+    throw new Error(`Not enough ${UNITS.currency.many} for ${reason}`);
   world.player.money -= amount;
 }
 
@@ -695,7 +696,7 @@ function requireCount(n: number): void {
 
 export function transfer(world: World, payer: Vehicle, payee: Vehicle, amount: number): void {
   const from = getResources(world, payer);
-  if (from.money < 0 || from.money < amount) throw new Error(payer.id === world.player.vehicleId ? 'Not enough money' : `${payer.name} cannot pay that much`);
+  if (from.money < 0 || from.money < amount) throw new Error(payer.id === world.player.vehicleId ? `Not enough ${UNITS.currency.many}` : `${payer.name} cannot pay that much`);
   from.money -= amount;
   getResources(world, payee).money += amount;
 }

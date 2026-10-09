@@ -2,7 +2,7 @@
 
 Values, prices, shops, contracts, the effort model, hidden salvage, fuel and supplies. The principles behind them are in [DESIGN.md](../../DESIGN.md).
 
-Money is M. One M is the price of 5 L of fuel at any town or stall, and every price reads against it. The sim and data keep money as whole cents, 100 to an M, so every price, fee and balance is exact to a cent. The UI shows whole M and rounds any part of an M away from zero, so a price, fee or debt never reads smaller than it is: 1.50 M reads 2, and a debt of 12.50 M reads 13. A balance rounds up too, so a balance and a price can read the same whole M while the balance is a few cents short.
+Prices are in M's, the basin's currency ([lore](../../lore.md#ms)). One M is the price of 5 L of fuel at any town or stall, and every price reads against it. The sim and data keep money as whole cents, 100 to an M, so every price, fee and balance is exact to a cent. The UI shows whole M and rounds any part of an M away from zero, so a price, fee or debt never reads smaller than it is: 1.50 M reads 2, and a debt of 12.50 M reads 13. A balance rounds up too, so a balance and a price can read the same whole M while the balance is a few cents short.
 
 - Fair price: every town garage and stall sells 5 L of fuel for 1 M with no spread. The scrap patch charges the same 1 M per 5 L it spares, and aid is priced the same.
 - Roadside: a truck selling fuel adds the spread and the road spread, so 5 L costs 1.50 M at Trade 0.

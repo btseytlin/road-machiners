@@ -103,23 +103,23 @@ const openingTip = (id: OpeningStep, text: string, done: (w: World, o: OpeningSt
 const TIPS: readonly Tip[] = [
   openingTip(
     "wreck",
-    "Your engine is nearly dead. [Shift]-click the ground by the wreck to set a stop point, then [Space] to drive there.",
+    "[Shift]-click the ground by the wreck, then [Space] to drive there.",
     (w, o) => inOpeningReach(w, o) || searchedOpening(w, o),
   ),
-  openingTip("search", "Click Search the wreck, then [Space] to run the search.", searchedOpening),
+  openingTip("search", "Click Search the wreck, then [Space].", searchedOpening),
   openingTip(
     "loot",
-    "Drag the parts and the Rebar cage onto your truck, or click Take all that fits.",
+    "Click Take all that fits.",
     (w, o) => o.stock !== null && searchedOpening(w, o) && !hasSalvage(o.stock),
   ),
   openingTip(
     "patch",
-    "[I] opens your truck. Click the engine, then Patch. Close your truck and [Space] runs the patch.",
+    "[I], click the engine, click Patch, then [Space].",
     (w, o) => o.stock !== null && !engineNeedsPatch(w),
   ),
   openingTip(
     "install",
-    "[I] opens your truck. Drag the Rebar cage onto a free cell at its edge, then close it and [Space] mounts the cage.",
+    "[I], drag the Rebar cage to a free cell at the truck's edge, then [Space].",
     (w, o) => o.stock !== null && cageMounted(w),
   ),
   {
@@ -152,7 +152,7 @@ const TIPS: readonly Tip[] = [
   },
   {
     id: "stopAt",
-    text: "[Shift]-click to set a waypoint your truck stops at. Click a waypoint to switch it.",
+    text: "[Shift]-click to set a stop point.",
     after: "stop",
     when: (w) => !playerVehicle(w).direct,
     done: (w) => playerVehicle(w).order?.kind === "stopAt",
@@ -166,13 +166,13 @@ const TIPS: readonly Tip[] = [
   },
   {
     id: "zones",
-    text: "Manual mode: click a zone to drive. Green speeds up. Yellow holds speed. Red slows down.",
+    text: "Click a zone to drive: green speeds up, yellow holds, red slows.",
     when: (w) => playerVehicle(w).direct,
     done: () => false,
   },
   {
     id: "aim",
-    text: "Click a truck to inspect it. Pick a weapon first to aim it at the body, or click a part in the card.",
+    text: "Pick a weapon, then click a truck to aim at its body.",
     when: (w) => vehicleStats(w, playerVehicle(w)).weapons.length > 0 && hostileInSight(w),
     done: (w) => Object.values(playerVehicle(w).weaponOrders).some((o) => o.aim !== "body"),
   },
@@ -222,12 +222,13 @@ function readSeen(storage: Storage): Set<TipId> {
 }
 
 export class Tips {
-  private readonly box = panel("tip");
+  private readonly box: HTMLElement;
   private readonly seen: Set<TipId>;
   private shown: TipId | null = null;
   private moment: { world: World; auto: boolean } | null = null;
 
-  constructor(private readonly storage: Storage) {
+  constructor(private readonly storage: Storage, parent: HTMLElement) {
+    this.box = panel("tip", parent);
     this.seen = readSeen(storage);
     this.box.style.display = "none";
   }

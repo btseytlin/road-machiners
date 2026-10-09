@@ -8,7 +8,7 @@ import { clearTips } from '../ui/tips';
 import type { NewGameActions } from '../ui/new-game';
 import { settleAims } from '../sim/combat';
 import { clockOf } from '../sim/sun';
-import { allSlots, listSaves, manualSlots, requestBoot, type BootRequest, type SlotId } from './save-slots';
+import { allSlots, listSaves, manualSlots, requestBoot, slotLabel, type BootRequest, type SlotId } from './save-slots';
 import type { SaveSlots } from './save-db';
 import { reportError } from './crash';
 import { CONFIG, GAME_VERSION } from '../config';
@@ -272,7 +272,7 @@ export type Run = { slots: SaveSlots; runId: string; log: RunLog };
 export class GameSaves {
   private readonly hold = new SaveHold();
 
-  constructor(private readonly run: Run, private readonly note: (text: string) => void) {
+  constructor(private readonly run: Run, private readonly note: (text: string) => void, private readonly record: (text: string) => void) {
     run.slots.onError = (err) => this.failed(err);
   }
 
@@ -280,10 +280,16 @@ export class GameSaves {
     const saves = saveStore(this.run.slots, this.run.log, window.sessionStorage, world, this.run.runId, CONFIG.saveSlots);
     return {
       ...saves,
-      save: (slot: SlotId) => this.hold.held ? this.note(SAVE_HELD_NOTE) : saves.save(slot),
+      save: (slot: SlotId) => this.saveManual(slot, saves.save),
       exportSave: () => this.exportSave(world()),
       exportLog: () => this.exportLog(world()).catch((err) => this.failed(err)),
     };
+  }
+
+  private saveManual(slot: SlotId, save: (slot: SlotId) => void): void {
+    if (this.hold.held) return this.note(SAVE_HELD_NOTE);
+    save(slot);
+    this.record(`Saved to ${slotLabel(slot)}`);
   }
 
   logWorld(world: World): void {

@@ -5,7 +5,7 @@ import { SPAWN } from '../data/npcs';
 import { REGION } from '../data/region';
 import { getResources } from './resources';
 import { siteGates } from './sites';
-import { autoOrders, beatenBy, fireWeapons, hitOdds, isHostile, laneOfOffset, missPoint, noteAttack, resolveDestroyed, wreckVehicle } from './combat';
+import { autoOrders, beatenBy, chanceSteps, fireWeapons, hitOdds, isHostile, laneOfOffset, missPoint, noteAttack, resolveDestroyed, wreckVehicle } from './combat';
 import { knockOutNpc } from './defeat';
 import { NPC_BEHAVIOR } from '../data/npc-behavior';
 import { thinkNpc, topGoal } from './npc-activities';
@@ -243,6 +243,28 @@ function expectShownChance(t: ReturnType<typeof aimTest> & { aim: string }) {
   }
   expect(Math.abs(reached / rounds - shown)).toBeLessThan(0.03);
 }
+
+describe('chance steps', () => {
+  it('start from the gun alone and end at the shown damage chance', () => {
+    const t = range(5, Math.PI / 2, 5);
+    t.me.speed = 4;
+    const odds = hitOdds(t.w, t.me, t.mg, t.buggy, 'body');
+    const steps = chanceSteps(t.w, t.me, t.mg, t.buggy, 'body');
+    expect(steps[0].cause).toBe('weapon');
+    expect(steps.at(-1)!.chance).toBeCloseTo(odds.damageChance, 12);
+    const shown = steps.slice(1).map((s) => s.cause);
+    const used = (Object.keys(odds.causes) as (keyof typeof odds.causes)[]).filter((k) => k !== 'weapon' && odds.causes[k] !== 0);
+    expect([...shown].sort()).toEqual([...used].sort());
+  });
+
+  it('add the causes that widen the scatter before those that narrow it, so a parked target never empties the scatter', () => {
+    const t = range(5, Math.PI / 2, 0);
+    const odds = hitOdds(t.w, t.me, t.mg, t.buggy, 'body');
+    expect(odds.causes.still).toBeLessThan(0);
+    const signs = chanceSteps(t.w, t.me, t.mg, t.buggy, 'body').slice(1).map((s) => Math.sign(odds.causes[s.cause]));
+    expect(signs).toEqual([...signs].sort((a, b) => b - a));
+  });
+});
 
 describe('towed trucks', () => {
   it('a truck on a tow rope is nobody\'s foe, but its tower stays one', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { entryEnabled, type MenuEntry } from "./game-menu";
+import { entryEnabled, entryReason, type MenuEntry } from "./game-menu";
 
 describe("entryEnabled", () => {
   const states = [
@@ -15,4 +15,15 @@ describe("entryEnabled", () => {
       }
     });
   }
+});
+
+describe("entryReason", () => {
+  it("names why Load is off", () => {
+    expect(entryReason("load", false, false)).toBe("No saves yet");
+    expect(entryReason("load", false, true)).toBeNull();
+  });
+  it("names the turn when it blocks an entry", () => {
+    expect(entryReason("save", true, true)).toBe("Wait for the turn");
+    expect(entryReason("help", true, false)).toBeNull();
+  });
 });
