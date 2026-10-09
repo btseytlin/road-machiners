@@ -7,6 +7,7 @@ import { topGoal } from './npc-activities';
 import { addState, stateOf } from './states';
 import { furyRoadWorld } from './testkit';
 import type { FuryRoadRun, World } from './types';
+import { heightAt } from './terrain';
 import { endTurn } from './world';
 
 function runOf(w: World): FuryRoadRun {
@@ -16,7 +17,7 @@ function runOf(w: World): FuryRoadRun {
 
 function moveTo(w: World, n: number): void {
   const me = playerVehicle(w);
-  me.pos = roadPoint(w.seed, runOf(w).window, n, FURY_ROAD.laneOffsets[1]);
+  me.pos = roadPoint(w.seed, runOf(w).window, n, HIGHWAY.road.lanes[1]);
   me.speed = 0;
 }
 
@@ -113,11 +114,26 @@ describe('arriving at an outpost', () => {
     expect(after.mapHash).toBe(highwayHash(w.seed, 1));
     expect(after.player.money).toBe(money + payOf(1, 0));
     expect(after.events).toContainEqual({ t: 'outpostReached', milestone: 1, pay: payOf(1, 0), wrecks: 0 });
-    expect(me.pos).toEqual({ x: before.x, y: before.y + STRIDE });
+    expect(me.pos).toEqual({ x: before.x + STRIDE, y: before.y + STRIDE });
     expect(after.terrain.types[Math.floor(me.pos.y) * after.size + Math.floor(me.pos.x)]).toBe(ground);
     expect(runOf(after).outposts.map((o) => [o.milestone, o.paid])).toEqual([[1, true], [2, false]]);
     expect(runOf(after).groups.every((g) => g.stretch === 2)).toBe(true);
     expect(reachedOutpostAt(after)?.name).toBe('Outpost 1');
+  });
+
+  it('shifts the player, the ground under it and the explored overlap one stride up the diagonal', () => {
+    const w = furyRoadWorld();
+    parkOnNext(w);
+    const before = playerVehicle(w).pos;
+    w.player.explored[95 * w.size + 5] = 1;
+
+    const after = endTurn(w, still);
+    const me = playerVehicle(after);
+    const shifted = (95 + STRIDE) * after.size + 5 + STRIDE;
+
+    expect(heightAt(after.terrain, me.pos.x, me.pos.y)).toBeCloseTo(heightAt(w.terrain, before.x, before.y), 9);
+    expect(after.player.explored[shifted]).toBe(1);
+    expect(after.vehicles.every((v) => v.pos.x > 0 && v.pos.y > 0 && v.pos.x < after.size && v.pos.y < after.size)).toBe(true);
   });
 
   it('pays nothing more on the next turns or after moving off and back', () => {

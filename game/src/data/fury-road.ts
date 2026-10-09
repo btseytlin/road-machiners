@@ -1,5 +1,4 @@
 import type { GearLevel } from './npcs';
-import type { LandmarkLook } from '../sim/types';
 import type { PropKind } from '../sim/terrain';
 import type { TerrainTypeId } from './terrain';
 
@@ -7,17 +6,8 @@ export type GroupPlan = { from: 'ahead' | 'behind'; templates: string[]; level: 
 export type Curve = { first: number; step: number; max: number };
 
 export const FURY_ROAD = {
-  laneOffsets: [-2.25, -0.75, 0.75, 2.25],
-  rowRadius: [0.55, 0.7] as [number, number],
-  outpost: {
-    padRadius: 3,
-    props: [
-      { look: 'guardPost', along: -2.5, across: 2.5, r: 0.8 },
-      { look: 'shack', along: 1, across: 3.5, r: 0.9 },
-      { look: 'drums', along: 3.5, across: 1.5, r: 0.45 },
-      { look: 'barrier', along: -3.5, across: -0.5, r: 0.5 },
-    ] as { look: LandmarkLook; along: number; across: number; r: number }[],
-  },
+  spawnOffsets: [-3, -1, 1, 3, -9, 9, -13, 13],
+  outpost: { padRadius: 3, padOffset: 9 },
   waves: [
     [{ from: 'ahead', templates: ['buggy'], level: 'light' }],
     [
@@ -63,59 +53,47 @@ export const FURY_ROAD = {
   maxTries: 400,
 };
 
-export type SceneryRule = { kind: PropKind; count: [number, number]; r: [number, number]; band: 'shoulder' | 'open' };
+export type BandRule = { kind: PropKind; count: [number, number]; r: [number, number]; across: [number, number] };
 export type GroundBand = { below: number; type: TerrainTypeId };
 
 export const HIGHWAY = {
-  version: 1,
+  version: 2,
   size: 320,
-  margin: 40,
+  stride: 220,
+  milestoneInset: 50,
   road: {
-    halfWidth: 3,
-    hardShoulder: 1.5,
-    flat: 2,
-    blend: 12,
-    bends: [
-      { amplitude: 34, wavelength: 420, seedOffset: 101 },
-      { amplitude: 8, wavelength: 150, seedOffset: 102 },
-    ],
-    minBendRadius: 60,
-    profile: { amplitude: 3, wavelength: 260, seedOffset: 103 },
+    lanes: [-3, -1, 1, 3],
+    laneWidth: 2,
+    asphalt: 5,
+    verge: 18,
+    badlands: 26,
+    flatTo: 15,
+    blend: 7,
+    ridge: { rise: 10, run: 10 },
+    bend: { amplitude: 8, wavelength: 520, seedOffset: 101 },
+    profile: { amplitude: 1.5, wavelength: 300, seedOffset: 103 },
     sample: 2,
-    paint: { dash: 3, gap: 3, line: 0.22, edgeInset: 0.35, wear: 0.12 },
+    paint: { dash: 3, gap: 3, line: 0.22, wear: 0.12 },
   },
-  edge: { band: 28, height: 14 },
   relief: { amplitude: 2.4, octaves: [{ freq: 1 / 56, amp: 1, seedOffset: 201 }, { freq: 1 / 17, amp: 0.3, seedOffset: 202 }] },
-  ground: { scale: 1 / 22, seedOffset: 301, ridgeRise: 2.5, bands: [{ below: 0.3, type: 'sand' }, { below: 0.6, type: 'hardpan' }, { below: 0.76, type: 'scrub' }, { below: 0.88, type: 'gravel' }, { below: 1, type: 'scree' }] as GroundBand[] },
-  chunkRows: 16,
+  ground: {
+    scale: 1 / 22,
+    seedOffset: 301,
+    verge: [{ below: 0.32, type: 'sand' }, { below: 1, type: 'hardpan' }] as GroundBand[],
+    badlands: [{ below: 0.45, type: 'gravel' }, { below: 0.7, type: 'scrub' }, { below: 1, type: 'scree' }] as GroundBand[],
+    ridge: 'scree' as TerrainTypeId,
+  },
+  chunk: 16,
   chunkEdge: 1.8,
-  shoulderBand: [1.4, 4.5] as [number, number],
-  openFrom: 7,
-  edgeKeep: 4,
-  scenery: [
-    { kind: 'rock', count: [3, 7], r: [0.6, 1.5], band: 'open' },
-    { kind: 'crag', count: [0, 1], r: [1.6, 2.4], band: 'open' },
-    { kind: 'deadTree', count: [0, 2], r: [0.35, 0.35], band: 'open' },
-    { kind: 'carWreck', count: [0, 1], r: [0.6, 0.75], band: 'shoulder' },
-    { kind: 'deadTruck', count: [0, 1], r: [0.65, 0.75], band: 'shoulder' },
-    { kind: 'pole', count: [0, 1], r: [0.3, 0.3], band: 'shoulder' },
-  ] as SceneryRule[],
-  billboard: { chance: 0.12, r: 1.6, across: [9, 14] as [number, number] },
-  rowKinds: ['carWreck', 'barrier', 'tankTrap', 'drums'] as PropKind[],
+  badlands: [
+    { kind: 'rock', count: [3, 6], r: [0.6, 1.5], across: [19.5, 40] },
+    { kind: 'crag', count: [0, 2], r: [1.6, 2.4], across: [22, 44] },
+    { kind: 'deadTree', count: [0, 2], r: [0.35, 0.35], across: [18.5, 34] },
+  ] as BandRule[],
+  powerLine: { spacing: 12, across: 14, r: 0.3 },
+  billboard: { chance: 0.14, r: 1.6, across: [17.6, 21] as [number, number] },
+  ditched: { chance: 0.4, kinds: ['carWreck', 'deadTruck'] as PropKind[], r: [0.6, 0.75] as [number, number], across: [12.8, 16.2] as [number, number], yaw: 25 },
+  milestoneClear: { south: 34, north: 24, across: 34 },
   propGap: 0.3,
-  bandGap: 1.5,
-  rowGap: 14,
-  outpostGap: 16,
-  gateGap: 9,
-  gateReach: 9,
-  gateStep: 1.3,
-  endGap: 6,
-  endReach: 5,
-  endStep: 1.1,
-  outpostZone: 14,
-  startLane: 1,
-  pad: { offset: 7, radius: 3, flatten: 3 },
-  rows: { first: 2, every: 2, max: 5 },
-  maxBlocked: { upTo: 2, early: 1, late: 2 },
-  maxTries: 200,
+  startLane: 2,
 };

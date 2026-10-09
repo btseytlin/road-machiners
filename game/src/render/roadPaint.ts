@@ -62,11 +62,11 @@ export function paintRoadMask(c: PaintCanvas, atlas: Atlas): void {
 type LaneLine = { offset: number; dashed: boolean };
 
 export function laneLines(road: AtlasRoad): LaneLine[] {
-  const half = road.width / 2;
-  const lane = road.width / road.lanes;
-  const edge = half - HIGHWAY.road.paint.edgeInset;
-  const dividers = Array.from({ length: road.lanes - 1 }, (_, i) => -half + lane * (i + 1));
-  return [{ offset: -edge, dashed: false }, { offset: edge, dashed: false }, ...dividers.map((offset) => ({ offset, dashed: Math.abs(offset) > 1e-6 }))];
+  const { lanes, laneWidth } = HIGHWAY.road;
+  if (road.lanes !== lanes.length) throw new Error(`A road of ${road.lanes} lanes is no highway of ${lanes.length}`);
+  const edge = lanes[lanes.length - 1] + laneWidth / 2;
+  const dividers = lanes.slice(1).map((center, i) => (center + lanes[i]) / 2);
+  return [{ offset: -edge, dashed: false }, { offset: edge, dashed: false }, ...dividers.map((offset) => ({ offset, dashed: true }))];
 }
 
 function paintLanes(c: PaintCanvas, road: AtlasRoad): void {

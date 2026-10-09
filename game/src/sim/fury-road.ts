@@ -5,7 +5,7 @@ import { RULES } from '../data/rules';
 import { chassisDef } from '../data/chassis';
 import { inCombat } from './combat';
 import { playerVehicle } from './damage';
-import { highwayMap, milestoneAt, outpostSite, roadPoint, STRIDE, stretchStream, toAbsolute, toLocal } from './highway';
+import { fromRoad, highwayMap, milestoneAt, outpostSite, roadPoint, STRIDE, stretchStream, toRoad } from './highway';
 import { mapObstacles } from './mapgen';
 import { rollPartStock } from './market';
 import { fightCornered, topGoal } from './npc-activities';
@@ -87,7 +87,7 @@ function runOf(world: World): FuryRoadRun {
 
 export function outpostPad(world: World, milestone: number): Vec {
   const pad = outpostSite(world.seed, milestone).pad;
-  return { x: pad.x, y: toLocal(runOf(world).window, pad.n) };
+  return fromRoad(runOf(world).window, pad.n, pad.u);
 }
 
 function outpostOf(world: World, facts: OutpostFacts): Outpost {
@@ -114,7 +114,7 @@ export function advanceFuryRoad(world: World): void {
 }
 
 function playerProgress(world: World, run: FuryRoadRun): number {
-  return toAbsolute(run.window, playerVehicle(world).pos.y);
+  return toRoad(run.window, playerVehicle(world).pos).n;
 }
 
 function countWrecks(world: World, run: FuryRoadRun): void {
@@ -195,8 +195,9 @@ function groupSpots(world: World, run: FuryRoadRun, along: number, radii: number
 
 function laneSpot(world: World, run: FuryRoadRun, along: number, radius: number, taken: Vec[]): Vec | null {
   for (let step = 0; step < FURY_ROAD.maxTries / 10; step++) {
-    const lane = FURY_ROAD.laneOffsets[step % FURY_ROAD.laneOffsets.length];
-    const offset = Math.floor(step / FURY_ROAD.laneOffsets.length) * FURY_ROAD.spawnStagger;
+    const offsets = FURY_ROAD.spawnOffsets;
+    const lane = offsets[step % offsets.length];
+    const offset = Math.floor(step / offsets.length) * FURY_ROAD.spawnStagger;
     const pos = roadPoint(world.seed, run.window, along + (step % 2 === 0 ? offset : -offset), lane);
     if (isFree(world, pos, radius, null) && taken.every((t) => dist(t, pos) > radius * 2 + 0.5)) return pos;
   }
@@ -308,14 +309,14 @@ export function moveWindow(world: World): void {
 }
 
 function shiftStorms(world: World): void {
-  for (const storm of world.weather) if (storm.kind === 'storm') storm.pos = { x: storm.pos.x, y: storm.pos.y + STRIDE };
+  for (const storm of world.weather) if (storm.kind === 'storm') storm.pos = { x: storm.pos.x + STRIDE, y: storm.pos.y + STRIDE };
 }
 
 function shiftVehicles(world: World): void {
   const me = playerVehicle(world);
   world.removed.push(...world.vehicles.filter((v) => v !== me));
   world.vehicles = [me];
-  me.pos = { x: me.pos.x, y: me.pos.y + STRIDE };
+  me.pos = { x: me.pos.x + STRIDE, y: me.pos.y + STRIDE };
   me.order = null;
   me.trail = [];
   me.weaponOrders = {};
@@ -326,7 +327,8 @@ function shiftPlayer(world: World): void {
   const p = world.player;
   const size = world.size;
   const explored = new Uint8Array(size * size);
-  explored.set(p.explored.subarray(0, (size - STRIDE) * size), STRIDE * size);
+  const kept = size - STRIDE;
+  for (let y = 0; y < kept; y++) explored.set(p.explored.subarray(y * size, y * size + kept), (y + STRIDE) * size + STRIDE);
   p.explored = explored;
   p.marked = [];
   p.hostilesSeen = [];

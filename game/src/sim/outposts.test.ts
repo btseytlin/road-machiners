@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ECONOMY, GOODS } from '../data/goods';
-import { FURY_ROAD } from '../data/fury-road';
+import { FURY_ROAD, HIGHWAY } from '../data/fury-road';
 import { REPAIR } from '../data/wear';
 import { playerVehicle } from './damage';
 import { outpostPad } from './fury-road';
@@ -94,7 +94,7 @@ describe('outpost services', () => {
     const part = w.furyRoad!.outposts[0].stock[0];
     w = outpostBuyPart(w, part.id);
     const me = playerVehicle(w);
-    me.pos = roadPoint(w.seed, w.furyRoad!.window, milestoneAt(1) + 30, FURY_ROAD.laneOffsets[1]);
+    me.pos = roadPoint(w.seed, w.furyRoad!.window, milestoneAt(1) + 30, HIGHWAY.road.lanes[1]);
 
     w = endTurn(w, still);
 

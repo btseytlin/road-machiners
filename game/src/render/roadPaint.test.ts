@@ -136,11 +136,11 @@ describe('road mask', () => {
 describe('highway lane paint', () => {
   const highway = highwayAtlas(4, 1);
 
-  it('marks four lanes: solid edges, a solid middle line and dashed dividers', () => {
+  it('marks four northbound lanes: solid edges and three dashed dividers, with no middle line', () => {
     const lines = laneLines(highway.roads[0]);
 
-    expect(lines.map((l) => l.offset)).toEqual([-2.65, 2.65, -1.5, 0, 1.5]);
-    expect(lines.map((l) => l.dashed)).toEqual([false, false, true, false, true]);
+    expect(lines.map((l) => l.offset)).toEqual([-4, 4, -2, 0, 2]);
+    expect(lines.map((l) => l.dashed)).toEqual([false, false, true, true, true]);
   });
 
   it('paints lanes and no dirt road on the highway, and no lanes on Icarus', () => {
