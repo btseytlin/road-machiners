@@ -33,6 +33,7 @@ export const PIECES: Piece[] = [
   { name: '[aria-disabled="true"]', note: "A control that cannot be used now. It keeps hover and focus.", build: () => disabled() },
   { name: ".tooltip", note: "A note that opens over its anchor. It also gives a disabled reason.", build: () => sample("tooltip", "Need 12 M's more") },
   { name: ".tooltip-row", note: "Label on the left, value on the right, for breakdowns.", build: () => breakdown() },
+  { name: ".key", note: "A keyboard key or a mouse button, drawn as a keycap.", build: () => text("kbd", "key", "Space") },
   { name: ".num", note: "A number in the mono face.", build: () => text("span", "num", "1 240") },
 ];
 

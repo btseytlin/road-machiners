@@ -206,6 +206,19 @@
   stroke: var(--coin-mark);
 }
 
+/* A keyboard key or a mouse button, drawn as a keycap. */
+.key {
+  display: inline-block;
+  padding: 0 var(--space-3);
+  background: var(--steel-3);
+  color: var(--ink-bright);
+  border: 1px solid var(--steel-5);
+  border-radius: var(--radius-s);
+  box-shadow: 0 2px 0 var(--steel-1);
+  font: var(--text-dense) var(--font-mono);
+  white-space: nowrap;
+}
+
 /* A number read at a glance, in the mono face. */
 .num {
   font: var(--text-dense) var(--font-mono);

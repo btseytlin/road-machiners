@@ -10,9 +10,6 @@
 #ui .top-left > .panel {
   position: static;
 }
-#ui .top-left > .help {
-  position: relative;
-}
 /* The weapons keep the bottom line, and the instruments go above them only when the two do not fit side by side. */
 .bottom-left {
   position: absolute;
