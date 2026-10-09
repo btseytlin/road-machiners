@@ -53,11 +53,6 @@ body {
   opacity: 0.45;
   cursor: default;
 }
-#ui button[aria-disabled="true"] {
-  color: var(--ink-faint);
-  border-color: var(--line-faint);
-  cursor: default;
-}
 #ui button:focus-visible,
 #ui select:focus-visible,
 #ui [tabindex]:focus-visible,

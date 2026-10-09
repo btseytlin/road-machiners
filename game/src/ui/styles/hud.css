@@ -163,10 +163,6 @@
 .weapon-head .switch:last-child {
   margin-left: auto;
 }
-#ui :is(.instruments, .weapons) [aria-disabled="true"] {
-  opacity: 0.45;
-  cursor: default;
-}
 #ui .weapons .weapon-pick.on {
   background: var(--accent-wash);
 }

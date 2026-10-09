@@ -133,6 +133,10 @@
   opacity: 0.45;
   cursor: default;
 }
+#ui button[aria-disabled="true"]:not(.switch):hover {
+  background: var(--surface-raised);
+  border-color: var(--line-strong);
+}
 
 /* A note that opens over its anchor on hover and focus. Words in the UI face, numbers in .num. It also gives the reason
    for a disabled control, as one short fact like "Need 12 M more". */
