@@ -12,6 +12,7 @@ import { callVehicle, chooseOption, currentOptions, hangUp, honk } from '../sim/
 import type { CallVar, CallVars, GameEvent, World } from '../sim/types';
 import { playerSees } from '../sim/vision';
 import { playerCanAct } from '../sim/world';
+import { modeRules } from '../sim/settings';
 import { el, isBrowserChord, panel, topCenter } from './dom';
 import { fuelLiters, meters, moneyText } from './units';
 import { npcName } from '../sim/spawn';
@@ -101,7 +102,7 @@ function isTyping(): boolean {
 
 export function canCall(w: World, id: string): boolean {
   const v = w.vehicles.find((x) => x.id === id);
-  return !!v?.brain && !isKnockedOut(v) && playerCanAct(w) && playerSees(w, v.pos);
+  return modeRules(w).radio && !!v?.brain && !isKnockedOut(v) && playerCanAct(w) && playerSees(w, v.pos);
 }
 
 export type DialogueHost = {

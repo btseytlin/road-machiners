@@ -33,7 +33,7 @@ import { SMOKE } from '../data/utilities';
 import { isShutDown } from './utility';
 import { attachLine } from './harpoon';
 import { angleDiff, bearing, clamp, dist, DEG, type Vec } from './vec';
-import { damageScale } from './settings';
+import { damageScale, modeRules } from './settings';
 
 export type FireBlock =
   | "disabled"
@@ -968,6 +968,11 @@ export function settleAims(world: World): void {
 }
 
 function npcFate(world: World, v: Vehicle, shot: Set<string>): "dies" | "knockedOut" | null {
+  const fate = rolledFate(world, v, shot);
+  return fate === "knockedOut" && !modeRules(world).knockouts ? "dies" : fate;
+}
+
+function rolledFate(world: World, v: Vehicle, shot: Set<string>): "dies" | "knockedOut" | null {
   if (getResources(world, v).health <= 0) return "dies";
   if (isDefeated(v)) return shot.has(v.id) ? "dies" : null;
   return corePart(v, "cab").hp > 0 ? cabKnockFate(world, v) : brokenCabFate(world);
@@ -992,7 +997,7 @@ function damagedByShots(world: World): Set<string> {
 
 export function wreckVehicle(world: World, v: Vehicle): void {
   const by = beatenBy(world, v);
-  createWreckSalvage(world, v);
+  if (modeRules(world).salvage) createWreckSalvage(world, v);
   world.vehicles = world.vehicles.filter((x) => x.id !== v.id);
   world.removed.push(v);
   world.obstacles.push({

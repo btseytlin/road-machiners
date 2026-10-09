@@ -16,6 +16,7 @@ import { getResources } from './resources';
 import type { Job, NpcState, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
 import { canVehicleSee } from './vision';
 import { npcName } from './spawn';
+import { modeRules } from './settings';
 
 export type WorkLeft = { turnsLeft: number; total: number };
 export type Work = WorkLeft & ({ from: 'job'; job: Job } | { from: 'state'; state: NpcState });
@@ -44,7 +45,7 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
     },
     check: (w, s) => (w.events.some((e) => (e.t === 'destroyed' || e.t === 'npcKnockout') && e.vehicle === s.other) ? 'fulfilled' : null),
     hooks: {
-      expired: (w, s) => { addState(w, 'backedOff', s.holder, s.other, { kind: 'none' }); },
+      expired: (w, s) => { if (modeRules(w).yielding) addState(w, 'backedOff', s.holder, s.other, { kind: 'none' }); },
       fulfilled: (w, s) => { if (isRobberyFeud(s)) lootRobbed(w, s.holder, s.other); },
     },
     work: noWork,
@@ -145,7 +146,7 @@ export function endState(w: World, s: NpcState, ending: StateEnding): void {
   if (i < 0) throw new Error(`State ${s.id} has already ended`);
   const [ended] = w.states.splice(i, 1);
   w.events.push({ t: 'stateEnded', state: ended, ending });
-  if (kindOf(ended.kind).binds && ending !== 'broken') backOffAfterDeal(w, ended);
+  if (kindOf(ended.kind).binds && ending !== 'broken' && modeRules(w).yielding) backOffAfterDeal(w, ended);
   kindOf(ended.kind).hooks[ending]?.(w, ended);
 }
 

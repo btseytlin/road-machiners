@@ -15,6 +15,7 @@ import { backOffLoot, defyThreat, finishGoal, pushGoal, topGoal } from './npc-ac
 import { decide, firepower, holdsUp, perceiveDanger, robbedFor, visibleHostiles, wantsLoot } from './npc-decisions';
 import { SPARE_LINE } from '../data/dialogue';
 import { vehicleHasPerk } from './progress';
+import { modeRules } from './settings';
 import { backedOff, canReachSalvage, claimantOf, claimPile, createCargoSalvage, dumpOnPile, hasCargo, lootClaimedBy, salvageInRange, takeError } from './salvage';
 import { isStranded } from './stats';
 import { addState, endState, pleaData, stateOf } from './states';
@@ -56,6 +57,7 @@ function holdFire(v: Vehicle, target: Vehicle): void {
 }
 
 export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, dumped: SalvageStock | null = null): void {
+  if (!modeRules(world).salvage) throw new Error(`${loser.id} cannot hand over cargo where nothing is looted`);
   const stock = hasCargo(loser) ? createCargoSalvage(world, loser, 1) : dumped;
   cede(world, loser, winner, stock, 'take the handed-over cargo');
   creditYield(world, loser, winner);
@@ -133,6 +135,7 @@ function grantPlea(world: World, pleader: Vehicle, answerer: Vehicle, plea: Plea
 }
 
 export function plead(world: World, npc: Vehicle, foe: Vehicle, plea: Plea): void {
+  requireRadio(world, npc, foe);
   addState(world, 'plea', npc.id, foe.id, { kind: 'plea', plea, answered: foe.brain !== null });
   if (!foe.brain) {
     world.events.push({ t: 'plea', from: npc.id, to: foe.id, plea, accepted: null });
@@ -147,6 +150,10 @@ export function plead(world: World, npc: Vehicle, foe: Vehicle, plea: Plea): voi
   if (reply !== 'comply') return;
   const held = stateOf(world, 'plea', npc.id, foe.id);
   if (held) endState(world, held, 'fulfilled');
+}
+
+function requireRadio(world: World, npc: Vehicle, foe: Vehicle): void {
+  if (!modeRules(world).radio) throw new Error(`${npc.id} cannot plead with ${foe.id} with no radio`);
 }
 
 export function settlePlayerPlea(world: World, npc: Vehicle, plea: Plea, accepted: boolean): void {
@@ -197,7 +204,8 @@ export function settleThreat(world: World, npc: Vehicle, answer: ThreatAnswer): 
 }
 
 export function defendClaim(world: World, claimant: Vehicle, trespasser: Vehicle): void {
-  defyThreat(world, claimant, trespasser, firepower(world, claimant) > 0 ? 'fightBack' : 'flee', 'defend its claimed loot');
+  const fights = firepower(world, claimant) > 0 || !modeRules(world).yielding;
+  defyThreat(world, claimant, trespasser, fights ? 'fightBack' : 'flee', 'defend its claimed loot');
 }
 
 export function warnedOff(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
@@ -296,7 +304,7 @@ export function hasStrandedPrey(world: World, npc: Vehicle): boolean {
 
 export function strandedPrey(world: World, npc: Vehicle): Vehicle | null {
   const prey = fightTarget(world, npc);
-  if (!prey || !isBeaten(world, npc, prey)) return null;
+  if (!prey || !modeRules(world).yielding || !isBeaten(world, npc, prey)) return null;
   return visibleHostiles(world, npc).every((foe) => foe.id === prey.id) ? prey : null;
 }
 

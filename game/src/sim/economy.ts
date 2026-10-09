@@ -28,6 +28,7 @@ import type { NpcState, PartInstance, Vehicle, World } from "./types";
 import { playerCommand } from "./world";
 import { tankLeaks } from "./supplies";
 import { fuelCap, isStranded, isWorking, suppliesCap } from "./stats";
+import { modeRules } from './settings';
 
 export type Supply = "fuel" | "supplies";
 
@@ -275,6 +276,7 @@ function topUp(world: World, vehicle: Vehicle, kinds: readonly Supply[]): void {
 }
 
 export function scrapPatch(world: World): void {
+  if (!modeRules(world).rescue) return;
   const town = needsPatchInTown(world);
   if (!town) return;
   const me = playerVehicle(world);
@@ -300,7 +302,7 @@ export function scrapFuel(world: World, v: Vehicle): number {
 export function enterTown(world: World): World {
   return playerCommand(world, (w) => {
     if (!shopAt(w)) throw new Error('Not at a shop gate');
-    if (w.player.townPatched) return;
+    if (w.player.townPatched || !modeRules(w).rescue) return;
     w.player.townPatched = true;
     const worn = criticalParts(playerVehicle(w)).filter((part) => !isJunk(part) && part.hp < Math.ceil(maxHp(part) * RULES.townPatch));
     for (const part of worn) scrapPatchPart(part, RULES.townPatch);

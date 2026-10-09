@@ -824,6 +824,9 @@ export type DecisionId = keyof DecisionOptions;
 
 export const MIN_CHANCE = 0.01;
 
+export const YIELD_OPTIONS: readonly string[] = ['flee', 'truce', 'beg', 'spare', 'offer', 'accept', 'comply'];
+export const RESCUE_OPTIONS: readonly string[] = ['tow'];
+
 export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> } = {
   hostileSeen: { keep: 1, fight: 1.8, flee: 1 },
   contactHeard: { keep: 1, investigate: 0, flee: 3 },

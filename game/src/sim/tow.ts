@@ -19,6 +19,7 @@ import { skillEffect } from './progress';
 import { canUseSite, nearestPad, reachedSite, type Site } from './sites';
 import { addState, endState, stateOf, towData, towPromiseData } from './states';
 import { isStranded, vehicleStats } from './stats';
+import { modeRules } from './settings';
 import { getResources } from './resources';
 import type { GameEvent, NpcActivity, NpcState, Pose, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
@@ -222,6 +223,7 @@ function beaconCenter(world: World, listener: Vehicle, me: Vehicle): Vec | null 
 
 export function setBeacon(world: World, on: boolean): World {
   return playerCommand(world, (w) => {
+    if (on && !modeRules(w).rescue) throw new Error('No one answers a beacon in this game mode');
     if (on && !isStranded(w, playerVehicle(w))) throw new Error('The beacon needs a stranded truck');
     w.player.beacon = on;
   });

@@ -1,0 +1,203 @@
+import { describe, expect, it } from 'vitest';
+import { startKit } from '../data/start';
+import { TEST_MAP } from '../test/map';
+import { resolveDestroyed } from './combat';
+import { playerVehicle } from './damage';
+import { checkKnockout } from './defeat';
+import { callVehicle, honk, raiseCalls } from './dialogue';
+import { corePart } from './grid';
+import { fightCornered, thinkNpc, topGoal } from './npc-activities';
+import { optionWeights } from './npc-decisions';
+import { renewSalvage } from './salvage';
+import { defaultSetup } from './settings';
+import { addState, advanceStates, stateOf } from './states';
+import { setBeacon } from './tow';
+import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
+import type { GameModeId, Vehicle, World } from './types';
+import { newWorld } from './world';
+import { TIME } from '../data/time';
+
+function worldIn(mode: GameModeId): World {
+  const w = emptyWorld({ x: 80, y: 80 });
+  w.setup = { ...w.setup, mode };
+  return w;
+}
+
+function raider(w: World, parts = ['mg', 'stockEngine']): Vehicle {
+  const v = addVehicle(w, 'raiders', 'wagon', parts, { x: 86, y: 80 }, Math.PI);
+  v.brain = npcBrain('buggy', v.pos, ['raider']);
+  return v;
+}
+
+function hostile(w: World, v: Vehicle): void {
+  addState(w, 'feud', v.id, w.player.vehicleId, { kind: 'feud', robbery: false });
+  fightCornered(w, v, playerVehicle(w));
+}
+
+describe('yielding', () => {
+  it('offers no flight, truce or mercy where no driver yields', () => {
+    const w = worldIn('gauntlet');
+    const v = raider(w);
+    const me = w.player.vehicleId;
+
+    expect(Object.keys(optionWeights(w, v, 'attacked', me, 1))).not.toContain('flee');
+    expect(Object.keys(optionWeights(w, v, 'hostileSeen', me, 1))).not.toContain('flee');
+    expect(Object.keys(optionWeights(w, v, 'parley', me, 1))).toEqual(['keep']);
+    expect(Object.keys(optionWeights(w, v, 'truceOffered', me, 1))).toEqual(['refuse']);
+    expect(Object.keys(optionWeights(w, v, 'threatened', me, 1))).not.toContain('comply');
+  });
+
+  it('keeps every option in Roaming', () => {
+    const w = worldIn('roaming');
+    const v = raider(w);
+    const me = w.player.vehicleId;
+
+    expect(Object.keys(optionWeights(w, v, 'attacked', me, 1))).toContain('flee');
+    expect(Object.keys(optionWeights(w, v, 'parley', me, 1))).toEqual(expect.arrayContaining(['truce', 'beg', 'flee']));
+  });
+
+  it('never flees when attacked, even when flight is all it would pick', () => {
+    forceOption('attacked', 'flee');
+    const fled = Array.from({ length: 20 }, (_, seed) => {
+      const w = worldIn('gauntlet');
+      const v = raider(w);
+      v.brain!.attackers = { [w.player.vehicleId]: false };
+      w.rngState = seed + 1;
+      thinkNpc(w, v);
+      return v.brain!.goals.some((g) => g.kind === 'flee');
+    });
+
+    expect(fled.some((f) => f)).toBe(false);
+  });
+
+  it('leaves no fight for service in town', () => {
+    const w = worldIn('gauntlet');
+    const v = raider(w);
+    v.resources!.fuel = 1;
+    hostile(w, v);
+
+    thinkNpc(w, v);
+
+    expect(topGoal(v)?.kind).toBe('fight');
+  });
+
+  it('keeps a fight with no gun left, so the truck rams', () => {
+    const gauntlet = worldIn('gauntlet');
+    const roaming = worldIn('roaming');
+    const unarmed = [gauntlet, roaming].map((w) => {
+      const v = raider(w, ['stockEngine']);
+      hostile(w, v);
+      thinkNpc(w, v);
+      return v;
+    });
+
+    expect(topGoal(unarmed[0])?.kind).toBe('fight');
+    expect(topGoal(unarmed[1])?.kind).not.toBe('fight');
+  });
+
+  it('never gives up a fight that stalls', () => {
+    const run = (mode: GameModeId) => {
+      const w = worldIn(mode);
+      const v = raider(w);
+      hostile(w, v);
+      topGoal(v)!.worn = { turn: w.turn - 100, condition: 1 };
+      w.turn += 1;
+      thinkNpc(w, v);
+      return { w, v };
+    };
+    const gauntlet = run('gauntlet');
+    const roaming = run('roaming');
+
+    expect(topGoal(gauntlet.v)?.kind).toBe('fight');
+    expect(stateOf(gauntlet.w, 'backedOff', gauntlet.v.id, gauntlet.w.player.vehicleId)).toBeNull();
+    expect(stateOf(roaming.w, 'backedOff', roaming.v.id, roaming.w.player.vehicleId)).not.toBeNull();
+  });
+
+  it('lets a feud lapse without backing off', () => {
+    const w = worldIn('gauntlet');
+    const v = raider(w);
+    v.pos = { x: 300, y: 300 };
+    const feud = addState(w, 'feud', v.id, w.player.vehicleId, { kind: 'feud', robbery: false });
+    feud.turnsLeft = 1;
+    w.turn += 1;
+
+    advanceStates(w);
+
+    expect(stateOf(w, 'feud', v.id, w.player.vehicleId)).toBeNull();
+    expect(stateOf(w, 'backedOff', v.id, w.player.vehicleId)).toBeNull();
+  });
+});
+
+describe('radio', () => {
+  it('opens no call, raises no hail and sounds no horn where there is no radio', () => {
+    const w = worldIn('gauntlet');
+    const v = raider(w);
+
+    expect(() => callVehicle(w, v.id)).toThrow(/radio/);
+    expect(() => honk(w)).toThrow(/radio/);
+    raiseCalls(w);
+    expect(w.player.call).toBeNull();
+  });
+});
+
+describe('salvage', () => {
+  it('leaves no salvage on a wreck and renews none', () => {
+    const w = worldIn('gauntlet');
+    const v = raider(w);
+    corePart(v, 'cab').hp = 0;
+    w.rngState = 1;
+    const before = structuredClone(w.salvage);
+
+    resolveDestroyed(w);
+    w.turn = TIME.turnsPerDay * 2;
+    renewSalvage(w);
+
+    expect(w.events).toContainEqual(expect.objectContaining({ t: 'destroyed', vehicle: v.id }));
+    expect(w.salvage).toEqual(before);
+  });
+});
+
+describe('knockouts', () => {
+  it('wrecks an NPC whose fate would be a knockout', () => {
+    const outs = Array.from({ length: 12 }, (_, seed) => {
+      const w = worldIn('gauntlet');
+      const v = raider(w);
+      corePart(v, 'cab').hp = 0;
+      w.rngState = seed + 1;
+      resolveDestroyed(w);
+      return w.events.map((e) => e.t);
+    });
+
+    expect(outs.every((events) => events.includes('destroyed'))).toBe(true);
+    expect(outs.some((events) => events.includes('npcKnockout'))).toBe(false);
+  });
+
+  it('ends the run when the player would be knocked out', () => {
+    const w = newWorld(4, startKit('gauntlet'), TEST_MAP, defaultSetup('gauntlet'));
+    corePart(playerVehicle(w), 'cab').hp = 0;
+
+    checkKnockout(w);
+
+    expect(w.player.state).toBe('dead');
+    expect(w.events).toEqual([{ t: 'runLost', stretch: 1, cause: 'wrecked' }]);
+  });
+
+  it('still knocks the player out in Roaming', () => {
+    const w = worldIn('roaming');
+    corePart(playerVehicle(w), 'cab').hp = 0;
+
+    checkKnockout(w);
+
+    expect(w.player.state).toBe('knockedOut');
+  });
+});
+
+describe('rescue', () => {
+  it('turns no beacon on where nobody answers it', () => {
+    const w = worldIn('gauntlet');
+    w.player.fuel = 0;
+
+    expect(() => setBeacon(w, true)).toThrow(/beacon/);
+    expect(setBeacon({ ...worldIn('roaming'), player: { ...w.player } }, true).player.beacon).toBe(true);
+  });
+});

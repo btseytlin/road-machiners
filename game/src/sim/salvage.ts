@@ -32,6 +32,7 @@ import { playerCommand } from './world';
 import { dist, type Vec } from './vec';
 import { OPENING_WRECK_ID } from './opening';
 import { maxHp } from './wear';
+import { modeRules } from './settings';
 
 export function initializeSalvage(world: World): void {
   const sites = REGION.locations.flatMap((site) => {
@@ -386,7 +387,7 @@ export function removeStocks(world: World, gone: Set<string>): void {
 }
 
 export function renewSalvage(world: World): void {
-  if (world.turn % TIME.turnsPerDay !== 0) return;
+  if (!modeRules(world).salvage || world.turn % TIME.turnsPerDay !== 0) return;
   for (const site of REGION.locations) {
     const table = siteLootTable(site);
     if (table) restockSite(world, siteStock(world, site.id), table);

@@ -4,7 +4,7 @@ import { REGION } from '../data/region';
 import { startKit } from '../data/start';
 import { TEST_MAP } from '../test/map';
 import { playerVehicle } from './damage';
-import { courseLine, progressOf } from './gauntlet-course';
+import { courseLine, progressOf } from './gauntlet-layout';
 import { isBakedObstacle } from './mapgen';
 import { route } from './path';
 import { defaultSetup } from './settings';

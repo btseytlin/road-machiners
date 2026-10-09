@@ -26,6 +26,8 @@ import { npcHomeSite, towOf } from "./tow";
 import { pushGoal } from "./npc-activities";
 import { liesUp } from "./npc-service";
 import { isWeak, wantsLoot } from "./npc-decisions";
+import { endRun } from "./gauntlet";
+import { modeRules } from "./settings";
 import type { SalvageStock, Vehicle, World } from "./types";
 import { wreckStockId } from "./salvage";
 import { dist, type Vec } from "./vec";
@@ -39,9 +41,14 @@ export function checkDeath(world: World): void {
 }
 
 export function checkKnockout(world: World): void {
-  const p = world.player;
   const me = playerVehicle(world);
-  if (p.state !== "active" || !knockedNow(world, me)) return;
+  if (world.player.state !== "active" || !knockedNow(world, me)) return;
+  if (modeRules(world).knockouts) knockOutPlayer(world, me);
+  else endRun(world, "wrecked");
+}
+
+function knockOutPlayer(world: World, me: Vehicle): void {
+  const p = world.player;
   const watchers = world.vehicles.filter((v) => isHostile(world, v, me) && canVehicleSee(world, v, me.pos));
   if (watchers.length > 0) practice(world, "knockout", 1, null, "driver");
   me.defeat = { phase: "out", turns: 0, unseen: 0, foes: withLastHitter(world, me, watchers.map((v) => v.id)), gaveUp: false };
@@ -108,6 +115,7 @@ function layDown(world: World, v: Vehicle, foes: string[], gaveUp: boolean): voi
 }
 
 export function standDown(world: World, v: Vehicle, winnerId: string): void {
+  if (!modeRules(world).knockouts) throw new Error(`${v.id} cannot stand down where nobody is knocked out`);
   layDown(world, v, [...new Set([...foesOf(world, v), winnerId])], true);
 }
 

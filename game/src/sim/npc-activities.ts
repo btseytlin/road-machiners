@@ -17,7 +17,7 @@ import { bodyStop } from './meeting-stop';
 import {
   tradeOffers, tradeSpend, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolStopsOf, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, npcSenses, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, noteStripped, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition, firepower,
+  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, noteStripped, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition, givesUpUnarmed, yields,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -174,7 +174,7 @@ export function fuelReserveFor(world: World, vehicle: Vehicle, profile: NpcProfi
 const isLowOnFuel = (world: World, vehicle: Vehicle, profile: NpcProfile): boolean => getResources(world, vehicle).fuel <= fuelReserveFor(world, vehicle, profile);
 
 function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): ServiceNeed | null {
-  if (holdsRearm(vehicle)) return null;
+  if (holdsRearm(vehicle) || !yields(world)) return null;
   const needs: [string, boolean][] = [
     ['low fuel', isLowOnFuel(world, vehicle, profile)],
     ['low supplies', getResources(world, vehicle).supplies <= suppliesCap(vehicle) * NPC_UPKEEP.lowSupplies],
@@ -336,7 +336,7 @@ function fightInvalid(world: World, vehicle: Vehicle, goal: NpcActivity, contact
   const target = world.vehicles.find((v) => v.id === goal.targetId);
   if (!target || !isHostile(world, vehicle, target)) return 'lost the target';
   if (holdsOffRobbery(world, vehicle, target)) return GAVE_UP_ROBBERY;
-  if (firepower(world, vehicle) <= 0) return 'no gun left to fight with';
+  if (givesUpUnarmed(world, vehicle)) return 'no gun left to fight with';
   return fightTargetLost(world, vehicle, target, contacts) ? 'lost the target' : null;
 }
 
@@ -375,7 +375,7 @@ function stalls(world: World, goal: NpcActivity, target: Vehicle): boolean {
   if (!goal.worn) throw new Error(`A fight on ${goal.targetId} has no record of wearing it down`);
   const condition = bodyCondition(target);
   if (goal.worn.condition - condition >= NPC_BEHAVIOR.fightWearShare) goal.worn = { turn: world.turn, condition };
-  return world.turn - goal.worn.turn > NPC_BEHAVIOR.fightStallTurns;
+  return yields(world) && world.turn - goal.worn.turn > NPC_BEHAVIOR.fightStallTurns;
 }
 
 function onHoldUp(world: World, vehicle: Vehicle): void {
@@ -562,7 +562,7 @@ function reactSeen(world: World, vehicle: Vehicle, enemy: Vehicle, profile: NpcP
 }
 
 function runsAgain(world: World, vehicle: Vehicle, track: Track, enemy: Vehicle, profile: NpcProfile): 'flee' | null {
-  if (!comesInSight(world, track) || topGoal(vehicle)?.kind === 'flee') return null;
+  if (!yields(world) || !comesInSight(world, track) || topGoal(vehicle)?.kind === 'flee') return null;
   const run = fleeGoal(world, vehicle, profile, enemy.id, enemy.pos, 'avoid a truck it ran from');
   return withinReach(vehicle, run) ? null : 'flee';
 }

@@ -11,8 +11,9 @@ import { isShutDown } from './utility';
 import { route } from './path';
 import { randRange } from './rng';
 import { nearestPad } from './sites';
+import { modeRules } from './settings';
 import { isFree } from './spawn';
-import { vehicleStats } from './stats';
+import { isStranded, vehicleStats } from './stats';
 import { isOnRope, npcHomeSite } from './tow';
 import type { Vehicle, World } from './types';
 import { canVehicleSee } from './vision';
@@ -32,7 +33,11 @@ function madeProgress(world: World, v: Vehicle): boolean {
 }
 
 function waits(world: World, v: Vehicle): boolean {
-  return isShutDown(world, v) || isOnRope(world, v.id) || awaitsTower(world, v) || liesUp(v) || waitsOnLeader(world, v);
+  return isShutDown(world, v) || isOnRope(world, v.id) || awaitsTower(world, v) || liesUp(v) || waitsOnLeader(world, v) || strandedForGood(world, v);
+}
+
+function strandedForGood(world: World, v: Vehicle): boolean {
+  return !modeRules(world).rescue && isStranded(world, v);
 }
 
 // A follower at its spot waits. So does one that stands as near a parked leader as its spot does: the spot lies on the
