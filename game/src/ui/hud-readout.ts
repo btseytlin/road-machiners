@@ -10,7 +10,7 @@ import { playerVehicle, vehicleById } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
 import { corePart, mountedItems, itemSize } from "../sim/grid";
 import { canOverdrive, fuelCap, gunDraw, hasWorkingEngine, inOverdrive, isStranded, isWorking, maxSpeedSteps, workingEngineCapacity, type SpeedStep } from "../sim/stats";
-import { fuelLimit } from "../sim/far";
+import { fuelLimit, lowFuelSpeed } from "../sim/far";
 import { spareParts } from "../sim/inventory";
 import { towData } from "../sim/states";
 import { playerTow } from "../sim/tow";
@@ -20,7 +20,7 @@ import { dist, type Vec } from "../sim/vec";
 import type { NpcState, SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { clock, vehicleName } from "./format";
-import { celsius, engineCelsius, fuelLiters, hp, kg, kph, moneyM } from "./units";
+import { celsius, engineCelsius, fuelLiters, hp, kph, moneyM } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
 import { contextKey, type ContextAction } from './hud';
@@ -253,8 +253,7 @@ function strandedReason(w: World): Msg | null {
 }
 
 // Max-speed rows and the power chip: the sim's steps and power facts, worded tersely for the HUD tooltip and the truck headers.
-// Each row shows its cause, its effect and the running km/h. The last row is the total the HUD shows.
-export type SpeedRow = { label: Msg; effect: Msg; kph: number; total: boolean };
+export type SpeedRow = { label: Msg; text: Msg; delta: number };
 
 export type PowerChip = { text: Msg; detail: Msg; over: boolean };
 
@@ -274,45 +273,49 @@ export function powerNumber(n: number): number {
 }
 
 type Kind<K extends SpeedStep['kind']> = Extract<SpeedStep, { kind: K }>;
-type Words = { label: Msg; effect: (deltaKph: number) => Msg };
-// What each step is called and how its effect reads. A new step kind fails typecheck until it has an entry here.
-type Wording = { [K in SpeedStep['kind']]: (step: Kind<K>, weather: Msg) => Words };
-
-const byFactor = (factor: number) => () => percent(factor);
+type Wording = { [K in SpeedStep['kind']]: (step: Kind<K>, weather: Msg) => Msg };
 
 const WORDING: Wording = {
-  chassis: () => ({ label: t("speed.chassis"), effect: () => t("speed.base") }),
-  engine: (s) => ({ label: s.worn ? t("speed.engineWorn") : t("speed.engine"), effect: byKph }),
-  load: (s) => ({ label: t("speed.load", { mass: kg(s.mass), rated: kg(s.rated) }), effect: byFactor(s.factor) }),
-  wheels: (s) => ({ label: t("speed.wheels", { n: s.broken }), effect: byFactor(s.factor) }),
-  guns: (s) => ({ label: t("speed.guns", { draw: powerNumber(s.draw), capacity: powerNumber(s.capacity) }), effect: byFactor(s.factor) }),
-  floor: () => ({ label: t("speed.floor"), effect: byKph }),
-  overdrive: (s) => ({ label: t("speed.overdrive"), effect: byFactor(s.factor) }),
-  transmission: () => ({ label: t("speed.transmission"), effect: byKph }),
-  limp: (s) => ({ label: t(`speed.limp.${s.cause}`), effect: () => t("speed.crawl") }),
-  weather: (s, weather) => ({ label: t("speed.weather", { weather }), effect: byFactor(s.factor) }),
-  towing: (s) => ({ label: t("speed.towing"), effect: byFactor(s.factor) }),
+  chassis: () => t("speed.chassis"),
+  engine: (s) => (s.worn ? t("speed.engineWorn") : t("speed.engine")),
+  load: () => t("speed.load"),
+  wheels: (s) => t("speed.wheels", { n: s.broken }),
+  guns: () => t("speed.guns"),
+  floor: () => t("speed.floor"),
+  overdrive: () => t("speed.overdrive"),
+  transmission: () => t("speed.transmission"),
+  limp: (s) => t(`speed.limp.${s.cause}`),
+  weather: (_s, weather) => weather,
+  towing: () => t("speed.towing"),
 };
 
-// One row per step, each with its effect and the running km/h of the rounded speed, so the rows chain to the total.
-// weather is the HUD's label for the weather at the truck.
-export function speedRows(weather: Msg, steps: SpeedStep[]): SpeedRow[] {
-  return steps.map((step, i) => {
-    const words = (WORDING[step.kind] as (step: SpeedStep, weather: Msg) => Words)(step, weather);
-    const speed = kph(step.speed);
-    return { label: words.label, effect: words.effect(i === 0 ? 0 : speed - kph(steps[i - 1].speed)), kph: speed, total: i === steps.length - 1 };
-  });
+function labelOf(weather: Msg, step: SpeedStep): Msg {
+  const word = WORDING[step.kind] as (step: SpeedStep, weather: Msg) => Msg;
+  return word(step, weather);
 }
 
-// Short notes for what the number leaves out: a low or empty tank, and how gun power works.
+export function speedRows(weather: Msg, steps: SpeedStep[]): SpeedRow[] {
+  const rows: SpeedRow[] = [];
+  steps.forEach((step, i) => {
+    const label = labelOf(weather, step);
+    if (step.kind === 'limp') return void rows.push({ label, text: t("speed.crawlLine", { label, n: kph(step.speed) }), delta: 0 });
+    if (i === 0) return;
+    const delta = kph(step.speed) - kph(steps[i - 1].speed);
+    if (delta !== 0) rows.push({ label, text: t("speed.line", { label, effect: byKph(delta) }), delta });
+  });
+  return rows;
+}
+
 export function speedNotes(w: World, v: Vehicle, steps: SpeedStep[]): Msg[] {
-  const notes: Msg[] = [];
-  const driving = steps.some((s) => s.kind === 'guns');
-  if (driving) notes.push(t("speed.gunNote", { pct: Math.round((1 - RULES.gunDragMax) * 100) }));
-  const fuel = fuelLimit(w, v, driving);
-  if (fuel === 'low') notes.push(t("speed.lowFuel", { pct: percent(RULES.lowFuelSpeedFactor) }));
-  if (fuel === 'empty') notes.push(t("speed.emptyTank"));
-  return notes;
+  const fuel = fuelLimit(w, v, steps.some((s) => s.kind === 'guns'));
+  if (fuel === 'low') return [t("speed.lowFuel", { n: kph(lowFuelSpeed(steps[steps.length - 1].speed)) })];
+  if (fuel === 'empty') return [t("speed.emptyTank")];
+  return [];
+}
+
+export function speedTip(rows: SpeedRow[], notes: Msg[]): Msg[] {
+  const lines = [...rows.map((r) => r.text), ...notes];
+  return lines.length > 0 ? lines : [t("speed.noPenalties")];
 }
 
 function gunStep(steps: SpeedStep[]): { step: Kind<'guns'>; before: number } | null {
@@ -372,8 +375,7 @@ export function getHudReadout(w: World) {
   return {
     speed: kph(me.speed),
     maxSpeed: kph(steps[steps.length - 1].speed),
-    maxSpeedRows: speedRows(weather.text, steps),
-    maxSpeedNotes: speedNotes(w, me, steps),
+    maxSpeedTip: speedTip(speedRows(weather.text, steps), speedNotes(w, me, steps)),
     manual: me.direct,
     clock: clock(w.turn),
     resources,

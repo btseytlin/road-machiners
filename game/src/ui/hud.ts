@@ -4,7 +4,6 @@ import { DialoguePanel, type DialogueHost } from "./dialogue";
 import type { Vehicle, World } from "../sim/types";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
-import type { SpeedRow } from "./hud-readout";
 import { bottomLeft, el, isBrowserChord, overlaps, panel, rightDock, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
 import {
@@ -85,29 +84,22 @@ const TOAST_MS = 3500;
 
 export class MaxSpeedView {
   private readonly text = el('span', { class: 'speed-max-text' });
-  private readonly rows = el('div', { class: 'speed-rows' });
-  private readonly notes = el('div', { class: 'speed-notes' });
+  private readonly lines = el('div', { class: 'speed-lines' });
   readonly root = el(
     'span',
     { class: 'speed-max', tabindex: 0, 'aria-describedby': 'speed-breakdown' },
     this.text,
-    el('div', { class: 'speed-tip', id: 'speed-breakdown', role: 'tooltip' }, this.rows, this.notes),
+    el('div', { class: 'speed-tip', id: 'speed-breakdown', role: 'tooltip' }, this.lines),
   );
 
   private shown = '';
 
-  render(maxSpeed: number, rows: SpeedRow[], notes: Msg[]): void {
+  render(maxSpeed: number, lines: Msg[]): void {
     setText(this.text, t("hud.maxSpeed", { n: maxSpeed }));
-    // The breakdown changes rarely, so most refreshes leave its nodes alone.
-    const key = JSON.stringify([rows, notes]);
+    const key = JSON.stringify(lines);
     if (key === this.shown) return;
     this.shown = key;
-    this.rows.replaceChildren(
-      ...rows.map((row) =>
-        el('div', { class: `speed-row${row.total ? ' total' : ''}` }, el('span', {}, row.label), el('span', {}, row.effect), el('span', {}, num(row.kph, 'int'))),
-      ),
-    );
-    this.notes.replaceChildren(...notes.map((note) => el('p', {}, note)));
+    this.lines.replaceChildren(...lines.map((line) => el('div', { class: 'speed-line' }, line)));
   }
 }
 
@@ -429,7 +421,7 @@ export class Hud {
       createIcon("truck"),
     );
     this.dialSlot.replaceChildren(dial);
-    this.maxSpeed.render(readout.maxSpeed, readout.maxSpeedRows, readout.maxSpeedNotes);
+    this.maxSpeed.render(readout.maxSpeed, readout.maxSpeedTip);
   }
 
   private renderReadouts(readout: ReturnType<typeof getHudReadout>): void {
