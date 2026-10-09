@@ -5,7 +5,9 @@ import { resolveDestroyed } from './combat';
 import { playerVehicle } from './damage';
 import { checkKnockout } from './defeat';
 import { callVehicle, honk, raiseCalls } from './dialogue';
-import { corePart } from './grid';
+import { corePart, mountedParts } from './grid';
+import { addGoods, dumpItem } from './inventory';
+import { spillDeadRows } from './spill';
 import { fightCornered, thinkNpc, topGoal } from './npc-activities';
 import { optionWeights } from './npc-decisions';
 import { renewSalvage } from './salvage';
@@ -199,5 +201,35 @@ describe('rescue', () => {
 
     expect(() => setBeacon(w, true)).toThrow(/beacon/);
     expect(setBeacon({ ...worldIn('roaming'), player: { ...w.player } }, true).player.beacon).toBe(true);
+  });
+});
+
+describe('spilled cargo', () => {
+  it('is lost, not piled, where nothing is looted', () => {
+    const w = worldIn('gauntlet');
+    const me = playerVehicle(w);
+    const before = structuredClone(w.salvage);
+    const panniers = mountedParts(me, 'cargo')[0];
+    addGoods(w, me, 'salt', 2);
+    panniers.hp = 0;
+
+    spillDeadRows(w);
+
+    expect(w.salvage).toEqual(before);
+    expect(w.events.filter((e) => e.t === 'cargoSpilled')).toEqual([expect.objectContaining({ pile: null })]);
+  });
+});
+
+describe('dumped cargo', () => {
+  it('is thrown away, not piled, where nothing is looted', () => {
+    const w = worldIn('gauntlet');
+    addGoods(w, playerVehicle(w), 'salt', 1);
+    const salt = playerVehicle(w).items.find((it) => it.kind === 'good' && it.good === 'salt')!;
+    const before = structuredClone(w.salvage);
+
+    const after = dumpItem(w, salt.id);
+
+    expect(after.salvage).toEqual(before);
+    expect(playerVehicle(after).items.some((it) => it.id === salt.id)).toBe(false);
   });
 });

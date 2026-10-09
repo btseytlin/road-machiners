@@ -14,6 +14,7 @@ import { startJob } from './jobs';
 import { RULES } from '../data/rules';
 import { PERK_NUMBERS } from '../data/skills';
 import { canReachSalvage, dumpOnPile, truckPickupItem } from './salvage';
+import { modeRules } from './settings';
 import { fitStores } from './resources';
 import { itemMass } from './mass';
 import { npcMassRoom, vehicleStats } from './stats';
@@ -178,7 +179,8 @@ export function dumpItem(world: World, itemId: string): World {
     requireIdleRefit(me);
     const item = findItem(me, itemId);
     if (isMounted(me.chassisId, item)) throw new Error('Remove an installed part before dumping it');
-    dumpOnPile(w, me, item);
+    if (modeRules(w).salvage) dumpOnPile(w, me, item);
+    else me.items = me.items.filter((it) => it.id !== item.id);
   });
 }
 
