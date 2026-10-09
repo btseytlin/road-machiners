@@ -616,7 +616,7 @@ function onContactsHeard(world: World, vehicle: Vehicle, profile: NpcProfile, co
   for (const contact of hostileContacts(world, vehicle, contacts)) {
     const option = reactHeard(world, vehicle, contact);
     if (option === null || option === 'keep') continue;
-    if (option === 'investigate') interrupt(world, vehicle, createActivity('investigate', contact.vehicleId, { ...contact.center }, 'heard a hostile beyond sight'));
+    if (option === 'investigate') interrupt(world, vehicle, createActivity('investigate', contact.vehicleId, { ...contact.center }, isWatching(vehicle) ? 'spring on prey it heard' : 'heard a hostile beyond sight'));
     else interrupt(world, vehicle, fleeFrom(world, vehicle, profile, contact.vehicleId, contact.center, 'heard a hostile beyond sight'));
     return;
   }
@@ -814,7 +814,15 @@ const STEERS: Partial<Record<NpcActivity['kind'], Steer>> = {
   tow: (world, vehicle, goal) => { if (!heldTow(world, vehicle)) steerToStranded(world, vehicle, goal); },
   meet: (world, _vehicle, goal) => { if (goal.destination) goal.destination = { ...vehicleById(world, goal.targetId!).pos }; },
   follow: steerFollow,
+  investigate: steerInvestigate,
 };
+
+// An investigation follows the newest centre of the sound it heard, never the true position of its target.
+function steerInvestigate(_world: World, _vehicle: Vehicle, goal: NpcActivity, _profile: NpcProfile, contacts: Contact[]): void {
+  if (!goal.targetId) throw new Error('An investigation has no target');
+  const contact = contacts.find((c) => c.vehicleId === goal.targetId);
+  if (contact) goal.destination = { ...contact.center };
+}
 
 function steerFlee(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[], goal: NpcActivity): void {
   const threat = fleeThreat(world, vehicle, contacts, goal);

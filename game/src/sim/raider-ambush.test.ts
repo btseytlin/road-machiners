@@ -17,7 +17,7 @@ import { campGoodPrice, campPartPrice } from './economy';
 import { corePart, goodsCount } from './grid';
 import { addGoods, spareParts } from './inventory';
 import { CLEARANCE, isTransientWreck, nearCliff, terrainNav } from './nav/layer';
-import { decide, fightOddsAgainst, huntingGrounds, judgeDanger, lawmanTowns, raiderGrounds, raiderPatrolPosts } from './npc-decisions';
+import { decide, fightOddsAgainst, huntingGrounds, judgeDanger, lawmanTowns, raiderGrounds, raiderPatrolPosts, usefulContacts } from './npc-decisions';
 import { finishGoal, resolveNpcActivities, topGoal } from './npc-activities';
 import { yieldTo } from './parley';
 import { route } from './path';
@@ -289,6 +289,61 @@ describe('the watch', () => {
     expect(goal.kind).toBe('investigate');
     expect(goal.destination).toEqual(contact.center);
     expect(goal.destination).not.toEqual(trader.pos);
+  });
+
+  it('names the investigation of a watching raider a spring', () => {
+    const { w, raider, trader } = watchingRaider(TERRAIN.vision.radius + 5);
+    trader.speed = 4;
+    forceOption('contactHeard', 'investigate');
+    planNpcOrders(w);
+    expect(topGoal(raider)).toMatchObject({ kind: 'investigate', reason: 'spring on prey it heard' });
+  });
+
+  it('follows the newest heard centre while the prey drives on, never its true position', () => {
+    const { w, raider, trader } = watchingRaider(TERRAIN.vision.radius + 5);
+    trader.speed = 4;
+    forceOption('contactHeard', 'investigate');
+    planNpcOrders(w);
+    const first = { ...topGoal(raider)!.destination! };
+    trader.pos = { x: trader.pos.x - 2, y: trader.pos.y - 2 };
+    w.turn++;
+    const newest = usefulContacts(w, raider).find((c) => c.vehicleId === trader.id)!;
+    planNpcOrders(w);
+    const goal = topGoal(raider)!;
+    expect(goal.kind).toBe('investigate');
+    expect(goal.destination).toEqual(newest.center);
+    expect(goal.destination).not.toEqual(first);
+    expect(goal.destination).not.toEqual(trader.pos);
+  });
+
+  it('ends at the last centre when the sound stops, and goes back to the hunt', () => {
+    const { w, raider, trader } = watchingRaider(TERRAIN.vision.radius + 5);
+    trader.speed = 4;
+    forceOption('contactHeard', 'investigate');
+    planNpcOrders(w);
+    const goal = topGoal(raider)!;
+    trader.speed = 0;
+    trader.pos = { x: trader.pos.x + 80, y: trader.pos.y };
+    raider.pos = { ...goal.destination! };
+    w.turn++;
+    planNpcOrders(w);
+    resolveNpcActivities(w);
+    expect(topGoal(raider)?.kind).not.toBe('investigate');
+    expect(w.events).toContainEqual(expect.objectContaining({ t: 'activity', vehicle: raider.id, previous: 'investigate', reason: 'found nothing at the contact' }));
+  });
+
+  it('ends the investigation on sight and rolls the sighting once', () => {
+    const { w, raider, trader } = watchingRaider(TERRAIN.vision.radius + 5);
+    trader.speed = 4;
+    forceOption('contactHeard', 'investigate');
+    planNpcOrders(w);
+    expect(topGoal(raider)?.kind).toBe('investigate');
+    trader.pos = { x: raider.pos.x + TERRAIN.vision.radius - 6, y: raider.pos.y };
+    forceOption('hostileSeen', 'fight');
+    w.turn++;
+    planNpcOrders(w);
+    expect(w.events).toContainEqual(expect.objectContaining({ t: 'activity', vehicle: raider.id, previous: 'investigate', reason: 'spotted the truck it heard' }));
+    expect(topGoal(raider)).toMatchObject({ kind: 'fight', targetId: trader.id });
   });
 
   it('springs on prey that drives into sight, and the fight follows', () => {
