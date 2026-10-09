@@ -27,9 +27,7 @@
   gap: var(--space-4);
   margin-top: var(--space-4);
 }
-.save-panel .save-row {
-  display: flex;
+#ui .save-panel .save-row {
   justify-content: space-between;
   gap: var(--space-9);
-  padding: var(--space-4) var(--space-6);
 }

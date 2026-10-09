@@ -85,7 +85,7 @@
 .game-menu [role=menu][hidden] {
   display: none;
 }
-.game-menu [role=menu] button {
+#ui .game-menu [role=menu] button {
   width: 100%;
-  text-align: left;
+  justify-content: flex-start;
 }

@@ -39,7 +39,7 @@ Name a token by its role, like `--ink-muted` or `--panel-l`, never by its value.
 
 Use a shared piece before writing a new rule. A screen may add its own layout to a piece, but not its own colors, type or frame.
 
-- `.panel` is the base of every HUD box: panel surface, strong edge, shadow and the standard padding of `--space-4` by `--space-5`. The radio, the instruments and the weapons are drawn hardware and use the compact padding of `--space-2` by `--space-4`. No other panel sets its own padding.
+- `.panel` is the base of every HUD box: panel surface, strong edge, shadow and the standard padding of `--space-4` by `--space-5`. The radio, the instruments and the weapons are drawn hardware and use the compact padding of `--space-2` by `--space-4`. Only the help panel sets its own, since its rows carry their own margins.
 - `.dialog` frames a modal, the save panel and the New game screen, with the scrim over the game and padding of `--space-9` on every side.
 - `.dock-panel` is a panel of the right dock: the log, the contracts and the radio.
 - `.notice` is a box at the top middle of the HUD that waits for a choice: rescue, stranded and dialogue.

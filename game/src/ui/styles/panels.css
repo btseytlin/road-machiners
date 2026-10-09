@@ -15,8 +15,7 @@
   z-index: var(--z-console);
   width: var(--panel-l);
   max-width: calc(100vw - var(--icon-hero));
-  padding: var(--space-3) var(--space-4);
-  font: var(--text-dense) / 1.35 var(--font-mono);
+  font:var(--text-dense) / 1.35 var(--font-mono);
 }
 .debug-console-log {
   max-height: calc(var(--icon-hero) * 3);

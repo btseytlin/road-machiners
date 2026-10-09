@@ -47,17 +47,25 @@ function scriptViolations(source: string): string[] {
 const BUTTON_SELECTOR = /(?<![\w-])button\b|\.close\b|\.btn-/;
 const BUTTON_GEOMETRY = /^(?:min-|max-)?height$|^padding(?:-[a-z]+)?$|^font(?:-size)?$|^line-height$/;
 
-function selfSizingButtons(components: string): string[] {
-  const list = components.match(/:where\(:not\(([^)]*)\)\)/)?.[1];
-  if (!list) throw new Error("components.css lost its list of self-sizing buttons");
-  return list.split(",").map((c) => c.trim());
+interface ButtonRules {
+  button: RegExp;
+  selfSizing: RegExp;
 }
 
-function buttonGeometry(css: string, selfSizing: string[]): string[] {
+const classes = (names: string[]): RegExp => new RegExp(`(?:${names.map((n) => n.replace(".", "\\.")).join("|")})(?![\\w-])`);
+
+function buttonRules(components: string): ButtonRules {
+  const list = components.match(/:where\(:not\(([^)]*)\)\)/)?.[1];
+  if (!list) throw new Error("components.css lost its list of self-sizing buttons");
+  const sized = [...components.matchAll(/#ui :is\(([^)]*)\)/g)].flatMap((m) => m[1]!.split(",").map((s) => s.trim()).filter((s) => /^\.[\w-]+$/.test(s)));
+  return { button: new RegExp(`${BUTTON_SELECTOR.source}|${classes(sized).source}`), selfSizing: classes(list.split(",").map((c) => c.trim())) };
+}
+
+function buttonGeometry(css: string, rules: ButtonRules): string[] {
   const body = css.replace(/\/\*[\s\S]*?\*\//g, "");
   const found: string[] = [];
   for (const [, selectors, block] of body.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-    const owned = selectors!.split(",").filter((s) => BUTTON_SELECTOR.test(s) && !selfSizing.some((c) => s.includes(c)));
+    const owned = selectors!.split(",").filter((s) => rules.button.test(s) && !rules.selfSizing.test(s));
     if (owned.length === 0) continue;
     for (const d of declarations(`${block};`)) if (BUTTON_GEOMETRY.test(d.prop)) found.push(`${owned[0]!.trim()} { ${d.prop} }`);
   }
@@ -111,15 +119,20 @@ describe("scriptViolations", () => {
 });
 
 describe("buttonGeometry", () => {
-  const tiles = ["inv-item"];
+  const rules = buttonRules("#ui button:where(:not(.inv-item, .perk)) { height: 1px } #ui :is(.btn-s, .log-expand) { height: 1px }");
 
   it("flags a button rule that sets height, padding or type size", () => {
-    expect(buttonGeometry(".a button { padding: 0; }", tiles)).toEqual([".a button { padding }"]);
-    expect(buttonGeometry(".close { font-size: 1em; } @media (x) { #ui .b button { height: 1px } }", tiles)).toEqual([".close { font-size }", "#ui .b button { height }"]);
+    expect(buttonGeometry(".a button { padding: 0; }", rules)).toEqual([".a button { padding }"]);
+    expect(buttonGeometry(".close { font-size: 1em; } @media (x) { #ui .b button { height: 1px } }", rules)).toEqual([".close { font-size }", "#ui .b button { height }"]);
+  });
+
+  it("flags a rule on a class that components.css sizes", () => {
+    expect(buttonGeometry("#ui .log-expand { padding: 0 }", rules)).toEqual(["#ui .log-expand { padding }"]);
   });
 
   it("passes width, placement, tiles and non-button rules", () => {
-    expect(buttonGeometry(".a button { width: 100%; margin-left: auto; } button.inv-item { padding: 2px; } .a { padding: 1px; }", tiles)).toEqual([]);
+    expect(buttonGeometry(".a button { width: 100%; margin-left: auto; } button.inv-item { padding: 2px; } .a { padding: 1px; }", rules)).toEqual([]);
+    expect(buttonGeometry(".perk-choice button.perk { padding: 2px; } .log-expanded { padding: 0 }", rules)).toEqual([]);
   });
 });
 
@@ -147,11 +160,11 @@ describe("the game's styles", () => {
   });
 
   it("size a text button only in components.css", () => {
-    const selfSizing = selfSizingButtons(read(styleDir + "components.css"));
+    const rules = buttonRules(read(styleDir + "components.css"));
     const found: string[] = [];
     for (const f of readdirSync(new URL(styleDir, root)).filter((f) => f.endsWith(".css") && !buttonOwners.has(f)))
-      for (const v of buttonGeometry(read(styleDir + f), selfSizing)) found.push(`${f}: ${v}`);
-    for (const v of buttonGeometry(read("src/ui/truck-condition.css"), selfSizing)) found.push(`truck-condition.css: ${v}`);
+      for (const v of buttonGeometry(read(styleDir + f), rules)) found.push(`${f}: ${v}`);
+    for (const v of buttonGeometry(read("src/ui/truck-condition.css"), rules)) found.push(`truck-condition.css: ${v}`);
     expect(found).toEqual([]);
   });
 });
