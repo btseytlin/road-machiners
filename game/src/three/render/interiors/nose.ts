@@ -9,7 +9,6 @@ import { fortressGates, type FortGate } from '../../../sim/fortress';
 import { boxDistance, propBoxes, propObstacle, type PosedBox } from '../../../sim/mapgen';
 import { noseFrame, noseRocks } from '../../../sim/nose';
 import type { Site } from '../../../sim/sites';
-import { PAL } from '../../../render/palette';
 import { model, socket, type ModelName } from '../models';
 import { spin } from '../site-motion';
 import { fitsCurtain, type SiteBuilder } from '../sites';
@@ -57,13 +56,8 @@ const CRATES = [
   { u: 12.5, v: -17 },
   { u: 10.5, v: 15.5 },
 ];
-const MAST = 3.3;
-const LIGHTS: { kind: 'flood' | 'wash'; mast: { u: number; v: number }; aim: { u: number; v: number; lift: number } }[] = [
-  { kind: 'wash', mast: { u: -2, v: 3 }, aim: { u: -4.2, v: 9.5, lift: 8 } },
-  { kind: 'flood', mast: { u: -6, v: -4 }, aim: { u: -5.5, v: 0.2, lift: 1.2 } },
-  { kind: 'flood', mast: { u: 12, v: -9 }, aim: { u: 16, v: -6, lift: 1.5 } },
-  { kind: 'flood', mast: { u: 2, v: -8 }, aim: { u: 6, v: -3.5, lift: 0.8 } },
-];
+const LAMP_MAST = 1.7;
+const LAMPS = { rows: [-1.5, -4, -6.5, -9, -11.5, -14, -16.5, -19, -21.5], along: 2, reach: 26, count: 14, gap: 2.5, keepOut: 0.6, span: 0.4 };
 const RUBBLE = { count: 44, scale: [2, 6], reach: 29.3 };
 const ROCK_SINK = 0.25 * 1.1;
 const UP = new THREE.Vector3(0, 1, 0);
@@ -93,10 +87,36 @@ export function buildNose(b: SiteBuilder, site: Site): void {
   b.root.userData.homes = addShelters(b, site, f, taken);
   addRubble(b, site, f, [...gateDiscs(site), ...taken]);
   b.root.userData.structures = taken;
-  for (const l of LIGHTS) {
-    const at = placeAt(f, l.mast.u, l.mast.v);
-    b.addWorkLight(l.kind, at.x, at.z, MAST, { ...placeAt(f, l.aim.u, l.aim.v), lift: l.aim.lift }, PAL.siteLight.cold);
+  lampSpots(site, f, taken).forEach((s, i) => b.addMast(s.x, s.z, LAMP_MAST, i * 0.7));
+}
+
+function lampSpots(site: Site, f: Frame, taken: Disc[]): Spot[] {
+  return spreadOut(lampCandidates(f).filter((c) => lampFits(site, taken, c)).map((c) => c.s));
+}
+
+function lampCandidates(f: Frame): { s: Spot; u: number; v: number }[] {
+  const all: { s: Spot; u: number; v: number }[] = [];
+  for (const v of LAMPS.rows) {
+    for (let u = -LAMPS.reach; u <= LAMPS.reach; u += LAMPS.along) all.push({ s: { ...placeAt(f, u, v), yaw: 0 }, u, v });
   }
+  return all;
+}
+
+function lampFits(site: Site, taken: Disc[], c: { s: Spot; u: number; v: number }): boolean {
+  if (Math.abs(c.u) < SHELTER.lane && c.v < -8) return false;
+  return fitsCurtain(site, c.s.x, c.s.z, LAMPS.span, LAMPS.span) && !taken.some((d) => Math.hypot(d.x - c.s.x, d.z - c.s.z) < d.r + LAMPS.keepOut);
+}
+
+function spreadOut(free: Spot[]): Spot[] {
+  const chosen: Spot[] = [];
+  while (chosen.length < LAMPS.count && free.length > 0) {
+    const apart = (s: Spot) => Math.min(...chosen.map((c) => Math.hypot(c.x - s.x, c.z - s.z)), Infinity);
+    const best = free.reduce((m, s) => (apart(s) > apart(m) ? s : m));
+    if (apart(best) < LAMPS.gap) break;
+    chosen.push(best);
+    free.splice(free.indexOf(best), 1);
+  }
+  return chosen;
 }
 
 function checkHole(site: Site, f: Frame): void {
