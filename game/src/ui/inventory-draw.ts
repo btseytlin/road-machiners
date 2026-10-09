@@ -3,15 +3,13 @@
 import { GOODS } from "../data/goods";
 import { partDef, type WeaponDef } from "../data/parts";
 import { fireSpans, reachedSides, sideBlockers, SIDES, type FireSpan } from "../sim/armor";
-import { maxHp } from "../sim/wear";
 import { itemCells, itemSize, type Cell, type Grid } from "../sim/grid";
 import type { GridItem, PartInstance, RefitJob, RefitMove, Vehicle, World } from "../sim/types";
 import { playerVehicle } from "../sim/damage";
 import { el } from "./dom";
 import { truckOutline } from "./plans";
-import { wearLabel } from "./format";
-import { gridItemIcon, toneStyle } from "./cards";
-import { hp, kg } from "./units";
+import { conditionMeter, gridItemIcon, toneStyle } from "./cards";
+import { kg } from "./units";
 
 const CELL_TITLE: Record<Cell, string> = {
   D: "deck mount for a weapon, scanner, utility, cargo frame or store",
@@ -67,11 +65,11 @@ export function itemBox(it: GridItem, chassisId: string, mounted: boolean, cell:
   const id = it.kind === "part" ? it.part.defId : it.good;
   const node = el(
     "div",
-    { class: itemClass(it, mounted), "data-item-id": it.id, style: `${pos(x, y, size.w, size.h, cell)};${toneStyle(id)}`, title: itemTitle(it, mounted), tabindex: 0, role: "button", "aria-label": itemTitle(it, mounted) },
+    { class: itemClass(it, mounted), "data-item-id": it.id, style: `${pos(x, y, size.w, size.h, cell)};${toneStyle(id)}`, title: itemName(it), tabindex: 0, role: "button", "aria-label": itemName(it) },
     gridItemIcon(it),
     el("span", { class: "inv-item-name" }, itemLabel(it).short),
   );
-  if (it.kind === "part") node.append(conditionBar(it.part));
+  if (it.kind === "part") node.append(conditionMeter(it.part));
   return node;
 }
 
@@ -123,27 +121,6 @@ export function footprint(it: GridItem): { w: number; h: number } {
 export function itemLabel(it: GridItem): { short: string } {
   if (it.kind === "good") return { short: GOODS[it.good].name.slice(0, 5) };
   return { short: partDef(it.part.defId).name };
-}
-
-export function itemTitle(it: GridItem, mounted: boolean): string {
-  if (it.kind === "good") return GOODS[it.good].name;
-  if (partDef(it.part.defId).kind === "core")
-    return `${partTitle(it.part)}\nBuilt in`;
-  return `${partTitle(it.part)}\n${mounted ? "Mounted" : "Spare"}`;
-}
-
-export function conditionBar(p: PartInstance): HTMLElement {
-  const max = maxHp(p);
-  return el(
-    "div",
-    { class: `inv-hp${p.hp > 0 ? "" : " broken"}` },
-    el("div", { style: `width:${(p.hp / max) * 100}%` }),
-  );
-}
-
-export function partTitle(p: PartInstance): string {
-  const d = partDef(p.defId);
-  return `${d.name} (${d.kind}) ${wearLabel(p)}, ${hp(p.hp)}/${hp(maxHp(p))} HP, ${d.w}x${d.h}`;
 }
 
 export function itemName(it: GridItem): string {

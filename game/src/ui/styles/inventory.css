@@ -99,10 +99,6 @@
 .inv-target h3 {
   margin: 0 0 var(--space-6);
 }
-.inv-target > .dim {
-  max-width: var(--panel-s);
-  margin-top: var(--space-10);
-}
 /* Room for the truck outline, which reaches past the grid. */
 .truck-shell {
   padding: var(--space-9) 0;
@@ -159,7 +155,6 @@
 }
 /* Rows of a broken cargo part: they hold nothing until the part is repaired. */
 .inv-cell.c-dead {
-  border-style: dashed;
   border-color: var(--cell-side);
   background: repeating-linear-gradient(45deg, var(--cell-none) 0 var(--space-2), var(--cell-plain) var(--space-2) var(--space-3));
 }
@@ -184,8 +179,7 @@
   width: 100%;
   height: 100%;
 }
-/* Clear of the condition bar. */
-.inv-item:has(.inv-hp) {
+.inv-item:has(.meter) {
   padding-bottom: var(--space-3);
 }
 .inv-item-name {
@@ -198,13 +192,11 @@
 .inv-item.mounted {
   border-color: var(--mark-own);
 }
-.inv-item:hover,
-.inv-item:focus {
-  border-color: var(--accent);
-}
 .inv-item.spare {
-  border-style: dashed;
   border-color: var(--ink-label);
+}
+.inv-item:hover {
+  border-color: var(--line-hover);
 }
 .inv-item.fixed {
   cursor: pointer;
@@ -226,25 +218,11 @@
   outline: 2px solid var(--danger);
   outline-offset: -2px;
 }
-.inv-item.selected {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-.inv-hp {
-  position: absolute;
-  left: var(--space-1);
-  right: var(--space-1);
-  bottom: var(--space-1);
-  height: var(--meter-s);
-  background: var(--good-well);
-  overflow: hidden;
-}
-.inv-hp > div {
-  height: 100%;
-  background: var(--good);
-}
-.inv-hp.broken {
-  background: var(--danger-ink);
+.inv-item.selected,
+.inv-item.holding,
+.inv-chip.selected {
+  border-color: var(--accent);
+  background-image: linear-gradient(var(--accent-wash), var(--accent-wash));
 }
 /* Item boxes, chips and standalone item icons sit on their category tone, set inline as --tone by toneStyle() in
    cards.ts from ITEM_TONES in src/render/palette.ts. A grid icon inherits its box's tone, so nothing doubles.
@@ -274,6 +252,9 @@
   border-top: 1px solid var(--line-strong);
   padding-top: var(--space-7);
 }
+.inv-inspection:empty {
+  display: none;
+}
 .inv-inspection > .icon {
   width: var(--icon-hero);
   height: var(--icon-hero);
@@ -285,7 +266,8 @@
 }
 .inv-storage {
   min-height: calc(var(--icon-hero) + var(--space-7));
-  border: 1px dashed var(--line-strong);
+  background: var(--surface-well);
+  border: 1px solid var(--line-soft);
   padding: var(--space-5);
 }
 .inv-chip {
@@ -295,6 +277,7 @@
   gap: var(--space-4);
   margin: var(--space-2) 0;
   padding: var(--space-2) var(--space-4) var(--space-3);
+  border: 1px solid var(--line-soft);
   cursor: grab;
   user-select: none;
   font-size: var(--text-dense);
@@ -311,6 +294,7 @@
   width: var(--icon-l);
   height: var(--icon-l);
 }
+.inv-item > .meter,
 .inv-chip > .meter {
   position: absolute;
   left: var(--space-1);
@@ -319,8 +303,9 @@
   height: var(--meter-s);
 }
 .inv-dump {
-  border: 1px dashed var(--accent-dim);
-  color: var(--accent-warm);
+  background: var(--surface-well);
+  border: 1px solid var(--line-soft);
+  color: var(--danger-ink);
   padding: var(--space-6);
   text-align: center;
   font-size: var(--text-dense);
@@ -336,14 +321,6 @@
 .inv-item.refitting {
   border: 2px dashed var(--accent);
 }
-.inv-chip.selected {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
-}
-.inv-item.holding {
-  outline: 2px dashed var(--accent);
-  outline-offset: -2px;
-}
 .inv-ghost.held {
   box-shadow: 0 0 0 2px var(--accent);
 }
@@ -354,7 +331,8 @@
   gap: var(--space-5);
   margin-bottom: var(--space-4);
   padding: var(--space-3) var(--space-4);
-  border: 1px dashed var(--accent);
+  background: var(--surface-well);
+  border: 1px solid var(--line-soft);
   font-size: var(--text-dense);
 }
 .inv-ghost {

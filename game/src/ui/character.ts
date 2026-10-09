@@ -43,7 +43,7 @@ export class CharacterScreen {
       el('h3', {}, 'Character', el('span', { class: 'chips' },
         el('span', { class: 'chip', title: 'Health' }, createIcon('driver'), `${hp(p.health)} / ${maxHealthOf(world)}`),
         el('span', { class: 'chip', title: 'Knockouts' }, createIcon('damage'), `${p.knockouts} knockouts`),
-        el('span', { class: 'chip xp-pool', title: 'XP earned by doing things, to spend on skill ranks' }, `XP to spend: ${Math.floor(p.xp)}`),
+        el('span', { class: 'chip xp-pool', title: 'XP to spend on ranks' }, `${Math.floor(p.xp)} XP`),
       )),
       el('div', { class: 'cards skill-cards' }, ...SKILL_IDS.map((id) => this.card(world, id))),
     );
@@ -59,7 +59,7 @@ export class CharacterScreen {
         el('div', { class: 'skill-level', title: `Rank ${rank} of ${MAX_RANK}` },
           ...Array.from({ length: MAX_RANK }, (_, i) => el('i', { class: i < rank ? 'on' : '' }))),
       ),
-      el('div', { class: 'skill-line' }, el('span', {}, `Rank ${rank}`), this.buy(world, id, rank)),
+      el('div', { class: 'skill-line' }, this.buy(world, id, rank)),
       el('div', { class: 'skill-line dim' }, el('span', {}, 'Earned today'), el('span', {}, `${Math.floor(today)} / ${XP_RULES.dailyCap} XP`)),
       el('div', { class: 'meter today' }, el('div', { style: `width:${Math.min(today / XP_RULES.dailyCap, 1) * 100}%` })),
       ...this.perks(world, id),
@@ -67,14 +67,14 @@ export class CharacterScreen {
   }
 
   private buy(world: World, skill: SkillId, rank: number): HTMLElement {
-    if (rank >= MAX_RANK) return el('span', {}, 'max');
+    if (rank >= MAX_RANK) return el('span', { class: 'dim' }, 'Max rank');
     const blocked = canBuyRank(world, skill);
     return el('button', {
       class: 'btn-s buy-rank',
       disabled: blocked !== null,
-      title: blocked ?? `Spend ${rankCost(rank + 1)} XP on ${SKILL_INFO[skill].name} rank ${rank + 1}`,
+      title: blocked ?? undefined,
       onclick: () => this.host.announce(buyRank(this.host.world(), skill)),
-    }, `Buy rank ${rank + 1} — ${rankCost(rank + 1)} XP`);
+    }, `Buy rank ${rank + 1} for ${rankCost(rank + 1)} XP`);
   }
 
   private perks(world: World, skill: SkillId): HTMLElement[] {
@@ -92,9 +92,10 @@ export class CharacterScreen {
     const button = (id: PerkId) => el('button', {
       class: 'perk',
       disabled: !canPick,
+      title: canPick ? undefined : `You are ${world.player.state === 'dead' ? 'dead' : 'knocked out'}`,
       onclick: () => this.host.apply(choosePerk(this.host.world(), id)),
     }, el('b', {}, PERKS[id].name), el('span', {}, PERKS[id].rule));
-    return el('div', { class: 'perk-choice' }, el('span', { class: 'good' }, `Rank ${pair.level} perk: pick one`), ...pair.perks.map(button));
+    return el('div', { class: 'perk-choice' }, el('span', { class: 'good' }, `Rank ${pair.level} perk`), ...pair.perks.map(button));
   }
 }
 
