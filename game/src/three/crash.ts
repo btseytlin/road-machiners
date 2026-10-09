@@ -5,7 +5,10 @@
 // The crash screen lists what a player can post in a public issue: the error, its source, the version, the boot step,
 // the browser and the page address. It holds no save, world or storage content.
 
+// A browser without WebGL gets a notice instead of the crash screen, and it is not reported.
+
 import { GAME_VERSION } from '../config';
+import { noWebGLText, WebGLUnavailable } from './webgl';
 
 let shown = false;
 let report: ((text: string) => void) | null = null;
@@ -106,6 +109,11 @@ function ignoreForeign(facts: ErrorFacts): void {
 }
 
 function onError(err: unknown, facts: ErrorFacts | null = null): void {
+  if (err instanceof WebGLUnavailable) showNoWebGL(err);
+  else onFault(err, facts);
+}
+
+function onFault(err: unknown, facts: ErrorFacts | null): void {
   for (const sink of sinks) sink(err);
   for (const listener of listeners) listener();
   if (!report) return showCrash(err, facts);
@@ -130,5 +138,31 @@ function showCrash(err: unknown, facts: ErrorFacts | null): void {
   hint.className = 'crash-hint';
   hint.textContent = 'Reload the page to start again.';
   box.append(title, body, hint);
+  document.body.appendChild(box);
+}
+
+function showNoWebGL(err: WebGLUnavailable): void {
+  if (shown) return;
+  shown = true;
+  const text = noWebGLText(err, navigator.userAgent);
+  const box = document.createElement('div');
+  box.style.cssText =
+    'position:fixed;inset:0;z-index:100000;background:#261c14;color:#e8d8c0;padding:40px;overflow:auto;' +
+    'font:16px/1.6 system-ui,sans-serif;';
+  const title = document.createElement('div');
+  title.style.cssText = 'font-size:28px;color:#f0b860;margin-bottom:20px;';
+  title.textContent = text.title;
+  box.append(title);
+  for (const line of text.lines) {
+    const row = document.createElement('div');
+    row.textContent = line;
+    box.append(row);
+  }
+  if (text.detail) {
+    const detail = document.createElement('div');
+    detail.style.cssText = 'margin-top:24px;color:#a89880;font:12px ui-monospace,Menlo,monospace;';
+    detail.textContent = text.detail;
+    box.append(detail);
+  }
   document.body.appendChild(box);
 }
