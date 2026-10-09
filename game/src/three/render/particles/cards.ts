@@ -21,10 +21,14 @@ export type Card = {
   g: number;
   b: number;
   alpha: number;
+  sx: number;
+  sy: number;
+  sz: number;
 };
 
 const VERTEX = `
   attribute vec3 offset;
+  attribute vec3 stretch;
   attribute vec2 sizeSpin;
   attribute float shape;
   attribute vec4 tint;
@@ -46,7 +50,11 @@ const VERTEX = `
     vSun = normalize((viewMatrix * vec4(sunDir, 0.0)).xyz);
     vUp = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
     vec4 mv = modelViewMatrix * vec4(offset, 1.0);
-    mv.xy += position.xy * sizeSpin.x;
+    vec2 along = (modelViewMatrix * vec4(stretch, 0.0)).xy;
+    float reach = length(along);
+    vec2 ax = reach > 0.0001 ? along / reach : vec2(1.0, 0.0);
+    vec2 corner = position.xy * sizeSpin.x;
+    mv.xy += reach > 0.0001 ? ax * position.x * (sizeSpin.x + reach) + vec2(-ax.y, ax.x) * corner.y - along * 0.5 : corner;
     gl_Position = projectionMatrix * mv;
   }
 `;
@@ -90,6 +98,7 @@ export class CardBatch {
   readonly mesh: THREE.Mesh;
   private readonly geo = new THREE.InstancedBufferGeometry();
   private readonly offsets: THREE.InstancedBufferAttribute;
+  private readonly stretches: THREE.InstancedBufferAttribute;
   private readonly sizeSpins: THREE.InstancedBufferAttribute;
   private readonly shapes: THREE.InstancedBufferAttribute;
   private readonly tints: THREE.InstancedBufferAttribute;
@@ -103,6 +112,7 @@ export class CardBatch {
     this.geo.setAttribute('position', quad.getAttribute('position'));
     this.geo.setAttribute('uv', quad.getAttribute('uv'));
     this.offsets = this.attribute('offset', 3);
+    this.stretches = this.attribute('stretch', 3);
     this.sizeSpins = this.attribute('sizeSpin', 2);
     this.shapes = this.attribute('shape', 1);
     this.tints = this.attribute('tint', 4);
@@ -134,29 +144,27 @@ export class CardBatch {
     u.groundColor.value.copy(l.ground);
   }
 
-  begin(): void {
-    this.cards.length = 0;
-  }
-
   push(card: Card): void {
     if (this.cards.length >= this.capacity) throw new Error(`CardBatch over its ${this.capacity} cards; the client pools must cap below it`);
     this.cards.push(card);
   }
 
-  end(camera: THREE.Camera): void {
+  flush(camera: THREE.Camera): void {
     if (this.kind === 'lit') this.sortBackToFront(camera);
     this.cards.forEach((c, i) => {
       this.offsets.setXYZ(i, c.x, c.y, c.z);
+      this.stretches.setXYZ(i, c.sx, c.sy, c.sz);
       this.sizeSpins.setXY(i, c.size, c.spin);
       this.shapes.setX(i, c.shape);
       this.tints.setXYZW(i, c.r, c.g, c.b, c.alpha);
     });
     this.geo.instanceCount = this.cards.length;
-    for (const a of [this.offsets, this.sizeSpins, this.shapes, this.tints]) {
+    for (const a of [this.offsets, this.stretches, this.sizeSpins, this.shapes, this.tints]) {
       a.clearUpdateRanges();
       a.addUpdateRange(0, this.cards.length * a.itemSize);
       a.needsUpdate = true;
     }
+    this.cards.length = 0;
   }
 
   private sortBackToFront(camera: THREE.Camera): void {

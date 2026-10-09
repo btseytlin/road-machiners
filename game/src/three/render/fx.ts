@@ -243,6 +243,8 @@ const CLAYMORE_FX_RADIUS = 10;
 const DUST = { color: 0xd8c098 };
 
 const MAX_PARTICLES = 4000;
+const MAX_GLOW_PARTICLES = 1000;
+const MAX_VIEW_CARDS = 2000;
 const MAX_CHUNKS = 600;
 
 const SPRAY = {
@@ -261,8 +263,13 @@ export type CardLights = { sun: THREE.DirectionalLight; sky: THREE.HemisphereLig
 export class Fx3D {
   private puffs = new ParticlePool(MAX_PUFFS, false);
   private glows = new ParticlePool(MAX_GLOWS, true);
-  private readonly cards = new CardBatch(MAX_PARTICLES, 'lit', createCardShapes(Math.random));
+  private readonly shapes = createCardShapes(Math.random);
+  readonly cards = {
+    lit: new CardBatch(MAX_PARTICLES + MAX_VIEW_CARDS, 'lit', this.shapes),
+    glow: new CardBatch(MAX_GLOW_PARTICLES + MAX_VIEW_CARDS, 'glow', this.shapes),
+  };
   private readonly particles = new Particles(MAX_PARTICLES);
+  private readonly glowParticles = new Particles(MAX_GLOW_PARTICLES);
   private readonly chunks = new ChunkBatch(MAX_CHUNKS, Math.random);
   private readonly sprayLooks = new Map<TerrainType, { dust: ParticleLook; haze: ParticleLook; clod: THREE.Color }>();
   private readonly cardLight = { sunDir: new THREE.Vector3(), sun: new THREE.Color(), sky: new THREE.Color(), ground: new THREE.Color() };
@@ -274,7 +281,7 @@ export class Fx3D {
   readonly ruts: Ruts;
 
   constructor(private scene: THREE.Scene, private overlay: HTMLElement, private rig: CameraRig) {
-    scene.add(this.puffs.mesh, this.glows.mesh, this.cards.mesh, ...this.chunks.meshes);
+    scene.add(this.puffs.mesh, this.glows.mesh, this.cards.lit.mesh, this.cards.glow.mesh, ...this.chunks.meshes);
     this.flashes = new MuzzleFlashes(scene);
     this.casings = new Casings(scene);
     this.ruts = new Ruts(scene);
@@ -402,7 +409,7 @@ export class Fx3D {
     l.sun.copy(sun.color).multiplyScalar(sun.intensity);
     l.sky.copy(sky.color).multiplyScalar(sky.intensity);
     l.ground.copy(sky.groundColor).multiplyScalar(sky.intensity);
-    this.cards.light(l);
+    this.cards.lit.light(l);
   }
 
   wheelDust(p: V3, back: V3, out: V3, ground: TerrainType): void {
@@ -436,8 +443,8 @@ export class Fx3D {
       const pale = tint.clone().lerp(new THREE.Color(0xffffff), 0.15);
       const colors = [tint.getHex(), pale.getHex()];
       look = {
-        dust: { life: d.life, size: d.size, colors, alpha: d.alpha, drag: d.drag, gravity: d.gravity },
-        haze: { life: h.life, size: h.size, colors, alpha: h.alpha, drag: h.drag, gravity: h.gravity },
+        dust: { life: d.life, size: d.size, colors, alpha: d.alpha, drag: d.drag, gravity: d.gravity, streak: 0 },
+        haze: { life: h.life, size: h.size, colors, alpha: h.alpha, drag: h.drag, gravity: h.gravity, streak: 0 },
         clod: new THREE.Color(ground.color).multiplyScalar(SPRAY.clods.shade),
       };
       this.sprayLooks.set(ground, look);
@@ -483,10 +490,12 @@ export class Fx3D {
     this.puffs.tick(dt);
     this.glows.tick(dt);
     this.particles.tick(dt);
+    this.glowParticles.tick(dt);
     this.chunks.tick(dt, world.terrain);
-    this.cards.begin();
-    this.particles.draw(this.cards);
-    this.cards.end(this.rig.camera);
+    this.particles.draw(this.cards.lit);
+    this.glowParticles.draw(this.cards.glow);
+    this.cards.lit.flush(this.rig.camera);
+    this.cards.glow.flush(this.rig.camera);
     this.flashes.tick(dt);
     this.casings.tick(dt, world.terrain, world.turn);
     this.ruts.tick(world.turn);

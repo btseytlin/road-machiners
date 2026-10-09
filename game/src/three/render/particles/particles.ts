@@ -12,6 +12,7 @@ export type ParticleLook = {
   alpha: { peak: number; fadeIn: number };
   drag: number;
   gravity: number;
+  streak: number;
 };
 
 type Slot = {
@@ -97,6 +98,9 @@ export class Particles {
         g: this.color.g,
         b: this.color.b,
         alpha: alphaAt(s.look, t),
+        sx: s.vel.x * s.look.streak,
+        sy: s.vel.y * s.look.streak,
+        sz: s.vel.z * s.look.streak,
       });
     }
   }
