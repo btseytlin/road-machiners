@@ -1,6 +1,6 @@
 // Road look for the ground shader. The mask marks where region roads (red) and territory dirt roads (green) lie on
 // the map, and where fused glass (blue) lies. The detail is a small tiling image of packed dirt with gravel, cracked
-// patches and potholes, drawn in pixels a third the size of the ground paint pixels. The tone is slow noise that varies the road and wanders its Each blurred dirt stroke is clipped to its own bounds so the blur stays local.
+// patches and potholes, drawn in pixels a third the size of the ground paint pixels. The tone is slow noise that varies the road and wanders its
 
 import { REGION, type TerritoryDef } from "../data/region";
 import { TERRITORIES, type FarmRoad, type WreckRules } from "../data/territory";
@@ -73,7 +73,7 @@ function strokeRuns(c: PaintCanvas, runs: Vec[][], width: number, blurPx = 0): v
 }
 
 // Strokes pixel-space lines with the style already set, clipped so the blur layer covers only the stroke's bounds.
-export function strokeClipped(ctx: CanvasRenderingContext2D, lines: readonly (readonly { x: number; y: number }[])[], blurPx: number): void {
+function strokeClipped(ctx: CanvasRenderingContext2D, lines: readonly (readonly { x: number; y: number }[])[], blurPx: number): void {
   if (!Number.isFinite(blurPx) || blurPx < 0) throw new Error(`Blur radius must be finite and not negative: ${blurPx}`);
   const drawn = lines.filter((line) => line.length > 1);
   if (drawn.length === 0) return;
