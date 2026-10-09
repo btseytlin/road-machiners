@@ -411,20 +411,9 @@
 .save-screen > div {
   max-width: var(--panel-xl);
 }
-#ui .death.run-complete h3 {
-  color: var(--good-bright);
-}
-.death .death-caption,
-.death .run-tally {
+.death .death-caption {
   font-size: var(--text-lead);
   color: var(--ink-muted);
-}
-.death .run-tally {
-  display: flex;
-  gap: var(--space-6);
-}
-.death .run-tally .good {
-  color: var(--good-bright);
 }
 .death .death-buttons {
   display: flex;
