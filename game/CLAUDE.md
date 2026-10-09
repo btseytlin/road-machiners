@@ -4,6 +4,8 @@ Turn-based wasteland truck RPG in 3D with an isometric positioned camera.
 
 Read [docs/DESIGN.md](docs/DESIGN.md) before any game change and before answering any question about the game. It is the source of truth for what the game should be. The detailed rules behind each of its sections live in [docs/wiki/mechanics/](docs/wiki/mechanics/). A rule change updates the mechanics page, and DESIGN.md changes only when a principle does.
 
+Every change a player sees in the HTML UI or an overlay goes through [docs/ui.md](docs/ui.md), the UI design system. That covers a new screen, panel, tooltip, notice, button, label or line of UI text. Plan it with the steps in "How to build a screen", build it from the shared formatters and pieces, and check the screenshots against the principle tests. A change that breaks a principle names it and says why, and a new pattern goes into docs/ui.md in the same change.
+
 ## Stack
 
 Three.js for drawing, Rapier for vehicle physics, TypeScript, Vite, Vitest. Playwright for browser checks.
@@ -17,7 +19,7 @@ Read the doc for an area before changing it.
 - [Economy, jobs and progression](docs/architecture/economy.md): salvage, shops, wear, jobs, sites and XP.
 - [Movement](docs/architecture/movement.md): NPC driving, routes, physics turns, far NPCs, auto travel and the camera.
 - [Rendering and UI](docs/architecture/render.md): outlines, scope, props, debris, tips and audio.
-- [UI design system](docs/ui.md): the tokens, shared pieces and rules every screen and overlay style follows. Read it before any UI or overlay style change. `npm run dev` serves a live guide at <http://localhost:5173/ui.html>.
+- [UI design system](docs/ui.md): the principles, patterns, tokens and shared pieces every screen and overlay follows. `npm run dev` serves a live guide at <http://localhost:5173/ui.html>.
 - [Map and world](docs/architecture/map.md): the bake layers, the bridge, weather and vision.
 - [Saves](docs/architecture/saves.md): slots, boot, versions and rescue.
 - [Principles](docs/architecture/principles.md): the project's architecture principles every design answers to, like one rulebook for every truck, no hot full scans and same seed, same game.

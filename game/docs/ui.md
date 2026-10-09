@@ -4,6 +4,8 @@ The HTML UI and the in-world overlays share one look: warm ink on dark metal, Ba
 
 A design system has three layers. Principles say what the UI is for and how to judge it. Patterns say how a kind of problem is solved every time, like a shop row, a disabled button or an alert. Tokens and shared pieces say what it is built from. A person or an agent who builds a new screen follows all three, so it makes the same choices as the screens before it.
 
+Every change a player sees in the HTML UI or an overlay goes through this document: a new screen, panel, tooltip, notice, button, label or line of UI text. Start with section 13, "How to build a screen". A change that breaks a principle names it and says why. A new or changed principle needs the user's approval. A new pattern or shared piece is added here in the same change, so the next screen can reuse it.
+
 Open <http://localhost:5173/ui.html> with `npm run dev` to see every token and shared piece drawn with the real CSS.
 
 ## 1. What the UI is for
@@ -245,7 +247,7 @@ Use a shared piece before writing a new rule. A screen may add its own layout to
 2. List the facts that answer it. Give each a tier.
 3. Pick the zone or the surface: in the world, HUD zone, cursor card, notice or modal.
 4. Pick the density for each entity and fill its slots in order.
-5. Use the shared formatters, states and pieces. Put the screen's rules in one file under `src/ui/styles/` and import it in `style.css` after `components.css`. Write only layout there. A new shared piece goes in `components.css`, this guide and `ui.html`.
+5. Use the shared formatters, states and pieces. Put the screen's rules in one file under `src/ui/styles/` and import it in `style.css` after `components.css`. Write only layout there. A new shared piece goes in `components.css`, section 12 of this guide and `src/ui/guide/pieces.ts`, which draws it in `ui.html`. `src/ui/guide/guide.test.ts` fails when one of the three is missing.
 6. Take every value from a token. Run `npx vitest run src/ui/style-guard.test.ts`.
 7. Pick a level for every event the screen raises.
 8. Take a screenshot next to a neighboring screen and check it against the principle tests.
@@ -260,3 +262,11 @@ Use a shared piece before writing a new rule. A screen may add its own layout to
 6. Color: hostility only in the tag. Chances by value: 50% and up brighter, 0% faint, the enemy's in danger ink. Healthy parts stay neutral, and only damage takes color.
 7. Type: four roles. Title for the name, body for words, caption for list heads, keys and gun names, mono for chances.
 8. Tooltip: hovering a chance opens Base, then one row per cause in percent, so the rows add up to the chance. It opens over the drawing, never over the lists.
+
+### Worked example: the help panel
+
+1. Decision: which key or click does the thing I want.
+2. Key facts: the key and the action. Supporting: where the click lands, like ground or your truck. Reference: the version and the world settings.
+3. Surface: a dialog in the center, since reading it takes the player's attention and a top-left panel collided with the tips.
+4. Grid: four groups side by side, Drive, Places and talk, Fight and View. Each line is the key as a `.key` keycap, then a short action. The panel grows sideways, not down.
+5. Words: no sentences. "Space" then "Drive or pause" replaces "Space: drive on or pause." The notes are one quiet line at the bottom.
