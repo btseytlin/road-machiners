@@ -1,8 +1,9 @@
 // Boots the game in headless Chromium on the Metal GPU, plays turns, and fails on page errors, the crash screen,
 // a blank canvas or a low frame rate. Screenshots go to .playtest/.
 // It also fails on HUD panels whose single control does not fill the panel, so a click in the box's edge or corner is dead.
-// It plays in Russian, switched from the menu: the menu and a HUD readout must turn Cyrillic, the log must hold no
-// English, and the choice must outlive a reload, until English is picked again.
+// It plays in Russian, picked by keyboard alone through Menu → Options → Language: the menu and a HUD readout must turn
+// Cyrillic, game keys must stay with the open panel, the log must hold no English, and the choice must outlive a reload,
+// until English is picked again by mouse. A language control anywhere outside the Options panel fails it.
 // With --cpu, Chromium draws in software and the frame rate is printed but not checked.
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
@@ -71,27 +72,84 @@ if (!(await page.locator('.game-menu [role=menu]').isVisible())) hitProblems.pus
 await page.keyboard.press('Escape');
 if (await page.locator('.game-menu [role=menu]').isVisible()) hitProblems.push('menu did not close on Escape');
 await page.locator('.game-menu .menu-button').click();
-await page.locator('.game-menu [role=menuitem]', { hasText: 'Help' }).click();
+await page.locator('.game-menu [data-entry=help]').click();
 if (!(await page.locator('#ui .help').isVisible())) hitProblems.push('help did not open from the menu');
 await page.keyboard.press('Escape');
 if (await page.locator('#ui .help').count()) hitProblems.push('help did not close on Escape');
 
-// The menu's language control switches at once, with no reload.
+// Menu → Options → Language is the one place to pick a language, and the switch is live, with no reload.
 const CYRILLIC = /[А-яЁё]/;
 const languageProblems = [];
+const LANGUAGE_CONTROLS = '.language-switch, .language-option, [data-lang]';
+const strayLanguageControls = () => page.evaluate((sel) => [...document.querySelectorAll(sel)].filter((n) => !n.closest('.options')).length, LANGUAGE_CONTROLS);
+const checkNoStrayControl = async (when) => {
+  if (await page.locator('#ui .options').count()) languageProblems.push(`Options still open ${when}`);
+  const stray = await strayLanguageControls();
+  if (stray > 0) languageProblems.push(`language control outside Options ${when}: ${stray}`);
+};
 const languageReadout = () => page.evaluate(() => ({
   lang: document.documentElement.lang,
-  label: document.querySelector('#ui .language-label')?.textContent ?? '',
+  menu: document.querySelector('#ui .game-menu .menu-button')?.textContent ?? '',
   money: document.querySelector('#ui [data-resource="money"] small')?.textContent ?? '',
 }));
-const pickLanguage = async (lang) => {
+const openOptionsByMouse = async () => {
   if (!(await page.locator('.game-menu [role=menu]').isVisible())) await page.locator('.game-menu .menu-button').click();
-  await page.locator(`#ui .language-switch [data-lang="${lang}"]`).click();
-  if (await page.locator('.game-menu [role=menu]').isVisible()) await page.keyboard.press('Escape');
+  const item = page.locator('.game-menu [data-entry=options]');
+  if (!(await item.count())) {
+    languageProblems.push('Options not reachable: the menu has no Options item');
+    return false;
+  }
+  await item.click();
+  if (!(await page.locator('#ui .options .language-switch').isVisible())) {
+    languageProblems.push('Options not reachable: the panel did not open with the language row');
+    return false;
+  }
+  return true;
 };
-await pickLanguage('ru');
+// Keyboard alone: Enter on Menu, arrows to Options, Enter, then Tab to the language and Enter.
+const pickLanguageByKeyboard = async (lang) => {
+  await page.locator('.game-menu .menu-button').focus();
+  await page.keyboard.press('Enter');
+  for (let i = 0; i < 6; i++) {
+    if (await page.evaluate(() => document.activeElement?.dataset.entry === 'options')) break;
+    await page.keyboard.press('ArrowDown');
+  }
+  await page.keyboard.press('Enter');
+  if (!(await page.locator('#ui .options .language-switch').isVisible())) {
+    languageProblems.push('Options not reachable by keyboard');
+    return;
+  }
+  for (let i = 0; i < 4; i++) {
+    if (await page.evaluate((lang) => document.activeElement?.dataset.lang === lang, lang)) break;
+    await page.keyboard.press('Tab');
+  }
+  // Game keys stay with the panel: Enter picks the language and Space does nothing behind it.
+  const turnBefore = await page.evaluate(() => window.__ROAM__.state.turn);
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Space');
+  await page.waitForTimeout(300);
+  if ((await page.evaluate(() => window.__ROAM__.state.turn)) !== turnBefore) languageProblems.push('a game key ended the turn behind Options');
+  await page.keyboard.press('Escape');
+  if (await page.locator('#ui .options').count()) languageProblems.push('Options did not close on Escape');
+  if (!(await page.evaluate(() => document.activeElement?.classList.contains('menu-button')))) languageProblems.push('focus did not return to the Menu button after Options');
+};
+const pickLanguageByMouse = async (lang) => {
+  if (!(await openOptionsByMouse())) return;
+  await page.locator(`#ui .options [data-lang="${lang}"]`).click();
+  await page.locator('#ui .options .close').click();
+};
+// The pressed language in Options, read with the panel open, then closed again.
+const pressedLanguage = async () => {
+  if (!(await openOptionsByMouse())) return '';
+  const pressed = await page.locator('#ui .options .language-option[aria-pressed="true"]').getAttribute('data-lang');
+  await page.keyboard.press('Escape');
+  return pressed;
+};
+await checkNoStrayControl('in English');
+await pickLanguageByKeyboard('ru');
 const russian = await languageReadout();
-if (russian.lang !== 'ru' || !CYRILLIC.test(russian.label) || !CYRILLIC.test(russian.money)) languageProblems.push(`Русский did not switch the menu and HUD: ${JSON.stringify(russian)}`);
+if (russian.lang !== 'ru' || !CYRILLIC.test(russian.menu) || !CYRILLIC.test(russian.money)) languageProblems.push(`Русский did not switch the menu and HUD: ${JSON.stringify(russian)}`);
+await checkNoStrayControl('in Russian');
 
 for (let i = 0; i < turns; i++) {
   await page.evaluate((i) => {
@@ -137,10 +195,11 @@ const reload = async () => {
   await page.waitForFunction(() => window.__ROAM__, null, { timeout: BOOT_LIMIT_MS });
   return languageReadout();
 };
-if ((await reload()).lang !== 'ru') languageProblems.push('Russian did not survive a reload');
-await pickLanguage('en');
+if ((await reload()).lang !== 'ru' || (await pressedLanguage()) !== 'ru') languageProblems.push('Russian did not survive a reload');
+await pickLanguageByMouse('en');
 const english = await reload();
-if (english.lang !== 'en' || CYRILLIC.test(english.label) || CYRILLIC.test(english.money)) languageProblems.push(`English did not stay after a reload: ${JSON.stringify(english)}`);
+if (english.lang !== 'en' || CYRILLIC.test(english.menu) || CYRILLIC.test(english.money) || (await pressedLanguage()) !== 'en') languageProblems.push(`English did not stay after a reload: ${JSON.stringify(english)}`);
+await checkNoStrayControl('after the reload');
 await browser.close();
 
 const problems = [...errors, ...hitProblems, ...languageProblems];

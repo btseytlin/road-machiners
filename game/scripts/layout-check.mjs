@@ -91,15 +91,16 @@ const hangUp = (page) => page.evaluate(() => {
   g.apply(next);
 });
 
-const chooseMenuItem = (page, index) => page.evaluate((i) => {
+const chooseMenuItem = (page, entry) => page.evaluate((entry) => {
   document.querySelector('#ui .game-menu .menu-button').click();
-  document.querySelectorAll('#ui .game-menu [role=menuitem]')[i].click();
-}, index);
+  document.querySelector(`#ui .game-menu [data-entry=${entry}]`).click();
+}, entry);
 
-const openHelp = (page) => chooseMenuItem(page, 3);
+const openHelp = (page) => chooseMenuItem(page, 'help');
 const closeHelp = (page) => page.evaluate(() => document.querySelector('#ui .help .close').click());
 
-const openSaves = (page) => chooseMenuItem(page, 1);
+const openSaves = (page) => chooseMenuItem(page, 'save');
+const openOptions = (page) => chooseMenuItem(page, 'options');
 
 function faultsIn(page, locale) {
   return page.evaluate(async ({ locale, names, glyphs }) => {
@@ -153,6 +154,7 @@ const STATES = {
   help: { setup: openHelp, teardown: closeHelp },
   character: { setup: (page) => key(page, 'KeyC'), teardown: escape },
   saves: { setup: openSaves, teardown: escape },
+  options: { setup: openOptions, teardown: escape },
 };
 
 // The log state always runs, since its long lines stay for every later screen.
