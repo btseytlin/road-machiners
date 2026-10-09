@@ -200,7 +200,7 @@ export class Game {
     radio: RadioPanel,
   ) {
     this.world = world;
-    this.saves = new GameSaves(run, (text) => this.hud.note(this.world, text, "bad"));
+    this.saves = new GameSaves(run, (text) => this.hud.note(this.world, text, "bad"), (text) => this.hud.note(this.world, text, "dim"));
     this.drive = buildDrive(this.world);
     setTimeout(() => this.travel.warm(this.world, this.drive));
 

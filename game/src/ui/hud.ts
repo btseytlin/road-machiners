@@ -5,7 +5,7 @@ import type { Vehicle, World } from "../sim/types";
 import { setupLabel } from "../sim/settings";
 import { workOf, type Work } from "../sim/states";
 import { isAutoPatch } from "../sim/jobs";
-import { bottomLeft, el, isBrowserChord, panel, rightDock, topLeft, topRight } from "./dom";
+import { bottomLeft, disabledWith, el, isBrowserChord, panel, rightDock, topCenter, topLeft, topRight } from "./dom";
 import { LogPanel } from "./log";
 import {
   heldContractDue,
@@ -25,7 +25,7 @@ import { aimMarks, TURN_PLAYING, type AimState } from "./weapons";
 import { token } from "./tokens";
 import { createSwitch } from "./switch";
 import { Tips } from "./tips";
-import { moneyEl, moneyText } from "./units";
+import { moneyEl } from "./units";
 import { playerVehicle } from "../sim/damage";
 import { affordableRanks, pendingPerkPairs } from "../sim/progress";
 import { douseBlock } from "../sim/engine-heat";
@@ -54,7 +54,7 @@ function actionTitle(action: ContextAction): string {
   return action.ready ? "" : "Stop to use";
 }
 
-export const combatBlocked = (turns: number): string => `Can't do this while in combat, ${turns} turns left`;
+export const combatBlocked = (turns: number): string => `In combat, ${turns} ${turns === 1 ? "turn" : "turns"} left`;
 
 type HudActions = {
   openInventory: () => void;
@@ -122,11 +122,12 @@ export class Hud {
   private feedback = panel("feedback", topLeft());
   private action = panel("action");
   private toastBox = panel("toast");
-  private rescue = panel("rescue notice");
-  private stranded = panel("stranded notice",this.condition.root);
+  private rescue = panel("rescue notice", topCenter());
+  private knockedOut = panel("status-mark", topCenter());
+  private stranded = panel("stranded notice", topCenter());
   private recenter = panel("recenter", bottomLeft());
   private cameraSwitch = panel("camera-mode", topRight());
-  private tips = new Tips(window.localStorage);
+  private tips = new Tips(window.localStorage, topCenter());
   cameraMode: CameraMode = "auto";
   private toastTimer: number | null = null;
 
@@ -151,6 +152,8 @@ export class Hud {
     window.addEventListener("resize", this.placeInfo);
     this.toastBox.style.display = "none";
     this.rescue.style.display = "none";
+    this.knockedOut.style.display = "none";
+    this.knockedOut.append(el("span", { class: "bad" }, "Knocked out"));
     this.stranded.style.display = "none";
     this.recenter.style.display = "none";
     this.recenter.append(el("button", { onclick: () => actions.recenter() }, "Center on truck (F)"));
@@ -269,10 +272,8 @@ export class Hud {
     const use = el(
       "button",
       {
-        onclick: () => action.ready && onUse(),
-        "aria-disabled": action.ready ? undefined : "true",
+        ...disabledWith(action.ready ? null : actionTitle(action), onUse),
         class: action.combat !== undefined ? "btn-danger" : "",
-        title: actionTitle(action),
       },
       action.hint ? action.label : `[E] ${action.label}`,
     );
@@ -288,19 +289,18 @@ export class Hud {
   renderRescue(w: World): void {
     this.dialogue.render(w);
     const r = getRescueReadout(w);
-    this.renderMiddle(r?.kind === "stranded" ? null : r);
-    this.renderStranded(r?.kind === "stranded" ? r : null);
+    this.knockedOut.style.display = rescueOf(r, "knockedOut") ? "" : "none";
+    this.renderMiddle(rescueOf(r, "towed"));
+    this.renderStranded(rescueOf(r, "stranded"));
   }
 
-  private renderMiddle(r: Exclude<RescueReadout, { kind: "stranded" }> | null): void {
+  private renderMiddle(r: Extract<RescueReadout, { kind: "towed" }> | null): void {
     this.rescue.style.display = r ? "" : "none";
     if (!r) return this.rescue.replaceChildren();
-    if (r.kind === "knockedOut")
-      return this.rescue.replaceChildren(el("h3", { class: "bad" }, "Knocked out"));
     this.rescue.replaceChildren(
       el("h3", {}, "Under tow"),
-      el("div", {}, `${r.tower} tows you to ${r.town}.`),
-      el("div", { class: "dim" }, `Fee ${moneyText(r.fee)} on arrival.`),
+      el("div", {}, `${r.tower} tows you to ${r.town}`),
+      el("div", { class: "dim" }, "Fee ", moneyEl(r.fee)),
       el(
         "div",
         { class: "rescue-buttons" },
@@ -314,7 +314,7 @@ export class Hud {
     if (!r) return this.stranded.replaceChildren();
     this.stranded.replaceChildren(
       el("h3", {}, "Stranded"),
-      el("div", { class: "dim" }, r.beacon ? "Calling for a tow." : r.reason),
+      ...(r.beacon || !r.reason ? [] : [el("div", { class: "dim" }, r.reason)]),
       el(
         "div",
         { class: "rescue-buttons" },
@@ -341,7 +341,8 @@ export class Hud {
         el(
           "div",
           { class: "contract-line" },
-          `${contractSummary(c)} — ${heldContractDue(c)}`,
+          el("span", {}, contractSummary(c)),
+          el("span", { class: "num" }, heldContractDue(c)),
         ),
       ),
     );
@@ -509,7 +510,7 @@ export class Hud {
       const line = eventText(w, e);
       if (!line) continue;
       lines.push(line);
-      if (e.t === "knockout" || e.t === "skillUp" || e.t === "discover") this.toast(line.text);
+      if (e.t === "skillUp" || e.t === "discover") this.toast(line.text);
     }
     this.log.add(w.turn, lines);
     this.radio.hear(w);
@@ -544,6 +545,10 @@ export class Hud {
     );
     this.placeInfo();
   }
+}
+
+function rescueOf<K extends RescueReadout["kind"]>(r: RescueReadout | null, kind: K): Extract<RescueReadout, { kind: K }> | null {
+  return r?.kind === kind ? (r as Extract<RescueReadout, { kind: K }>) : null;
 }
 
 function infoHead(v: Vehicle, hostile: boolean): HTMLElement {

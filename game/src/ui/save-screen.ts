@@ -6,7 +6,7 @@ import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { WORLD_SETTINGS } from '../data/modes';
 import { percent } from '../sim/settings';
-import { download, el, panel } from './dom';
+import { disabledWith, download, el, panel } from './dom';
 import { openNewGame, type NewGameActions } from './new-game';
 import { moneyText } from './units';
 
@@ -23,12 +23,11 @@ export function chooseSaveFate(reason: string, canMigrate: boolean, stored: unkn
       el(
         'div',
         { class: 'death-buttons' },
-        el('button', { onclick: migrate, disabled: !canMigrate }, 'Migrate save'),
+        el('button', disabledWith(canMigrate ? null : 'The save is unreadable', migrate), 'Migrate save'),
         el('button', { onclick: () => openNewGame(newGame, () => {}) }, 'New game'),
         el('button', { onclick: () => downloadSave(stored) }, 'Download save'),
       ),
     );
-    if (!canMigrate) root.append(el('div', { class: 'dim' }, 'The save is unreadable'));
     root.append(el('div', { class: 'dim' }, 'If this looks like a bug, download the save and attach it to a GitHub issue.'));
   });
 }

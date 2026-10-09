@@ -75,3 +75,19 @@ export function download(name: string, text: string, type: string): void {
 export function isBrowserChord(e: Pick<KeyboardEvent, "ctrlKey" | "metaKey" | "altKey">): boolean {
   return e.ctrlKey || e.metaKey || e.altKey;
 }
+
+export function topCenter(): HTMLElement {
+  const root = uiRoot();
+  const found = root.querySelector<HTMLElement>(':scope > .top-center');
+  if (found) return found;
+  const stack = el('div', { class: 'top-center' });
+  root.append(stack);
+  return stack;
+}
+
+type ClickAttrs = { onclick: () => void; 'aria-disabled'?: string; 'data-reason'?: string };
+
+export function disabledWith(reason: string | null, onclick: () => void): ClickAttrs {
+  if (reason === null) return { onclick };
+  return { onclick: () => {}, 'aria-disabled': 'true', 'data-reason': reason };
+}

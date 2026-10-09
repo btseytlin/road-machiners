@@ -70,14 +70,14 @@ describe("character screen", () => {
 describe("inventory header money", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("prints money through moneyText with no coin icon", () => {
+  it("prints money as the M's coin and the number", () => {
     stubDom();
     const world = emptyWorld();
     world.player.money = 3300;
     const chips = truckChips(world) as unknown as FakeNode;
-    const money = chips.all((n) => n.text().endsWith(" M"))[0];
-    expect(money.children).toHaveLength(1);
-    expect(typeof money.children[0]).toBe("string");
+    const money = chips.all((n) => n.className.split(" ").includes("amount"))[0];
+    expect((money.children[0] as FakeNode).className).toBe("coin");
+    expect(money.text()).toBe("33");
   });
 
   it("prints debt as a negative amount in danger ink", () => {
@@ -85,8 +85,8 @@ describe("inventory header money", () => {
     const world = emptyWorld();
     world.player.money = -3300;
     const chips = truckChips(world) as unknown as FakeNode;
-    const money = chips.all((n) => n.text().startsWith("-"))[0];
+    const money = chips.all((n) => n.className.split(" ").includes("amount"))[0];
     expect(money.className).toContain("bad");
-    expect(money.text()).not.toMatch(/Debt/);
+    expect(money.text()).toBe("−33");
   });
 });

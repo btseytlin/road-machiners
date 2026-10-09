@@ -1,7 +1,4 @@
 #ui .dialogue {
-  left: 50%;
-  top: var(--hud-notice-top);
-  transform: translateX(-50%);
   min-width: var(--panel-m);
   max-width: var(--panel-l);
   background: var(--surface-raised);

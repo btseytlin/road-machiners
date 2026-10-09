@@ -27,6 +27,11 @@ export function entryEnabled(entry: MenuEntry, busy: boolean, hasSave: boolean):
   return !busy;
 }
 
+export function entryReason(entry: MenuEntry, busy: boolean, hasSave: boolean): string | null {
+  if (entryEnabled(entry, busy, hasSave)) return null;
+  return busy ? "Wait for the turn" : "No saves yet";
+}
+
 export class HelpPanel {
   constructor(private setup: () => string) {}
 
@@ -133,7 +138,17 @@ export class GameMenu {
   refresh(): void {
     const busy = this.isBusy();
     const saved = this.actions.hasSave();
-    for (const { entry } of ENTRIES) this.items[entry].disabled = !entryEnabled(entry, busy, saved);
+    for (const { entry } of ENTRIES) this.setReason(this.items[entry], entryReason(entry, busy, saved));
+  }
+
+  private setReason(item: HTMLButtonElement, reason: string | null): void {
+    if (reason === null) {
+      item.removeAttribute("aria-disabled");
+      item.removeAttribute("data-reason");
+      return;
+    }
+    item.setAttribute("aria-disabled", "true");
+    item.setAttribute("data-reason", reason);
   }
 
   toggle(): void {
@@ -141,13 +156,16 @@ export class GameMenu {
     else this.closeList(true);
   }
 
+  private allItems(): HTMLButtonElement[] {
+    return ENTRIES.map((e) => this.items[e.entry]);
+  }
+
   private enabledItems(): HTMLButtonElement[] {
-    return ENTRIES.map((e) => this.items[e.entry]).filter((b) => !b.disabled);
+    return this.allItems().filter((b) => !b.hasAttribute("aria-disabled"));
   }
 
   private moveFocus(code: string, step: number): void {
-    const items = this.enabledItems();
-    if (items.length === 0) return;
+    const items = this.allItems();
     const at = items.indexOf(document.activeElement as HTMLButtonElement);
     const next = code === "Home" ? 0 : code === "End" ? items.length - 1 : (at + step + items.length) % items.length;
     items[next].focus();
@@ -174,6 +192,7 @@ export class GameMenu {
   }
 
   private choose(entry: MenuEntry): void {
+    if (this.items[entry].hasAttribute("aria-disabled")) return;
     this.closeList(false);
     if (entry === "save") this.savePanel.openSave();
     else if (entry === "load") this.savePanel.openLoad();

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isBrowserChord } from "./dom";
+import { vi } from "vitest";
+import { disabledWith, isBrowserChord } from "./dom";
 
 const keys = { ctrlKey: false, metaKey: false, altKey: false };
 
@@ -15,5 +16,24 @@ describe("isBrowserChord", () => {
   it("leaves bare keys and Shift to the game", () => {
     expect(isBrowserChord(keys)).toBe(false);
     expect(isBrowserChord({ ...keys, shiftKey: true } as KeyboardEvent)).toBe(false);
+  });
+});
+
+describe("disabledWith", () => {
+  it("passes the click through when there is no reason", () => {
+    const click = vi.fn();
+    const attrs = disabledWith(null, click);
+    attrs.onclick();
+    expect(click).toHaveBeenCalledOnce();
+    expect(attrs["aria-disabled"]).toBeUndefined();
+  });
+
+  it("blocks the click and carries the reason when there is one", () => {
+    const click = vi.fn();
+    const attrs = disabledWith("No saves yet", click);
+    attrs.onclick();
+    expect(click).not.toHaveBeenCalled();
+    expect(attrs["aria-disabled"]).toBe("true");
+    expect(attrs["data-reason"]).toBe("No saves yet");
   });
 });
