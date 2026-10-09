@@ -558,3 +558,23 @@ describe("wake-up log", () => {
     expect(line?.cls).toBe("dim");
   });
 });
+
+describe("loot argument log", () => {
+  it("tells how an argument between two drivers the player sees ended", () => {
+    const w = emptyWorld();
+    const warner = addVehicle(w, "raiders", "scout", ["stockEngine"], { x: 32, y: 30 });
+    const looter = addVehicle(w, "scavengers", "scout", ["stockEngine"], { x: 33, y: 30 });
+    const [a, b] = [vehicleName(w, warner.id), vehicleName(w, looter.id)];
+    const argument = (end: "yielded" | "backedOff" | "fight", place: "wreck" | "truck" = "wreck"): GameEvent => ({ t: "lootArgument", warner: warner.id, looter: looter.id, place, end });
+    expect(eventText(w, argument("yielded"))).toEqual({ text: `${a} warns ${b} off the wreck. ${b} rolls on.`, cls: "dim" });
+    expect(eventText(w, argument("backedOff", "truck"))?.text).toBe(`${a} warns ${b} off the truck. ${b} stays put, and ${a} rolls on.`);
+    expect(eventText(w, argument("fight"))).toEqual({ text: `${a} warns ${b} off the wreck. They fight over it.`, cls: "bad" });
+  });
+
+  it("logs nothing when the player notices neither driver", () => {
+    const w = emptyWorld();
+    const warner = addVehicle(w, "raiders", "scout", ["stockEngine"], { x: 230, y: 230 });
+    const looter = addVehicle(w, "scavengers", "scout", ["stockEngine"], { x: 231, y: 230 });
+    expect(eventText(w, { t: "lootArgument", warner: warner.id, looter: looter.id, place: "pile", end: "yielded" })).toBeNull();
+  });
+});

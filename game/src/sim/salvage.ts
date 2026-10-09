@@ -33,6 +33,7 @@ import { shopAt } from './market';
 import { isLootSpot, spotLookOf, spotTable, territoryAt, territoryOfStock } from './territory';
 import type { BakedMap, PropKind } from './terrain';
 import { inTowReach } from './tow';
+import { breakLootWarning, warnedOffTarget } from './loot-warning';
 import { playerCommand } from './world';
 import { clamp, dist, type Vec } from './vec';
 import { OPENING_WRECK_ID } from './opening';
@@ -544,6 +545,7 @@ export function takeFromTruck(world: World, targetId: string, itemId: string, to
     requireIdleRefit(me);
     if (!canLootTruck(me, target)) throw new Error('Park beside a knocked-out truck to loot it');
     requireLootFree(w, me, targetId);
+    breakLootWarning(w, me, targetId);
     const item = target.items.find((it) => it.id === itemId);
     if (!item) throw new Error(`No item ${itemId} on ${target.name}`);
     takeItem(w, me, target, item, to);
@@ -577,8 +579,12 @@ export function looterOf(world: World, targetId: string): Vehicle | null {
   const working = world.vehicles.find((v) => worksOn(v, targetId)) ?? world.vehicles.find((v) => actsOn(world, v, targetId));
   if (working) return working;
   if (world.salvage.some((s) => s.id === targetId && claimantOf(world, s))) return null;
+  return playerHolds(world, targetId);
+}
+
+function playerHolds(world: World, targetId: string): Vehicle | null {
   const me = playerVehicle(world);
-  return inLootReach(world, me, targetId) ? me : null;
+  return inLootReach(world, me, targetId) && !warnedOffTarget(world, me, targetId) ? me : null;
 }
 
 export function lootBlocker(world: World, looter: Vehicle, targetId: string): Vehicle | null {
@@ -627,7 +633,7 @@ function isLootActOn(goal: NpcActivity, targetId: string): boolean {
   return (goal.kind === 'loot' || goal.kind === 'scavenge') && goal.targetId === targetId && goal.phase === 'act';
 }
 
-function inLootReach(world: World, v: Vehicle, targetId: string): boolean {
+export function inLootReach(world: World, v: Vehicle, targetId: string): boolean {
   const stock = world.salvage.find((s) => s.id === targetId);
   return stock ? canReachSalvage(v, stock) : canLootTruck(v, vehicleById(world, targetId));
 }

@@ -1,6 +1,7 @@
 // Scavengers at old-world loot spots on the committed map: the off-road pick, the drive from the road, the search and
 // the take, an emptied spot and a spot the player is searching. src/three/old-spot-reload.test.ts reloads on the way.
 
+import { hangUp } from './dialogue';
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { NPCS } from '../data/npcs';
 import { OLD_PLACES, OLD_TABLES } from '../data/salvage';
@@ -166,14 +167,15 @@ describe('a scavenger at an old-world loot spot', () => {
     npc.brain!.goals = [scavengeGoal(building)];
     const before = held(w, stock.id);
     // The player keeps searching, as a player does when an NPC pulls up.
-    const keepSearching = (next: World): World => {
+    const keepSearching = (open: World): World => {
+      const next = open.player.call ? hangUp(open) : open;
       const player = vehicle(next, next.player.vehicleId);
       if (!player.job && (next.salvage.find((s) => s.id === stock.id)!.goods.scrap ?? 0) > 0) beginSearch(next, player, stock.id);
       return next;
     };
     const { w: after, searched, reasons } = runGoal(w, npc.id, stock.id, DRIVE_TURNS, keepSearching);
     expect(searched).toBe(false);
-    expect(reasons[0]).toBe('someone else is looting it');
+    expect(['someone else is looting it', 'the looter would not leave']).toContain(reasons[0]);
     expect(held(after, stock.id)).toBe(before);
   }, 120_000);
 });

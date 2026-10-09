@@ -25,11 +25,12 @@ import { standingPressures } from './market';
 import { remember } from './memory';
 import { chance, hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
-import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, isSiteStock, lootClaimedBy, lootTruckTurn, searchTarget, STRIPPED, oldSpotOf, oldSpotsNear, oldStockId } from './salvage';
+import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, isSiteStock, lootTruckTurn, searchTarget, STRIPPED, oldSpotOf, oldSpotsNear, oldStockId } from './salvage';
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
 import { answersHoldUp, judgeStrandedFoe, plead, warnedOff } from './parley';
+import { heldByLooter } from './loot-warning';
 import { addState, endState, stateOf, statesHeld } from './states';
 import { isStranded, suppliesCap, vehicleStats } from './stats';
 import type { Contact, Job, NpcActivity, NpcBrain, NpcState, RefitJob, SalvageStock, Track, Vehicle, World } from './types';
@@ -512,7 +513,7 @@ function perceives(world: World, vehicle: Vehicle, decision: string, id: string,
   return PERCEIVES[decision as NoticedDecision](world, vehicle, id, contacts);
 }
 
-export type NoticedDecision = 'preySeen' | 'strandedSeen' | 'salvageSeen' | 'ramChance' | 'escortSeen' | 'strandedFoe' | 'surrenderOffered' | 'needySeen';
+export type NoticedDecision = 'preySeen' | 'strandedSeen' | 'salvageSeen' | 'ramChance' | 'escortSeen' | 'strandedFoe' | 'surrenderOffered' | 'needySeen' | 'lootContested';
 
 type Perception = (world: World, vehicle: Vehicle, id: string, contacts: Contact[]) => boolean;
 
@@ -539,6 +540,7 @@ const PERCEIVES: Record<NoticedDecision, Perception> = {
   strandedFoe: seesVehicle,
   surrenderOffered: seesVehicle,
   needySeen: seesVehicle,
+  lootContested: seesVehicle,
 };
 
 export function react<D extends NoticedDecision>(world: World, vehicle: Vehicle, decision: D, id: string): DecisionOptions[D] | null {
@@ -720,15 +722,6 @@ export function defyThreat(world: World, vehicle: Vehicle, threatener: Vehicle, 
   startFeuds(world, threatener, vehicle);
   if (answer === 'fightBack') interrupt(world, vehicle, fightGoal(world, vehicle, threatener, reason));
   else interrupt(world, vehicle, fleeFrom(world, vehicle, npcProfile(vehicle), threatener.id, threatener.pos, reason));
-}
-
-export function backOffLoot(world: World, vehicle: Vehicle): void {
-  const target = lootClaimedBy(world, vehicle);
-  if (target === null) throw new Error(`${vehicle.id} holds no loot claim to back off from`);
-  if (worksOnLoot(vehicle, target)) cancelJob(world, vehicle);
-  vehicle.brain!.noticed[`salvageSeen:${target}`] = world.turn;
-  const goal = topGoal(vehicle);
-  if (goal && ['loot', 'scavenge'].includes(goal.kind) && goal.targetId === target) finishGoal(world, vehicle, 'warned off the loot');
 }
 
 function onPreySeen(world: World, vehicle: Vehicle): void {
@@ -1032,8 +1025,7 @@ function resolveTow(world: World, vehicle: Vehicle, activity: NpcActivity): void
 }
 
 function resolveSearch(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  const taken = lootTaken(world, vehicle, activity.targetId);
-  if (taken) { finishGoal(world, vehicle, taken); return; }
+  if (heldByLooter(world, vehicle, activity)) return;
   const truck = world.vehicles.find((v) => v.id === activity.targetId);
   if (truck) { resolveTruckLoot(world, vehicle, activity, truck); return; }
   const found = searchTarget(world, vehicle, activity.targetId);
