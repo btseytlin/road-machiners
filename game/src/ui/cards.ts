@@ -5,7 +5,8 @@
 import { oilSlickLength } from "../data/utilities";
 import { chassisDef } from "../data/chassis";
 import { partDef, type PartDef, type PartKind, type WeaponDef, type EngineDef, type ArmorDef, type ScannerDef, type CargoDef, type StoreDef, type UtilityDef, type FieldRepair } from "../data/parts";
-import { baseGrid, cellCount, mountedParts, type Cell } from "../sim/grid";
+import { playerVehicle } from "../sim/damage";
+import { baseGrid, cargoCellsGained, cellCount, mountedParts, type Cell } from "../sim/grid";
 import { maxHp, partValue, wornDef } from "../sim/wear";
 import type { GridItem, PartInstance, Vehicle, World } from "../sim/types";
 import { GOODS } from "../data/goods";
@@ -451,7 +452,7 @@ const KIND_STATS: Record<PartKind, (world: World, part: PartInstance) => Stat[]>
   weapon: weaponStats,
   engine: (_, part) => engineStats(part),
   armor: (_, part) => armorStats(part),
-  cargo: (_, part) => cargoStats(part),
+  cargo: cargoStats,
   scanner: (_, part) => [stat("scanner", "Detection range", meters(wornDef<ScannerDef>(part).range), "m", "more")],
   store: (_, part) => storeStats(part),
   core: () => [],
@@ -478,9 +479,13 @@ function storeStats(part: PartInstance): Stat[] {
   return [{ ...stat("supplies", "Extra supplies", d.amount, "", "more"), text: `+${d.amount}` }];
 }
 
-function cargoStats(part: PartInstance): Stat[] {
+// Headlines the cells the part gains on the player's own truck, since a row is as wide as the chassis.
+function cargoStats(world: World, part: PartInstance): Stat[] {
   const d = partDefOf<CargoDef>(part);
-  return [{ ...stat("rows", "Extra cargo rows", d.extraRows, d.extraRows === 1 ? "row" : "rows", "more"), text: `+${d.extraRows}` }, tallStat(d)];
+  const cells = cargoCellsGained(playerVehicle(world).chassisId, part.defId);
+  const gained = { ...stat("cells", "Cargo cells", cells, "", "more"), text: signed(cells, 0) };
+  const rows = { ...stat("rows", "Extra cargo rows", d.extraRows, d.extraRows === 1 ? "row" : "rows", "more"), text: `+${d.extraRows}` };
+  return [gained, rows, tallStat(d)];
 }
 
 function penStat(d: WeaponDef): Stat {

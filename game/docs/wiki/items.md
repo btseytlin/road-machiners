@@ -121,13 +121,13 @@ Each weapon's round:
 <!-- wiki:cargo -->
 | id | name | tier | value (M) | cells (w x h) | mass (kg) | hp | armor | tall | extra rows |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| rack | Roof rack | 1 | 40 | 2 x 1 | 60 | 30 | 1 | false | 1 |
-| trailerBox | Cargo box | 2 | 100 | 2 x 2 | 135 | 60 | 1 | true | 3 |
+| rack | Roof rack | 1 | 67 | 2 x 1 | 60 | 30 | 1 | false | 2 |
+| trailerBox | Cargo box | 2 | 120 | 2 x 2 | 135 | 60 | 1 | true | 5 |
 | panniers | Panniers | 1 | 34 | 1 x 1 | 60 | 20 | 1 | false | 1 |
 | flatbed | Flatbed extension | 1 | 67 | 2 x 1 | 120 | 50 | 1 | false | 2 |
-| lightFrame | Light cargo frame | 2 | 127 | 2 x 2 | 90 | 24 | 1 | false | 3 |
-| enclosedFrame | Enclosed cargo frame | 2 | 147 | 2 x 2 | 165 | 110 | 8 | true | 3 |
-| heavyFrame | Heavy cargo frame | 3 | 217 | 2 x 2 | 175 | 90 | 3 | true | 5 |
+| lightFrame | Light cargo frame | 2 | 127 | 2 x 2 | 90 | 24 | 1 | false | 5 |
+| enclosedFrame | Enclosed cargo frame | 2 | 134 | 2 x 2 | 165 | 110 | 8 | true | 5 |
+| heavyFrame | Heavy cargo frame | 3 | 160 | 2 x 2 | 150 | 90 | 3 | true | 6 |
 <!-- /wiki:cargo -->
 
 ## Scanners
