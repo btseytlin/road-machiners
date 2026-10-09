@@ -18,6 +18,13 @@ export function meters(tiles: number): number {
   return Math.round(tiles * PHYSICS.metersPerTile);
 }
 
+const METERS_PER_KM = 1000;
+
+export function distanceText(tiles: number): string {
+  const m = meters(tiles);
+  return m >= METERS_PER_KM ? `${(m / METERS_PER_KM).toFixed(1)} km` : `${m} m`;
+}
+
 export function liters(cells: number): number {
   return Math.round(cells * RULES.cellMeters * RULES.cellMeters * UNITS.cellDepth * 1000);
 }

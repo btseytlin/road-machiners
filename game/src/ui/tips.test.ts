@@ -270,3 +270,15 @@ describe("opening tips", () => {
     expect(openingStep(emptyWorld())).toBeNull();
   });
 });
+
+describe("tips in a Gauntlet run", () => {
+  it("runs no opening and offers no horn", () => {
+    const w = newWorld(3, startKit("gauntlet"), TEST_MAP, defaultSetup("gauntlet"));
+    addVehicle(w, "raiders", "wagon", ["mg"], { x: playerVehicle(w).pos.x + 4, y: playerVehicle(w).pos.y }).brain = npcBrain("buggy", playerVehicle(w).pos, ["raider"]);
+    refreshVision(w);
+    const seen = new Set<TipId>(["waypoint", "drive", "autoStop", "stop", "stopAt", "manual", "zones", "aim"]);
+
+    expect(openingStep(w)).toBeNull();
+    expect(tipToShow(w, false, seen, null)).not.toBe("honk");
+  });
+});

@@ -16,6 +16,8 @@ import type { GauntletRun, Outpost, RunLossCause, Vehicle, WaveGroup, World } fr
 import { dist, type Vec } from './vec';
 import { playerCommand } from './world';
 
+export const OUTPOST_PAY = 'outpostPay';
+
 export type GauntletReadout = { stretch: number; total: number; toOutpost: number; complete: boolean };
 
 export function advanceGauntlet(world: World): void {
@@ -25,8 +27,8 @@ export function advanceGauntlet(world: World): void {
   if (run.complete) return;
   const line = courseLine(run.course);
   huntPlayer(world, run);
-  spawnDueGroups(world, run, line, progressOf(line, playerVehicle(world).pos));
   if (arrivedAtNext(world, run)) completeStretch(world, run);
+  else spawnDueGroups(world, run, line, progressOf(line, playerVehicle(world).pos));
 }
 
 function countWrecks(world: World, run: GauntletRun): void {
@@ -136,7 +138,7 @@ function completeStretch(world: World, run: GauntletRun): void {
   const wrecks = groups.reduce((n, g) => n + g.wrecked, 0);
   const pay = GAUNTLET.pay.base[k] + GAUNTLET.pay.perWreck[k] * wrecks;
   world.player.money += pay;
-  world.events.push({ t: 'money', amount: pay, reason: 'outpostPay' });
+  world.events.push({ t: 'money', amount: pay, reason: OUTPOST_PAY });
   post.paid = true;
   removeSurvivors(world, groups);
   run.stretch++;
@@ -171,14 +173,30 @@ export function abandonRun(world: World): World {
   });
 }
 
+export function runEarnings(world: World): { pay: number; wrecks: number } {
+  const run = world.gauntlet;
+  if (!run) throw new Error('No run to count earnings for');
+  const paid = run.outposts.map((post, k) => ({ post, k })).filter(({ post }) => post.paid);
+  const wrecksOf = (k: number) => run.groups.filter((g) => g.stretch === k).reduce((n, g) => n + g.wrecked, 0);
+  return {
+    pay: paid.reduce((sum, { k }) => sum + GAUNTLET.pay.base[k] + GAUNTLET.pay.perWreck[k] * wrecksOf(k), 0),
+    wrecks: run.groups.reduce((n, g) => n + g.wrecked, 0),
+  };
+}
+
 export function nextOutpost(world: World): Outpost | null {
   const run = world.gauntlet;
   return run && !run.complete ? run.outposts[run.stretch] : null;
 }
 
 export function reachedOutpostAt(world: World): Outpost | null {
+  const near = outpostNear(world);
+  return near && playerVehicle(world).speed <= RULES.parkedSpeed ? near : null;
+}
+
+export function outpostNear(world: World): Outpost | null {
   const me = playerVehicle(world);
-  return world.gauntlet?.outposts.find((post) => post.paid && onPad(post, me)) ?? null;
+  return world.gauntlet?.outposts.find((post) => post.paid && dist(me.pos, post.pad) <= GAUNTLET.outpost.padRadius) ?? null;
 }
 
 export function gauntletReadout(world: World): GauntletReadout | null {

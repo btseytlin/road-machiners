@@ -1,9 +1,12 @@
 // The fullscreen death screen. A dead run takes no more turns or commands, so it covers the whole game.
 // Load save opens the Load panel, and New game opens the New game screen over it.
 
+import { abandonRun, canAbandonRun, runEarnings } from "../sim/gauntlet";
+import type { RunLossCause, World } from "../sim/types";
 import { disabledWith, el, panel } from "./dom";
-import { openNewGame, type NewGameActions } from "./new-game";
+import { CONFIRM_NEW_GAME, openNewGame, type NewGameActions } from "./new-game";
 import { SavePanel, type SavePanelActions } from "./save-panel";
+import { moneyEl } from "./units";
 
 export type DeathActions = SavePanelActions & {
   hasSave: () => boolean;
@@ -11,6 +14,12 @@ export type DeathActions = SavePanelActions & {
 };
 
 const NO_SAVE = "No saves yet";
+const RUN_TITLE: Record<RunLossCause, string> = { wrecked: "Wrecked", abandoned: "Stranded" };
+export const CONFIRM_END_RUN = "End the run here? It cannot be undone.";
+
+export function confirmedEndRun(world: World): World | null {
+  return canAbandonRun(world) && window.confirm(CONFIRM_END_RUN) ? abandonRun(world) : null;
+}
 
 export class DeathScreen {
   private root: HTMLElement | null = null;
@@ -25,20 +34,75 @@ export class DeathScreen {
     return this.root !== null;
   }
 
-  show(): void {
+  noteTurn(world: World): void {
+    if (world.events.some((e) => e.t === "runComplete")) this.showRunComplete(world);
+  }
+
+  private showRunComplete(world: World): void {
+    const run = world.gauntlet;
+    if (this.root || !run) return;
+    const { pay, wrecks } = runEarnings(world);
+    const root = panel("death run-complete");
+    root.setAttribute("role", "alertdialog");
+    root.setAttribute("aria-label", "Run complete");
+    root.append(
+      el("h3", {}, "Run complete"),
+      el("div", { class: "run-tally" }, el("span", {}, `${run.outposts.length} outposts`), el("span", {}, `${wrecks} wrecks`), el("span", { class: "good" }, "+", moneyEl(pay))),
+      el(
+        "div",
+        { class: "death-buttons" },
+        el("button", { onclick: () => this.closeRunComplete() }, "Keep driving"),
+        el("button", { onclick: () => openNewGame(this.actions.newGame, () => {}) }, "New game"),
+      ),
+    );
+    this.root = root;
+  }
+
+  private closeRunComplete(): void {
+    this.root?.remove();
+    this.root = null;
+  }
+
+  show(world: World): void {
     if (this.root) return;
     const saved = this.actions.hasSave();
+    const title = deathTitle(world);
     this.root = panel("death");
     this.root.setAttribute("role", "alertdialog");
-    this.root.setAttribute("aria-label", "You died");
+    this.root.setAttribute("aria-label", title);
     this.root.append(
-      el("h3", {}, "You died"),
+      el("h3", {}, title),
+      ...runCaption(world),
       el(
         "div",
         { class: "death-buttons" },
         el("button", disabledWith(saved ? null : NO_SAVE, () => this.savePanel.openLoad()), "Load save"),
+        world.gauntlet ? el("button", { onclick: () => this.restart(world) }, "Restart run") : null,
         el("button", { onclick: () => openNewGame(this.actions.newGame, () => {}) }, "New game"),
       ),
     );
   }
+
+  private restart(world: World): void {
+    const { newGame } = this.actions;
+    if (!newGame.confirm(CONFIRM_NEW_GAME)) return;
+    newGame.requestBoot({ new: world.setup });
+    newGame.reload();
+  }
+}
+
+function lossCause(world: World): RunLossCause {
+  const lost = world.events.find((e) => e.t === "runLost");
+  return lost?.t === "runLost" ? lost.cause : "wrecked";
+}
+
+function deathTitle(world: World): string {
+  return world.gauntlet ? RUN_TITLE[lossCause(world)] : "You died";
+}
+
+function runCaption(world: World): HTMLElement[] {
+  const run = world.gauntlet;
+  if (!run) return [];
+  const reached = Math.min(run.stretch + 1, run.outposts.length);
+  return [el("div", { class: "death-caption" }, `Stretch ${reached} of ${run.outposts.length}`)];
 }

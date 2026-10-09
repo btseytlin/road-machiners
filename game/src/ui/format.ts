@@ -87,6 +87,7 @@ export function workProgress(work: WorkLeft): number {
   return 1 - work.turnsLeft / work.total;
 }
 import { damage, fuelLiters, hp, kph, moneyDelta, moneyNumber, moneyText, turnsText as turnsLabel } from './units';
+import { OUTPOST_PAY } from '../sim/gauntlet';
 import { npcName } from '../sim/spawn';
 
 export function wearLabel(part: PartInstance): string {
@@ -648,7 +649,17 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   escortPaid: escortPaidText,
   escortHired: escortHiredText,
   escortRefused: escortRefusedText,
+  money: (_, e) => (e.reason === OUTPOST_PAY ? null : { text: `${moneyDelta(e.amount)}: ${e.reason}`, cls: e.amount > 0 ? 'good' : 'bad' }),
+  outpostReached: outpostReachedText,
+  runLost: (_, e) => ({ text: e.cause === 'wrecked' ? `Your truck is wrecked. The run ends on stretch ${e.stretch}.` : `You end the run on stretch ${e.stretch}.`, cls: 'bad' }),
+  runComplete: () => ({ text: 'The last outpost. The run is complete.', cls: 'good' }),
 };
+
+function outpostReachedText(world: World, e: Extract<GameEvent, { t: 'outpostReached' }>): LogLine {
+  const name = world.gauntlet?.outposts.find((o) => o.id === e.outpost)?.name ?? `Outpost ${e.stretch}`;
+  const wrecks = e.wrecks === 0 ? '' : ` and ${e.wrecks} ${e.wrecks === 1 ? 'wreck' : 'wrecks'}`;
+  return { text: `${name}. Paid ${moneyText(e.pay)} for the road${wrecks}.`, cls: 'good' };
+}
 
 export function eventText(world: World, e: GameEvent): LogLine | null {
   if (unnoticed(world, e)) return null;
@@ -671,8 +682,6 @@ export function eventText(world: World, e: GameEvent): LogLine | null {
       return null;
     case 'skillUp':
       return { text: skillUpText(e.skill, e.level), cls: 'good' };
-    case 'money':
-      return { text: `${moneyDelta(e.amount)}: ${e.reason}`, cls: e.amount > 0 ? 'good' : 'bad' };
     case 'discover': {
       const loc = [...REGION.towns, ...REGION.locations].find((l) => l.id === e.location);
       return { text: `Discovered ${loc?.name ?? e.location}`, cls: 'good' };

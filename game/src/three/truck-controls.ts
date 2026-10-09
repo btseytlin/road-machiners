@@ -7,6 +7,7 @@ import { isBusy } from "../sim/jobs";
 import { canOverdrive, inOverdrive } from "../sim/stats";
 import { canLoot, canScavenge, canUseOasis, scavenge, useOasis } from "../sim/locations";
 import { shopAt } from "../sim/market";
+import { reachedOutpostAt } from "../sim/gauntlet";
 import type { World } from "../sim/types";
 import { playerCanAct, setAutoRepair, setDirect, setHeadlights, setOverdrive } from "../sim/world";
 import { type ContextAction, type ContextTarget } from "../ui/hud";
@@ -68,6 +69,7 @@ export type ContextHost = {
   note: (text: string) => void;
   openTrade: (npcId: string) => void;
   openTown: () => void;
+  openOutpost: () => void;
   openDowned: (vehicleId: string) => void;
   openLoot: (stockId: string) => void;
 };
@@ -101,6 +103,7 @@ export class TruckContext {
       aid: () => 'id' in target && this.startAid(target.id),
       trade: () => 'id' in target && h.openTrade(target.id),
       shop: () => shopAt(h.world()) && h.openTown(),
+      outpost: () => reachedOutpostAt(h.world()) && h.openOutpost(),
       downed: () => 'id' in target && h.openDowned(target.id),
       oasis: () => this.refill(),
       stock: () => 'id' in target && this.searchStock(target.id, action.combat),

@@ -45,6 +45,7 @@ import { Hud } from "../ui/hud";
 import { InventoryScreen } from "../ui/inventory";
 import type { RadioPanel } from "../ui/radio";
 import { TownScreen, TruckTradeScreen } from "../ui/town";
+import { OutpostScreen } from "../ui/outpost";
 import { FullShopScreen } from "../ui/full-shop";
 import { aimActions, HoverHold, InspectPin, SLOT_KEYS, toggleBodyAim, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
@@ -80,7 +81,7 @@ import { SoundRingView } from "./render/soundRing";
 import { reportError } from "./crash";
 import { GameSaves, turnFailedNote, type Run } from "./save";
 import { GameMenu } from "../ui/game-menu";
-import { DeathScreen } from "../ui/death";
+import { confirmedEndRun, DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
 import { CombatScore, CombatWatch, computeEngineGlide, EngineStrain, musicPlaceAt, SoundDirector, SoundLoops, stingOf } from "./sound";
 import type { SoundPlayer } from "../audio/player";
@@ -181,6 +182,7 @@ export class Game {
   private readonly hitCard: HitCard;
   private readonly weapons: WeaponPanel;
   private readonly town: TownScreen;
+  private readonly outpost: OutpostScreen;
   private readonly fullShop: FullShopScreen;
   private readonly context: TruckContext;
   private readonly trade: TruckTradeScreen;
@@ -265,6 +267,7 @@ export class Game {
       note: (text) => this.hud.note(this.world, text, "bad"),
       openTrade: (id) => this.trade.openWith(id),
       openTown: () => this.town.open(),
+      openOutpost: () => this.outpost.open(),
       openDowned: (id) => this.inventory.openDowned(this.world, id),
       openLoot: (id) => this.inventory.openLoot(id),
     });
@@ -279,6 +282,7 @@ export class Game {
     const host = this.uiHost();
     this.weapons = new WeaponPanel(host);
     this.town = new TownScreen(host);
+    this.outpost = new OutpostScreen(host);
     this.fullShop = new FullShopScreen(host);
     this.trade = new TruckTradeScreen(host);
     this.character = new CharacterScreen(host);
@@ -302,6 +306,7 @@ export class Game {
             ? setBeacon(w, on)
             : null,
         ),
+      endRun: () => this.rescueCommand(confirmedEndRun),
       isBusy: () => this.anim !== null,
       autoTravel: () => this.travel.isAuto(this.world),
       dialogue: { world: () => this.world, inspected: () => this.inspected(), busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.saves.logWorld(next); this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
@@ -388,9 +393,12 @@ export class Game {
     this.rig.resize();
   }
 
+  private screens() {
+    return [this.town, this.outpost, this.fullShop, this.trade, this.character, this.inventory];
+  }
+
   private modalOpen(): boolean {
-    const screens = [this.town, this.fullShop, this.trade, this.character, this.inventory];
-    return screens.some((s) => s.isOpen()) || this.world.player.call !== null || this.menu.isOpen();
+    return this.screens().some((s) => s.isOpen()) || this.world.player.call !== null || this.menu.isOpen();
   }
 
   private displayWorld(): World {
@@ -417,13 +425,9 @@ export class Game {
     this.craters.sync(this.world);
     this.hud.renderTop(this.displayWorld());
     this.hud.renderRescue(this.displayWorld());
-    if (!this.anim && this.world.player.state === "dead") this.death.show();
+    if (!this.anim && this.world.player.state === "dead") this.death.show(this.world);
     this.weapons.render();
-    this.town.render();
-    this.fullShop.render();
-    this.trade.render();
-    this.character.render();
-    this.inventory.render();
+    this.screens().forEach((s) => s.render());
     const { action, count, index } = this.context.shown();
     this.hud.renderAction(
       action,
@@ -543,7 +547,7 @@ export class Game {
   }
 
   private closeScreens(keep: CharacterScreen | InventoryScreen | null): void {
-    for (const s of [this.town, this.fullShop, this.trade, this.character, this.inventory]) if (s !== keep) s.close();
+    for (const s of this.screens()) if (s !== keep) s.close();
   }
 
   private toggleScreen(screen: CharacterScreen | InventoryScreen): void {
@@ -752,6 +756,7 @@ export class Game {
     this.hud.pushEvents(this.world);
     const searched = this.world.events.find((e) => e.t === "searched");
     if (searched) this.inventory.openLoot(searched.stock);
+    this.death.noteTurn(this.world);
     this.uiStale = true;
     for (const b of this.breakCues.rest()) this.playBreak(b);
   }

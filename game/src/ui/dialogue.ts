@@ -14,11 +14,10 @@ import { playerSees } from '../sim/vision';
 import { playerCanAct } from '../sim/world';
 import { modeRules } from '../sim/settings';
 import { el, isBrowserChord, panel, topCenter } from './dom';
-import { fuelLiters, meters, moneyText } from './units';
+import { distanceText, fuelLiters, moneyText } from './units';
 import { npcName } from '../sim/spawn';
 
 const COMPASS = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'];
-const METERS_PER_KM = 1000;
 
 function compass(rad: number): string {
   const step = (2 * Math.PI) / COMPASS.length;
@@ -36,11 +35,6 @@ function siteName(id: string): string {
   const site = [...REGION.towns, ...REGION.locations].find((s) => s.id === id);
   if (!site) throw new Error(`Unknown site ${id}`);
   return site.name;
-}
-
-function distanceText(tiles: number): string {
-  const m = meters(tiles);
-  return m >= METERS_PER_KM ? `${(m / METERS_PER_KM).toFixed(1)} km` : `${m} m`;
 }
 
 function dealText(v: Extract<CallVar, { kind: 'deal' }>): string {
@@ -196,7 +190,7 @@ export class DialoguePanel {
   }
 
   private honk(): boolean {
-    if (!playerCanAct(this.host.world())) return false;
+    if (!playerCanAct(this.host.world()) || !modeRules(this.host.world()).radio) return false;
     this.horn.sound();
     return true;
   }

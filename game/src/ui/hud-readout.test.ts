@@ -387,12 +387,12 @@ describe("rescue readout", () => {
     const w = emptyWorld();
     expect(getRescueReadout(w)).toBeNull();
     w.player.fuel = 0;
-    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: false, reason: "Out of fuel." });
+    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: false, reason: "Out of fuel.", canEnd: false });
     w.player.beacon = true;
-    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true, reason: "Out of fuel." });
+    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true, reason: "Out of fuel.", canEnd: false });
     w.player.money = 10;
     const tow = addState(w, "tow", w.vehicles[0].id, w.player.vehicleId, { kind: "tow", site: "bowl", fee: 50, waived: 0, hitched: false });
-    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true, reason: "Out of fuel." });
+    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true, reason: "Out of fuel.", canEnd: false });
     towData(tow).hitched = true;
     expect(getRescueReadout(w)).toMatchObject({ kind: "towed", fee: 50 });
     w.player.state = "knockedOut";
@@ -579,5 +579,45 @@ describe('overdrive switch', () => {
     expect(overdriveSwitch(w)).toEqual({ checked: false, reason: null, title: 'Faster, but the engine heats fast [O]' });
     w.player.overdrive = true;
     expect(overdriveSwitch(w).checked).toBe(true);
+  });
+});
+
+describe("Gauntlet readouts", () => {
+  const gauntlet = () => newWorld(3, startKit("gauntlet"), TEST_MAP, defaultSetup("gauntlet"));
+  const parkAt = (w: World, k: number) => {
+    const me = playerVehicle(w);
+    me.pos = { ...w.gauntlet!.outposts[k].pad };
+    me.speed = 0;
+  };
+
+  it("shows the stretch and the distance to the next outpost", () => {
+    const run = getHudReadout(gauntlet()).resources.find((r) => r.label === "Run");
+
+    expect(run?.value).toMatch(/^1\/4 \d+(\.\d)? k?m$/);
+    expect(run && "tip" in run ? run.tip : "").toMatch(/^Stretch 1 of 4, .* to Outpost 1$/);
+  });
+
+  it("shows no run readout in Roaming", () => {
+    const w = newWorld(3, startKit("standard"), TEST_MAP, defaultSetup("roaming"));
+
+    expect(getHudReadout(w).resources.some((r) => r.label === "Run")).toBe(false);
+  });
+
+  it("offers to enter a reached outpost only while parked on its pad", () => {
+    const w = gauntlet();
+    parkAt(w, 0);
+    expect(getContextActions(w, false).some((a) => a.target.kind === "outpost")).toBe(false);
+
+    w.gauntlet!.outposts[0].paid = true;
+    expect(getContextActions(w, false)).toContainEqual({ label: "Enter Outpost 1", ready: true, target: { kind: "outpost" } });
+    playerVehicle(w).speed = 2;
+    expect(getContextActions(w, false)).toContainEqual({ label: "Enter Outpost 1", ready: false, target: { kind: "outpost" } });
+  });
+
+  it("offers End run instead of the beacon to a stranded truck", () => {
+    const w = gauntlet();
+    w.player.fuel = 0;
+
+    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: false, reason: "Out of fuel.", canEnd: true });
   });
 });

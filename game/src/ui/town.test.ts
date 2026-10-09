@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { pressureHint, shortBy } from "./town";
+import { pressureHint } from "./town";
+import { shortBy } from "./shop-rows";
 import type { ShopDef } from "../data/market";
 import type { ShopState } from "../sim/market";
 

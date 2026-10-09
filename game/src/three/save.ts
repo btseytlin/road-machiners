@@ -1,6 +1,7 @@
 import type { BakedMap } from '../sim/terrain';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
+import { reachedOutpostAt } from '../sim/gauntlet';
 import type { BrokenProp, Obstacle, Player, Vehicle, World, WorldSetup } from '../sim/types';
 import { refreshVision } from '../sim/vision';
 import { parseSetup } from '../sim/settings';
@@ -172,7 +173,11 @@ export function saveWorld(slots: SaveSlots, world: World, runId: string, interva
 }
 
 export function saveInTown(slots: SaveSlots, world: World, runId: string, savedAt: number): void {
-  if (world.player.state === 'active' && townAt(world)) writeSave(slots, 'auto', world, runId, savedAt);
+  if (world.player.state === 'active' && (townAt(world) || reachedOutpostAt(world))) writeSave(slots, 'auto', world, runId, savedAt);
+}
+
+export function saveOnArrival(slots: SaveSlots, world: World, runId: string, savedAt: number): void {
+  if (world.player.state === 'active' && world.events.some((e) => e.t === 'outpostReached')) writeSave(slots, 'auto', world, runId, savedAt);
 }
 
 export function writeSave(slots: SaveSlots, slot: SlotId, world: World, runId: string, savedAt: number): void {
@@ -316,7 +321,9 @@ export class GameSaves {
 
   afterTurn(world: World): void {
     this.hold.finishTurn();
-    if (!this.hold.held) saveWorld(this.run.slots, world, this.run.runId, CONFIG.saveTurns, Date.now());
+    if (this.hold.held) return;
+    saveWorld(this.run.slots, world, this.run.runId, CONFIG.saveTurns, Date.now());
+    saveOnArrival(this.run.slots, world, this.run.runId, Date.now());
   }
 
   afterCommand(world: World): void {

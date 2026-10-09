@@ -41,7 +41,8 @@ export type ContextTarget =
   | { kind: 'oasis' }
   | { kind: 'stock'; id: string }
   | { kind: 'loot'; id: string }
-  | { kind: 'empty' };
+  | { kind: 'empty' }
+  | { kind: 'outpost' };
 export type ContextAction = { label: string; ready: boolean; target: ContextTarget; hint?: string; combat?: number };
 
 export function contextKey(target: ContextTarget): string {
@@ -67,6 +68,7 @@ type HudActions = {
   douseEngine: () => void;
   unhitch: () => void;
   setBeacon: (on: boolean) => void;
+  endRun: () => void;
   isBusy: () => boolean;
   autoTravel: () => boolean;
   dialogue: DialogueHost;
@@ -320,13 +322,15 @@ export class Hud {
       el(
         "div",
         { class: "rescue-buttons" },
-        createSwitch({
-          on: "Beacon on",
-          off: "Beacon off",
-          checked: r.beacon,
-          title: "Call for a tow by radio.",
-          onclick: () => this.actions.setBeacon(!r.beacon),
-        }),
+        r.canEnd
+          ? el("button", { class: "btn-danger", onclick: () => this.actions.endRun() }, "End run")
+          : createSwitch({
+              on: "Beacon on",
+              off: "Beacon off",
+              checked: r.beacon,
+              title: "Call for a tow by radio.",
+              onclick: () => this.actions.setBeacon(!r.beacon),
+            }),
       ),
     );
   }

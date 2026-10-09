@@ -38,6 +38,7 @@ function place(el: HTMLDivElement, world: World, pos: Vec, rig: CameraRig, limit
 export class Labels {
   private els = new Map<string, HTMLDivElement>();
   private rumors = new Map<string, HTMLDivElement>();
+  private outposts = new Map<string, HTMLDivElement>();
 
   constructor(private readonly container: HTMLElement) {
     for (const s of sites()) this.els.set(s.id, labelEl(container));
@@ -50,6 +51,27 @@ export class Labels {
       place(el, world, s.pos, rig, limit, playerExplored(world, s.pos));
     }
     this.updateRumors(world, rig, limit);
+    this.updateOutposts(world, rig, limit);
+  }
+
+  private updateOutposts(world: World, rig: CameraRig, limit: SightLimit): void {
+    const posts = world.gauntlet?.outposts ?? [];
+    const ids = new Set(posts.map((p) => p.id));
+    for (const [id, el] of this.outposts) {
+      if (ids.has(id)) continue;
+      el.remove();
+      this.outposts.delete(id);
+    }
+    for (const post of posts) place(this.outpostLabel(post.id, post.name), world, post.pad, rig, limit, true);
+  }
+
+  private outpostLabel(id: string, name: string): HTMLDivElement {
+    const known = this.outposts.get(id);
+    if (known) return known;
+    const made = labelEl(this.container);
+    made.textContent = name;
+    this.outposts.set(id, made);
+    return made;
   }
 
   private updateRumors(world: World, rig: CameraRig, limit: SightLimit): void {

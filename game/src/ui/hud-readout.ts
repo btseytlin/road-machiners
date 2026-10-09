@@ -19,7 +19,8 @@ import { dist, type Vec } from "../sim/vec";
 import type { NpcState, SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { clockLabel, vehicleName } from "./format";
-import { celsius, engineCelsius, fuelLiters, hp, kg, kph, moneyText } from "./units";
+import { celsius, distanceText, engineCelsius, fuelLiters, hp, kg, kph, moneyText } from "./units";
+import { canAbandonRun, gauntletReadout, nextOutpost, outpostNear, reachedOutpostAt } from "../sim/gauntlet";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
 import { contextKey, type ContextAction } from './hud';
@@ -98,6 +99,8 @@ function getPlaceActions(world: World): ContextAction[] {
   const actions: ContextAction[] = [];
   const shop = shopNear(world);
   if (shop) actions.push({ label: `Enter ${shop.name}`, ready: shopAt(world) === shop.id, target: { kind: 'shop' } });
+  const post = outpostNear(world);
+  if (post) actions.push({ label: `Enter ${post.name}`, ready: reachedOutpostAt(world) !== null, target: { kind: 'outpost' } });
   for (const downed of downedListNear(world)) {
     actions.push({ label: `Loot ${npcName(downed)}`, ready: canLootTruck(playerVehicle(world), downed), target: { kind: 'downed', id: downed.id } });
   }
@@ -233,7 +236,7 @@ function weatherLabel(w: World, pos: Vec): string {
 export type RescueReadout =
   | { kind: "knockedOut" }
   | { kind: "towed"; tower: string; town: string; fee: number }
-  | { kind: "stranded"; beacon: boolean; reason: string };
+  | { kind: "stranded"; beacon: boolean; reason: string; canEnd: boolean };
 
 export function getRescueReadout(w: World): RescueReadout | null {
   const p = w.player;
@@ -245,7 +248,7 @@ export function getRescueReadout(w: World): RescueReadout | null {
     return { kind: "towed", tower: vehicleName(w, state.holder), town: townName(data.site), fee: data.fee };
   }
   if (p.beacon || isStranded(w, playerVehicle(w)))
-    return { kind: "stranded", beacon: p.beacon, reason: strandedReason(w) };
+    return { kind: "stranded", beacon: p.beacon, reason: strandedReason(w), canEnd: canAbandonRun(w) };
   return null;
 }
 
@@ -389,6 +392,7 @@ export function getHudReadout(w: World) {
       },
       { label: "Supplies", value: kg(p.supplies), warning: p.supplies <= RULES.suppliesLow, icon: "supplies" as const },
       { label: "Driver", value: `${hp(p.health)}`, warning: p.health < maxHealth, icon: "driver" as const },
+      ...runResources(w),
     ],
     survival: [
       { label: "Heat", value: `${celsius(heat)} °C`, warning: heat >= HOT },
@@ -401,6 +405,16 @@ export function getHudReadout(w: World) {
       ...(weather === "Clear" ? [] : [{ label: "Weather", value: weather, warning: stormNear }]),
     ],
   };
+}
+
+function runResources(w: World) {
+  const run = gauntletReadout(w);
+  if (!run) return [];
+  const next = nextOutpost(w);
+  const left = distanceText(run.toOutpost);
+  const value = next ? `${run.stretch}/${run.total} ${left}` : `${run.total}/${run.total}`;
+  const tip = next ? `Stretch ${run.stretch} of ${run.total}, ${left} to ${next.name}` : "Run complete";
+  return [{ label: "Run", value, warning: false, icon: "range" as const, tip }];
 }
 
 const NEW_ISSUE_URL = "https://github.com/btseytlin/road-machiners/issues/new";

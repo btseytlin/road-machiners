@@ -558,3 +558,16 @@ describe("wake-up log", () => {
     expect(line?.cls).toBe("dim");
   });
 });
+
+describe("Gauntlet log lines", () => {
+  it("tells an outpost arrival with its pay once, and the run's end", () => {
+    const w = emptyWorld();
+
+    expect(eventText(w, { t: "outpostReached", outpost: "outpost-1", stretch: 2, pay: 37000, wrecks: 3 })).toEqual({ text: "Outpost 2. Paid 370 M's for the road and 3 wrecks.", cls: "good" });
+    expect(eventText(w, { t: "outpostReached", outpost: "outpost-0", stretch: 1, pay: 15000, wrecks: 0 })?.text).toBe("Outpost 1. Paid 150 M's for the road.");
+    expect(eventText(w, { t: "money", amount: 15000, reason: "outpostPay" })).toBeNull();
+    expect(eventText(w, { t: "runLost", stretch: 3, cause: "wrecked" })?.text).toBe("Your truck is wrecked. The run ends on stretch 3.");
+    expect(eventText(w, { t: "runLost", stretch: 2, cause: "abandoned" })?.text).toBe("You end the run on stretch 2.");
+    expect(eventText(w, { t: "runComplete", stretches: 4 })?.cls).toBe("good");
+  });
+});
