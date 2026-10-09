@@ -15,7 +15,7 @@ import { mountedParts } from "../sim/grid";
 import { fuelLiters } from "./units";
 import { wreckVehicle } from "../sim/combat";
 import { partName, vehicleTitle } from "../text/names";
-import type { Msg } from "../text/msg";
+import { t, type Msg } from "../text/msg";
 import { resolve } from "../text/resolve";
 
 // English words of a message, or null for none.
@@ -46,6 +46,35 @@ describe("wearLabel", () => {
 
   it("reads a part past the last wear step as junk", () => {
     expect(en(wearLabel(part(CONDITION.maxWear + 1)))).toBe("junk");
+  });
+});
+
+// The Russian condition words sit beside a part name of any gender, so each must read right on all of them.
+describe("Russian part condition on every gender", () => {
+  const ru = (msg: Msg) => resolve(msg, "ru");
+  const PARTS_BY_GENDER = { m: "shotgun", f: "mg", n: "recoilless", pl: "plates" } as const;
+  // A working part shows its HP, which needs no agreement.
+  const HP = /^\d+\/\d+ прочн\.$/;
+  const cases: [string, Partial<PartInstance>, string, string | RegExp][] = [
+    ["pristine", { wear: 0 }, "без износа", HP],
+    ["rebuilt once", { wear: 1 }, "1 капремонт", HP],
+    ["rebuilt twice", { wear: 2 }, "2 капремонта", HP],
+    ["rebuilt four times", { wear: CONDITION.maxWear }, `${CONDITION.maxWear} капремонта`, HP],
+    ["broken", { wear: 1, hp: 0 }, "1 капремонт", "не работает"],
+    ["junk", { wear: CONDITION.maxWear + 1, hp: 0 }, "лом", "только на лом"],
+  ];
+  for (const [gender, defId] of Object.entries(PARTS_BY_GENDER)) {
+    for (const [state, fields, wear, status] of cases) {
+      it(`${state} on a ${gender} part`, () => {
+        const p: PartInstance = { id: "p1", defId, hp: 10, wear: 0, ...fields };
+        expect(ru(wearLabel(p))).toBe(wear);
+        expect(ru(conditionStatus(p).text)).toMatch(status);
+      });
+    }
+  }
+
+  it("counts five rebuilds with the many form", () => {
+    expect(ru(t("cond.rebuilt", { n: 5 }))).toBe("5 капремонтов");
   });
 });
 

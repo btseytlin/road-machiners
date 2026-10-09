@@ -21,7 +21,7 @@ export const LOG = {
   // Part condition.
   'cond.junk': 'junk',
   'cond.pristine': 'pristine',
-  'cond.rebuilt': m('rebuilt x{n}', { n: 'int' }),
+  'cond.rebuilt': m('rebuilt x{n}', { n: 'count' }),
   'cond.scrapOnly': 'scrap only',
   'cond.broken': 'broken',
   'cond.hp': m('{hp}/{max} HP', { hp: 'int', max: 'int' }),

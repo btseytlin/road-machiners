@@ -89,13 +89,13 @@ describe('resolve', () => {
     expect(resolve(t('log.patchDoneYou', { who: trader(driver('Boris', 'Morozov')) }), 'ru')).toBe('Вы починили торговца Бориса Морозова.');
     expect(resolve(t('log.patchDoneThem', { who: trader(driver('Vera', 'Morozov.f')) }), 'ru')).toBe('Торговец Вера Морозова починила ваш грузовик.');
     expect(resolve(t('log.patchDoneYou', { who: trader(driver('Ada', 'Kane.f')) }), 'ru')).toBe('Вы починили торговца Аду Кейн.');
-    expect(resolve(t('job.repair', { part: list([byId('part.mg'), byId('part.plates')]) }), 'ru')).toBe('Ремонт пулемётной турели, стальных плит');
+    expect(resolve(t('job.repair', { part: list([byId('part.mg'), byId('part.plates')]) }), 'ru')).toBe('Ремонт пулемётной турели, стальных листов');
   });
 
   it('agrees with the gender of a name, and a list of several is plural', () => {
     const fixedBy = (who: Msg) => resolve(t('log.patchDoneThem', { who }), 'ru');
     expect(fixedBy(byId('part.mg'))).toBe('Пулемётная турель починила ваш грузовик.');
-    expect(fixedBy(list([byId('part.mg'), byId('part.plates')]))).toBe('Пулемётная турель, стальные плиты починили ваш грузовик.');
+    expect(fixedBy(list([byId('part.mg'), byId('part.plates')]))).toBe('Пулемётная турель, стальные листы починили ваш грузовик.');
   });
 
   it('says where a place is with its own preposition and ending', () => {
