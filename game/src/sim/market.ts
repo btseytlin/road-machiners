@@ -142,14 +142,27 @@ export function estimateTurns(from: Vec, to: Vec): number {
   return (dist(from, to) * EFFORT.routeFactor) / EFFORT.refSpeed + EFFORT.handlingTurns;
 }
 
-export function contractReward(turns: number, tier: Tier, cargoValue: number, rush: boolean): number {
+// A haul's reward: turns of estimated travel at the salvage wage, whatever the good, times the haul's
+// reward factor, plus a small cut of the hauled goods' value. The good's value pays through the cut, not
+// through a tier wage. A rush haul pays the rush premium on top.
+export function contractReward(turns: number, cargoValue: number, rush: boolean): number {
+  requireNonNegative('turns', turns);
+  requireNonNegative('cargo value', cargoValue);
   const commission = cargoValue * CONTRACTS.haul.valueShare;
-  const standard = turns * EFFORT.wage[tier] * CONTRACTS.haul.rewardFactor + commission;
+  const standard = turns * EFFORT.wage[1] * CONTRACTS.haul.rewardFactor + commission;
   return Math.round(rush ? standard * CONTRACTS.haul.rush.premium : standard);
 }
 
+// Turns a haul allows from acceptance. A standard haul gets room on top of the drive plus a fixed slack
+// for one stop. A rush haul gets the drive with a margin and no slack.
 export function haulWindow(turns: number, rush: boolean): number {
-  return Math.round(turns * (rush ? CONTRACTS.haul.rush.durationFactor : CONTRACTS.haul.durationFactor));
+  requireNonNegative('turns', turns);
+  const haul = CONTRACTS.haul;
+  return Math.round(rush ? turns * haul.rush.durationFactor : turns * haul.durationFactor + haul.slackTurns);
+}
+
+function requireNonNegative(what: string, n: number): void {
+  if (!Number.isFinite(n) || n < 0) throw new Error(`A haul needs a finite ${what} of at least 0, got ${n}`);
 }
 
 export function vehicleValue(v: Vehicle): number {
@@ -208,7 +221,7 @@ function rollHaul(world: World, input: RollInput, id: string): Contract {
   const units = randInt(world.marketRng, CONTRACTS.haul.units[0], CONTRACTS.haul.units[1]);
   const turns = estimateTurns(input.shop.pos, to.pos);
   const rush = chance(world.marketRng, CONTRACTS.haul.rush.chance);
-  const reward = contractReward(turns, tier, units * goodValue(good), rush);
+  const reward = contractReward(turns, units * goodValue(good), rush);
   const window = haulWindow(turns, rush);
   return { id, shop: input.shop.id, kind: 'haul', good, units, to: to.id, reward, deadline: world.turn + window, window, rush, tier };
 }
