@@ -2,8 +2,10 @@ import * as THREE from 'three';
 import { groundPoint, toMap, type V3 } from '../../../phys/frames';
 import { count } from '../../../perf';
 import type { Terrain } from '../../../sim/terrain';
+import type { Nearby } from './particles';
 
 export const CHUNK_OVERWRITE_COUNTER = 'fx.chunks.overwritten';
+export const CHUNK_FAR_COUNTER = 'fx.chunks.far';
 
 export const CHUNK = {
   shapes: 3,
@@ -39,7 +41,7 @@ export class ChunkBatch {
   private readonly quat = new THREE.Quaternion();
   private readonly scale = new THREE.Vector3();
 
-  constructor(private readonly capacity: number, random: () => number) {
+  constructor(private readonly capacity: number, random: () => number, private readonly nearby: Nearby) {
     this.meshes = Array.from({ length: CHUNK.shapes }, () => {
       const mesh = new THREE.InstancedMesh(rockGeometry(random), this.material, capacity);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -66,6 +68,10 @@ export class ChunkBatch {
   }
 
   spawn(p: V3, vel: V3, size: number, life: number, color: THREE.Color): void {
+    if (!this.nearby(p)) {
+      count(CHUNK_FAR_COUNTER);
+      return;
+    }
     const c = this.chunks[this.head];
     if (c.alive) count(CHUNK_OVERWRITE_COUNTER);
     this.head = (this.head + 1) % this.capacity;

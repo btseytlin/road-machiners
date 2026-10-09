@@ -4,6 +4,9 @@ import { count } from '../../../perf';
 import { CARD_SHAPES, type CardBatch } from './cards';
 
 export const OVERWRITE_COUNTER = 'fx.particles.overwritten';
+export const FAR_COUNTER = 'fx.particles.far';
+
+export type Nearby = (p: V3) => boolean;
 
 export type ParticleLook = {
   life: number;
@@ -36,7 +39,7 @@ export class Particles {
   private readonly colorKeys = new Map<ParticleLook, THREE.Color[]>();
   private readonly color = new THREE.Color();
 
-  constructor(private readonly capacity: number) {
+  constructor(private readonly capacity: number, private readonly nearby: Nearby) {
     this.slots = Array.from({ length: capacity }, () => ({
       alive: false,
       pos: new THREE.Vector3(),
@@ -52,6 +55,10 @@ export class Particles {
   }
 
   spawn(p: V3, vel: V3, look: ParticleLook, scale: number): void {
+    if (!this.nearby(p)) {
+      count(FAR_COUNTER);
+      return;
+    }
     const slot = this.slots[this.head];
     if (slot.alive) count(OVERWRITE_COUNTER);
     this.head = (this.head + 1) % this.capacity;

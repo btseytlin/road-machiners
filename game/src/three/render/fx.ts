@@ -7,7 +7,7 @@ import { PHYSICS } from '../../data/physics';
 import { TERRAIN_TYPES, type TerrainType } from '../../data/terrain';
 import { ENGINE_HEAT } from '../../data/wear';
 import { wheelMounts } from '../../phys/body';
-import { headingOf, type V3, type VehicleFrame } from '../../phys/frames';
+import { headingOf, toMap, type V3, type VehicleFrame } from '../../phys/frames';
 import { PAL } from '../../render/palette';
 import { bodyOf } from '../../sim/body';
 import { corePart, mountedParts } from '../../sim/grid';
@@ -22,7 +22,8 @@ import { Casings, Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan,
 import { CONFIG } from '../../config';
 import { CardBatch, createCardShapes } from './particles/cards';
 import { ChunkBatch } from './particles/chunks';
-import { Particles, type ParticleLook } from './particles/particles';
+import { Particles, type Nearby, type ParticleLook } from './particles/particles';
+import { inLiveRange } from '../../sim/fidelity';
 
 const MAX_PUFFS = 2048;
 const MAX_GLOWS = 256;
@@ -269,9 +270,10 @@ export class Fx3D {
     lit: new CardBatch(MAX_PARTICLES + MAX_VIEW_CARDS, 'lit', this.shapes, CONFIG.fxFillScreens),
     glow: new CardBatch(MAX_GLOW_PARTICLES + MAX_VIEW_CARDS, 'glow', this.shapes, CONFIG.fxFillScreens),
   };
-  private readonly particles = new Particles(MAX_PARTICLES);
-  private readonly glowParticles = new Particles(MAX_GLOW_PARTICLES);
-  private readonly chunks = new ChunkBatch(MAX_CHUNKS, Math.random);
+  private readonly nearby: Nearby = (p) => inLiveRange(this.world(), toMap(p));
+  private readonly particles = new Particles(MAX_PARTICLES, this.nearby);
+  private readonly glowParticles = new Particles(MAX_GLOW_PARTICLES, this.nearby);
+  private readonly chunks = new ChunkBatch(MAX_CHUNKS, Math.random, this.nearby);
   private readonly sprayLooks = new Map<TerrainType, { dust: ParticleLook; haze: ParticleLook; clod: THREE.Color }>();
   private readonly cardLight = { sunDir: new THREE.Vector3(), sun: new THREE.Color(), sky: new THREE.Color(), ground: new THREE.Color() };
   private texts: FloatText[] = [];
@@ -281,7 +283,7 @@ export class Fx3D {
   private casings: Casings;
   readonly ruts: Ruts;
 
-  constructor(private scene: THREE.Scene, private overlay: HTMLElement, private rig: CameraRig) {
+  constructor(private scene: THREE.Scene, private overlay: HTMLElement, private rig: CameraRig, private readonly world: () => World) {
     scene.add(this.puffs.mesh, this.glows.mesh, ...this.cards.lit.meshes, ...this.cards.glow.meshes, ...this.chunks.meshes);
     this.flashes = new MuzzleFlashes(scene);
     this.casings = new Casings(scene);

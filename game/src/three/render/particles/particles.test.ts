@@ -2,11 +2,12 @@ import * as THREE from 'three';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { perfSnapshot, resetPerf } from '../../../perf';
 import type { Card, CardBatch } from './cards';
-import { alphaAt, colorAt, OVERWRITE_COUNTER, Particles, sizeAt, type ParticleLook } from './particles';
+import { alphaAt, colorAt, FAR_COUNTER, OVERWRITE_COUNTER, Particles, sizeAt, type ParticleLook } from './particles';
 
 const LOOK: ParticleLook = { life: 1, size: { from: 1, to: 3 }, colors: [0xff0000, 0x0000ff], alpha: { peak: 0.6, fadeIn: 0.2 }, drag: 0, gravity: 0, streak: 0 };
 const AT = { x: 0, y: 0, z: 0 };
 const STILL = { x: 0, y: 0, z: 0 };
+const NEAR = () => true;
 
 class RecordingBatch {
   cards: Card[] = [];
@@ -48,8 +49,16 @@ describe('particle curves', () => {
 describe('Particles', () => {
   beforeEach(() => resetPerf());
 
+  it('spawns nothing out of the live range and counts the skip', () => {
+    const p = new Particles(4, (at) => at.x < 10);
+    p.spawn({ x: 5, y: 0, z: 0 }, STILL, LOOK, 1);
+    p.spawn({ x: 50, y: 0, z: 0 }, STILL, LOOK, 1);
+    expect(p.alive()).toBe(1);
+    expect(perfSnapshot()[FAR_COUNTER].calls).toBe(1);
+  });
+
   it('reuses the oldest slot when full and counts the overwrite', () => {
-    const p = new Particles(2);
+    const p = new Particles(2, NEAR);
     p.spawn({ x: 1, y: 0, z: 0 }, STILL, LOOK, 1);
     p.spawn({ x: 2, y: 0, z: 0 }, STILL, LOOK, 1);
     p.spawn({ x: 3, y: 0, z: 0 }, STILL, LOOK, 1);
@@ -59,7 +68,7 @@ describe('Particles', () => {
   });
 
   it('frees a particle at the end of its life', () => {
-    const p = new Particles(4);
+    const p = new Particles(4, NEAR);
     p.spawn(AT, STILL, LOOK, 1);
     p.tick(LOOK.life * 1.21);
     expect(p.alive()).toBe(0);
@@ -67,7 +76,7 @@ describe('Particles', () => {
   });
 
   it('moves a particle by its velocity and gravity', () => {
-    const p = new Particles(1);
+    const p = new Particles(1, NEAR);
     p.spawn(AT, { x: 1, y: 0, z: 0 }, { ...LOOK, gravity: -1 }, 1);
     p.tick(0.5);
     const [card] = drawn(p);
