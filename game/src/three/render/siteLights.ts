@@ -8,12 +8,12 @@ import { PAL } from '../../render/palette';
 import { DEG } from '../../sim/vec';
 import { lampsOn } from './daylight';
 
-export type SiteLightKind = 'flood' | 'wash' | 'gate' | 'fire';
+export type SiteLightKind = 'flood' | 'wash' | 'gate' | 'fire' | 'sconce' | 'wall' | 'window';
 export type SiteLight = { id: string; siteId: string; kind: SiteLightKind; at: V3; aim: V3; ground: number; color?: number };
 
 type Look = { color: number; intensity: number; range: number; angle: number; penumbra: number; decay: number };
 
-export const SITE_LIGHT_POOL = 8;
+export const SITE_LIGHT_POOL = 16;
 export const SITE_LIGHT_FADE_S = 1.5;
 export const GATE_APRON_MARGIN = 3;
 
@@ -22,6 +22,9 @@ export const LOOKS: Record<SiteLightKind, Look> = {
   wash: { color: PAL.siteLight.sodium, intensity: 240, range: 32, angle: 17 * DEG, penumbra: 0.6, decay: 1 },
   gate: { color: PAL.siteLight.sodium, intensity: 70, range: 22, angle: 30 * DEG, penumbra: 0.5, decay: 1 },
   fire: { color: PAL.siteLight.fire, intensity: 30, range: 12, angle: 60 * DEG, penumbra: 0.8, decay: 1 },
+  sconce: { color: PAL.siteLight.warm, intensity: 60, range: 12, angle: 75 * DEG, penumbra: 1, decay: 1 },
+  wall: { color: PAL.siteLight.warm, intensity: 55, range: 14, angle: 30 * DEG, penumbra: 0.8, decay: 1 },
+  window: { color: PAL.siteLight.warm, intensity: 40, range: 14, angle: 55 * DEG, penumbra: 0.7, decay: 1 },
 };
 
 export function lookOf(light: SiteLight): Look {

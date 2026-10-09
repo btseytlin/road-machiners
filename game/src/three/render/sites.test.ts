@@ -395,7 +395,6 @@ describe('landmark scale', () => {
     };
     expect(named('salvage-crane')).toHaveLength(1);
     expect(named('salvage-stack').length).toBeGreaterThanOrEqual(3);
-    expect(named('salvage-tank')).toHaveLength(1);
     expect(named('salvage-container')).toHaveLength(1);
     expect(named('salvage-jeep')).toHaveLength(1);
     expect(named('salvage-shed')).toHaveLength(1);
@@ -651,14 +650,14 @@ describe('site work lights (#402)', () => {
   });
 
   it('keeps each site within the pool and every light id unique (IV4)', () => {
-    for (const site of FORTS) expect(of(site.id).length, site.id).toBeLessThanOrEqual(SITE_LIGHT_POOL);
+    for (const site of FORTS) expect(of(site.id).filter((l) => l.kind !== 'sconce' && l.kind !== 'wall').length, site.id).toBeLessThanOrEqual(SITE_LIGHT_POOL);
     expect(new Set(flat.map((l) => l.id)).size).toBe(flat.length);
   });
 
   it('keeps every flood and fire cone on the ground inside its curtain (IV2)', () => {
     const leaks: string[] = [];
     for (const site of FORTS) {
-      for (const light of of(site.id).filter((l) => l.kind !== 'gate')) {
+      for (const light of of(site.id).filter((l) => l.kind !== 'gate' && l.kind !== 'sconce' && l.kind !== 'wall')) {
         for (const hit of groundHits(light, 16)) {
           const p = tiles(hit);
           if (!insideCurtain(site, p) && !onFortressRock(site, p)) leaks.push(`${light.id} hits ${(p.x - site.pos.x).toFixed(1)},${(p.y - site.pos.y).toFixed(1)}`);
@@ -684,11 +683,30 @@ describe('site work lights (#402)', () => {
     }
   });
 
+  it('aims every wall lamp at ground inside its curtain', () => {
+    for (const site of FORTS) {
+      for (const light of of(site.id).filter((l) => l.kind === 'wall')) {
+        expect(insideCurtain(site, tiles(light.aim)) || onFortressRock(site, tiles(light.aim)), light.id).toBe(true);
+      }
+    }
+  });
+
+  it('hangs sconces outside the curtain, aimed at the wall they hang on', () => {
+    for (const site of FORTS) {
+      const sconces = of(site.id).filter((l) => l.kind === 'sconce');
+      expect(sconces.length, site.id).toBeGreaterThan(0);
+      for (const light of sconces) {
+        expect(insideCurtain(site, tiles(light.at)), light.id).toBe(false);
+        expect(Math.hypot(light.aim.x - light.at.x, light.aim.z - light.at.z) / S, light.id).toBeLessThan(1);
+      }
+    }
+  });
+
   it('puts every light head inside its curtain, a mast height over the ground', () => {
     for (const site of FORTS) {
       for (const light of of(site.id)) {
         const p = tiles(light.at);
-        expect(insideCurtain(site, p) || light.kind === 'gate' || onFortressRock(site, p), light.id).toBe(true);
+        expect(insideCurtain(site, p) || light.kind === 'gate' || light.kind === 'sconce' || onFortressRock(site, p), light.id).toBe(true);
         expect(light.at.y, light.id).toBeGreaterThan(light.ground);
       }
     }

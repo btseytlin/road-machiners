@@ -25,7 +25,7 @@ const SHED_DOOR = {
   width: (0.9 * SHED_SCALE) / 4 - 0.04,
   height: (1.8 * SHED_SCALE) / 4 - 0.05,
 };
-const SHED_LAMP = { reach: 0.12, size: 0.14, lift: 0.66 };
+const SHED_LAMP = { reach: 0.12, size: 0.14, lift: 0.66, throw: 2 };
 const PIPE = { size: 0.08, lift: 0.12, support: 0.6 };
 const MAST = 3.3;
 const DUSTWELL_LIGHTS = [
@@ -62,7 +62,9 @@ function addShed(b: SiteBuilder, site: string, shed: { x: number; z: number; yaw
   const bracket = at(SHED_DOOR.reach + SHED_LAMP.reach / 2);
   b.addBox(bracket.x, bracket.z, SHED_LAMP.reach, 0.03, 0.03, PAL.metal, SHED_LAMP.lift + SHED_LAMP.size, shed.yaw);
   const lamp = at(SHED_DOOR.reach + SHED_LAMP.reach);
-  b.addBox(lamp.x, lamp.z, SHED_LAMP.size, SHED_LAMP.size, SHED_LAMP.size, PAL.lamp.on, SHED_LAMP.lift, shed.yaw).name = `${site}-shed-lamp`;
+  const head = b.addBox(lamp.x, lamp.z, SHED_LAMP.size, SHED_LAMP.size, SHED_LAMP.size, PAL.lamp.on, SHED_LAMP.lift, shed.yaw);
+  head.name = `${site}-shed-lamp`;
+  b.addLight('window', head, { x: lamp.x + out.x * SHED_LAMP.throw, z: lamp.z + out.z * SHED_LAMP.throw }, PAL.siteLight.warm);
 }
 
 function addPipes(b: SiteBuilder): void {
@@ -210,7 +212,6 @@ const CRANE = { x: 0.1, z: 1.3, yaw: (160 * Math.PI) / 180 };
 const SLEW = { amplitude: (35 * Math.PI) / 180, period: 14 };
 const HOIST = { range: 2, period: 7 };
 const HANG = 5.2;
-const TANK = { x: -2.0, z: -2.0 };
 const CONTAINER = { x: -1.85, z: 2.55, yaw: 0, length: 1.5, width: 0.6, height: 0.65, ribs: 6 };
 const YARD_SHED = { x: -1.55, z: -0.1, yaw: 0 };
 const STACKS = [
@@ -229,7 +230,6 @@ const YARD_PROPS = [
 
 export function buildSalvageYard(b: SiteBuilder): void {
   addCrane(b);
-  b.addModel('storage_tank', TANK.x, TANK.z).name = 'salvage-tank';
   addContainer(b);
   addShed(b, 'salvage', YARD_SHED);
   for (const stack of STACKS) addScrapStack(b, stack);

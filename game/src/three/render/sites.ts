@@ -3,8 +3,8 @@
 
 import * as THREE from 'three';
 import { REGION, type SiteLocationDef, type SiteEdge, type TownDef } from '../../data/region';
-import { FORTRESS_SITES, FORTRESS_STYLES } from '../../data/fortress';
-import { fortressGates, insideCurtain, onFortressRock, type FortGate } from '../../sim/fortress';
+import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES, type FortressKind } from '../../data/fortress';
+import { fortressGates, fortressPieces, insideCurtain, onFortressRock, type FortGate, type FortressPiece } from '../../sim/fortress';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
@@ -84,8 +84,8 @@ export class SiteBuilder {
     this.addShape(new THREE.CylinderGeometry(radius * S, radius * S, height * S, 10), color, x, z, lift + height / 2);
   }
   addLampHead(x: number, z: number, top: number, yaw: number): THREE.Mesh {
-    this.addBox(x, z, 0.2, 0.35, 0.6, PAL.metal, top, yaw);
-    return this.addBox(x, z, 0.24, 0.22, 0.45, PAL.lamp.on, top + 0.06, yaw);
+    this.addBox(x, z, 0.2 / LAMP_SHRINK, 0.35 / LAMP_SHRINK, 0.6 / LAMP_SHRINK, PAL.metal, top, yaw);
+    return this.addBox(x, z, 0.24 / LAMP_SHRINK, 0.22 / LAMP_SHRINK, 0.45 / LAMP_SHRINK, PAL.lamp.on, top + 0.06 / LAMP_SHRINK, yaw);
   }
   // A pole with a lamp head on top. Everything stands at x, z so that pullInside() moves pole and head together.
   addMast(x: number, z: number, height: number, yaw: number): THREE.Mesh {
@@ -194,11 +194,13 @@ const EDGE_STYLES: Record<SiteEdge, WallStyle> = {
   wrecks: { height: SET.wreckHeight, thickness: SET.wreckThickness, segment: SET.wreckSegment, ragged: true, fence: false, colors: [PAL.rust.side, PAL.metal, PAL.rust.dark], postColor: PAL.rust.dark, doorColor: PAL.metal },
 };
 const LAMP_REACH = 0.3;
+const LAMP_SHRINK = 1.5;
 const SINK = 0.3;
 const DOOR_THICKNESS = 0.4;
 const GATE_APRON_AIM = 2.5;
 const WORK_MAST = 3.3;
 const FIRE_MAST = 0.7;
+const SCONCE = { every: { outer: 2, inner: 3 }, reach: 0.7, height: 2.3, aimLift: 1.3, throw: 2.5 };
 const WASH = { mast: 2.4, aim: 3.8, lift: 3 };
 
 function edgeStyle(site: Site): WallStyle {
@@ -304,7 +306,65 @@ function dressGates(b: SiteBuilder, site: Site): void {
   const guarded = isBannered(site);
   const first = b.root.children.length;
   for (const fort of fortressGates(site)) dressGate(b, site, fort, guarded);
+  addSconces(b, site);
   for (const piece of b.root.children.slice(first)) piece.userData.gateFurniture = true;
+}
+
+type Vec2 = { x: number; z: number };
+type Mount = { n: Vec2; face: Vec2; lamp: Vec2; throwAt: Vec2; inside: boolean };
+
+function sconceNormals(piece: FortressPiece): Vec2[] {
+  const across = { x: -Math.sin(piece.yaw), z: Math.cos(piece.yaw) };
+  const sides = [across, { x: -across.x, z: -across.z }];
+  if (piece.kind === 'wall') return sides;
+  const along = { x: Math.cos(piece.yaw), z: Math.sin(piece.yaw) };
+  return [...sides, along, { x: -along.x, z: -along.z }];
+}
+
+function sconceMount(site: Site, centre: Vec2, depth: number, n: Vec2): Mount {
+  const face = { x: centre.x + (n.x * depth) / 2, z: centre.z + (n.z * depth) / 2 };
+  const lamp = { x: face.x + n.x * SCONCE.reach, z: face.z + n.z * SCONCE.reach };
+  const throwAt = { x: lamp.x + n.x * SCONCE.throw, z: lamp.z + n.z * SCONCE.throw };
+  return { n, face, lamp, throwAt, inside: insideAt(site, lamp) };
+}
+
+function insideAt(site: Site, p: Vec2): boolean {
+  return insideCurtain(site, { x: site.pos.x + p.x, y: site.pos.y + p.z });
+}
+
+function wantsSconce(site: Site, kind: FortressKind, m: Mount): boolean {
+  if (!m.inside) return m.n.x + m.n.z > 0;
+  return kind === 'wall' && insideAt(site, m.throwAt);
+}
+
+function hangSconce(b: SiteBuilder, m: Mount): void {
+  const yaw = Math.atan2(-m.n.z, m.n.x);
+  const bracket = { x: m.face.x + (m.n.x * SCONCE.reach) / 2, z: m.face.z + (m.n.z * SCONCE.reach) / 2 };
+  b.addBox(bracket.x, bracket.z, SCONCE.reach, 0.12, 0.12, PAL.metal, SCONCE.height - 0.12, yaw);
+  const head = b.addLampHead(m.lamp.x, m.lamp.z, SCONCE.height, yaw);
+  const aim = m.inside ? { ...m.throwAt, lift: 0 } : { ...m.face, lift: SCONCE.aimLift };
+  b.addLight(m.inside ? 'wall' : 'sconce', head, aim, PAL.siteLight.warm);
+}
+
+const PIECE_DEPTH: Partial<Record<FortressKind, number>> = { wall: FORTRESS.wallDepth, tower: FORTRESS.towerSize, bastion: FORTRESS.bastionSize };
+
+function sconceMounts(site: Site, piece: FortressPiece): Mount[] {
+  const depth = PIECE_DEPTH[piece.kind];
+  if (depth === undefined) return [];
+  const centre = { x: piece.pos.x - site.pos.x, z: piece.pos.y - site.pos.y };
+  return sconceNormals(piece).map((n) => sconceMount(site, centre, depth, n)).filter((m) => wantsSconce(site, piece.kind, m));
+}
+
+function spaced(kind: FortressKind, m: Mount, seen: { outer: number; inner: number }): boolean {
+  const side = m.inside ? 'inner' : 'outer';
+  return kind !== 'wall' || seen[side]++ % SCONCE.every[side] === 0;
+}
+
+function addSconces(b: SiteBuilder, site: Site): void {
+  const seen = { outer: 0, inner: 0 };
+  for (const piece of fortressPieces(site)) {
+    for (const m of sconceMounts(site, piece)) if (spaced(piece.kind, m, seen)) hangSconce(b, m);
+  }
 }
 
 function dressGate(b: SiteBuilder, site: Site, fort: FortGate, guarded: boolean): void {
@@ -530,7 +590,8 @@ function resolveLights(b: SiteBuilder, site: Site, t: Terrain): SiteLight[] {
   const gates = lights.filter((l) => l.kind === 'gate').length;
   if (gates !== fortressGates(site).length) throw new Error(`Site ${site.id} has ${gates} gate lights for ${fortressGates(site).length} gates`);
   if (lights.length === gates) throw new Error(`Site ${site.id} has no interior work light`);
-  if (lights.length > SITE_LIGHT_POOL) throw new Error(`Site ${site.id} has ${lights.length} work lights, more than the pool of ${SITE_LIGHT_POOL}`);
+  const fixed = lights.filter((l) => l.kind !== 'sconce' && l.kind !== 'wall').length;
+  if (fixed > SITE_LIGHT_POOL) throw new Error(`Site ${site.id} has ${fixed} work lights besides tower lights, more than the pool of ${SITE_LIGHT_POOL}`);
   return lights;
 }
 
