@@ -11,7 +11,6 @@ import { maxHealthOf } from "../sim/health";
 import { corePart, mountedItems, mountedParts, itemSize } from "../sim/grid";
 import { canOverdrive, fuelCap, gunDraw, hasWorkingEngine, inOverdrive, isStranded, isWorking, maxSpeedSteps, workingEngineCapacity, type SpeedStep } from "../sim/stats";
 import { fuelLimit, lowFuelSpeed } from "../sim/far";
-import { spareParts } from "../sim/inventory";
 import { towData } from "../sim/states";
 import { playerTow } from "../sim/tow";
 import { heatAt } from "../sim/sun";
@@ -253,10 +252,7 @@ export function getRescueReadout(w: World): RescueReadout | null {
 
 function strandedReason(w: World): string {
   const me = playerVehicle(w);
-  if (!hasWorkingEngine(me)) {
-    const spare = spareParts(me).some((part) => partDef(part.defId).kind === "engine");
-    return spare ? "No working engine. Install the spare [I]." : "No working engine.";
-  }
+  if (!hasWorkingEngine(me)) return "No working engine.";
   if (!isWorking(corePart(me, "transmission"))) return "The transmission is broken.";
   if (w.player.fuel <= 0) return "Out of fuel.";
   return "";

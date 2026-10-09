@@ -124,7 +124,8 @@ export class Hud {
   private toastBox = panel("toast");
   private rescue = panel("rescue notice", topCenter());
   private knockedOut = panel("status-mark", topCenter());
-  private stranded = panel("stranded notice", topCenter());
+  private truckStack = el("div", { class: "truck-stack" });
+  private stranded = panel("stranded notice", this.truckStack);
   private recenter = panel("recenter", bottomLeft());
   private cameraSwitch = panel("camera-mode", topRight());
   private tips = new Tips(window.localStorage, topCenter());
@@ -143,7 +144,8 @@ export class Hud {
   };
 
   constructor(private actions: HudActions, private radio: RadioPanel) {
-    bottomLeft().append(this.condition.root);
+    this.truckStack.append(this.condition.root);
+    bottomLeft().append(this.truckStack);
     this.dialogue = new DialoguePanel(actions.dialogue);
     this.info.style.display = "none";
     this.info.append(this.infoBody);

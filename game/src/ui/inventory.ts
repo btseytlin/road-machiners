@@ -169,7 +169,6 @@ export class InventoryView {
           "div",
           { class: "inv-truck" },
           el("div", { class: "truck-shell" }, grid),
-          this.legend(),
         ),
         el(
           "div",
@@ -184,16 +183,6 @@ export class InventoryView {
       this.error ? el("div", { class: "bad" }, this.error) : el("div"),
     );
     return this.root;
-  }
-
-  private legend(): HTMLElement {
-    return el(
-      "details",
-      { class: "dim inv-legend" },
-      el("summary", {}, "Mounts and controls"),
-      el("div", {}, "A part works only when it lies fully on one kind of mount."),
-      el("div", {}, "R or right click turns an item."),
-    );
   }
 
   private itemEl(w: World, it: GridItem): HTMLElement {

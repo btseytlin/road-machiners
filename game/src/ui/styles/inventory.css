@@ -310,14 +310,6 @@
   text-align: center;
   font-size: var(--text-dense);
 }
-.inv-legend {
-  margin-top: var(--space-7);
-  max-width: var(--panel-m);
-  font-size: var(--text-dense);
-}
-.inv-legend > div {
-  margin-top: var(--space-3);
-}
 .inv-item.refitting {
   border: 2px dashed var(--accent);
 }

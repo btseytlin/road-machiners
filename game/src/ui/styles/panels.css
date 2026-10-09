@@ -347,7 +347,6 @@
   margin-bottom: var(--space-2);
 }
 #ui .stranded {
-  min-width: var(--panel-s);
   text-align: center;
 }
 #ui .status-mark {

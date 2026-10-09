@@ -41,7 +41,7 @@
   display: none;
 }
 /* The wide modal reaches under the condition panel, which stands above the instruments. */
-#ui:has(.modal:not([style*="display: none"])) .truck-condition {
+#ui:has(.modal:not([style*="display: none"])) .truck-stack {
   display: none;
 }
 #ui .modal > h3 {

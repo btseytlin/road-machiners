@@ -255,8 +255,7 @@ export class TownScreen {
     const rows = shown.map((p) => {
       const price = partTradePrice(w, me, p, "buy");
       const short = shortBy(w.player.money, price);
-      const verb = canStowPart(me, p) ? "Buy" : "Buy to storage";
-      return this.partRow(w, p, price, short === "", this.button(verb, (x) => buyStockPart(x, p.id), short));
+      return this.partRow(w, p, price, short === "", this.button("Buy", (x) => buyStockPart(x, p.id), short));
     });
     return el(
       "div",

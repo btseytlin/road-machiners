@@ -254,7 +254,6 @@ export function utilityKey(w: World, i: number): number | null {
   return key <= SLOT_KEYS ? key : null;
 }
 
-const PICK_TEXT: Record<"point", string> = { point: "aim: click the ground" };
 const FIRES_TEXT = "fires this turn";
 
 export type UtilityState = "ready" | "aiming" | "set" | "armed" | "recharging" | "blocked";
@@ -275,7 +274,7 @@ export function utilityStatus(w: World, part: PartInstance, selected: boolean): 
 
 function aimingStatus(w: World, part: PartInstance, kind: UtilityOrder["kind"], selected: boolean): UtilityStatus | null {
   if (!selected || kind === "self" || aimBlock(w, part) !== null) return null;
-  return { state: "aiming", text: PICK_TEXT[kind] };
+  return { state: "aiming", text: "aiming" };
 }
 
 function idleStatus(w: World, part: PartInstance): UtilityStatus {

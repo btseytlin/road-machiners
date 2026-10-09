@@ -662,7 +662,7 @@ describe("the utility row", () => {
     sprout.hp = 0;
     expect(utilityStatus(world.w, sprout, false)).toEqual({ state: "blocked", text: "broken" });
     expect(utilityStatus(world.w, mortar, false)).toEqual({ state: "ready", text: "ready" });
-    expect(utilityStatus(world.w, mortar, true)).toEqual({ state: "aiming", text: "aim: click the ground" });
+    expect(utilityStatus(world.w, mortar, true)).toEqual({ state: "aiming", text: "aiming" });
     world.w.vehicles[0].utilityOrders[mortar.id] = { kind: "point", pos: { x: 40, y: 30 } };
     expect(utilityStatus(world.w, mortar, true)).toEqual({ state: "set", text: "fires this turn" });
     const claymore = makePart(world.w, "claymoreRam", 0);

@@ -373,7 +373,7 @@ describe("rescue readout", () => {
     expect(resources[0]).toHaveProperty("balance");
     expect(resources.slice(1).every((r) => !("balance" in r))).toBe(true);
   });
-  it("tells a stranded player to install a spare engine it carries", () => {
+  it("names a missing engine without telling the player what to do", () => {
     const w = newWorld(1337, startKit("combat"), TEST_MAP, defaultSetup('roaming'));
     const me = playerVehicle(w);
     const engine = me.items.find((it) => it.kind === "part" && partDef(it.part.defId).kind === "engine");
@@ -381,7 +381,7 @@ describe("rescue readout", () => {
     me.items = me.items.filter((it) => it.kind === "part" && partDef(it.part.defId).kind === "core");
     expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine." });
     expect(stowPart(w, me, engine.part)).toBe(true);
-    expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine. Install the spare [I]." });
+    expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine." });
   });
   it("follows the player from stranded to tow, and leaves an open offer to the radio", () => {
     const w = emptyWorld();

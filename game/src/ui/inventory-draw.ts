@@ -50,7 +50,7 @@ function gridCellEl(g: Grid, x: number, y: number, cell: number): HTMLElement | 
   const c = g.cells[y][x];
   if (c !== null) return cellEl(c, x, y, cell);
   if (y < g.deadFrom) return null;
-  return el("div", { class: "inv-cell c-dead", style: pos(x, y, 1, 1, cell), title: "Broken cargo rows. Repair the cargo part to use them." });
+  return el("div", { class: "inv-cell c-dead", style: pos(x, y, 1, 1, cell), title: "Broken cargo rows" });
 }
 
 export function cellEl(c: Cell, x: number, y: number, cell: number): HTMLElement {

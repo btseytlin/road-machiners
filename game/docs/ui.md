@@ -181,6 +181,8 @@ Every event gets a level before it gets a channel. A level fires on its channels
 | Dashed line | Provisional: a plan, or knowledge that is not exact |
 | Flood fill | The thing under the cursor or selected, never a whole diagram |
 
+The own truck's diagram colors every part by condition, so a healthy part is green. The truck drawing on the hover card stays neutral and colors only damage, because there the drawing is for aiming.
+
 World colors keep their meaning in the 3D view. The UI does not reuse the cold cyan of dead ship tech or the green glow of the reactor.
 
 ## 10. Where styles live
