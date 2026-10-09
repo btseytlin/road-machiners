@@ -9,3 +9,6 @@
   border-color: var(--accent-warm);
   color: var(--accent);
 }
+#ui:has(.dialog:not(.modal)) > .top-center > .tip {
+  visibility: hidden;
+}

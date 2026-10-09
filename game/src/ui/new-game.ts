@@ -103,12 +103,13 @@ class NewGameScreen {
         input.setAttribute("aria-valuetext", percent(next));
       },
     });
+    const defaultAt = (def.default - def.min) / (def.max - def.min);
     return el(
       "div",
       { class: "setting-row", "data-setting": id },
-      el("label", { for: `setting-${id}` }, el("b", {}, def.name), label, el("span", { class: "dim" }, `default ${percent(def.default)}`)),
-      el("div", { class: "dim" }, def.description),
-      el("div", { class: "setting-input" }, el("span", { class: "dim" }, percent(def.min)), input, el("span", { class: "dim" }, percent(def.max))),
+      el("label", { for: `setting-${id}`, title: def.description }, def.name),
+      el("div", { class: "setting-slider" }, input, el("span", { class: "default-tick", style: `--default-at: ${defaultAt}` })),
+      label,
     );
   }
 
