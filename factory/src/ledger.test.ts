@@ -52,11 +52,15 @@ describe('runs cut off before their result', () => {
   const prices = { opus: { input: 4, output: 20, cacheRead: 0.2, cacheWrite5m: 5, cacheWrite1h: 8 } };
   const job = { id: 'job-5', stage: 'implement' as const, issue: 5, startedAt: '2026-10-05T10:00:00.000Z' };
   const jobAgents = () => readLedger(HOME, new Date(0)).flatMap((line) => (line.kind === 'job' ? line.agents : []));
-  const transcript = (projects: string, id: string, output: number): void => {
-    mkdirSync(`${projects}/-work-game`, { recursive: true });
+  const line = (mid: string, output: number, timestamp: string): string => {
     const usage = { input_tokens: 0, output_tokens: output, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 } };
-    writeFileSync(`${projects}/-work-game/${id}.jsonl`, `${JSON.stringify({ type: 'assistant', message: { id: 'm1', model: 'opus', usage } })}\n`);
+    return JSON.stringify({ type: 'assistant', timestamp, message: { id: mid, model: 'opus', usage } });
   };
+  const transcriptLines = (projects: string, id: string, lines: string[]): void => {
+    mkdirSync(`${projects}/-work-game`, { recursive: true });
+    writeFileSync(`${projects}/-work-game/${id}.jsonl`, `${lines.join('\n')}\n`);
+  };
+  const transcript = (projects: string, id: string, output: number): void => transcriptLines(projects, id, [line('m1', output, '2026-10-05T10:00:30.000Z')]);
 
   it('prices the open run of a killed job from its transcript in the job line', () => {
     transcript(`${HOME}/sessions/issue-5`, 's1', 50_000);
@@ -64,6 +68,13 @@ describe('runs cut off before their result', () => {
     recordJob(HOME, prices, new Date('2026-10-05T11:30:00.000Z'), job, 'timeout');
     expect(jobAgents()).toEqual([{ model: 'opus', costUsd: 1, minutes: 90, sessionId: 's1', resumed: false, fromTranscript: true, modelUsage: [{ model: 'opus', input: 0, output: 50_000, cacheRead: 0, cacheWrite: 0, cost: 1 }] }]);
     expect(existsSync(`${HOME}/usage/job-5.run.json`)).toBe(false);
+  });
+
+  it('prices a resumed run only for the messages written since it started', () => {
+    transcriptLines(`${HOME}/sessions/issue-5`, 's1', [line('m1', 90_000, '2026-10-05T09:00:00.000Z'), line('m2', 50_000, '2026-10-05T10:00:30.000Z')]);
+    openRun(HOME, 'job-5', { model: 'opus', projects: `${HOME}/sessions/issue-5`, sessionId: 's1', resumed: true, startedAt: '2026-10-05T10:00:00.000Z' });
+    recordJob(HOME, prices, new Date('2026-10-05T10:10:00.000Z'), job, 'died');
+    expect(jobAgents().map((agent) => agent.costUsd)).toEqual([1]);
   });
 
   it('removes the run folder of a run with no issue session once priced', () => {
