@@ -8,13 +8,10 @@ import { fillGlass, markGlass } from './glass';
 import { BUILT_GLASS, BUILT_SCRUB, BUILT_TRACK } from './newworld';
 import { prop, ruleRng, tileCenter, tilesWithin } from './oldworld';
 
-// A synthetic territory on open ground north-west of the orchard, where no region road runs, on a flat draft.
 const T: TerritoryDef = { id: 'test-glass', name: 'Test Glass', kind: 'territory', pos: { x: 405, y: 378 }, radius: 24, outline: null };
 const GLASS: GlassRules = { cell: 6, cover: [0.25, 0.55], clear: 1.5, spires: { look: 'hullShard', count: 6, radius: [0.8, 1.1] } };
-// Rules with no wreck and no farm: only the glass bakes.
 const RULES: TerritoryRules = { seed: 2, wreck: null, farm: null, glass: GLASS, spotGap: 6, debrisGap: 1.5, reactor: null, relief: null };
 
-// A wreck with nothing but the given building groups.
 function wreckOf(buildings: BuildingGroup[]): WreckRules {
   return {
     pieces: [],
@@ -49,7 +46,6 @@ function glassTiles(d: MapDraft): number[] {
 describe('fused glass', () => {
   it('keeps glass off dirt road tiles and clear of every kept prop', () => {
     const d = newDraft(REGION.size);
-    // A track across the territory, three tiles wide.
     for (let y = 377; y < 380; y++) for (let x = 380; x < 430; x++) d.built[y * d.size + x] = BUILT_TRACK;
     const building = prop('barn', { x: 412, y: 370 }, 2.5, 0);
 

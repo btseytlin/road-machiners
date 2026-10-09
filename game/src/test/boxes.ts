@@ -3,7 +3,6 @@
 import { boxDistance, segmentCrossesBox, type PosedBox } from '../sim/mapgen';
 import type { Vec } from '../sim/vec';
 
-// Whether two box outlines overlap: an edge of one crosses the other, or one holds the other's centre.
 export function boxesOverlap(a: PosedBox, b: PosedBox): boolean {
   return boxEdges(a).some(([p, q]) => segmentCrossesBox(b, p, q)) || boxDistance(a, b.center) === 0 || boxDistance(b, a.center) === 0;
 }

@@ -7,7 +7,6 @@ import type { NpcActivity, NpcBrain } from './types';
 
 const OFF_ROAD_GOALS: ReadonlySet<NpcActivity['kind']> = new Set(HUNT.offRoadGoals);
 
-// Whether this driver plans its routes off the road: the raider trait with a top goal in HUNT.offRoadGoals.
 export function huntsOffRoad(brain: NpcBrain | undefined): boolean {
   if (!brain?.traits.includes('raider')) return false;
   const top = brain.goals.at(-1);

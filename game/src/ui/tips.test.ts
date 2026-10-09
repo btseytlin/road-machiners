@@ -175,7 +175,6 @@ describe("opening tips", () => {
     for (let i = 0; i < 10 && playerVehicle(next).job; i++) next = turns(next, 1);
     return next;
   };
-  // What the tip box does on a refresh: marks what the player did, then picks the tip.
   const refresh = (w: World, seen: Set<TipId>): TipId | null => {
     for (const id of doneTips(w, seen)) seen.add(id);
     return tipToShow(w, false, seen, null);
@@ -204,7 +203,6 @@ describe("opening tips", () => {
     let w = opening();
     expect(refresh(w, seen)).toBe("wreck");
 
-    // A stop point by the wreck is a waypoint, but the driving tips wait.
     w = setMoveOrder(w, { kind: "stopAt", dest: openingStopPoint(w) });
     expect(refresh(w, seen)).toBe("wreck");
     expect(seen.has("waypoint") || seen.has("stopAt")).toBe(false);

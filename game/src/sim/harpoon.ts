@@ -1,8 +1,6 @@
 // Harpoon lines. The harpoon is a gun of one round (WeaponDef.line). A round of it that strikes its target ties a line
 // to the part it hit first; the fire phase calls attachLine(). The line is a world object that ends after its turns
 // (advanceUtilityEffects ages it), when it tears, or when either anchor part leaves its truck or the harpoon breaks.
-// Physics reads the holding lines at turn start through lineAnchors() and pulls the two trucks together while the line
-// is stretched. A stretch pull above HARPOON.tearForce tears it, and physics reports the tear for tearLine().
 
 import { PHYSICS } from '../data/physics';
 import { HARPOON } from '../data/utilities';
@@ -14,25 +12,19 @@ import type { GridItem, HarpoonLine, Vehicle, World } from './types';
 
 const S = PHYSICS.metersPerTile;
 
-// A point on a truck in body meters: +x the nose, +z the truck's right, +y up from the box center.
 export type BodyPoint = { x: number; y: number; z: number };
 
-// A holding line as physics needs it: the two trucks, each anchor in its truck's body space, and the length in
-// meters past which the line pulls.
 export type LineAnchor = { id: string; from: string; to: string; fromAt: BodyPoint; toAt: BodyPoint; length: number };
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;
 
 export type Ends = { from: Vehicle; fromPart: string; to: Vehicle; toPart: string };
 
-// Ties a line from the harpoon on the shooter to the part its round hit on the target, for `turns` turns. The line is
-// as long as its anchors stand apart now.
 export function attachLine(world: World, ends: Ends, turns: number): void {
   const length = anchorGap(ends);
   world.lines.push({ id: newId(world, 'l'), from: ends.from.id, fromPart: ends.fromPart, to: ends.to.id, toPart: ends.toPart, length, turnsLeft: turns });
 }
 
-// Meters between the two anchors on the ground plane, from the trucks' poses.
 function anchorGap(ends: Ends): number {
   const a = mapPoint(ends.from, anchorOf(ends.from, ends.fromPart));
   const b = mapPoint(ends.to, anchorOf(ends.to, ends.toPart));
@@ -45,8 +37,6 @@ function mapPoint(v: Vehicle, at: BodyPoint): { x: number; z: number } {
   return { x: v.pos.x * S + cos * at.x - sin * at.z, z: v.pos.y * S + sin * at.x + cos * at.z };
 }
 
-// The anchor of a part: the center of its cells in body meters, at the height of the body's center, so a pull
-// does not tip the truck.
 function anchorOf(v: Vehicle, partId: string): BodyPoint {
   const item = mountedItem(v, partId);
   if (!item) throw new Error(`${v.name} has no mounted part ${partId}`);
@@ -58,7 +48,6 @@ function mountedItem(v: Vehicle, partId: string): PartItem | undefined {
   return mountedItems(v).find((it) => it.part.id === partId);
 }
 
-// A line holds while both trucks are in the world, the harpoon is mounted above 0 HP and the held part is mounted.
 function holdsEnds(world: World, line: HarpoonLine): Ends | null {
   const from = world.vehicles.find((v) => v.id === line.from);
   const to = world.vehicles.find((v) => v.id === line.to);
@@ -68,12 +57,10 @@ function holdsEnds(world: World, line: HarpoonLine): Ends | null {
   return { from, fromPart: line.fromPart, to, toPart: line.toPart };
 }
 
-// Drops the lines that no longer hold.
 export function endLines(world: World): void {
   world.lines = world.lines.filter((line) => holdsEnds(world, line) !== null);
 }
 
-// The holding lines with their anchors in body space, for physics at turn start.
 export function lineAnchors(world: World): LineAnchor[] {
   return world.lines.flatMap((line) => {
     const ends = holdsEnds(world, line);
@@ -82,7 +69,6 @@ export function lineAnchors(world: World): LineAnchor[] {
   });
 }
 
-// The line tore under a hard pull: the part it held takes the tear damage, once, and the line is gone.
 export function tearLine(world: World, lineId: string): void {
   const line = world.lines.find((l) => l.id === lineId);
   if (!line) throw new Error(`There is no line ${lineId}`);

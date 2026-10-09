@@ -12,7 +12,6 @@ export function keepsOffRoads(world: World, v: Vehicle): boolean {
   return hides(world, v) || huntsOffRoad(v.brain);
 }
 
-// A raider that retreats, flees or is stranded.
 function hides(world: World, v: Vehicle): boolean {
   const goal = topGoal(v)?.kind;
   return goal === 'retreat' || goal === 'flee' || isStranded(world, v);

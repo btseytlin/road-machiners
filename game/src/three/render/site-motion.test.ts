@@ -5,7 +5,6 @@ import { hoist, rock, SiteMotion, slew, spin, travel, type Motion } from './site
 const X = new THREE.Vector3(1, 0, 0);
 const Y = new THREE.Vector3(0, 1, 0);
 
-// A part away from the origin and turned, as a part stands on its base model.
 function part(): THREE.Object3D {
   const node = new THREE.Object3D();
   node.position.set(1, 2, 3);
@@ -15,7 +14,6 @@ function part(): THREE.Object3D {
   return node;
 }
 
-// The part's local matrix after its motion has run for the given seconds.
 function after(motion: Motion, seconds: number): THREE.Matrix4 {
   const node = part();
   const motions = new SiteMotion();

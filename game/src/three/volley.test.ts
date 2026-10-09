@@ -56,10 +56,8 @@ describe("playCrashes with claymore blasts", () => {
   const blast = (other: string): GameEvent => ({ t: "claymore", vehicle: "a", part: "ram", other, pos: { x: 30, y: 30 }, hits: [], selfHits: [] });
 
   const RAM_AT = { x: 7, y: 2, z: 9 };
-  // A view of truck a that draws the ram, or none.
   const drawn = (ram: boolean) => new Map([["a", { hasPart: (id: string) => ram && id === "ram", partPoint: () => RAM_AT }]]);
 
-  // The fx and sounds one blast plays and where, with these trucks seen.
   function played(e: GameEvent, seen: string[], views = drawn(true)): (string | V3)[] {
     const out: (string | V3)[] = [];
     const world = emptyWorld();
@@ -153,7 +151,6 @@ describe("playUtilitySounds", () => {
 });
 
 describe("playVolley sounds", () => {
-  // The cues one round of this gun plays as it fires and lands, striking the target or not.
   function cuesOf(weapon: string, struck: boolean): string[] {
     const cues: string[] = [];
     const p = { x: 0, y: 0, z: 0 };

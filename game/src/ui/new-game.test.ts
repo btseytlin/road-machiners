@@ -3,7 +3,6 @@ import { WORLD_SETTINGS } from "../data/modes";
 import type { BootRequest } from "../three/save-slots";
 import { CONFIRM_NEW_GAME, isNewGameOpen, openNewGame } from "./new-game";
 
-// Just enough DOM for the screen. Attributes, children, listeners, focus and removal.
 class FakeNode {
   attrs: Record<string, string> = {};
   className = "";
@@ -38,7 +37,6 @@ class FakeNode {
   }
 }
 
-// Storage that records every write, so a test can show nothing was written.
 function spyStorage() {
   return { setItem: vi.fn(), removeItem: vi.fn(), clear: vi.fn(), getItem: vi.fn(() => null) };
 }

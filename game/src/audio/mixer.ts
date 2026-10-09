@@ -29,7 +29,6 @@ export class Mixer {
     this.buses[bus].gain.value = volume;
   }
 
-  // Muffles a whole bus by lowering its low-pass cutoff over rampSeconds.
   setBusTone(bus: Bus, cutoffHz: number, rampSeconds: number): void {
     const tone = this.tones.get(bus);
     if (!tone) throw new Error(`Bus ${bus} has no tone filter`);
@@ -40,7 +39,6 @@ export class Mixer {
     this.master.gain.value = muted ? 0 : 1;
   }
 
-  // Browsers keep the context suspended until the first user input.
   unlockOn(target: EventTarget): void {
     const resume = () => void this.ctx.resume();
     target.addEventListener("pointerdown", resume, { once: true });
@@ -58,7 +56,6 @@ export class Mixer {
     return g;
   }
 
-  // Returns the chain input: compressor to master dry, plus a reverb send.
   private effectsChain(mix: Mix): AudioNode {
     const c = mix.compressor;
     const comp = this.ctx.createDynamicsCompressor();
@@ -76,7 +73,6 @@ export class Mixer {
     return comp;
   }
 
-  // Stereo noise with a power decay: a plain open-air tail.
   private impulse(seconds: number, decay: number): AudioBuffer {
     const n = Math.round(seconds * this.ctx.sampleRate);
     const buf = this.ctx.createBuffer(2, n, this.ctx.sampleRate);

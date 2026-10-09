@@ -1,7 +1,6 @@
 // Plays one recorder run and prints the player truck turn by turn from --from to --to: money, net worth, fuel,
 // supplies, goods, free cells, contracts, order, mounted part HP and the events that touch the player. A line prints only when something
 // in it changed or an event happened. It writes no trace.
-// Usage: npm run progression:watch -- --archetype trader --seed 1 --to 5000 [--from 4500] [--markov-turns <k>]
 import { playerVehicle } from '../src/sim/damage.ts';
 import { freeCells, goodsCount, mountedParts } from '../src/sim/grid.ts';
 import { isArchetype } from '../src/sim/progression/bot.ts';
@@ -11,7 +10,6 @@ import { moneyText } from '../src/ui/units.ts';
 
 const USAGE = 'Usage: npm run progression:watch -- --archetype <a> --seed <n> --to <turn> [--from <turn>] [--markov-turns <k>]';
 
-// Events with no vehicle field are the player's own.
 const OWN = new Set(['money', 'contract', 'death', 'knockout', 'wake', 'skillUp', 'supply', 'townPatch', 'scrapPatch', 'searched', 'discover']);
 const QUIET = new Set(['practice', 'activity', 'arrived', 'spawn', 'despawn', 'info', 'weather']);
 
@@ -41,7 +39,6 @@ function touchesPlayer(e, me) {
   return JSON.stringify(e).includes(`"${me}"`);
 }
 
-// A truck id with its driver template and chassis, such as v76:raider-gunwagon/gunwagon.
 function truck(w, id) {
   const v = w.vehicles.find((x) => x.id === id);
   return v ? `${id}:${v.brain?.templateId ?? 'player'}/${v.chassisId}` : id;

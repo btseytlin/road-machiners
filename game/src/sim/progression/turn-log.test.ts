@@ -4,7 +4,6 @@ import { addVehicle, editableTerrain, emptyWorld } from '../testkit';
 import type { World } from '../types';
 import { worldLine, type TruckSnap } from './turn-log';
 
-// A world on sand with a single road tile under (40, 40), on a snapshot turn.
 function sandWithOneRoadTile(): World {
   const w = emptyWorld();
   const terrain = editableTerrain(w);

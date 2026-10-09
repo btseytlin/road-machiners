@@ -23,12 +23,10 @@ const SITES = [...REGION.towns, ...REGION.locations];
 const FORT_SITES = SITES.filter(isFortress);
 const world = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
 
-// The corners of a posed box's ground outline.
 function corners(b: { center: { x: number; y: number }; axis: { x: number; y: number }; half: { x: number; y: number } }) {
   return [-1, 1].flatMap((i) => [-1, 1].map((j) => ({ x: b.center.x + b.axis.x * b.half.x * i - b.axis.y * b.half.y * j, y: b.center.y + b.axis.y * b.half.x * i + b.axis.x * b.half.y * j })));
 }
 
-// The baked pieces of one site: the landmarks of its style's kinds that stand inside its circle.
 function piecesOf(site: (typeof SITES)[number], piece?: 'gate' | 'wall'): Extract<Obstacle, { kind: 'landmark' }>[] {
   const kinds: string[] = Object.values(FORT_PROPS[FORTRESS_SITES[site.id].style]);
   return mapObstacles(TEST_MAP).filter((o): o is Extract<Obstacle, { kind: 'landmark' }> => o.kind === 'landmark' && kinds.includes(o.look) && dist(o.pos, site.pos) <= site.radius && (!piece || FORT_MODELS.get(o.look)?.piece === piece));
@@ -36,7 +34,6 @@ function piecesOf(site: (typeof SITES)[number], piece?: 'gate' | 'wall'): Extrac
 
 const styleOf = (site: (typeof SITES)[number]) => FORTRESS_STYLES[FORTRESS_SITES[site.id].style];
 
-// A gatehouse's flat outer face is a chord, so its corners stand a little past the circle that its middle touches.
 function sag(site: (typeof SITES)[number], o: object): number {
   return 'look' in o && FORT_MODELS.get(o.look as never)?.piece === 'gate' ? Math.hypot(site.radius, styleOf(site).gate.width / 2) - site.radius : 0;
 }
@@ -138,7 +135,6 @@ describe('fortress obstacles', () => {
       expect(pose.scale.y).toBe(1);
       const axis = { x: Math.cos(pose.yaw), y: Math.sin(pose.yaw) };
       const along = propBoxes(o).flatMap((b) => corners(b).map((c) => (c.x - pose.pos.x) * axis.x + (c.y - pose.pos.y) * axis.y));
-      // Scrap wall coils and sheet teeth reach a little past the section ends, which only deepens the joints.
       expect(Math.abs(Math.max(...along) - Math.min(...along) - o.r * 2)).toBeLessThan(0.1);
     }
   });
@@ -181,7 +177,6 @@ describe('fortress ground', () => {
     for (const s of FORT_SITES) {
       for (const pad of sitePads(s)) {
         const out = { x: (pad.x - s.pos.x) / dist(pad, s.pos), y: (pad.y - s.pos.y) / dist(pad, s.pos) };
-        // Sample the whole rectangle: length runs out from the gate, width along the site edge.
         for (let i = 0; i <= 10; i++) {
           for (let j = 0; j <= 14; j++) {
             const u = (i / 10 - 0.5) * length;
@@ -216,7 +211,6 @@ describe('Bowl pit', () => {
   const pit = FORTRESS_SITES.bowl.pit!;
   const core = fortressCore(bowl);
   const edge = (p: Vec) => Math.min(...core.map((a, i) => segmentDist(p, a, core[(i + 1) % core.length])));
-  // A point d tiles in from the middle of the first gate's side.
   const inFromGate = (d: number): Vec => {
     const g = fortressGates(bowl)[0];
     return { x: g.face.x - g.out.x * d, y: g.face.y - g.out.y * d };

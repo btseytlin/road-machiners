@@ -1,7 +1,6 @@
 // Aiming a utility that waits for a ground point: the selected point utility, the click that gives its order, and the
 // ground marks that show where it can reach. It shows its range ring around the truck and a marker of its effect's
 // size under the pointer, red where the point is out of range. Every point order set this turn keeps a small cross.
-// Rules stay in src/sim/utility.ts; this file only turns clicks into orders.
 
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -19,17 +18,17 @@ import { aimBlock } from '../ui/weapons';
 import { GroundBand } from './render/zones';
 
 const LOOK = {
-  ring: { width: 0.1, opacity: 0.8 }, // the range edges, in tiles
-  reach: 0.08, // opacity of the ground the point may go to
-  marker: { width: 0.12, opacity: 0.9, dot: 0.35 }, // the effect's edge and its center dot, in tiles
-  cross: { arm: 0.45, width: 0.1, lift: 0.05 }, // a set point's cross: half its span and its bar width, in tiles
+  ring: { width: 0.1, opacity: 0.8 },
+  reach: 0.08,
+  marker: { width: 0.12, opacity: 0.9, dot: 0.35 },
+  cross: { arm: 0.45, width: 0.1, lift: 0.05 },
   renderOrder: 812,
 };
 
 export type UtilityAimHost = {
   world(): World;
   apply(next: World): void;
-  note(text: string): void; // a refused order, shown to the player
+  note(text: string): void;
 };
 
 export class UtilityAim {
@@ -53,7 +52,6 @@ export class UtilityAim {
     this.selected = id;
   }
 
-  // The selected part while it can still aim, or null. A part that left the truck or cannot aim (aimBlock) drops it.
   private selectedPart(w: World): PartInstance | null {
     const part = chargedParts(playerVehicle(w)).find((p) => p.id === this.selected);
     const aiming = part && aimBlock(w, part) === null ? part : null;
@@ -61,8 +59,6 @@ export class UtilityAim {
     return aiming;
   }
 
-  // A left click while a point utility waits for its target: the ground under the pointer. Returns false when the
-  // click is not for the utility, so it orders the truck as usual.
   click(ground: Vec | null): boolean {
     const part = this.selectedPart(this.host.world());
     if (!part || orderKindOf(part) !== 'point' || !ground) return false;
@@ -70,7 +66,6 @@ export class UtilityAim {
     return true;
   }
 
-  // An order drops the selection.
   private order(part: PartInstance, order: UtilityOrder): void {
     const w = this.host.world();
     const error = utilityOrderError(w, playerVehicle(w), part.id, order);
@@ -79,7 +74,6 @@ export class UtilityAim {
     this.host.apply(setUtilityOrder(w, part.id, order));
   }
 
-  // hoverGround: the ground point under the pointer, or null. hide: nothing shows, as while a turn plays.
   draw(w: World, terrain: Terrain, hoverGround: Vec | null, hide: boolean): void {
     this.root.visible = !hide;
     if (hide) return;
@@ -89,7 +83,6 @@ export class UtilityAim {
     this.drawSet(terrain, me);
   }
 
-  // The reach band and range rings of the selected point utility, and its effect under the pointer, or none.
   private drawReach(terrain: Terrain, me: Vehicle, part: PartInstance | null, hoverGround: Vec | null): void {
     if (!part) for (const b of [this.reach, this.inner, this.outer, this.hover]) b.hide();
     else this.drawPointReach(terrain, me, part, hoverGround);
@@ -104,7 +97,6 @@ export class UtilityAim {
     this.hover.place(terrain, hoverGround, effectRadius(part), pointBlock(me, part, hoverGround) ? PAL.dest : PAL.select);
   }
 
-  // A small cross on each point order set this turn.
   private drawSet(terrain: Terrain, me: Vehicle): void {
     const points = chargedParts(me).flatMap((part) => {
       const order = me.utilityOrders[part.id];
@@ -119,7 +111,6 @@ export class UtilityAim {
   }
 }
 
-// Puts the cross on the ground at the point, or hides it without one.
 function placeCross(mark: THREE.Mesh, terrain: Terrain, at: Vec | undefined): void {
   mark.visible = at !== undefined;
   if (!at) return;
@@ -127,7 +118,6 @@ function placeCross(mark: THREE.Mesh, terrain: Terrain, at: Vec | undefined): vo
   mark.position.set(p.x, p.y + LOOK.cross.lift * PHYSICS.metersPerTile, p.z);
 }
 
-// A flat plus of two bars, in meters, drawn over trucks like the other aim marks.
 function cross(): THREE.Mesh {
   const S = PHYSICS.metersPerTile;
   const span = LOOK.cross.arm * 2 * S;
@@ -138,7 +128,6 @@ function cross(): THREE.Mesh {
   return mesh;
 }
 
-// The radius in tiles the utility's effect covers around its point.
 function effectRadius(part: PartInstance): number {
   const def = partDef(part.defId);
   if (def.kind !== 'utility' || !('radius' in def.effect)) throw new Error(`${def.name} covers no radius`);
@@ -149,7 +138,6 @@ function band(opacity: number): GroundBand {
   return new GroundBand({ color: PAL.select, opacity, renderOrder: LOOK.renderOrder, overTrucks: true });
 }
 
-// The edge of an effect's circle and a dot at its center.
 class Marker {
   private readonly edge = band(LOOK.marker.opacity);
   private readonly dot = band(LOOK.marker.opacity);

@@ -18,7 +18,6 @@ function testWorkersFrom(env: Record<string, string | undefined>): number | null
   return workers;
 }
 
-// Builds the real context from the environment. Missing config stops here, before any action.
 export function realContext(env: Record<string, string | undefined>): Ctx {
   const cfg = loadConfig(env);
   const stateDir = join(cfg.home, 'state');

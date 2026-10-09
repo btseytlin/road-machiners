@@ -18,7 +18,6 @@ const placed = chunks.flatMap(all);
 const scrub = chunks.flatMap((c) => [...c.scrub, ...c.desert_scrub]);
 const cacti = chunks.flatMap((c) => c.cactus);
 const pebbles = chunks.flatMap((c) => [...c.pebbles, ...c.desert_stones]);
-// Where a placement stands, in tiles, read back from its matrix.
 const at = (p: { matrix: THREE.Matrix4 }): Vec => ({ x: p.matrix.elements[12] / PHYSICS.metersPerTile, y: p.matrix.elements[14] / PHYSICS.metersPerTile });
 const roadDist = (x: number, y: number) => ROAD_INDEX.nearestWithin(x, y, ROAD_GAP + SHOULDER_TILES);
 const typeAt = (at: Vec) => t.types[Math.floor(at.y) * t.size + Math.floor(at.x)];
@@ -26,7 +25,6 @@ const look = lookTypes(t);
 const lookAt = (at: Vec) => look[Math.floor(at.y) * t.size + Math.floor(at.x)];
 const onShoulder = (at: Vec) => roadDist(at.x, at.y) < ROAD_GAP + SHOULDER_TILES;
 const tileKey = (at: Vec) => Math.floor(at.y) * t.size + Math.floor(at.x);
-// Tiles whose center lies within CACTUS_NEAR_ROCK of a rock or a crag.
 const nearRock = new Set<number>();
 for (const o of world.obstacles) {
   if (o.kind !== 'rock' && !(o.kind === 'landmark' && o.look === 'crag')) continue;
@@ -45,7 +43,6 @@ describe('scatterPlacements', () => {
       byTile.set(key, [...(byTile.get(key) ?? []), at(p)]);
     }
     for (const o of world.obstacles) {
-      // Tiles are blocked by their center, and a placement lies within half a tile diagonal of its tile's center.
       const r = o.r + OBSTACLE_GAP - Math.SQRT1_2;
       for (let y = Math.floor(o.pos.y - r); y <= o.pos.y + r; y++) for (let x = Math.floor(o.pos.x - r); x <= o.pos.x + r; x++)
         for (const at of byTile.get(y * t.size + x) ?? []) expect(Math.hypot(at.x - o.pos.x, at.y - o.pos.y)).toBeGreaterThan(r);

@@ -1,23 +1,31 @@
 # Factory dashboard
 
-A read-only public page at `/factory/` that explains factory work. Overview shows activity, scheduling waits, release gates and server load. Analytics shows measured usage and time. Delivery shows how long cards take from triage to dev, where they loop back and how often they are refused. Hermes's `factory_status` tool reads the same JSON from `/factory/api/snapshot`, so the page and Hermes never disagree. Visitors cannot start jobs or change state. `/factory/api/badges/<name>` serves the root README's live pills in the shields.io endpoint format: `release` counts the next release's features, and `building` counts open cards past triage. The code is in `src/dashboard/`, and the page in this folder.
+A read-only public page at `/factory/` that explains factory work. Overview shows activity, scheduling waits, release gates and server load. Analytics shows measured usage and time. Delivery shows how long issues take to reach dev, where they loop back and how often they are refused. Hermes's `factory_status` tool reads the same JSON from `/factory/api/snapshot`, so the page and Hermes never disagree. Visitors cannot start jobs or change state. `/factory/api/badges/<name>` serves the root README's live pills in the shields.io endpoint format: `release` counts the next release's features, and `building` counts open cards past triage. The code is in `src/dashboard/`, and the page in this folder.
 
 ## Local use
 
 From `factory/`:
 
-1. Run `npm ci` and copy `dashboard/.env.example` to `dashboard/.env`. It also reads `settings.env` and `.env`.
+1. Run `npm ci`. It installs `@duckdb/node-api`, a native module with prebuilt binaries. Then copy `dashboard/.env.example` to `dashboard/.env`. It also reads `settings.env` and `.env`.
 2. Set `DASHBOARD_PORT`, or `DASHBOARD_SOCKET` for an absolute socket path.
 3. Leave `DASHBOARD_CHANNEL_URL` empty to get the link of `FACTORY_PUBLIC_CHANNEL` from the bot, or set `DASHBOARD_HIDE_TELEGRAM=1` to show no channel.
 4. Run `npm run dashboard` and open `http://127.0.0.1:8787/factory/`. GitHub reads need `gh` logged in.
 
 ## What the numbers mean
 
+- Every number comes from SQL over `$FACTORY_HOME/ledger.jsonl`. This keeps each number readable in one file. `src/dashboard/analytics.ts` loads the ledger lines into an in-memory DuckDB on every refresh and runs one file of `src/dashboard/queries/` per panel. It runs each file once for the 24-hour, 7-day and 30-day ranges, with the parameters `$now`, `$days` and `$budget_ms`.
+- `queries/base.sql` builds the typed tables jobs, agents, model_usage, cards, scheduler and scheduler_waits from the lines. `queries/macros.sql` holds the range filters that panels share.
+- Queries read each line as JSON and filter it by kind. So a new ledger kind or field changes nothing until a query uses it.
+- A panel returns its rows or its error. A failing panel shows its name and the error type where the panel would be, and the other panels keep their rows. A missing query file fails only its own panel.
+- The page is public and a DuckDB error can quote ledger text, so the full error goes only to `logs/dashboard.log`.
+- A ledger line that cannot be parsed, a line with a bad time and an agent record with a bad cost are left out. The `problems` panel counts them, and the page shows the counts.
 - Job outcomes, durations, costs and tokens come from the factory ledger. Older lines have cost but no tokens, and a missing count shows as unavailable, never as zero.
-- Review rounds count under Verify, since their ledger job is Verify.
+- Every agent run in the ledger records only its own spend, and the dashboard sums the records. A run with a CLI result records the CLI's `total_cost_usd`. It covers only that run, because the container keeps no Claude cost state. A run that ends without a result, by death or kill, is priced from its transcript. Only messages stamped at or after the run's start count, so a resumed session is not charged twice.
+- Wasted spend is the spend of jobs whose outcome is not done and not held. These are failed, died, timeout and stopped.
 - The 24-hour, 7-day and 30-day ranges are rolling UTC windows. Hermes chat, agent runs outside the factory and hosting costs are not counted.
-- Waiting time sums the intervals a task spent not running. Gaps longer than three ticks are left out and counted.
+- Cards waiting is the average number of cards held back at once over the measured clock time. A card that waits behind its own running job does not count. Its tooltip and the stage bars show summed card-time, so 20 cards waiting for one hour count as 20 hours. Worker time sums the same way across parallel jobs. Gaps longer than three ticks are left out of both and counted.
 - Runner heartbeats show a job is alive. Agent activity reports are labelled apart and never prove a check passed. Scheduler explanations come from job selection.
+- A factory script, like the release playtest's suite and plays or a build, prints each step as it starts and its phase. So a worker shows the substep that runs, never `npm ci` for a whole script, and a phase shows only while its script runs. Each step counts as progress.
 - CPU, container CPU, memory, GPU and disk readings are whole-host percentages. A reading that fails or is not supported shows as unavailable.
 - A pause shows as an amber banner from the pause file. Raw pause notes never leave the server.
 - While `DASHBOARD_HIDE_TELEGRAM=1`, the API returns no channel link or posts.
@@ -26,17 +34,25 @@ Agents report their phase with `factory-status <activity>`, with no free text. `
 
 ## Delivery numbers
 
-The Delivery tab reads only the card lines of the ledger. The board shows where a card is now, and job lines give worker time, so neither tells when a card entered a column. The tab shows nothing for history before the first card line, and states when that was.
+The Delivery tab reads only the card lines of the ledger, with the panels `delivery_coverage`, `lead`, `dwell`, `loops`, `rejections` and `delivery_retries`. The words that group them are in `src/dashboard/vocabulary.ts`: delivery stages, loop steps, gates, the column to stage map, retry stages and outcomes. They are typed against the factory's unions and load into DuckDB tables. So a new card step, column or outcome fails typecheck there. The board shows where a card is now, and job lines give worker time, so neither tells when a card entered a column. The tab shows nothing for history before the first card line, and states when that was.
 
-- Time in stage is calendar time from the move into a stage to the next move out, waits included. It is never worker time, which Analytics shows. Testing is the preview and Hardening the harden stage. Approval splits into the committee's wait and the merge queue after hardening or `factory merge`. A `factory move` into Testing counts as preview.
+- Time in stage is calendar time from the move into a stage to the next move out, waits included. It is never worker time, which Analytics shows. Testing is the preview, Hardening the harden stage and Merging the merge queue. Older lines, written before the Merging column, count Approval after hardening or `factory merge` as the merge queue. A `factory move` into Testing counts as preview.
 - A stage counts in a range when it ended in that range. Stages still open are counted with their mean age and are not in the means.
-- Triage to dev runs from the first triage acceptance to the first merge into dev after it, the merge that adds `release-candidate`. Weekly Ship is not its end. Cards merged in the range count. Accepted cards not yet merged or closed are in flight. A merge with no recorded acceptance is counted apart.
+- Issue to dev runs from the day the issue was opened to its first merge into dev, the moment GitHub shows the label `release-candidate` added. Weekly Ship is not its end. Votes and triage waits are inside it. Issues merged in the range count. Release tasks and ad hoc tasks are left out, because the factory opens them itself. It reads GitHub, so it covers merges from before card records began.
+- In flight counts cards that triage accepted and that are not yet merged or closed. It starts at the first triage acceptance, so it needs card records. A merge with no recorded acceptance is counted apart.
 - Loops count each move back by its transition, with the cards it touched. The loop rate is cards with a loop over cards with any move in the range.
-- Failed job retries count card jobs that failed, died or timed out. The tick runs those again in the same column, so they are not loops. A job a control order stopped is no retry.
+- Failed job retries count card jobs that failed, died or timed out. The tick runs those again in the same column, so they are not loops. A job a control order stopped is no retry, but its spend counts as wasted.
 - Each rejection rate has its own base: triage refusals over triage decisions, design refusals over design decisions, and Deny over committee approvals and denials. Each card counts once per gate, by its latest decision in the range. Pending cards, failed jobs, patches, redesigns, removals and operator drops are not rejections.
 - Hotfixes, release tasks, the release card and ad hoc tasks run other paths, so they are left out and counted.
 - A line equal to the card's previous line is a copy from a resumed job or a repeated tick, and is dropped. A move into the column the card is in starts no new stage.
-- Card lines stay 180 days in the dashboard's memory. A card that moved before the first card line is counted as joined before records.
+- The Delivery queries read card lines of the last 180 days. A card that moved before the first card line is counted as joined before records.
+
+## Add a panel
+
+1. Write `src/dashboard/queries/<name>.sql`. It returns the panel's rows.
+2. Add its row type to `PanelRows` and its columns to `PANEL_COLUMNS` in `src/dashboard/analytics.ts`. A query that returns other columns fails its panel.
+3. Add its render code in `dashboard/dashboard.js`.
+4. Add a test in `src/dashboard/usage-queries.test.ts` or `src/dashboard/delivery-queries.test.ts`.
 
 ## Production
 
@@ -49,6 +65,13 @@ Check it after an install:
 - `systemctl status roam-factory-dashboard.service` and `/opt/factory/home/logs/dashboard.log`.
 - `https://<domain>/factory/health` answers, and `https://<domain>/factory/` updates through `/factory/api/events`.
 - A `POST` returns 405, and a private path returns 404.
+
+## Staying in step with the factory
+
+- The page's words for columns, job stages, queues, activities, wait reasons, delivery stages, loops and gates live in `src/dashboard/labels.ts`. Each list is keyed by the factory's own type, so a new column, stage, queue, activity or wait reason fails `npm run typecheck` until it has a label. The snapshot carries the labels to the page, and a key with no label shows as itself.
+- `dashboard.js` is type-checked by `dashboard/tsconfig.json` against the server's `Snapshot` type. A field the server renames or drops fails the check.
+- The funnel and the card counts follow the labels, so a new column needs no CSS or page edit.
+- A commit that touches this folder or `src/dashboard/` runs the browser check below in the pre-commit hook.
 
 ## Browser check
 

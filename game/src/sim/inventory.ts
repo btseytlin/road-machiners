@@ -5,7 +5,7 @@ import { partDef } from '../data/parts';
 import { skillEffect, vehicleHasPerk } from './progress';
 import { playerVehicle } from './damage';
 import { newId } from './factory';
-import { cabShield, gunLayoutScore } from './armor';
+import { cabShieldWith, gunLayoutScore } from './armor';
 import { findSpot, freeCells, gridOf, isMounted, itemCells, MOUNT_CELLS, mountSpots, placementError, type Cell, type Spot } from './grid';
 import { requireShop, shopAt } from './market';
 import { disarm } from './claymore';
@@ -20,9 +20,6 @@ import { npcMassRoom, vehicleStats } from './stats';
 import type { GridItem, PartInstance, RefitJob, RefitMove, RefitPickup, Vehicle, World } from './types';
 import { playerCommand } from './world';
 
-// Mount a part on a free fitting mount. Returns false when no mount has room. A gun or a tall part takes the first
-// spot with the best gun layout, so a gun covers sides the others miss and a box blinds no gun. Armor takes the
-// spot that shields the most cab lanes. `mount` narrows the cells a part may use, like one side's edge for armor.
 export function mountPart(world: World, v: Vehicle, part: PartInstance, mount: Cell[] = MOUNT_CELLS[partDef(part.defId).kind]): boolean {
   const item: PartItem = { id: newId(world, 'i'), x: 0, y: 0, rot: 0, kind: 'part', part };
   const spot = installSpot(v, item, mount);
@@ -33,8 +30,6 @@ export function mountPart(world: World, v: Vehicle, part: PartInstance, mount: C
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;
 
-// The spot mountPart would pick for this part item, or null when no mount has room. The item may already stand
-// on the grid, as a spare: its own cells count as free.
 export function installSpot(v: Vehicle, item: PartItem, mount: Cell[] = MOUNT_CELLS[partDef(item.part.defId).kind]): Spot | null {
   const others = { ...v, items: v.items.filter((it) => it.id !== item.id) };
   const def = partDef(item.part.defId);
@@ -43,7 +38,6 @@ export function installSpot(v: Vehicle, item: PartItem, mount: Cell[] = MOUNT_CE
   return findSpot(gridOf(others), others.items, item, mount, null);
 }
 
-// The spot for an item in the truck's storage, off every mount, or null when only mounts or nothing is free.
 export function stowSpot(v: Vehicle, item: GridItem): Spot | null {
   const avoid = item.kind === 'part' ? MOUNT_CELLS[partDef(item.part.defId).kind] : null;
   return findSpot(gridOf(v), v.items, item, null, avoid);
@@ -59,40 +53,33 @@ function bestArcSpot(v: Vehicle, item: GridItem, mount: Cell[]): Spot | null {
   return best;
 }
 
-// Armor goes where it shields the most cab lanes, the first such spot on a tie.
 function bestShieldSpot(v: Vehicle, item: GridItem, mount: Cell[]): Spot | null {
   let best: Spot | null = null;
   let bestScore = -1;
+  const shield = cabShieldWith(v);
   for (const spot of mountSpots(gridOf(v), v.items, item, mount)) {
-    const score = cabShield({ ...v, items: [...v.items, { ...item, ...spot }] });
+    const score = shield({ ...item, ...spot });
     if (score > bestScore) [best, bestScore] = [spot, score];
   }
   return best;
 }
 
-// Put a spare part anywhere it fits without mounting it. Returns false when there is no room.
-// Kilograms of cargo the truck can take. An NPC truck stops at its speed floor, see npcMassRoom(). The player has no cap,
-// since weight only slows the player's truck.
 export function cargoMassRoom(v: Vehicle): number {
   return v.brain ? npcMassRoom(v) : Infinity;
 }
 
-// Units of a good that fit the grid and the mass room.
 export function cargoRoom(v: Vehicle, good: string): number {
   return Math.min(freeCells(v), Math.floor(cargoMassRoom(v) / GOODS[good].mass));
 }
 
-// Whether the hold takes a unit of any good. A truck full by cells or by mass has no room for salvage.
 export function hasCargoRoom(v: Vehicle): boolean {
   return Object.keys(GOODS).some((good) => cargoRoom(v, good) > 0);
 }
 
-// Where a loose part would go on the grid, or null when it does not fit the grid or the mass room.
 function stowPlace(v: Vehicle, item: GridItem): Spot | null {
   return itemMass(item) > cargoMassRoom(v) ? null : stowSpot(v, item);
 }
 
-// Whether stowPart would place the part.
 export function canStowPart(v: Vehicle, part: PartInstance): boolean {
   return stowPlace(v, { id: 'probe', x: 0, y: 0, rot: 0, kind: 'part', part }) !== null;
 }
@@ -105,7 +92,6 @@ export function stowPart(world: World, v: Vehicle, part: PartInstance): boolean 
   return true;
 }
 
-// Adds up to n units, one cell each. Returns how many fit the grid and the mass room.
 export function addGoods(world: World, v: Vehicle, good: string, n: number): number {
   const count = Math.min(n, cargoRoom(v, good));
   for (let i = 0; i < count; i++) {
@@ -147,19 +133,14 @@ export function moveItem(world: World, itemId: string, to: Spot): World {
   });
 }
 
-// Turns a field refit takes: the planned turns times the truck's work time (src/sim/utility.ts), cut by the player's
-// machining, at least 1.
 export function refitTurns(world: World, v: Vehicle, planned: number): number {
   return Math.max(1, Math.ceil(planned * workTimeMult(v) * (1 - skillEffect(world, v, 'machining', 'refit'))));
 }
 
-// Turns a field refit takes to move a part off a wreck stock or a knocked-out truck. The Cannibal perk sets the
-// whole job, however many mounts it crosses.
 export function lootRefitTurns(world: World, v: Vehicle, planned: number): number {
   return vehicleHasPerk(world, v, 'cannibal') ? PERK_NUMBERS.cannibal.turns : refitTurns(world, v, planned);
 }
 
-// Garage storage holds spare parts between trips, at every shop.
 export function storePart(world: World, itemId: string): World {
   return playerCommand(world, (w) => {
     requireShop(w);
@@ -191,8 +172,6 @@ export function takeFromStorage(world: World, partId: string, to: Spot): World {
   });
 }
 
-// Throw goods and loose parts onto a pile on the ground to make room. Installed parts must be removed first.
-// The player knows what lies on its own pile, so it needs no search.
 export function dumpItem(world: World, itemId: string): World {
   return playerCommand(world, (w) => {
     const me = playerVehicle(w);
@@ -213,7 +192,6 @@ function requireRemovable(item: GridItem): void {
   if (item.kind === 'part' && partDef(item.part.defId).kind === 'core') throw new Error(`${partDef(item.part.defId).name} is built in. It can only be repaired.`);
 }
 
-// A refit can remove grid rows or drop a weapon. Items left outside the grid block it.
 export function afterRefit(w: World): void {
   const me = playerVehicle(w);
   const error = getLayoutError(me, me.items);

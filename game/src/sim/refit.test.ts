@@ -182,7 +182,6 @@ describe('machining on refits', () => {
   });
 });
 
-// The player's truck with a Patcher crane on its deck.
 function mountCrane(w: World): PartInstance {
   const crane = makePart(w, 'patcherCrane', 0);
   if (!mountPart(w, w.vehicles[0], crane)) throw new Error('No deck room for the crane');

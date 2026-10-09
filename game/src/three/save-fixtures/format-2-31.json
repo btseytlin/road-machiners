@@ -1,0 +1,47 @@
+{
+  "turn": 2600,
+  "vehicles": [
+    {
+      "id": "v1",
+      "chassisId": "buggy",
+      "speed": 3.2,
+      "trail": [
+        { "x": 10, "y": 20, "heading": 0 },
+        { "x": 11, "y": 20, "heading": 0 }
+      ]
+    },
+    {
+      "id": "v2",
+      "chassisId": "hauler",
+      "speed": 0,
+      "trail": []
+    }
+  ],
+  "removed": [
+    {
+      "id": "gone",
+      "chassisId": "buggy",
+      "trail": [{ "x": 1, "y": 2, "heading": 0 }]
+    }
+  ],
+  "events": [
+    { "t": "arrived", "vehicle": "v1" }
+  ],
+  "broken": [
+    {
+      "obstacle": { "id": "deadTree-1354", "pos": { "x": 103.18, "y": 318.67 }, "r": 0.35, "kind": "landmark", "look": "deadTree", "yaw": 6.0 },
+      "turn": 2559
+    }
+  ],
+  "dustClouds": [
+    { "id": "dust-v1-3685", "source": "v1", "pos": { "x": 112.4, "y": 419.4 }, "vel": { "x": 1.7, "y": -0.5 }, "age": 7, "range": 29.4 }
+  ],
+  "player": {
+    "vehicleId": "v1",
+    "money": 5120,
+    "visible": [251489, 251490, 251491],
+    "contacts": [{ "vehicleId": "v2" }],
+    "clouds": ["dust-v1-3685"],
+    "explored": "AAAA"
+  }
+}

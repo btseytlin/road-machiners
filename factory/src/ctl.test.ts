@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EMPTY_STATE, readState, writeState } from './state';
 import { ROOT, fake, reset, type Fake } from './stages/test-fakes';
 
-// The control module has its own tests. These fakes write the inbox file like the real one and let only the name "ann" act.
 vi.mock('./control', async (importOriginal) => ({
   DROP_QUEUES: (await importOriginal<{ DROP_QUEUES: readonly string[] }>()).DROP_QUEUES,
   resolveActor: (_ctx: unknown, by: string, gated: boolean) => {
@@ -20,6 +19,8 @@ vi.mock('./control', async (importOriginal) => ({
     return path;
   },
 }));
+const repairs: unknown[] = [];
+vi.mock('./repair-clone', () => ({ repairClone: async (_ctx: unknown, order: unknown) => { repairs.push(order); return ['repaired']; } }));
 const { runCtl } = await import('./ctl');
 
 let out: string[];
@@ -113,25 +114,25 @@ describe('read commands', () => {
   });
 
   it('audit prints only the drift lines', async () => {
-    writeState(fake().ctx.statePath, { ...structuredClone(EMPTY_STATE), testPhase: { '5': 'checks' } });
+    writeState(fake().ctx.statePath, { ...structuredClone(EMPTY_STATE), postOnly: [5] });
     await run(board(), 'audit');
-    expect(out).toEqual(['#5 testPhase checks but column Design', '#6 column Approval but no open post and no approval']);
+    expect(out).toEqual(['#5 waits for a post but column Design', '#6 column Approval but no open post and no approval']);
   });
 
   it('audit skips a card with a running job, and card still shows its drift and the job', async () => {
     const f = board();
     const running = { id: 'j', stage: 'checks' as const, issue: 5, pid: 1, startedAt: '2026-01-01T00:00:00Z', log: 'l' };
-    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), testPhase: { '5': 'checks' }, jobs: [running], approvalPosts: { '77': 6 } });
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), postOnly: [5], jobs: [running], approvalPosts: { '77': 6 } });
     await run(f, 'audit');
     expect(out).toEqual([]);
     await run(f, 'card', '5');
-    expect(out).toContain('drift: #5 testPhase checks but column Design');
+    expect(out).toContain('drift: #5 waits for a post but column Design');
     expect(out).toContain('note: a checks job is running, so the drift above may pass in seconds');
   });
 
   it('audit and the other read commands change no store', async () => {
     const f = board();
-    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), testPhase: { '5': 'checks' } });
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), postOnly: [5] });
     const before = readFileSync(f.ctx.statePath, 'utf8');
     for (const args of [['audit'], ['cards'], ['card', '5'], ['jobs'], ['queues'], ['release'], ['failures'], ['help']]) await run(f, ...args);
     expect(readFileSync(f.ctx.statePath, 'utf8')).toBe(before);
@@ -146,13 +147,13 @@ describe('read commands', () => {
 
   it('card prints one fact per line and its drift', async () => {
     const f = board();
-    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), testPhase: { '5': 'checks' }, builds: { '5': 'abc1234' } });
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), postOnly: [5], builds: { '5': 'abc1234' } });
     await run(f, 'card', '5');
     expect(out).toContain('position: design');
     expect(out).toContain('labels: hotfix');
-    expect(out).toContain('testPhase: checks');
+    expect(out).toContain('post only: yes');
     expect(out).toContain('build: abc1234');
-    expect(out).toContain('drift: #5 testPhase checks but column Design');
+    expect(out).toContain('drift: #5 waits for a post but column Design');
     await expect(run(f, 'card', '99')).rejects.toThrow('No card');
   });
 
@@ -186,7 +187,7 @@ describe('read commands', () => {
 
   it('help lists every command', async () => {
     await run(fake(), 'help');
-    for (const name of ['status', 'cards', 'card N', 'jobs', 'queues', 'release', 'failures', 'log N', 'audit', 'move N', 'merge N', 'ship', 'cut', 'remove N', 'drop', 'merge-change', 'pause-card N', 'resume-card N', 'retry N', 'pause', 'resume']) {
+    for (const name of ['status', 'cards', 'card N', 'jobs', 'queues', 'release', 'failures', 'log N', 'audit', 'move N', 'merge N', 'ship', 'cut', 'remove N', 'drop', 'merge-change', 'pause-card N', 'resume-card N', 'retry N', 'pause', 'resume', 'repair-clone N']) {
       expect(out.some((line) => line.startsWith(name))).toBe(true);
     }
   });
@@ -219,7 +220,7 @@ describe('read commands', () => {
   });
 });
 
-const RELEASE = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, candidateSha: null, removed: [] };
+const RELEASE = { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: null, candidateSha: null, removed: [], tasks: [] };
 
 describe('immediate commands', () => {
   it('retry removes the stuck label and only that card failures', async () => {
@@ -231,19 +232,19 @@ describe('immediate commands', () => {
     expect(readState(f.ctx.statePath).failures.map((row) => row.issue)).toEqual([6]);
   });
 
-  it('retry of the release tracking card lifts a playtest block, gives back the runs and keeps the decision and the run count', async () => {
+  it('retry of the release tracking card lifts a playtest block and keeps the decision and the play count', async () => {
     const f = fake();
     f.ctx.cfg = { ...f.ctx.cfg, playtestRuns: 4 };
-    const playtest = { seed: 1, runs: 4, streak: 4, passed: null, blocked: { sha: 'abc1234', reason: 'taste' }, notes: [] };
+    const playtest = { seed: 1, runs: 4, passed: null, blocked: { sha: 'abc1234', reason: 'taste' }, notes: [] };
     writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, playtest } });
     await run(f, 'retry', String(RELEASE.issue), 'Raiders', 'may', 'chase', 'at', 'night.');
     expect(f.calls).toContain(`removeLabel ${RELEASE.issue} factory-stuck`);
-    expect(readState(f.ctx.statePath).release?.playtest).toEqual({ seed: 1, runs: 4, streak: 0, passed: null, blocked: null, notes: ['Raiders may chase at night.'] });
+    expect(readState(f.ctx.statePath).release?.playtest).toEqual({ seed: 1, runs: 4, passed: null, blocked: null, notes: ['Raiders may chase at night.'] });
   });
 
   it('retry of another card leaves the playtest alone', async () => {
     const f = fake();
-    const playtest = { seed: 1, runs: 4, streak: 0, passed: null, blocked: { sha: 'abc1234', reason: 'taste' }, notes: [] };
+    const playtest = { seed: 1, runs: 4, passed: null, blocked: { sha: 'abc1234', reason: 'taste' }, notes: [] };
     writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), release: { ...RELEASE, playtest } });
     await run(f, 'retry', '5', 'note');
     expect(readState(f.ctx.statePath).release?.playtest).toEqual(playtest);
@@ -256,6 +257,28 @@ describe('immediate commands', () => {
     await expect(run(f, 'pause')).rejects.toThrow('needs a reason');
     await run(f, 'resume');
     expect(existsSync(join(ROOT, 'paused'))).toBe(false);
+  });
+
+  it('repair-clone passes the card, who, why and --backup-merge to the repair and prints its lines', async () => {
+    repairs.length = 0;
+    await run(fake(), 'repair-clone', '5', '--by', 'hermes', '--reason', 'merge left it dirty');
+    await run(fake(), 'repair-clone', '6', '--backup-merge', '--reason', 'open merge', '--by', 'ann');
+    expect(repairs).toEqual([
+      { issue: 5, by: 'hermes', reason: 'merge left it dirty', backupMerge: false },
+      { issue: 6, by: 'ann', reason: 'open merge', backupMerge: true },
+    ]);
+    expect(out).toContain('repaired');
+    expect(inbox()).toEqual([]);
+  });
+
+  it('repair-clone refuses a missing --by or --reason, an unknown actor and stray arguments before it repairs', async () => {
+    repairs.length = 0;
+    await expect(run(fake(), 'repair-clone', '5', '--reason', 'r')).rejects.toThrow('Missing --by');
+    await expect(run(fake(), 'repair-clone', '5', '--by', 'hermes')).rejects.toThrow('Missing --reason');
+    await expect(run(fake(), 'repair-clone', '5', '--by', 'bob', '--reason', 'r')).rejects.toThrow('unknown actor');
+    await expect(run(fake(), 'repair-clone', '5', '6', '--by', 'hermes', '--reason', 'r')).rejects.toThrow('Unexpected "6"');
+    await expect(run(fake(), 'repair-clone', 'x', '--by', 'hermes', '--reason', 'r')).rejects.toThrow('not an issue number');
+    expect(repairs).toEqual([]);
   });
 
   it('resume keeps a pause written by hand', async () => {

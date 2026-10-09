@@ -33,7 +33,6 @@ const catalog = iconCatalog(PARTS, GOODS, CHASSIS, ICON_WEAPON_PICKS);
 const items = catalog.filter((e) => e.section !== 'chassis');
 const chassis = catalog.filter((e) => e.section === 'chassis');
 
-// A drawn extent as shares of the cell: x, y, w, h.
 type Cell = { index: number; hash: string; box: number[] };
 const storedItems: Record<string, Cell> = ICONS.items;
 const storedChassis: Record<string, Cell> = ICONS.chassis;

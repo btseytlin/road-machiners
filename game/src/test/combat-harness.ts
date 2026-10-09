@@ -1,7 +1,6 @@
 // Combat harness: plays fights through the real turn pipeline and Rapier physics on flat open ground. Two sides fight,
 // and each truck names its driver and its gear apart, so a run can hold the driver and vary the gear to tune gear, or
 // hold the gear and vary the driver to tune behavior. It measures hit rates, damage and outcomes, so a balance change
-// can be judged before it ships. The game never imports this module.
 
 import { CHASSIS } from '../data/chassis';
 import { DECISIONS, GEAR_LEVEL_IDS, NPC_BEHAVIOR, NPCS, TRAITS, type GearLevel } from '../data/npcs';
@@ -33,60 +32,37 @@ import { cloneWorld, endTurn, newWorld, seedStreams, setAutoFire, setMoveOrder }
 import { TEST_MAP } from './map';
 import { defaultSetup } from '../sim/settings';
 
-// A scripted driver steers the player truck instead of a brain, to test one way of driving. stand: brakes and never
-// moves. orbit: circles the nearest foe. charge: drives at the nearest foe and brakes once close. kite: closes in to
-// near the edge of its longest gun range, then backs straight away from the nearest foe, nose and guns toward it. A
-// truck that faces away turns and drives off instead.
 export type Policy = 'stand' | 'orbit' | 'charge' | 'kite';
 export const POLICIES: Policy[] = ['stand', 'orbit', 'charge', 'kite'];
 
-// One gun and a stock engine on a hauler, with every armor cell filled with one armor part or left bare.
 export type Outfit = { gun: string; armor: string | null; ram?: string };
 
-// kit: a START_KITS truck. npc: a loadout rolled for an NPC template, at a gear level or rolled as a spawn does.
-// outfit: a hauler with one gun and one armor.
 export type Gear = { kind: 'kit'; id: string } | { kind: 'npc'; template: string; level: GearLevel | null } | { kind: 'outfit'; outfit: Outfit };
 
-// driver is an NPCS template id, whose brain and traits drive the truck, or a scripted Policy. label is the spec the
-// truck was parsed from.
 export type Truck = { driver: string; gear: Gear; label: string };
 
 export type Fight = {
   a: Truck[];
   b: Truck[];
   seed: number;
-  gap: number; // tiles between the sides at the start
-  orbit: number; // tiles; orbit radius and charge stop distance of a scripted driver
+  gap: number;
+  orbit: number;
   maxTurns: number;
-  arena: number | null; // radius in tiles of a closed ring where survivors resume after peace; null for open ground
+  arena: number | null;
 };
 
-// odds sums each round's hit chance. speed sums the side's speed each turn, averaged over its trucks still in the fight.
 export type Side = { rounds: number; hits: number; odds: number; damage: number; speed: number };
-// won: every truck of side b is out. lost: every truck of side a is out. a fled, b fled: the sides drove apart, and
-// the side named left the fight: the side that last dropped its fight goal while the other side fought on. When that
-// never happened, the side farther from the middle of the fight. truce: no truck of either side is hostile to one of
-// the other any more, through a truce, mercy or a surrender.
 export type Outcome = 'won' | 'lost' | 'a fled' | 'b fled' | 'truce' | 'timeout';
 const OUTCOMES: Outcome[] = ['won', 'lost', 'a fled', 'b fled', 'truce', 'timeout'];
-// crashes counts collisions between trucks of opposite sides, rams included. bHpLeft is the share of max part HP the
-// side b trucks keep at the end of a won fight, wrecks included, and null for any other outcome.
 export type FightReport = { fight: Fight; outcome: Outcome; turns: number; crashes: number; a: Side; b: Side; bHpLeft: number | null };
 
-// The middle of the map, so a truck that backs or drives away for a whole fight never reaches the map edge.
 const CENTER: Vec = { x: TEST_MAP.terrain.size / 2, y: TEST_MAP.terrain.size / 2 };
-const FLED_RANGE = 40; // tiles between the sides; this far apart, the fight is over
-// Where the player truck waits when brains drive both sides. Trucks drive in physics only within the player's live
-// range, sight plus PERF.liveMargin, and by the cheap far rules beyond it, so the player waits inside that range but
-// past a driver's sight. It carries no cargo, so no raider wants it if a fight drifts its way.
+const FLED_RANGE = 40;
 const PARKED: Vec = { x: CENTER.x, y: CENTER.y + TERRAIN.vision.radius + PERF.liveMargin / 2 };
-const LINE_SPACING = 3; // tiles between trucks of one side
-const ARENA_ROCK = 1; // tiles; radius of each rock in the arena ring
-const ARENA_STEP = 1.6; // tiles between rock centers along the ring, less than a rock's width, so no gap opens
+const LINE_SPACING = 3;
+const ARENA_ROCK = 1;
+const ARENA_STEP = 1.6;
 
-// Parses `driver:gear`, or `driver` alone. A driver without gear drives its own template's rolled loadout, and a
-// scripted driver the standard kit. Gear is a start kit id, `template` or `template@level`, or `gun/armor+ram` for an
-// outfit, with `bare` for no armor and the ram optional.
 export function parseTruck(spec: string): Truck {
   const [driver, gearText, extra] = spec.split(':');
   if (extra !== undefined) throw new Error(`A truck is driver:gear, got "${spec}"`);
@@ -96,7 +72,6 @@ export function parseTruck(spec: string): Truck {
   return { driver, gear, label: spec };
 }
 
-// Trucks joined with + fight on one side.
 export function parseLineup(text: string): Truck[] {
   return text.split('+').map(parseTruck);
 }
@@ -121,11 +96,8 @@ function parseOutfit(text: string): Outfit {
   return { gun, armor: armor === 'bare' ? null : armor, ...(ram ? { ram } : {}) };
 }
 
-// Balance tables that --set may change, by the name the data files export them under.
 const TABLES: Record<string, object> = { RULES, PHYSICS, NPCS, PARTS, CHASSIS, TRAITS, DECISIONS, NPC_BEHAVIOR, SKILL_EFFECTS };
 
-// Sets one balance number for this run, like RULES.leadError=3 or PARTS.mg.spread=4. Only an existing number can
-// change, so a typo fails instead of adding a field nothing reads.
 export function setNumber(assignment: string): void {
   const [path, raw] = assignment.split('=');
   const value = Number(raw);
@@ -135,7 +107,7 @@ export function setNumber(assignment: string): void {
   const owner = keys.slice(1).reduce((obj, key) => subTable(obj, key, path), rootTable(keys[0]));
   if (typeof owner[last] !== 'number') throw new Error(`${path} is not a number`);
   owner[last] = value;
-  BASES.clear(); // a base world holds numbers rolled from the old tables
+  BASES.clear();
 }
 
 type Table = Record<string, unknown>;
@@ -152,9 +124,6 @@ function subTable(obj: Table, key: string, path: string): Table {
   return sub as Table;
 }
 
-// Flat road ground with no NPCs and no spawns later, open or ringed by the arena. The base world is built once per kit
-// and arena and cloned for each fight, so every fight shares one frozen terrain, one obstacle list and its cached
-// route grids.
 const BASES = new Map<string, World>();
 
 function baseWorld(kit: string, arena: number | null): World {
@@ -168,7 +137,7 @@ function baseWorld(kit: string, arena: number | null): World {
   w.terrain = Object.freeze(terrain);
   w.obstacles = arena === null ? [] : arenaRing(arena);
   w.states = [];
-  for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER; // only the fight's trucks drive here
+  for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
   const me = w.vehicles[0];
   me.pos = { ...CENTER };
   me.heading = 0;
@@ -177,7 +146,6 @@ function baseWorld(kit: string, arena: number | null): World {
   return w;
 }
 
-// Rocks edge to edge around the center, so routes and bodies both stop at the ring.
 function arenaRing(radius: number): Obstacle[] {
   const count = Math.ceil((2 * Math.PI * radius) / ARENA_STEP);
   return Array.from({ length: count }, (_, i) => {
@@ -194,13 +162,11 @@ function isScripted(t: Truck): boolean {
   return (POLICIES as string[]).includes(t.driver);
 }
 
-// The truck a scripted driver steers: the player truck, alone on side a. Null when brains drive every truck.
 function scriptedTruck(fight: Fight): Truck | null {
   if (fight.b.some(isScripted) || (fight.a.length > 1 && fight.a.some(isScripted))) throw new Error('A scripted driver drives the player truck, alone on side a');
   return isScripted(fight.a[0]) ? fight.a[0] : null;
 }
 
-// The player truck starts from the scripted truck's kit. An outfit goes on the combat kit's hauler.
 function baseKit(t: Truck | null): string {
   if (!t) return 'standard';
   if (t.gear.kind === 'npc') throw new Error(`A scripted driver takes a kit or an outfit, not NPC gear: "${t.label}"`);
@@ -209,12 +175,8 @@ function baseKit(t: Truck | null): string {
 
 type Ids = { a: string[]; b: string[] };
 
-// The sides face each other across the gap, centered on the arena. Every pair of opposite trucks starts in a feud, so
-// even two drivers of one faction fight. Cowards drop their trait, since a fleeing driver measures nothing about the
-// fight.
 function setup(fight: Fight): { w: World; ids: Ids } {
   if (fight.arena !== null && fight.arena <= fight.gap / 2 + LINE_SPACING) throw new Error(`An arena of ${fight.arena} tiles leaves no room for a gap of ${fight.gap}`);
-  // Across a wider ring, trucks on opposite sides lose sight of each other and the fight stalls.
   if (fight.arena !== null && 2 * fight.arena > TERRAIN.vision.radius) throw new Error(`An arena of ${fight.arena} tiles is wider than sight, ${TERRAIN.vision.radius} tiles across`);
   const scripted = scriptedTruck(fight);
   const w = Object.assign(cloneWorld(baseWorld(baseKit(scripted), fight.arena)), seedStreams(fight.seed));
@@ -254,7 +216,6 @@ function loadoutOf(w: World, gear: Gear): NpcLoadout {
   return { chassisId: kit.chassis, level: 'standard', parts: kit.parts.map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {} };
 }
 
-// Each NPC of the pair holds a feud against the other and already knows it as an attacker.
 function setAgainst(w: World, aId: string, bId: string): void {
   for (const [holder, other] of [[aId, bId], [bId, aId]]) {
     const v = w.vehicles.find((x) => x.id === holder)!;
@@ -265,7 +226,6 @@ function setAgainst(w: World, aId: string, bId: string): void {
   }
 }
 
-// Strips every part but the built-in ones, then mounts a stock engine, the gun and the armor on every armor cell.
 function outfit(w: World, v: Vehicle, o: Outfit): void {
   if (PARTS[o.gun]?.kind !== 'weapon') throw new Error(`Unknown weapon "${o.gun}"`);
   if (o.armor !== null && PARTS[o.armor]?.kind !== 'armor') throw new Error(`Unknown armor "${o.armor}"`);
@@ -278,7 +238,7 @@ function outfit(w: World, v: Vehicle, o: Outfit): void {
 
 const BARE_HAULER: NpcLoadout = { chassisId: 'hauler', level: 'standard', parts: [], spares: [], cargo: {} };
 
-const KITE_HOLD = 0.8; // share of the longest gun range a kiting truck closes to, so a closing foe stays in range
+const KITE_HOLD = 0.8;
 
 function orders(w: World, policy: Policy, orbit: number, foe: Vehicle): World {
   const me = w.vehicles.find((v) => v.id === w.player.vehicleId)!;
@@ -292,7 +252,7 @@ function orders(w: World, policy: Policy, orbit: number, foe: Vehicle): World {
 }
 
 function circle(w: World, me: Vehicle, foe: Vehicle, radius: number): World {
-  const a = bearing(foe.pos, me.pos) + Math.PI / 2; // a quarter circle ahead keeps the truck turning at speed
+  const a = bearing(foe.pos, me.pos) + Math.PI / 2;
   return setMoveOrder(w, { kind: 'through', dest: { x: foe.pos.x + Math.cos(a) * radius, y: foe.pos.y + Math.sin(a) * radius } });
 }
 
@@ -305,7 +265,6 @@ function kite(w: World, me: Vehicle, foe: Vehicle): World {
   return setMoveOrder(w, { kind: 'through', dest: { x: me.pos.x + Math.cos(away) * back, y: me.pos.y + Math.sin(away) * back } });
 }
 
-// One line about a turn: each fighting truck's place, speed, top goal and state, then the shots.
 export function turnLine(w: World, turn: number): string {
   const trucks = w.vehicles.filter((v) => v.id !== w.player.vehicleId || dist(v.pos, PARKED) > 1).map((v) =>
     `${v.id} ${v.pos.x.toFixed(1)},${v.pos.y.toFixed(1)} v${v.speed.toFixed(1)} ${v.brain?.goals.at(-1)?.kind ?? v.order?.kind ?? '-'}${isDefeated(v) ? ' OUT' : ''}`);
@@ -316,10 +275,8 @@ export function turnLine(w: World, turn: number): string {
 const partHp = (v: Vehicle) => mountedParts(v).reduce((sum, p) => sum + p.hp, 0);
 const side = (): Side => ({ rounds: 0, hits: 0, odds: 0, damage: 0, speed: 0 });
 
-// leaver is the side that last dropped its fight while the other side fought on.
 type Count = { ids: Ids; a: Side; b: Side; crashes: number; leaver: 'a' | 'b' | null };
 
-// A truck is out once defeated or gone from the world. The player truck is out once the player is not active.
 function inFight(w: World, ids: string[]): Vehicle[] {
   return w.vehicles.filter((v) => ids.includes(v.id) && !isDefeated(v) && (v.id !== w.player.vehicleId || w.player.state === 'active'));
 }
@@ -354,7 +311,6 @@ function countMoves(w: World, c: Count): void {
   c.crashes += w.events.filter((e) => e.t === 'collision' && across(e.a, e.b)).length;
 }
 
-// Part HP each truck lost this turn goes to the other side.
 function countDamage(w: World, c: Count, before: Map<string, number>): void {
   for (const v of w.vehicles) {
     const lost = Math.max(0, (before.get(v.id) ?? 0) - partHp(v));
@@ -373,7 +329,6 @@ function outcomeOf(w: World, c: Count): Outcome | null {
   return null;
 }
 
-// A scripted driver never leaves, and a brain stays while its top goal is a fight.
 function staysInFight(v: Vehicle): boolean {
   return !v.brain || topGoal(v)?.kind === 'fight';
 }
@@ -384,14 +339,12 @@ function noteLeaver(w: World, c: Count): void {
   if (aStays !== bStays) c.leaver = aStays ? 'b' : 'a';
 }
 
-// The side that last left while the other fought on. With none, the side farther from the middle of the fight.
 function fledSide(a: Vehicle[], b: Vehicle[], leaver: 'a' | 'b' | null): Outcome {
   if (leaver) return `${leaver} fled`;
   const away = (side: Vehicle[]) => Math.max(...side.map((v) => dist(v.pos, CENTER)));
   return away(a) > away(b) ? 'a fled' : 'b fled';
 }
 
-// Plays one turn and counts it. Returns the next physics drive.
 function playTurn(w: World, d: Drive, c: Count, arena: boolean): { w: World; d: Drive } {
   const before = new Map(w.vehicles.map((v) => [v.id, partHp(v)]));
   let next: Drive | null = null;
@@ -405,8 +358,6 @@ function playTurn(w: World, d: Drive, c: Count, arena: boolean): { w: World; d: 
   return { w, d: next! };
 }
 
-// Arena duels continue after settlements. A real turn resolves each plea or surrender, then surviving opponents
-// resume their feud for the next turn. Open-ground fights keep the game's normal peace outcomes.
 function keepArenaFight(w: World, ids: Ids): void {
   const a = inFight(w, ids.a);
   const b = inFight(w, ids.b);
@@ -420,7 +371,6 @@ function keepArenaFight(w: World, ids: Ids): void {
   }
 }
 
-// The scripted driver's orders for the turn, at the nearest foe still fighting. Brains need none.
 function steer(w: World, fight: Fight, c: Count): World {
   const policy = scriptedTruck(fight)?.driver as Policy | undefined;
   if (!policy) return w;
@@ -428,7 +378,6 @@ function steer(w: World, fight: Fight, c: Count): World {
   return orders(w, policy, fight.orbit, nearest(me, inFight(w, c.ids.b)));
 }
 
-// watch, when given, sees the world after every turn, for traces and custom counts.
 export function runFight(fight: Fight, watch?: (w: World, turn: number) => void): FightReport {
   const start = setup(fight);
   let w = start.w;
@@ -437,7 +386,7 @@ export function runFight(fight: Fight, watch?: (w: World, turn: number) => void)
   let outcome: Outcome | null = null;
   let turns = 0;
   while (outcome === null && turns < fight.maxTurns) {
-    if (w.player.call) w = hangUp(w); // a raider demand; the fight goes on
+    if (w.player.call) w = hangUp(w);
     w = steer(w, fight, c);
     ({ w, d } = playTurn(w, d, c, fight.arena !== null));
     turns++;
@@ -448,7 +397,6 @@ export function runFight(fight: Fight, watch?: (w: World, turn: number) => void)
   return { fight, outcome: outcome ?? 'timeout', turns, crashes: c.crashes, a: c.a, b: c.b, bHpLeft: outcome === 'won' ? hpLeft(w, c.ids.b) : null };
 }
 
-// The share of max part HP the trucks keep, read from the world and from wrecks that left it.
 function hpLeft(w: World, ids: string[]): number {
   const parts = [...w.vehicles, ...w.removed].filter((v) => ids.includes(v.id)).flatMap((v) => mountedParts(v));
   return parts.reduce((a, p) => a + p.hp, 0) / parts.reduce((a, p) => a + maxHp(p), 0);
@@ -458,7 +406,6 @@ export type Group = { a: string; b: string; reports: FightReport[] };
 
 const lineupLabel = (trucks: Truck[]) => trucks.map((t) => t.label).join('+');
 
-// Groups reports by the two lineups, in run order.
 export function groups(reports: FightReport[]): Group[] {
   const out = new Map<string, Group>();
   for (const r of reports) {
