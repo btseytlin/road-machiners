@@ -49,9 +49,4 @@ export class OptionsPanel {
     this.close();
     this.onClose?.();
   }
-
-  toggle(): void {
-    if (this.root) this.close();
-    else this.open();
-  }
 }
