@@ -114,7 +114,7 @@ In-character and out-of-character info is separated. For example, in talking NPC
 
 Roaming is the sandbox every section above describes. Another mode is a separate world picked at New game, and it changes only the rules it names. Every mode keeps the world settings, the truck, driving and tactical combat.
 
-Gauntlet is a highway combat run on Icarus's roads: a seeded course of stretches between outposts, fought against escalating hostile groups, with no traffic, salvage or shops. The committee approved these exceptions for Gauntlet only:
+Gauntlet is a highway combat run on its own map, never on Icarus: an endless generated four-lane highway north, with outposts as milestones. The land ahead is generated as the player reaches each outpost, seamless with the last, and hostile groups grow and arm up for eight stretches, then hold. It has no traffic, salvage or shops. The committee approved these exceptions for Gauntlet only:
 
 - Combat: hostile groups find the player and fight to the wreck. A fight ends when a truck is wrecked or the two part. A wreck leaves no loot, and beating a truck pays at the next outpost.
 - Defeat and recovery: nobody is knocked out. A beaten NPC is wrecked, and a beaten player ends the run. A stranded player with no way to patch ends the run. There are no tows, beacon or town patches. Restart run starts a new run with the same settings.
