@@ -14,6 +14,7 @@ import { AGENT_NETWORK, GAME_DIR, PROXY_NAME, PROXY_PORT, type AgentSession, typ
 
 export const CHECKS_TIMEOUT_MARK = 'the checks ran past their';
 const CLIENT_GRACE_MINUTES = 2;
+const REMOVE_TIMEOUT_MS = 60_000;
 
 const FACTORY_LABEL = 'factory=1';
 
@@ -210,21 +211,21 @@ async function runLimited(run: Run, log: string, limitMinutes: number | undefine
   if (limitMinutes === undefined) return run('docker', args([]), { logPath: log });
   const name = `factory-checks-${randomUUID()}`;
   const limit = removeAfter(run, name, limitMinutes);
-  const result = await run('docker', args(['--name', name]), { logPath: log, timeoutMs: (limitMinutes + CLIENT_GRACE_MINUTES) * 60_000 });
-  const removal = await limit.end();
+  let result: RunResult;
+  try {
+    result = await run('docker', args(['--name', name]), { logPath: log, timeoutMs: (limitMinutes + CLIENT_GRACE_MINUTES) * 60_000 });
+  } finally {
+    limit.cancel();
+  }
+  const removal = await limit.removal();
   if (removal !== null) throw checksTimedOut(log, limitMinutes, removal);
   return result;
 }
 
-function removeAfter(run: Run, name: string, minutes: number): { end: () => Promise<RunResult | null> } {
+function removeAfter(run: Run, name: string, minutes: number): { cancel: () => void; removal: () => Promise<RunResult | null> } {
   let removal: Promise<RunResult> | null = null;
-  const timer = setTimeout(() => { removal = run('docker', ['rm', '-f', name]); }, minutes * 60_000);
-  return {
-    end: async () => {
-      clearTimeout(timer);
-      return removal;
-    },
-  };
+  const timer = setTimeout(() => { removal = run('docker', ['rm', '-f', name], { timeoutMs: REMOVE_TIMEOUT_MS }); }, minutes * 60_000);
+  return { cancel: () => clearTimeout(timer), removal: async () => removal };
 }
 
 function checksTimedOut(log: string, minutes: number, removal: RunResult): Error {

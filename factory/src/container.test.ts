@@ -374,7 +374,7 @@ describe('usage limit', () => {
       const name = started.args[started.args.indexOf('--name') + 1];
       expect(name).toMatch(/^factory-checks-/);
       expect(started.opts?.timeoutMs).toBe(47 * 60_000);
-      expect(calls.map((call) => call.args.join(' '))).toContain(`rm -f ${name}`);
+      expect(calls.find((call) => call.args.join(' ') === `rm -f ${name}`)?.opts?.timeoutMs).toBe(60_000);
       expect(readFileSync(log, 'utf8')).toMatch(new RegExp(`tests and typecheck\n\nCheckTimeoutError: .*${CHECKS_TIMEOUT_MARK} 45 minute limit`));
     });
 
@@ -385,6 +385,19 @@ describe('usage limit', () => {
       await vi.advanceTimersByTimeAsync(60 * 60_000);
       expect(done.calls.some((call) => call.args[0] === 'rm')).toBe(false);
       await expect(dockerContainer(fakeRun(1).run, cfg, 'merge---x').shell('/c', 'x', '/l', {}, {}, 45)).rejects.toThrow('exit 1');
+    });
+
+    it('removes nothing later when the run could not start', async () => {
+      vi.useFakeTimers();
+      const calls: string[] = [];
+      const run: Run = async (_cmd, args) => {
+        calls.push(args.join(' '));
+        if (args[0] === 'run' && args[1] === '--rm') throw new Error('spawn docker ENOENT');
+        return { code: 0, stdout: args[0] === 'inspect' ? 'true sha:1' : args[0] === 'image' ? 'sha:1\n' : '', stderr: '' };
+      };
+      await expect(dockerContainer(run, cfg, 'merge---x').shell('/c', 'x', '/l', {}, {}, 45)).rejects.toThrow('ENOENT');
+      await vi.advanceTimersByTimeAsync(60 * 60_000);
+      expect(calls.some((call) => call.startsWith('rm'))).toBe(false);
     });
 
     it('names no container and sets no limit without one', async () => {

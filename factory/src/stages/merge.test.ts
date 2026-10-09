@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EMPTY_STATE, readState, updateState, writeState } from '../state';
 import { RELEASE_TASK_LABEL, STUCK_LABEL, type AgentRun, type Card, type Ctx } from '../types';
@@ -197,6 +197,23 @@ describe('merge queue', () => {
     expect(runs).toHaveLength(1);
     expect(runs[0]!.prompt).toContain('expected 1 to be 2');
     expect(calls).toContain('push head1 dev');
+  });
+
+  it('judges each run by its own lines of the shared checks log, so a real failure after a hung run reaches the agent', async () => {
+    const outputs = [HUNG, "src/a.ts(1,1): error TS2322: Type 'string' is not assignable to type 'number'."];
+    const ctx = fakeCtx();
+    ctx.container.shell = async (_dir: string, _script: string, log: string) => {
+      calls.push('checks');
+      const output = outputs.shift();
+      if (output === undefined) return;
+      appendFileSync(log, `${output}\n`);
+      throw new Error('shell failed with exit 2');
+    };
+    await merge(ctx);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]!.prompt).toContain('error TS2322');
+    expect(runs[0]!.prompt).not.toContain('ran past their');
+    expect(calls.filter((call) => call === 'checks')).toHaveLength(3);
   });
 
   it('lets a slow run that ends inside its limit pass, and notes its progress every 5 minutes', async () => {

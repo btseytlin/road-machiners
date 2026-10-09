@@ -141,12 +141,13 @@ const PROGRESS_MS = 5 * 60_000;
 
 export async function runChecks(ctx: Ctx, at: { stage: Stage; issue: number | null }, dir: string, script: string, log: string, env: Record<string, string>): Promise<string | null> {
   const started = Date.now();
+  const from = existsSync(log) ? statSync(log).size : 0;
   const progress = setInterval(() => ctx.log(at.stage, at.issue, checksProgress(log, started)), PROGRESS_MS);
   try {
     await ctx.container.shell(dir, script, log, env, testCacheMount(ctx), ctx.cfg.checksTimeoutMinutes);
     return null;
   } catch (error) {
-    return checkFailure(log, error);
+    return checkFailure(log, error, from);
   } finally {
     clearInterval(progress);
   }
@@ -179,9 +180,10 @@ export async function checkUntilReal(check: () => Promise<string | null>, onTime
 
 const FAILURE_TAIL_LINES = 150;
 
-export function checkFailure(log: string, error: unknown): string {
+function checkFailure(log: string, error: unknown, from: number): string {
   const message = error instanceof Error ? error.message : String(error);
-  const tail = existsSync(log) ? readFileSync(log, 'utf8').split('\n').slice(-FAILURE_TAIL_LINES).join('\n') : message;
+  const written = existsSync(log) ? readFileSync(log).subarray(from).toString('utf8') : '';
+  const tail = written.trim() === '' ? message : written.split('\n').slice(-FAILURE_TAIL_LINES).join('\n');
   return stripAnsi(tail);
 }
 
