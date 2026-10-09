@@ -45,7 +45,7 @@
   line-height: 1;
   white-space: nowrap;
 }
-#ui :is(.btn-s, td button, .tabs.sub > button, .weapon-head button, .log-expand, .tip-close, .aim-body) {
+#ui :is(.btn-s, td button, .tabs.sub > button, .weapon-head button, .log-expand, .tip-close) {
   height: var(--btn-h-s);
   padding: 0 var(--space-4);
   font-size: var(--text-dense);
@@ -121,13 +121,27 @@
   background: var(--accent);
 }
 
-/* A note that opens over its anchor on hover and focus. */
+/* The one look of a chosen item: accent border and accent wash. A pressed toggle, a picked card and a picked tile all use it. */
+#ui .selected,
+#ui button.on {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+/* A control that cannot be used now. It keeps hover and focus, and its tooltip says why. */
+#ui [aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* A note that opens over its anchor on hover and focus. Words in the UI face, numbers in .num. It also gives the reason
+   for a disabled control, as one short fact like "Need 12 M more". */
 .tooltip {
   padding: var(--space-4) var(--space-5);
   background: var(--surface-raised);
   border: 1px solid var(--line-bright);
   color: var(--ink);
-  font: var(--text-dense) var(--font-mono);
+  font: var(--text-dense) var(--font-ui);
   text-align: left;
   white-space: normal;
 }
@@ -149,6 +163,43 @@
   color: var(--ink);
   font: var(--text-dense) var(--font-ui);
   white-space: nowrap;
+}
+
+/* A line of a tooltip breakdown: the label on the left in the UI face, the value on the right in mono. */
+.tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+.tooltip-row > .num {
+  text-align: right;
+}
+
+/* An amount of money: the M's coin, sized by the text around it, then the number. */
+.amount {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.coin {
+  display: inline-block;
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+}
+.coin svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.coin-face {
+  fill: var(--coin-face);
+  stroke: var(--coin-rim);
+}
+.coin-mark {
+  stroke: var(--coin-mark);
 }
 
 /* A number read at a glance, in the mono face. */

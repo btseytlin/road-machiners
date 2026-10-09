@@ -27,9 +27,23 @@ export const PIECES: Piece[] = [
   { name: ".meter", note: "A bar that fills from the left.", build: () => meter("meter", 70) },
   { name: ".meter.progress", note: "A bar for timed work.", build: () => meter("meter progress", 40) },
   { name: ".meter.broken", note: "A bar of a broken part.", build: () => meter("meter broken", 100) },
-  { name: ".tooltip", note: "A note that opens over its anchor.", build: () => sample("tooltip", "Load: -10 km/h") },
+  { name: ".selected", note: "The one look of a chosen item. A pressed button.on uses it too.", build: () => sample("selected tile", "Selected") },
+  { name: '[aria-disabled="true"]', note: "A control that cannot be used now. It keeps hover and focus.", build: () => disabled() },
+  { name: ".tooltip", note: "A note that opens over its anchor. It also gives a disabled reason.", build: () => sample("tooltip", "Need 12 M more") },
+  { name: ".tooltip-row", note: "Label on the left, value on the right, for breakdowns.", build: () => breakdown() },
   { name: ".num", note: "A number in the mono face.", build: () => text("span", "num", "1 240") },
 ];
+
+function disabled(): HTMLElement {
+  const button = text("button", "", "Buy");
+  button.setAttribute("aria-disabled", "true");
+  return button;
+}
+
+function breakdown(): HTMLElement {
+  const row = (label: string, value: string): HTMLElement => el("div", { class: "tooltip-row" }, el("span", {}, label), el("span", { class: "num" }, value));
+  return el("div", { class: "tooltip" }, row("Base", "120 km/h"), row("Load", "−10 km/h"));
+}
 
 function meter(cls: string, percent: number): HTMLElement {
   const fill = el("span", {});

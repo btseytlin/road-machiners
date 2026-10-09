@@ -95,39 +95,193 @@
 .help .version.world-setup {
   margin-top: 0;
 }
-/* The hover panel grows with the hit table down to the log, since the mouse stays on the truck and cannot scroll it. */
 .info {
-  right: var(--hud-inset);
-  top: var(--hud-hover-top);
-  width: var(--inspection-width);
-  min-height: var(--inspection-height);
-  /* Stops above the log. */
-  max-height: calc(100dvh - var(--hud-hover-top) - var(--icon-hero) * 4 - var(--space-5) - var(--hud-gap));
-  max-width: calc(100vw - 2 * var(--hud-inset));
+  right: var(--space-7);
+  width: var(--dock-width);
   box-sizing: border-box;
-  overflow: auto;
+  overflow: hidden;
   font-size: var(--text-dense);
+  z-index: var(--z-hud);
 }
-.info .aim-line {
+.info-content {
   display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin: var(--space-2) 0;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+.info-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+}
+.info-name {
+  flex-shrink: 0;
   white-space: nowrap;
+  font-size: var(--text-lead);
+  color: var(--ink-title);
 }
-.info .aim-body {
-  cursor: crosshair;
+.info-head .tag {
+  margin-left: auto;
 }
-.info .aim-body[aria-pressed="true"] {
-  border-color: var(--alarm);
+.info-quiet {
+  min-width: 0;
+  color: var(--ink-muted);
 }
-.info .aim-body .condition-aim {
-  position: static;
-  margin-left: var(--space-2);
+.info-head .info-quiet {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
-/* The radio steps away while the hover panel overlaps it. Hud.keepRadioClear decides. */
-#ui .radio.away {
-  visibility: hidden;
+.info-state {
+  margin-top: var(--space-1);
+  color: var(--ink);
+}
+.info-state.info-quiet {
+  min-width: 0;
+  color: var(--ink-muted);
+}
+.info-head .info-quiet {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.info-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-rows: minmax(0, 1fr);
+  column-gap: var(--space-5);
+  margin-top: var(--space-4);
+}
+.info-draw {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.info .condition-aim {
+  border-color: var(--accent);
+}
+.info-column {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.hitcard {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+}
+.hc-well {
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface-sunk);
+  border-left: var(--space-1) solid var(--line);
+}
+.hc-well.theirs {
+  flex: 1;
+  border-left-color: var(--danger);
+}
+.hc-cap {
+  font-size: var(--text-caption);
+  color: var(--ink-muted);
+}
+.hc-none {
+  margin-top: var(--space-2);
+  color: var(--ink-faint);
+}
+.hc-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-3);
+  align-items: baseline;
+  margin-top: var(--space-1);
+}
+.hc-gun {
+  min-width: 0;
+  color: var(--ink);
+  font-size: var(--text-caption);
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.hc-key {
+  margin-right: var(--space-2);
+  font: var(--text-caption) var(--font-mono);
+  color: var(--ink-muted);
+}
+.hc-pct {
+  font: var(--text-dense) var(--font-mono);
+  text-align: right;
+}
+.hc-pct.mine,
+.hc-pct.theirs {
+  text-decoration: underline dotted var(--ink-faint);
+  text-underline-offset: var(--space-2);
+  cursor: help;
+}
+.hc-pct.mine {
+  color: var(--ink);
+}
+.hc-pct.mine.high {
+  color: var(--ink-bright);
+}
+.hc-pct.theirs {
+  color: var(--danger-ink);
+}
+.hc-pct.theirs.high {
+  color: var(--danger-bright);
+}
+.hc-pct.zero {
+  color: var(--ink-faint);
+}
+.hc-row.blocked {
+  grid-template-columns: minmax(0, 1fr);
+}
+.hc-row.blocked .hc-gun {
+  color: var(--ink-faint);
+}
+.hc-pct.blocked {
+  font-size: var(--text-caption);
+  text-align: left;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--font-ui);
+  color: var(--ink-faint);
+}
+.hc-tip {
+  display: none;
+  position: absolute;
+  right: calc(100% + var(--hud-gap));
+  z-index: var(--z-popup);
+  width: max-content;
+  grid-template-columns: 1fr auto;
+  column-gap: var(--space-4);
+  row-gap: var(--space-1);
+  font: var(--text-dense) var(--font-ui);
+  text-align: left;
+  cursor: default;
+}
+.hc-pct:hover > .hc-tip,
+.hc-pct:focus > .hc-tip {
+  display: grid;
+}
+.hc-tip .v {
+  font-family: var(--font-mono);
+  text-align: right;
+}
+.hc-tip .base {
+  color: var(--ink-muted);
+}
+.hc-tip .up {
+  color: var(--good);
+}
+.hc-tip .down {
+  color: var(--danger-ink);
 }
 /* One row per part: icon, name, HP and a condition bar under the name. */
 .info-part {
@@ -149,33 +303,6 @@
   grid-column: 2 / 4;
   height: var(--meter-s);
   margin-top: var(--space-1);
-}
-#ui .hitcard {
-  border-top: 1px solid var(--line-strong);
-  margin-top: var(--space-6);
-  padding-top: var(--space-3);
-  font-size: var(--text-dense);
-}
-.hitcard .hc-head {
-  margin: var(--space-3) 0 var(--space-1);
-  color: var(--ink-label);
-  font-size: var(--text-dense);
-}
-.hitcard .hc-row {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-6);
-}
-.hitcard .hc-chance {
-  font-size: var(--text-lead);
-  color: var(--good);
-}
-.hitcard .hc-row {
-  align-items: baseline;
-}
-.hitcard .hc-cause {
-  font-size: var(--text-dense);
-  margin-bottom: var(--space-1);
 }
 #ui .toast {
   left: 50%;

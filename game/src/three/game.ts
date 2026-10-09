@@ -308,7 +308,7 @@ export class Game {
       recenter: () => this.runKey("KeyF"),
       ...aimActions({ world: () => this.world, selected: () => this.selected, canAim: () => this.anim === null && playerCanAct(this.world), apply: (w) => this.apply(w) }),
     }, radio);
-    this.hitCard = new HitCard(this.hud.getInspectionRoot());
+    this.hitCard = new HitCard(this.hud.getExchangeRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
     const saves = this.saves.menuActions(() => this.world);
     this.menu = new GameMenu(saves, () => this.anim !== null, () => setupLabel(this.world.setup));

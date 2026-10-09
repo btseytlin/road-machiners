@@ -84,6 +84,14 @@
 #ui button.switch:hover {
   border-color: var(--line-hover);
 }
+/* Chosen hardware keeps its metal and takes the accent edge of the shared selected look. */
+#ui :is(button.switch, .truck-instrument):is(.selected, .on) {
+  border-color: var(--accent);
+  box-shadow:
+    inset 0 1px 0 var(--bevel-light),
+    inset 0 -1px 0 var(--bevel-dark),
+    0 0 0 1px var(--accent);
+}
 .switch::before,
 .switch::after {
   content: "";

@@ -6,10 +6,11 @@ import { corePart } from '../sim/grid';
 import type { GameEvent } from '../sim/types';
 import { addState } from '../sim/states';
 import { refreshVision } from '../sim/vision';
-import { eventText, formatNpcActivity, formatNpcCargo, formatNpcMark, formatNpcStates, formatNpcTraits } from './format';
+import { eventText, formatNpcActivity, formatNpcCargo, formatNpcMark, formatNpcStates, formatNpcTraits, formatVehicleState } from './format';
 import { PERK_NUMBERS } from '../data/skills';
 import { makePart } from '../sim/factory';
 import { addGoods, stowPart } from '../sim/inventory';
+import { kph } from './units';
 
 it('shows a visible NPC goal as its reason in a sentence, without naming its target', () => {
   const w = emptyWorld();
@@ -265,7 +266,36 @@ it('names both trucks, the destination and the fee in a tow between NPCs', () =>
   client.name = 'Client';
   refreshVision(w);
   expect(eventText(w, { t: 'towHitched', by: tower.id, client: client.id, site: 'kiln' })).toEqual({ text: 'Tower takes Client in tow to Kiln Camp.', cls: 'dim' });
-  expect(eventText(w, { t: 'towDone', by: tower.id, client: client.id, fee: 1250 })).toEqual({ text: 'Tower tows Client in and takes 13 M.', cls: 'dim' });
+  expect(eventText(w, { t: 'towDone', by: tower.id, client: client.id, fee: 1250 })).toEqual({ text: 'Tower tows Client in and takes 13 M\'s.', cls: 'dim' });
   expect(eventText(w, { t: 'towDropped', by: tower.id, client: client.id, reason: 'danger' })).toEqual({ text: 'Tower drops the tow of Client.', cls: 'dim' });
-  expect(eventText(w, { t: 'towDone', by: tower.id, client: w.player.vehicleId, fee: 1200 })).toEqual({ text: 'Tower tows you into town and takes 12 M.', cls: 'bad' });
+  expect(eventText(w, { t: 'towDone', by: tower.id, client: w.player.vehicleId, fee: 1200 })).toEqual({ text: 'Tower tows you into town and takes 12 M\'s.', cls: 'bad' });
+});
+
+describe('vehicle state line', () => {
+  it('reads Parked for a truck at rest', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'traders', 'hauler', [], { x: 32, y: 30 });
+    npc.brain = npcBrain('trader', npc.pos, ['trader']);
+    npc.speed = 0;
+    expect(formatVehicleState(w, npc)).toBe('Parked');
+  });
+
+  it('reads Moving with the speed, then the shut-down turns, the activity and the states, joined by full stops', () => {
+    const w = emptyWorld();
+    const me = playerVehicle(w);
+    const npc = addVehicle(w, 'scavengers', 'scout', [], { x: 32, y: 30 });
+    npc.brain = { ...npcBrain('scavenger', npc.pos, ['scavenger']), goals: [{ kind: 'flee', targetId: null, destination: null, phase: 'act', reason: 'avoid a costly fight' }] };
+    npc.speed = 2;
+    npc.shutDown = { from: w.turn, until: w.turn + 2 };
+    addState(w, 'turnedDown', npc.id, me.id, { kind: 'none' });
+    refreshVision(w);
+    expect(formatVehicleState(w, npc)).toBe(`Moving, ${kph(2)} km/h. Shut down, 2 turns. Avoid a costly fight. You turned down its tow`);
+  });
+
+  it('leaves out the activity and states for a truck with no brain', () => {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'traders', 'hauler', [], { x: 32, y: 30 });
+    npc.speed = 0;
+    expect(formatVehicleState(w, npc)).toBe('Parked');
+  });
 });

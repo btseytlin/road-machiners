@@ -3,8 +3,9 @@
 
 import { partDef } from "../data/parts";
 import type { PartInstance, World } from "../sim/types";
-import { conditionTag, createIcon, footprint, headlineStat, partDetail, partIconEl, statChip, toneStyle } from "./cards";
+import { conditionTag, footprint, headlineStat, partDetail, partIconEl, statChip, toneStyle } from "./cards";
 import { el } from "./dom";
+import { moneyEl } from "./units";
 import { conditionStatus, conditionTier } from "./format";
 
 export type PartRow = {
@@ -67,7 +68,7 @@ export class PartRows {
       this.nameCell(r.part),
       statChip(headlineStat(r.world, r.part, r.base)),
       footprint(partDef(r.part.defId).w, partDef(r.part.defId).h),
-      el("span", { class: `price${r.payable ? "" : " bad"}`, title: r.payable ? "" : r.unpaidTitle }, createIcon("money"), `${r.price}`),
+      el("span", { class: `price${r.payable ? "" : " bad"}`, title: r.payable ? "" : r.unpaidTitle }, moneyEl(r.price)),
       el("span", { class: "chevron" }),
     );
     head.addEventListener("click", () => {
