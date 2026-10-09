@@ -45,10 +45,10 @@ INNER_HEIGHT = 13.0
 
 # Colors from src/render/palette.ts, the Salvage Yard family: rust plate and concrete over broken rock.
 COLORS = {
-    "plate": 0x5E3420,  # PAL.rust.side
-    "plate_b": 0x3A2418,  # PAL.rust.dark
-    "plate_c": 0x3A2E26,  # FACTION_COLORS.vultures.top
-    "rust": 0x8A4A2A,  # PAL.rust.top
+    "plate": 0x8A4A2A,  # PAL.rust.top
+    "plate_b": 0x5E3420,  # PAL.rust.side
+    "plate_c": 0x7A4630,  # between PAL.rust.top and PAL.rust.side
+    "rust": 0xA05C38,  # a shade over PAL.rust.top, the lit plate
     "concrete": 0xB8B8B0,  # FACTION_COLORS.convoys.top
     "concrete_b": 0x9A8A78,  # PAL.rock.top
     "pipe": 0x5A5A58,  # PAL.metal
@@ -77,7 +77,7 @@ def pipe_y(kit: Kit, name: str, y0: float, y1: float, x: float, z: float, r: flo
     kit.cylinder(name, r, y1 - y0, (x, (y0 + y1) / 2, z), mat, rot=(math.pi / 2, 0, 0), vertices=8)
 
 
-def rivets(kit: Kit, name: str, x0: float, x1: float, y: float, z0: float, z1: float, out: float, along_x: bool = True) -> None:
+def rivets(kit: Kit, name: str, x0: float, x1: float, y: float, z0: float, z1: float, out: float) -> None:
     """Rows of rivet strips on a plate face at y: thin vertical ribs every 0.8 m between x0 and x1."""
     n = max(1, int((x1 - x0) / 0.8))
     for k in range(n + 1):

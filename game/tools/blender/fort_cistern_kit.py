@@ -44,8 +44,8 @@ INNER_HEIGHT = 13.0
 
 # Colors from src/render/palette.ts. The green tarp and the teal tank carry the oasis identity.
 COLORS = {
-    "sheet": 0x8A8A84,  # PAL.metalLight, corrugated sheet
-    "sheet_b": 0x5E6A5A,  # PAL.roof[1], weathered green-grey sheet
+    "sheet": 0xB4B4AA,  # a shade over PAL.metalLight, new corrugated sheet
+    "sheet_b": 0x8A8A84,  # PAL.metalLight, weathered sheet
     "rust": 0x8A4A2A,  # PAL.rust.top
     "rust_dark": 0x5E3420,  # PAL.rust.side
     "tarp": 0x4A6A2A,  # PAL.palm, the green tarp
