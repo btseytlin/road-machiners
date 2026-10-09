@@ -120,10 +120,6 @@
   margin: 0 auto 0 0;
   font-size: var(--text-dense);
 }
-#ui .weapon-head button {
-  padding: 1px var(--space-2);
-  font: var(--text-caption) var(--font-ui);
-}
 .weapons fieldset {
   display: block;
   border: 0;

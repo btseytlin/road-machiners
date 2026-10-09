@@ -177,6 +177,11 @@
   --icon-3xl: 44px;
   --icon-hero: 56px;
 
+  /* Text button heights: small, medium (the plain button) and large */
+  --btn-h-s: 24px;
+  --btn-h-m: 32px;
+  --btn-h-l: 44px;
+
   /* Bars and pips */
   --meter-s: 3px;
   --meter-m: 4px;

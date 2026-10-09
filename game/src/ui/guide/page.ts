@@ -70,6 +70,7 @@ const GROUPS: Group[] = [
   { title: "Light and shade", prefixes: ["--bevel-", "--shade", "--shadow-", "--vignette", "--storm-"], sample: swatch },
   { title: "Spacing", prefixes: ["--space-"], sample: spaceSample },
   { title: "Corners", prefixes: ["--radius-"], sample: radiusSample },
+  { title: "Button heights", prefixes: ["--btn-"], sample: spaceSample },
   { title: "Icon and bar sizes", prefixes: ["--icon-", "--meter-", "--pip"], sample: spaceSample },
   { title: "Panel sizes", prefixes: ["--panel-", "--dock-", "--modal-"], sample: boxSample },
   {

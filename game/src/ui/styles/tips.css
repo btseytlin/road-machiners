@@ -9,11 +9,6 @@
   font-size: var(--text-body);
   z-index: var(--z-toast);
 }
-#ui .tip .tip-close {
-  padding: 0 var(--space-3);
-  font-size: var(--text-lead);
-  line-height: 1.2;
-}
 #ui .end-turn.auto {
   border-color: var(--accent-warm);
   color: var(--accent);

@@ -117,13 +117,6 @@
   white-space: nowrap;
 }
 .info .aim-body {
-  display: inline-flex;
-  align-items: center;
-  box-sizing: border-box;
-  padding: 0 var(--space-3);
-  height: var(--icon-m);
-  line-height: 1;
-  font-size: var(--text-label);
   cursor: crosshair;
 }
 .info .aim-body[aria-pressed="true"] {
@@ -198,9 +191,6 @@
   transform: translateX(-50%);
   padding: 0;
   border: 0;
-}
-.action button {
-  font-size: var(--text-body);
 }
 #ui .action:has(.cycle) {
   display: flex;
@@ -277,8 +267,4 @@
 .death .death-buttons {
   display: flex;
   gap: var(--space-5);
-}
-.death .death-buttons button {
-  font-size: var(--text-lead);
-  padding: var(--space-5) var(--space-8);
 }

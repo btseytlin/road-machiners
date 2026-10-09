@@ -29,21 +29,9 @@
 }
 
 /* Shop tabs carry an icon beside the label. */
-.town-shop > .tabs button {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) var(--space-6) var(--space-2) var(--space-4);
-}
 .town-shop > .tabs .icon {
   width: var(--icon-m);
   height: var(--icon-m);
-}
-.modal .tabs.sub button {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: var(--icon-xl);
 }
 .modal .tabs.sub .icon {
   width: var(--icon-m);
@@ -143,10 +131,6 @@
   margin: var(--space-2) 0 var(--space-3);
   font-size: var(--text-dense);
   text-align: left;
-}
-#ui button.card-compare {
-  padding: var(--space-1) var(--space-4);
-  font-size: var(--text-dense);
 }
 .card-foot {
   display: flex;

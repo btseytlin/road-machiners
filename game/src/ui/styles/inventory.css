@@ -45,11 +45,6 @@
 .town-shop th {
   padding: var(--space-1) var(--space-3);
 }
-.town-shop td button {
-  margin: 0;
-  padding: var(--space-1) var(--space-4);
-  white-space: nowrap;
-}
 .town-shop h3 {
   margin: var(--space-5) 0 0;
 }
@@ -90,8 +85,6 @@
 }
 .modal .tabs.sub button {
   min-width: 0;
-  padding: var(--space-1) var(--space-4);
-  font-size: var(--text-dense);
 }
 .inv-wrap {
   display: flex;

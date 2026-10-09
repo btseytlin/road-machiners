@@ -44,6 +44,26 @@ function scriptViolations(source: string): string[] {
   return [...colors, ...fonts];
 }
 
+const BUTTON_SELECTOR = /(?<![\w-])button\b|\.close\b|\.btn-/;
+const BUTTON_GEOMETRY = /^(?:min-|max-)?height$|^padding(?:-[a-z]+)?$|^font(?:-size)?$|^line-height$/;
+
+function selfSizingButtons(components: string): string[] {
+  const list = components.match(/:where\(:not\(([^)]*)\)\)/)?.[1];
+  if (!list) throw new Error("components.css lost its list of self-sizing buttons");
+  return list.split(",").map((c) => c.trim());
+}
+
+function buttonGeometry(css: string, selfSizing: string[]): string[] {
+  const body = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  const found: string[] = [];
+  for (const [, selectors, block] of body.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const owned = selectors!.split(",").filter((s) => BUTTON_SELECTOR.test(s) && !selfSizing.some((c) => s.includes(c)));
+    if (owned.length === 0) continue;
+    for (const d of declarations(`${block};`)) if (BUTTON_GEOMETRY.test(d.prop)) found.push(`${owned[0]!.trim()} { ${d.prop} }`);
+  }
+  return found;
+}
+
 const root = new URL("../../", import.meta.url);
 const read = (path: string): string => readFileSync(new URL(path, root), "utf8");
 
@@ -90,8 +110,22 @@ describe("scriptViolations", () => {
   });
 });
 
+describe("buttonGeometry", () => {
+  const tiles = ["inv-item"];
+
+  it("flags a button rule that sets height, padding or type size", () => {
+    expect(buttonGeometry(".a button { padding: 0; }", tiles)).toEqual([".a button { padding }"]);
+    expect(buttonGeometry(".close { font-size: 1em; } @media (x) { #ui .b button { height: 1px } }", tiles)).toEqual([".close { font-size }", "#ui .b button { height }"]);
+  });
+
+  it("passes width, placement, tiles and non-button rules", () => {
+    expect(buttonGeometry(".a button { width: 100%; margin-left: auto; } button.inv-item { padding: 2px; } .a { padding: 1px; }", tiles)).toEqual([]);
+  });
+});
+
 const styleDir = "src/ui/styles/";
 const drawings = new Set(["drawings.css"]);
+const buttonOwners = new Set(["components.css", "base.css", "drawings.css"]);
 const scripts = [
   ...readdirSync(new URL("src/ui/", root)).filter((f) => f.endsWith(".ts") && !f.endsWith(".test.ts")).map((f) => `src/ui/${f}`),
   "src/three/crash.ts",
@@ -109,6 +143,15 @@ describe("the game's styles", () => {
     for (const v of cssViolations(read("src/ui/style.css"), { geometry: true })) found.push(`style.css: ${v}`);
     for (const v of cssViolations(read("index.html"), { geometry: true })) found.push(`index.html: ${v}`);
     for (const f of scripts) for (const v of scriptViolations(read(f))) found.push(`${f}: ${v}`);
+    expect(found).toEqual([]);
+  });
+
+  it("size a text button only in components.css", () => {
+    const selfSizing = selfSizingButtons(read(styleDir + "components.css"));
+    const found: string[] = [];
+    for (const f of readdirSync(new URL(styleDir, root)).filter((f) => f.endsWith(".css") && !buttonOwners.has(f)))
+      for (const v of buttonGeometry(read(styleDir + f), selfSizing)) found.push(`${f}: ${v}`);
+    for (const v of buttonGeometry(read("src/ui/truck-condition.css"), selfSizing)) found.push(`truck-condition.css: ${v}`);
     expect(found).toEqual([]);
   });
 });

@@ -74,13 +74,8 @@
   font-weight: normal;
   font-size: var(--text-dense);
 }
-.modal td button {
-  font-size: var(--text-dense);
-  margin: var(--space-1) 0;
-}
 #ui .modal .close {
   position: absolute;
   right: var(--space-8);
   top: var(--space-9);
-  font-size: var(--text-dense);
 }

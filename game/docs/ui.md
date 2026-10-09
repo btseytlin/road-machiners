@@ -44,8 +44,9 @@ Use a shared piece before writing a new rule. A screen may add its own layout to
 - `.dock-panel` is a panel of the right dock: the log, the contracts and the radio.
 - `.notice` is a box at the top middle of the HUD that waits for a choice: rescue, stranded and dialogue.
 - `.panel-title` is the heading of a small HUD panel. A dialog uses a plain `h3`.
-- A plain `button` is the default size. `.btn-s` makes a small one for rows and cards. `.btn-l` makes a large one for a screen's main choice. `.btn-danger` marks a hostile action. `.on` marks a pressed toggle.
-- `.tabs` is a row of tab buttons, and `.tabs.sub` the smaller row inside a tab.
+- A text button has one of three heights: `--btn-h-s` 24px, `--btn-h-m` 32px and `--btn-h-l` 44px. A plain `button` is medium. `.btn-s` makes a small one for rows, cards, table cells and small panels. `.btn-l` makes a large one for a screen's main choice. `.btn-danger` marks a hostile action. `.on` marks a pressed toggle.
+- Only `components.css` sets a button's height, padding or type size. A screen file places a button and sets its width. The small group of buttons that size themselves are tiles and drawn hardware, and the list is in `components.css`. A new button joins a size, and the guard test fails when a screen file sizes one.
+- `.tabs` is a row of medium tab buttons, and `.tabs.sub` the small row inside a tab.
 - `.row` is a list line with a faint line under it. `.tile` is a boxed list item edged in its `--tone`.
 - `.chip` is a small boxed value. `.tag` is an outlined word in the color of its text.
 - `.meter` is a bar that fills from the left. `.s` and `.l` change its height. `.broken` turns the track to danger. `.progress` fills it with the accent for timed work and recharge.
