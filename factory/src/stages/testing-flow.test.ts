@@ -49,7 +49,8 @@ beforeEach(() => {
 });
 afterEach(() => rmSync(home, { recursive: true, force: true }));
 
-const TIMEOUT_FAILURE = ' FAIL  src/phys/drive.test.ts > climbs a hill\nError: Test timed out in 30000ms.\nIf this is a long-running test, pass a timeout value.\nError: [vitest-worker]: Timeout calling "onTaskUpdate"';
+const TIMEOUT_FAILURE = 'Error: [vitest-worker]: Timeout calling "onTaskUpdate"';
+const TEST_LIMIT_FAILURE = ' FAIL  src/sim/npc-rearm.test.ts > NPC rearm > waits out the service delay\nError: Test timed out in 300000ms.\nIf this is a long-running test, pass a timeout value.';
 const result = (cost: number) => `${JSON.stringify({ type: 'result', total_cost_usd: cost, duration_ms: 1000 })}\n`;
 const out = (run: AgentRun) => `${run.clone}/${run.dir}/.factory`;
 const APPROVAL = JSON.stringify({ description: 'A loud horn.', howToTry: 'Press H.' });
@@ -408,5 +409,13 @@ describe('captions', () => {
     expect(timeoutOnly(hung)).toBe(true);
     expect(timeoutOnly(hung.replace('45', '37.5'))).toBe(true);
     expect(timeoutOnly(` FAIL  src/a.test.ts > adds\nAssertionError: expected 1 to be 2\n${hung}`)).toBe(false);
+  });
+
+  it('counts a test or hook past its own limit as a real failure, never as load to run again', () => {
+    expect(timeoutOnly(TEST_LIMIT_FAILURE)).toBe(false);
+    expect(timeoutOnly(`${TEST_LIMIT_FAILURE}\n${TIMEOUT_FAILURE}`)).toBe(false);
+    expect(timeoutOnly(' FAIL  src/a.test.ts [ src/a.test.ts ]\nError: Hook timed out in 120000ms.')).toBe(false);
+    const spin = '[test-limit] FAIL src/sim/npc-rearm.test.ts > NPC rearm > waits out the service delay\nTestLimitError: the test ran 310 s, past its 300 s limit, without yielding.\nError: Channel closed';
+    expect(timeoutOnly(spin)).toBe(false);
   });
 });

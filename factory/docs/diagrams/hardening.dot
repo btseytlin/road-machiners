@@ -21,8 +21,8 @@ digraph hardening {
   XN [label="Done", fillcolor="#f3f4f6", color="#6b7280"];
   edge [color="#dc2626", fontcolor="#dc2626", style=dashed, penwidth=1.3];
   MM -> MM [label="conflict: the merge\nsession resolves it"];
-  MC -> MM [label="failure: back into\nthe merge session"];
-  MC -> MC [label="timed out or past\nFACTORY_CHECKS_TIMEOUT_MINUTES:\nrun again, at most 3 runs"];
+  MC -> MM [label="failure, or a test past\nits own limit: back into\nthe merge session"];
+  MC -> MC [label="run past\nFACTORY_CHECKS_TIMEOUT_MINUTES:\nrun again, at most 3 runs"];
   MP -> MM [label="base moved:\nmerge it in, check again"];
   XS -> MM [label="timed out or died:\nthe stuck sweep releases\nhalf the batch"];
   MP -> MM [label="cards left: the next\njob takes the next batch"];

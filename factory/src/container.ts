@@ -23,7 +23,7 @@ function baseArgs(jobId: string | null, cpus: string | null, testWorkers: number
   const pin = cpus === null ? [] : ['--cpuset-cpus', cpus];
   const workers = testWorkers === null ? [] : ['-e', `TEST_WORKERS=${testWorkers}`];
   const card = gpu ? ['--gpus', 'all', '-e', 'NVIDIA_DRIVER_CAPABILITIES=all'] : [];
-  return ['run', '--rm', '--label', FACTORY_LABEL, ...label, ...pin, ...workers, ...card, '-e', 'TEST_TIMEOUTS=off'];
+  return ['run', '--rm', '--label', FACTORY_LABEL, ...label, ...pin, ...workers, ...card, '-e', 'TEST_TIMEOUTS=shared'];
 }
 
 const PEAK_MARK = 'FACTORY_MEMORY_PEAK';

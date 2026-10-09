@@ -160,7 +160,7 @@ export function checksProgress(log: string, started: number): string {
   return `the checks still run after ${minutes} min, log ${Math.round(statSync(log).size / 1024)} KB, last step: ${step}`;
 }
 
-const TIMEOUT_LINE = new RegExp(`(Test|Hook) timed out in \\d+ms|Timeout calling "onTaskUpdate"|${CHECKS_TIMEOUT_MARK} [\\d.]+ minute limit`);
+const TIMEOUT_LINE = new RegExp(`Timeout calling "onTaskUpdate"|${CHECKS_TIMEOUT_MARK} [\\d.]+ minute limit`);
 
 export function timeoutOnly(failure: string): boolean {
   const errors = failure.split('\n').filter((line) => /Error:|timed out in/.test(line));

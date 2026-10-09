@@ -58,7 +58,7 @@ Hermes can put a card in any position with `factory move`. The board column is t
 
 ## Testing column
 
-Testing is one job. The testing session merges the base, plays the build, fixes what it finds and writes the post text and its screenshots. Then the factory pushes the branch and runs the post checkpoint in a fresh clone: the typecheck, the playtest and the build. The full suite runs once, at the merge checkpoint. A failure goes back into the same session. A passing build is published and posted to the committee.
+Testing is one job. The testing session merges the base, plays the build, fixes what it finds and writes the post text and its screenshots. Then the factory pushes the branch and runs the post checkpoint in a fresh clone: the typecheck, the playtest and the build. The full suite runs once, at the merge checkpoint. A failure goes back into the same session, and a test past its own time limit is a failure too. A passing build is published and posted to the committee.
 
 ![Testing column](diagrams/testing.svg)
 
@@ -69,7 +69,7 @@ Testing is one job. The testing session merges the base, plays the build, fixes 
 
 Approve moves a card to Hardening. The hardening session merges the base, attacks the change, runs `/code-review` and fixes every finding. No checks run there. Then the card moves to Merging.
 
-A merge job takes up to three Merging cards of one base, the oldest first. It merges them into a clone of the base, and the merge session resolves any conflict. The merge checkpoint runs the full suite, the typecheck, the playtest and the build on the result. Each run of the checks stops at `FACTORY_CHECKS_TIMEOUT_MINUTES` and counts as a timeout, which runs them again, at most 3 times. A failure goes back into the merge session. The base takes only a result that passed. If the base moved during the checks, the job merges it in and checks again. A failed batch labels each of its cards `factory-stuck`. When a batch timed out or its job died, the stuck sweep releases half its cards only after no ready Merging card of that base remains and no merge job is running; the three-card cap still applies to every new job. A single repeatedly failing card stays stuck for investigation. Each passing batch is pushed before the next job takes the remaining cards, so later failures cannot lose earlier progress.
+A merge job takes up to three Merging cards of one base, the oldest first. It merges them into a clone of the base, and the merge session resolves any conflict. The merge checkpoint runs the full suite, the typecheck, the playtest and the build on the result. Each game test and hook has its own finite limit, and a test past it is a failure that names the test. Each run of the checks stops at `FACTORY_CHECKS_TIMEOUT_MINUTES` and counts as a timeout, which runs them again, at most 3 times. A failure goes back into the merge session. The base takes only a result that passed. If the base moved during the checks, the job merges it in and checks again. A failed batch labels each of its cards `factory-stuck`. When a batch timed out or its job died, the stuck sweep releases half its cards only after no ready Merging card of that base remains and no merge job is running; the three-card cap still applies to every new job. A single repeatedly failing card stays stuck for investigation. Each passing batch is pushed before the next job takes the remaining cards, so later failures cannot lose earlier progress.
 
 ![Hardening and Merging columns](diagrams/hardening.svg)
 
