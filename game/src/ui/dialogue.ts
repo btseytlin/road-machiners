@@ -13,6 +13,7 @@ import type { CallVar, CallVars, GameEvent, World } from '../sim/types';
 import { playerSees } from '../sim/vision';
 import { playerCanAct } from '../sim/world';
 import { el, isBrowserChord, panel } from './dom';
+import { renderLine } from './quest-text';
 import { fuelLiters, meters, moneyText } from './units';
 import { npcName } from '../sim/spawn';
 
@@ -151,27 +152,33 @@ const KEY_DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 
 export class DialoguePanel {
   private readonly root = panel('dialogue');
   private readonly horn: Horn;
+  private drawn = '';
 
   constructor(private readonly host: DialogueHost) {
     this.horn = new Horn(host);
     this.root.style.display = 'none';
+    this.root.addEventListener('click', () => this.root.classList.add('qt-done'));
     window.addEventListener('keydown', (e) => this.onKey(e), true);
   }
 
   render(w: World): void {
     const call = w.player.call;
     this.root.style.display = call ? '' : 'none';
-    if (!call) return this.root.replaceChildren();
+    if (!call) {
+      this.drawn = '';
+      return this.root.replaceChildren();
+    }
+    const offered = currentOptions(w);
+    const key = JSON.stringify([call, offered.map((o) => o.text)]);
+    if (key === this.drawn) return;
+    this.drawn = key;
     const npc = vehicleById(w, call.with);
     this.root.style.borderLeftColor = `#${FACTION_COLORS[npc.faction].top.toString(16).padStart(6, '0')}`;
-    const options = currentOptions(w).map((o, i) =>
-      el('button', { class: 'dialogue-option', onclick: () => this.choose(i) }, `${i + 1}. ${o.text}`),
-    );
-    this.root.replaceChildren(
-      el('div', { class: 'dialogue-speaker' }, `Radio: ${npcName(npc)}`),
-      el('div', { class: 'dialogue-line' }, `“${fillLine(call.line.text, call.line.vars)}”`),
-      el('div', { class: 'dialogue-options' }, ...options),
-    );
+    this.root.classList.remove('qt-done');
+    const options = offered.map((o, i) => el('button', { class: 'dialogue-option', onclick: () => this.choose(i) }, `${i + 1}. ${o.text}`));
+    const line = renderLine(`“${fillLine(call.line.text, call.line.vars)}”`, [], 0).el;
+    line.classList.add('dialogue-line');
+    this.root.replaceChildren(el('div', { class: 'dialogue-speaker' }, `Radio: ${npcName(npc)}`), line, el('div', { class: 'dialogue-options' }, ...options));
   }
 
   private onKey(e: KeyboardEvent): void {

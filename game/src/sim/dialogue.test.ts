@@ -3,7 +3,8 @@ import { PERK_NUMBERS, XP_SOURCES } from '../data/skills';
 import { SHOPS } from '../data/market';
 import { buyPrice, sellPrice } from './economy';
 import { goodBasePrice, goodValue, vehicleValue } from './market';
-import { BUSY_LINE, TRAIT_TALK, END, HONK_RANGE, HUB, REFUSED, TOPICS, type Topic } from '../data/dialogue';
+import { BUSY_LINE, TRAIT_TALK, END, handoffQuest, HONK_RANGE, HUB, REFUSED, TOPICS, type Topic } from '../data/dialogue';
+import { QUESTS, questView } from './quests';
 import { REGION } from '../data/region';
 import { STORY_WRECKS } from '../data/salvage';
 import { playerVehicle } from './damage';
@@ -54,6 +55,11 @@ describe('topic data', () => {
       while (queue.length > 0) {
         for (const option of topic.nodes[queue.pop()!].options) {
           if (option.go === HUB || option.go === END) continue;
+          const quest = handoffQuest(option.go);
+          if (quest) {
+            expect(QUESTS.quests[quest]?.checkpoints, `${topic.id} → ${option.go}`).toContain('start');
+            continue;
+          }
           expect(topic.nodes[option.go], `${topic.id} → ${option.go}`).toBeDefined();
           if (!reached.has(option.go)) { reached.add(option.go); queue.push(option.go); }
         }
@@ -862,6 +868,22 @@ describe('army wagon topic', () => {
 
     expect(next.player.notes.map((n) => n.id)).toEqual(['wagonBowl', 'wagonRoad']);
     expect(next.player.rumored).toEqual([]);
+    expect(next.player.talked[npc.id]?.armyWagon).toBe('done');
+  });
+
+  it('hands the talk over to the driver quest: the call ends and the quest opens in the same command', () => {
+    const { w, npc } = wagonWorld();
+    w.player.notes = [{ id: 'wagonBowl', turn: 0 }];
+
+    let next = callVehicle(w, npc.id);
+    next = chooseOption(next, optionIndex(next, askText));
+    next = chooseOption(next, optionIndex(next, 'What else did you see out there?'));
+
+    expect(next.player.call).toBeNull();
+    expect(next.events).toContainEqual({ t: 'call', with: npc.id, outcome: 'ended' });
+    expect(next.player.quests.session?.quest).toBe('radio_wagon_driver');
+    expect(questView(next, QUESTS).choices).toContain('Anyone still around the wreck?');
+    expect(next.player.notes.map((n) => n.id)).toEqual(['wagonBowl', 'wagonRoad']);
     expect(next.player.talked[npc.id]?.armyWagon).toBe('done');
   });
 

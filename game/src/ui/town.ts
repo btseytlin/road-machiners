@@ -49,7 +49,7 @@ import { PartRows, type PartRow } from "./part-rows";
 import { el, panel } from "./dom";
 import { contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, heldContractDue, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
 import { InventoryView, truckChips } from "./inventory";
-import { PeopleView } from "./talk";
+import { peopleList } from "./talk";
 import { localsAt } from "../sim/dialogue-rules";
 import type { UiHost } from "./host";
 import { fuelLiters, moneyAmount, moneyText } from "./units";
@@ -75,14 +75,12 @@ export class TownScreen {
   private rows = new PartRows(() => this.render());
 
   private inventory: InventoryView;
-  private people: PeopleView;
 
   constructor(private host: UiHost) {
     this.root.classList.add("town-screen");
     this.root.style.display = "none";
     window.addEventListener("resize", () => this.render());
     this.inventory = new InventoryView(host, () => this.render(), false);
-    this.people = new PeopleView((cmd) => this.run(cmd, true), () => this.render());
   }
 
   isOpen(): boolean {
@@ -99,7 +97,6 @@ export class TownScreen {
 
   close(): void {
     this.inventory.clearSelection();
-    this.people.reset();
     this.root.style.display = "none";
     this.root.replaceChildren();
   }
@@ -158,7 +155,7 @@ export class TownScreen {
 
   private tabBody(w: World, shopId: string, def: ShopDef): HTMLElement {
     const body: Record<Tab, () => HTMLElement> = {
-      people: () => this.people.render(w, shopId),
+      people: () => peopleList(shopId, (cmd) => this.run(cmd, true)),
       market: () => this.market(w, shopId, def),
       buyParts: () => this.buyParts(w, shopId),
       sellParts: () => this.sellParts(w),

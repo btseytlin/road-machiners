@@ -625,6 +625,61 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   },
   (world) => world,
   withNotesAndWagon_34_35,
+  (world) => ({ ...world, player: { ...(world.player as SavedJson), quests: { world: {}, local: {}, session: null } } }),
+  (world) => dropQuestVar(dropQuest(dropQuest(world, 'sample_bowl'), 'sample_nose'), null, 'sample_wagon_heard'),
+  (world) => dropQuestVar(dropQuestVar(world, 'nose_depot_leak', 'evidence'), 'nose_depot_leak', 'misled'),
 ];
+
+type SavedQuests = { world: SavedJson; local: Record<string, SavedJson>; session: { quest: string; checkpoint: string; seed: number } | null };
+
+function questsOf(world: SavedJson): SavedQuests {
+  return (world.player as { quests: SavedQuests }).quests;
+}
+
+function withQuests(world: SavedJson, quests: SavedQuests): SavedJson {
+  return { ...world, player: { ...(world.player as SavedJson), quests } };
+}
+
+function questVars(quests: SavedQuests, quest: string | null): SavedJson {
+  return quest === null ? quests.world : (quests.local[quest] ?? {});
+}
+
+function withQuestVars(quests: SavedQuests, quest: string | null, vars: SavedJson): SavedQuests {
+  if (quest === null) return { ...quests, world: vars };
+  const { [quest]: _old, ...others } = quests.local;
+  return { ...quests, local: Object.keys(vars).length > 0 ? { ...others, [quest]: vars } : others };
+}
+
+export function renameQuestVar(world: SavedJson, quest: string | null, from: string, to: string): SavedJson {
+  const quests = questsOf(world);
+  const { [from]: value, ...rest } = questVars(quests, quest);
+  if (value === undefined) return world;
+  if (to in rest) throw new Error(`Quest variable ${to} already holds a value, so ${from} cannot move there`);
+  return withQuests(world, withQuestVars(quests, quest, { ...rest, [to]: value }));
+}
+
+export function dropQuestVar(world: SavedJson, quest: string | null, name: string): SavedJson {
+  const quests = questsOf(world);
+  const { [name]: _dropped, ...rest } = questVars(quests, quest);
+  return withQuests(world, withQuestVars(quests, quest, rest));
+}
+
+export function moveQuestCheckpoint(world: SavedJson, quest: string, from: string, to: string): SavedJson {
+  const quests = questsOf(world);
+  const session = quests.session;
+  if (session?.quest !== quest || session.checkpoint !== from) return world;
+  return withQuests(world, { ...quests, session: { ...session, checkpoint: to } });
+}
+
+export function endQuestSession(world: SavedJson, quest: string): SavedJson {
+  const quests = questsOf(world);
+  return quests.session?.quest === quest ? withQuests(world, { ...quests, session: null }) : world;
+}
+
+export function dropQuest(world: SavedJson, quest: string): SavedJson {
+  const quests = endQuestSession(world, quest);
+  const { [quest]: _dropped, ...local } = questsOf(quests).local;
+  return withQuests(quests, { ...questsOf(quests), local });
+}
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;
