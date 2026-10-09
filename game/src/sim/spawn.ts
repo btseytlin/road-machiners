@@ -11,19 +11,22 @@ import { generateNpcLoadout, type NpcLoadout } from "./npc-loadout";
 import { getKnownSite, profileOf } from "./npc-decisions";
 import { chance, randInt, randRange, type Rng } from "./rng";
 import { isFortress, siteGates, siteUnder, type Site } from "./sites";
+import { modeRules } from "./settings";
 import { startEscort } from "./tow";
 import type { Vehicle, World } from "./types";
 import { dist, type Vec } from "./vec";
 
 export function spawnNpcs(world: World): void {
-  for (const tpl of Object.values(NPCS)) {
-    if (tpl.spawn.kind === "escort") continue;
-    const left = (world.spawnTimer[tpl.id] ?? tpl.interval) - 1;
-    world.spawnTimer[tpl.id] = left;
-    if (left > 0) continue;
-    world.spawnTimer[tpl.id] = tpl.interval;
-    if (aliveOf(world, tpl) < tpl.cap) spawnWithEscorts(world, tpl, () => siteFor(world, tpl), true);
-  }
+  if (!modeRules(world).traffic) return;
+  for (const tpl of Object.values(NPCS)) if (tpl.spawn.kind !== "escort") tickSpawn(world, tpl);
+}
+
+function tickSpawn(world: World, tpl: NpcTemplate): void {
+  const left = (world.spawnTimer[tpl.id] ?? tpl.interval) - 1;
+  world.spawnTimer[tpl.id] = left;
+  if (left > 0) return;
+  world.spawnTimer[tpl.id] = tpl.interval;
+  if (aliveOf(world, tpl) < tpl.cap) spawnWithEscorts(world, tpl, () => siteFor(world, tpl), true);
 }
 
 export function spawnInitial(world: World): void {

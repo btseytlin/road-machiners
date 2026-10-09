@@ -23,7 +23,6 @@ import { celsius, engineCelsius, fuelLiters, hp, kg, kph, moneyText } from "./un
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
 import { contextKey, type ContextAction } from './hud';
-import { SHOPS } from '../data/market';
 import { canUseSite, locationAt } from '../sim/sites';
 import { shopAt } from '../sim/market';
 import { canUseOasis, downedListNear, emptySalvageNear, hasLootFor, lootBlockerHere, needsSearch, salvageListNear } from '../sim/locations';
@@ -49,7 +48,7 @@ export function overdriveSwitch(w: World): { checked: boolean; reason: string | 
 
 function shopNear(world: World): { id: string; name: string } | null {
   const pos = playerVehicle(world).pos;
-  const sites = [...REGION.towns, ...REGION.locations].filter((s) => s.id in SHOPS);
+  const sites = [...REGION.towns, ...REGION.locations].filter((s) => s.id in world.shops);
   const site = sites.find((s) => canUseSite(pos, s));
   return site ? { id: site.id, name: site.name } : null;
 }

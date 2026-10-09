@@ -36,7 +36,7 @@ import { allSlots, newestSlot, requestBoot, takeBootRequest, type SlotId } from 
 import { rescueSave } from './save-rescue';
 import { loadModels } from './render/models';
 import { groundTexture } from './render/terrain';
-import { defaultSetup } from '../sim/settings';
+import { defaultSetup, modeKit } from '../sim/settings';
 
 function element(id: string): HTMLElement {
   const el = document.getElementById(id);
@@ -101,7 +101,7 @@ async function persistSaves(): Promise<void> {
 }
 
 function newGame(setup: WorldSetup): World {
-  return newWorld(CONFIG.seed ?? freshSeed(), startKit(CONFIG.startKit), map, setup);
+  return newWorld(CONFIG.seed ?? freshSeed(), startKit(modeKit(setup.mode, CONFIG.startKit)), map, setup);
 }
 
 installCrashScreen();
@@ -135,7 +135,7 @@ radio.hear(world);
 const overlay = element('overlay');
 const game = await boot.track('scene', () => new Game(world, { slots, runId, log }, element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute(), radio));
 const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game.follow.keyPan.setSpeed(factor) };
-const opening = startKit(CONFIG.startKit).opening;
+const opening = startKit(modeKit(world.setup.mode, CONFIG.startKit)).opening;
 if (fresh && opening) game.hud.note(world, opening.log, "");
 const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
 keepRunningOnErrors((text) => debugConsole.error(text));

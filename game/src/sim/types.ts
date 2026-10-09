@@ -1,7 +1,7 @@
 // World state. Plain data only, so it clones and serializes.
 
 import type { PartHit, Side } from "./armor";
-import type { TraitId } from "../data/npcs";
+import type { GearLevel, TraitId } from "../data/npcs";
 import type { PropKind, Terrain } from "./terrain";
 import type { Vec } from "./vec";
 import type { TopicId } from "../data/dialogue";
@@ -396,9 +396,29 @@ export type GameEvent =
   | { t: 'claymore'; vehicle: string; part: string; other: string; pos: Vec; hits: PartHit[]; selfHits: PartHit[] }
   | { t: 'claymoreCookOff'; vehicle: string; part: string; pos: Vec; hits: PartHit[] }
   | { t: 'caltrops'; vehicle: string; field: string; source: string; hits: PartHit[] }
-  | { t: 'found'; vehicle: string; stock: string; goods: Record<string, number>; parts: string[]; fuel: number; supplies: number };
+  | { t: 'found'; vehicle: string; stock: string; goods: Record<string, number>; parts: string[]; fuel: number; supplies: number }
+  | { t: 'outpostReached'; outpost: string; stretch: number; pay: number; wrecks: number }
+  | { t: 'runLost'; stretch: number; cause: RunLossCause }
+  | { t: 'runComplete'; stretches: number };
 
-export type GameModeId = 'roaming';
+export type GameModeId = 'roaming' | 'gauntlet';
+export type ModeRules = { traffic: boolean; salvage: boolean; knockouts: boolean; yielding: boolean; radio: boolean; rescue: boolean; roadWrecks: boolean };
+export type RunLossCause = 'wrecked' | 'abandoned';
+export type GauntletCourse = { road: number; reversed: boolean; start: number; end: number };
+export type Outpost = { id: string; name: string; at: number; side: 1 | -1; pad: Vec; stock: PartInstance[]; paid: boolean };
+export type WaveGroup = {
+  id: string;
+  stretch: number;
+  at: number;
+  from: 'ahead' | 'behind';
+  templates: string[];
+  level: GearLevel;
+  spawned: boolean;
+  vehicles: string[];
+  wrecked: number;
+  retryUntil: number | null;
+};
+export type GauntletRun = { rng: Rng; course: GauntletCourse; stretch: number; outposts: Outpost[]; groups: WaveGroup[]; complete: boolean };
 export type WorldSettings = { damage: number; fuelUse: number; supplyUse: number };
 export type WorldSetup = { mode: GameModeId; settings: WorldSettings };
 
@@ -433,4 +453,5 @@ export type World = {
   flares: Flare[];
   lines: HarpoonLine[];
   searchRng: Rng;
+  gauntlet: GauntletRun | null;
 };

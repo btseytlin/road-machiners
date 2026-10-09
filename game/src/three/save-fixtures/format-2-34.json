@@ -1,0 +1,6 @@
+{
+  "turn": 812,
+  "setup": { "mode": "roaming", "settings": { "damage": 1, "fuelUse": 1, "supplyUse": 1 } },
+  "player": { "vehicleId": "v1", "money": 33300 },
+  "vehicles": [{ "id": "v1", "pos": { "x": 131.2, "y": 402.5 } }]
+}

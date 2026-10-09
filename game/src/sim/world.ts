@@ -41,7 +41,8 @@ import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
 import { advanceAid, readyAid } from './aid';
 import type { GridItem, MoveOrder, PartInstance, UtilityOrder, Vehicle, WeaponOrder, World, WorldSettings, WorldSetup, XpSource } from './types';
-import { defaultSetup, parseSetup, repairSetup } from './settings';
+import { defaultSetup, modeRules, parseSetup, repairSetup } from './settings';
+import { gauntletStart } from './gauntlet-course';
 import { canOverdrive, vehicleStats } from './stats';
 import { playerSees, practiceContacts, refreshVision } from './vision';
 import { noteEscape } from './escape';
@@ -64,7 +65,7 @@ export function seedStreams(seed: number): Pick<World, 'seed' | 'rngState' | 'ma
   return { seed, rngState: seed, marketRng: marketStream(seed), nameRng: nameStream(seed), searchRng: searchStream(seed) };
 }
 
-export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: WorldSetup, populate = true, start: { pos: Vec; heading: number } = startPose()): World {
+export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: WorldSetup, populate = true, start: { pos: Vec; heading: number } = startOf(seed, setup)): World {
   if (map.terrain.size !== REGION.size)
     throw new Error(`Map size ${map.terrain.size} does not match region size ${REGION.size}`);
   const world: World = {
@@ -138,6 +139,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
     fields: [],
     flares: [],
     lines: [],
+    gauntlet: null,
   };
   world.obstacles = generateObstacles(world, map, openingObstacles(kit.opening, start));
   const truck = makeVehicle(world, {
@@ -160,14 +162,23 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
     );
   world.vehicles.push(truck);
   world.player.vehicleId = truck.id;
-  initializeSalvage(world);
-  setUpOpening(world, truck, kit.opening);
-  world.player.storage = kit.storage.map((defId) => makePart(world, defId, 0));
-  if (populate) spawnInitial(world);
-  initializeShops(world);
+  setUpWorldStock(world, truck, kit, populate);
   refreshVision(world);
   world.events = [];
   return world;
+}
+
+function setUpWorldStock(world: World, truck: Vehicle, kit: StartKit, populate: boolean): void {
+  const rules = modeRules(world);
+  if (rules.salvage) initializeSalvage(world);
+  setUpOpening(world, truck, kit.opening);
+  world.player.storage = kit.storage.map((defId) => makePart(world, defId, 0));
+  if (populate && rules.traffic) spawnInitial(world);
+  if (rules.traffic) initializeShops(world);
+}
+
+export function startOf(seed: number, setup: WorldSetup): { pos: Vec; heading: number } {
+  return setup.mode === 'gauntlet' ? gauntletStart(seed) : startPose();
 }
 
 export function startPose(): { pos: Vec; heading: number } {
@@ -462,7 +473,8 @@ export function carriedWorld(carried: Carried, kit: StartKit, map: BakedMap, fre
   const { setup, reset } = carriedSetup(carried.setup);
   const report: CarryReport = { toGarage: [], sold: [], lost: [], settingsReset: reset };
   const truckKit = carriedKit(carried, kit, report);
-  const world = newWorld(pick(carried.seed, freshSeed()), { ...truckKit, opening: null, autoRepair: true }, map, setup, true, townStart());
+  const seed = pick(carried.seed, freshSeed());
+  const world = newWorld(seed, { ...truckKit, opening: null, autoRepair: true }, map, setup, true, setup.mode === 'roaming' ? townStart() : startOf(seed, setup));
   carryPlayer(world, carried);
   carryTruck(world, carried, carried.truck !== null && truckKit !== kit, report);
   world.player.costBasis = heldBasis(playerVehicle(world), carried.costBasis);

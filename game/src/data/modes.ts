@@ -2,12 +2,16 @@
 // is the standard game. The mode picker lists GAME_MODES, so a new mode is a new row here and a new GameModeId.
 // docs/wiki/mechanics/world-settings.md says which rules are settings and why the others stay fixed.
 
-import type { GameModeId, WorldSettings } from '../sim/types';
+import type { GameModeId, ModeRules, WorldSettings } from '../sim/types';
 
-export type GameMode = { name: string; description: string };
+export type GameMode = { name: string; description: string; rules: ModeRules; kit: string | null };
+
+const OPEN_WORLD: ModeRules = { traffic: true, salvage: true, knockouts: true, yielding: true, radio: true, rescue: true, roadWrecks: true };
+const RUN: ModeRules = { traffic: false, salvage: false, knockouts: false, yielding: false, radio: false, rescue: false, roadWrecks: false };
 
 export const GAME_MODES: Record<GameModeId, GameMode> = {
-  roaming: { name: 'Roaming', description: 'The open wasteland. Drive, trade, scavenge and fight as you like.' },
+  roaming: { name: 'Roaming', description: 'The open wasteland. Drive, trade, scavenge and fight as you like.', rules: OPEN_WORLD, kit: null },
+  gauntlet: { name: 'Gauntlet', description: 'A highway run between outposts. Every fight is to the wreck.', rules: RUN, kit: 'gauntlet' },
 };
 
 export type WorldSettingDef = { name: string; description: string; default: number; min: number; max: number; step: number };

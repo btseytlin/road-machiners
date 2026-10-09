@@ -376,7 +376,7 @@ export function shopAt(world: World): string | null {
 
 export function shopNear(world: World): string | null {
   const pos = playerVehicle(world).pos;
-  return Object.keys(SHOPS).find((id) => canUseSite(pos, siteOf(id))) ?? null;
+  return Object.keys(world.shops).find((id) => canUseSite(pos, siteOf(id))) ?? null;
 }
 
 export function siteOf(siteId: string): Site {

@@ -2,7 +2,7 @@
 // setup and is the only reader of its settings for rules, through the scale queries below.
 
 import { GAME_MODES, WORLD_SETTINGS } from '../data/modes';
-import type { GameModeId, World, WorldSettings, WorldSetup } from './types';
+import type { GameModeId, ModeRules, World, WorldSettings, WorldSetup } from './types';
 
 type SettingId = keyof WorldSettings;
 const SETTING_IDS = Object.keys(WORLD_SETTINGS) as SettingId[];
@@ -28,6 +28,19 @@ export function repairSetup(raw: unknown): { setup: WorldSetup; reset: SettingId
   const setup = defaultSetup(mode);
   const reset = SETTING_IDS.filter((id) => !validSetting(id, settings[id]));
   return { setup: { ...setup, settings: { ...setup.settings, ...pickSettings(settings, reset) } }, reset };
+}
+
+export function modeRules(world: World): ModeRules {
+  return modeOf(world.setup.mode).rules;
+}
+
+export function modeKit(mode: GameModeId, fallback: string): string {
+  return modeOf(mode).kit ?? fallback;
+}
+
+function modeOf(mode: GameModeId): (typeof GAME_MODES)[GameModeId] {
+  if (!isMode(mode)) throw new Error(`Unknown game mode ${String(mode)}`);
+  return GAME_MODES[mode];
 }
 
 export function damageScale(world: World): number {

@@ -12,6 +12,7 @@ import { TERRAIN } from '../data/terrain';
 import { randInt, randRange } from './rng';
 import { hulkBoxes } from './body';
 import { DECKS, propBase, underDeck } from './bridge';
+import { modeRules } from './settings';
 import type { LandmarkLook, Obstacle, World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 
@@ -25,7 +26,7 @@ export function generateObstacles(world: World, map: BakedMap, fixed: Obstacle[]
       throw new Error(`Obstacle ${o.id} at ${o.pos.x.toFixed(1)}, ${o.pos.y.toFixed(1)} overlaps a prop, a site or a deck`);
     out.push(o);
   }
-  placeRoadWrecks(world, out);
+  if (modeRules(world).roadWrecks) placeRoadWrecks(world, out);
   return out;
 }
 
