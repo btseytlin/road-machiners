@@ -10,6 +10,7 @@ const SHAPE_BLUR_PX = 6;
 const CARD_LIGHT = { scatter: 0.7 };
 const CARD_ORDER = { lit: 904, glow: 906 };
 const FILL_ALPHA_STEPS = 64;
+const ROUND_EDGE = '(1.0 - smoothstep(0.84, 1.0, length(vBall)))';
 export const OVERFILL_COUNTER = 'fx.cards.overfilled';
 
 export type CardLight = { sunDir: THREE.Vector3; sun: THREE.Color; sky: THREE.Color; ground: THREE.Color };
@@ -79,7 +80,7 @@ const LIT_FRAGMENT = `
   varying vec3 vSun;
   varying vec3 vUp;
   void main() {
-    float a = vTint.a * texture2D(shapes, vUv).a;
+    float a = vTint.a * texture2D(shapes, vUv).a * ${ROUND_EDGE};
     if (a <= 0.003) discard;
     vec3 n = normalize(vec3(vBall, sqrt(max(0.0, 1.0 - dot(vBall, vBall) * 0.5))));
     vec3 sky = mix(groundColor, skyColor, 0.5 * dot(n, vUp) + 0.5);
@@ -94,9 +95,10 @@ const LIT_FRAGMENT = `
 const GLOW_FRAGMENT = `
   uniform sampler2D shapes;
   varying vec2 vUv;
+  varying vec2 vBall;
   varying vec4 vTint;
   void main() {
-    float a = vTint.a * texture2D(shapes, vUv).a;
+    float a = vTint.a * texture2D(shapes, vUv).a * ${ROUND_EDGE};
     if (a <= 0.003) discard;
     gl_FragColor = vec4(vTint.rgb, a);
     #include <colorspace_fragment>
