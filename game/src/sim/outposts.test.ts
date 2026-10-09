@@ -8,6 +8,7 @@ import { playerVehicle } from './damage';
 import { courseLine, pointAt } from './gauntlet-layout';
 import { corePart, goodsCount, mountedParts } from './grid';
 import { startRepair } from './jobs';
+import { repairPlan } from './repair';
 import { outpostBuyGood, outpostBuyPart, outpostBuySupply, outpostGoodPrice, outpostPartPrice, outpostRepairAll, outpostRepairBasics } from './outposts';
 import { defaultSetup } from './settings';
 import type { World } from './types';
@@ -32,6 +33,7 @@ describe('outpost services', () => {
   it('repairs every part for the garage price', () => {
     const w = atOutpost();
     batter(w);
+    w.player.money = 10_000_000;
     const money = w.player.money;
 
     const after = outpostRepairAll(w);
@@ -102,9 +104,12 @@ describe('outpost services', () => {
   });
 
   it('patches a broken engine in the field with bought parts, up to the field cap', () => {
-    let w = outpostBuyGood(atOutpost(), 2);
+    let w = atOutpost();
+    w.player.money = 10_000_000;
     const engine = mountedParts(playerVehicle(w), 'engine')[0];
     engine.hp = 0;
+    const plan = repairPlan(w, playerVehicle(w), engine.id);
+    w = outpostBuyGood(w, plan.needed - plan.parts);
     w.player.autoRepair = false;
     w = startRepair(w, engine.id);
     for (let i = 0; i < 30 && playerVehicle(w).job; i++) w = endTurn(w, still);
