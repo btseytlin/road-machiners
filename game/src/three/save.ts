@@ -3,6 +3,7 @@ import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
 import { reachedOutpostAt } from '../sim/gauntlet';
 import { highwayMap } from '../sim/highway';
+export { newMapFor } from '../sim/highway';
 import type { BrokenProp, Obstacle, Player, Vehicle, World, WorldSetup } from '../sim/types';
 import { refreshVision } from '../sim/vision';
 import { parseSetup } from '../sim/settings';
@@ -65,10 +66,6 @@ type SavedWorld = Omit<World, 'terrain' | 'events' | 'removed' | 'broken' | 'veh
 };
 
 type ViewField = 'visible' | 'contacts' | 'clouds';
-
-export function newMapFor(setup: WorldSetup, seed: number, icarus: BakedMap): BakedMap {
-  return setup.mode === 'gauntlet' ? highwayMap(seed, 0) : icarus;
-}
 
 export function mapFor(saved: Pick<World, 'mapHash' | 'seed' | 'setup' | 'gauntlet'>, icarus: BakedMap): BakedMap {
   const highway = saved.mapHash.startsWith('highway:');

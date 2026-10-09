@@ -5,6 +5,7 @@ import { NO_DECKS } from './bridge';
 import { INDEX_CELL, RoadIndex } from './road-index';
 import { hashRandom, nextRandom, randInt, randRange, type Rng } from './rng';
 import type { BakedMap, BakedProp, PropKind, Terrain } from './terrain';
+import type { WorldSetup } from './types';
 import { dist, type Vec } from './vec';
 
 const SIZE = HIGHWAY.size;
@@ -382,6 +383,10 @@ export function highwayMap(seed: number, window: number): BakedMap {
   Object.freeze(land.types);
   const terrain: Terrain = Object.freeze({ size: SIZE, ...land, atlas: Object.freeze({ kind: 'highway', seed, window }) });
   return { hash: highwayHash(seed, window), seed, terrain, props: bakedProps(seed, window) };
+}
+
+export function newMapFor(setup: WorldSetup, seed: number, icarus: BakedMap): BakedMap {
+  return setup.mode === 'gauntlet' ? highwayMap(seed, 0) : icarus;
 }
 
 export function highwayLine(seed: number, window: number): Vec[] {

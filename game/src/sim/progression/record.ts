@@ -25,7 +25,8 @@ import { endTurn, newWorld, update } from '../world';
 import { botOrders, parkedOnPurpose, type Archetype, type BotOptions, type Policy } from './bot';
 import { emptyLedger, LEDGER_KEYS, type BotTurn, type Ledger } from './orders';
 import { TEST_MAP } from '../../test/map';
-import { defaultSetup, parseSetup } from '../settings';
+import { newMapFor } from '../highway';
+import { defaultSetup, modeRules, parseSetup } from '../settings';
 
 export type TraceLine = { turn: number; source: XpSource; amount: number; difficulty: number | null; target: string };
 export type RunEnd = { end: 'death'; turn: number };
@@ -118,7 +119,8 @@ function modeSetup(picked: GameModeId | undefined, settings: Record<string, numb
 
 export function startWorld(seed: number, kit = 'standard', rank = 0, settings?: Record<string, number>, mode?: GameModeId): World {
   if (!Number.isInteger(rank) || rank < 0 || rank > MAX_RANK) throw new Error(`No skill rank ${rank}; ranks run 0 to ${MAX_RANK}`);
-  return update(newWorld(seed, startKit(kit), TEST_MAP, modeSetup(mode, settings)), (w) => {
+  const setup = modeSetup(mode, settings);
+  return update(newWorld(seed, startKit(kit), newMapFor(setup, seed, TEST_MAP), setup), (w) => {
     const p = w.player;
     p.xp = 0;
     for (const skill of Object.keys(p.ranks) as (keyof typeof p.ranks)[]) {
@@ -237,6 +239,7 @@ function failOnStall(w: World, goals: Map<string, NpcActivity>, tolerate: boolea
 }
 
 function failOnDryMajority(w: World): void {
+  if (!modeRules(w).traffic) return;
   const drivers = w.vehicles.filter((v) => v.brain);
   const dry = drivers.filter((v) => getResources(w, v).fuel <= 0).length;
   if (dry * 2 > drivers.length) throw new Error(`turn ${w.turn}: ${dry} of ${drivers.length} NPCs are dry at once, a majority`);

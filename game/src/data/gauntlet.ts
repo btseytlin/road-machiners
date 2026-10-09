@@ -25,28 +25,24 @@ export const GAUNTLET = {
       { from: 'behind', templates: ['buggy'], level: 'light' },
     ],
     [
+      { from: 'ahead', templates: ['buggy'], level: 'light' },
+      { from: 'behind', templates: ['buggy'], level: 'light' },
+    ],
+    [
+      { from: 'ahead', templates: ['buggy'], level: 'standard' },
+      { from: 'behind', templates: ['buggy'], level: 'standard' },
+    ],
+    [
       { from: 'ahead', templates: ['buggy', 'buggy'], level: 'standard' },
       { from: 'behind', templates: ['buggy'], level: 'standard' },
     ],
     [
-      { from: 'ahead', templates: ['gunwagon', 'buggy', 'buggy'], level: 'heavy' },
-      { from: 'behind', templates: ['buggy', 'buggy', 'gunwagon'], level: 'heavy' },
-      { from: 'ahead', templates: ['gunwagon', 'gunwagon', 'buggy'], level: 'heavy' },
+      { from: 'ahead', templates: ['gunwagon', 'buggy'], level: 'standard' },
+      { from: 'behind', templates: ['buggy', 'buggy'], level: 'standard' },
     ],
     [
       { from: 'ahead', templates: ['gunwagon', 'buggy', 'buggy'], level: 'heavy' },
-      { from: 'behind', templates: ['gunwagon', 'buggy', 'buggy'], level: 'heavy' },
-      { from: 'ahead', templates: ['gunwagon', 'gunwagon'], level: 'heavy' },
-    ],
-    [
-      { from: 'ahead', templates: ['gunwagon', 'gunwagon', 'buggy'], level: 'heavy' },
-      { from: 'behind', templates: ['gunwagon', 'buggy', 'buggy'], level: 'heavy' },
-      { from: 'ahead', templates: ['gunwagon', 'gunwagon'], level: 'loaded' },
-    ],
-    [
-      { from: 'ahead', templates: ['gunwagon', 'gunwagon', 'buggy'], level: 'loaded' },
-      { from: 'behind', templates: ['gunwagon', 'gunwagon', 'buggy'], level: 'heavy' },
-      { from: 'ahead', templates: ['gunwagon', 'gunwagon'], level: 'loaded' },
+      { from: 'behind', templates: ['gunwagon', 'buggy'], level: 'heavy' },
     ],
     [
       { from: 'ahead', templates: ['gunwagon', 'gunwagon', 'buggy'], level: 'loaded' },
@@ -61,7 +57,7 @@ export const GAUNTLET = {
   spawnStagger: 3,
   maxAlive: 8,
   spawnRetryTurns: 20,
-  pay: { base: { first: 15000, step: 10000, max: 80000 } as Curve, perWreck: { first: 3000, step: 1000, max: 10000 } as Curve },
+  pay: { base: { first: 30000, step: 15000, max: 120000 } as Curve, perWreck: { first: 6000, step: 1500, max: 15000 } as Curve },
   stock: { base: 2, every: 2, max: 6 },
   goodsMarkup: 1.5,
   maxTries: 400,

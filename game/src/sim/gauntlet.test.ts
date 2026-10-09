@@ -71,14 +71,17 @@ describe('Gauntlet groups', () => {
 
   it('never put more than the cap of trucks on the road at once', () => {
     let w = gauntletWorld();
-    for (let k = 0; k < 3; k++) w = arrive(w);
+    for (let k = 0; k < 7; k++) w = arrive(w);
     const run = runOf(w);
-    moveTo(w, run.groups[run.groups.length - 1].at + 1);
+    moveTo(w, Math.max(...run.groups.map((g) => g.at)) + 1);
+    advanceGauntlet(w);
+    const late = { ...run.groups[0], id: 'late', spawned: false, vehicles: [], templates: ['buggy'] };
+    run.groups.push(late);
 
     advanceGauntlet(w);
 
-    expect(groupTrucks(w).length).toBeLessThanOrEqual(GAUNTLET.maxAlive);
-    expect(run.groups.some((g) => !g.spawned)).toBe(true);
+    expect(groupTrucks(w).length).toBe(GAUNTLET.maxAlive);
+    expect(late.spawned).toBe(false);
   });
 
   it('keep hunting a player they meet long after they spawn', () => {
