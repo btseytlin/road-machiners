@@ -367,7 +367,7 @@ function repairMult(world: World): number {
   );
 }
 
-function pay(world: World, amount: number, reason: string): void {
+export function pay(world: World, amount: number, reason: string): void {
   if (world.player.money < 0 || amount > world.player.money)
     throw new Error(`Not enough ${UNITS.currency.many} for ${reason}`);
   world.player.money -= amount;
@@ -432,7 +432,7 @@ export function canRebuild(world: World, part: PartInstance): boolean {
   return townAt(world) !== null && isJunk(part) && !part.rebuilt && vehicleHasPerk(world, playerVehicle(world), "rebuild");
 }
 
-function garageRepair(part: PartInstance): void {
+export function garageRepair(part: PartInstance): void {
   if (isJunk(part)) rebuildJunk(part);
   else restorePart(part, maxHp(part));
 }
@@ -545,11 +545,11 @@ function repairableParts(v: Vehicle): PartInstance[] {
   return allParts(v).filter((p) => !isJunk(p));
 }
 
-function garageParts(world: World, v: Vehicle): PartInstance[] {
+export function garageParts(world: World, v: Vehicle): PartInstance[] {
   return allParts(v).filter((p) => !isJunk(p) || canRebuild(world, p));
 }
 
-function basicParts(world: World, v: Vehicle): PartInstance[] {
+export function basicParts(world: World, v: Vehicle): PartInstance[] {
   return garageParts(world, v).filter((p) => partDef(p.defId).kind === "core");
 }
 
