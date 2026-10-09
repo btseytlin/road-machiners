@@ -11,7 +11,7 @@ import { toMap } from './frames';
 import { physicsMove } from './turn';
 import { TEST_MAP } from '../test/map';
 import { budget } from '../test/budget';
-import { PLAIN_KIT } from '../sim/testkit';
+import { gauntletWorld, PLAIN_KIT } from '../sim/testkit';
 import { defaultSetup } from '../sim/settings';
 import { ICARUS_DECKS } from '../sim/bridge';
 
@@ -104,3 +104,13 @@ it('the terrain collider is a heightfield whose surface matches the corner grid'
   expect(flat).toBeGreaterThan(0);
   freeDrive(drive);
 });
+
+it('builds no deck on the Gauntlet highway, and every Icarus deck on Icarus', () => {
+  const highway = buildDrive(gauntletWorld(5));
+  const icarus = buildDrive(newWorld(1337, PLAIN_KIT, TEST_MAP, defaultSetup('roaming')));
+
+  expect(highway.decks).toHaveLength(0);
+  expect(icarus.decks).toHaveLength(ICARUS_DECKS.decks.length);
+  freeDrive(highway);
+  freeDrive(icarus);
+}, budget(30_000));
