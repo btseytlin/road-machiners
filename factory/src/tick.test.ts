@@ -396,6 +396,15 @@ describe('tick', () => {
     expect(h.pinned.sort()).toEqual(['checks 2-3 4', 'implement 1 2', 'verify 1 2']);
   });
 
+  it('starts a catch-up beside a running merge job on the light pool, and keeps the merge alive', async () => {
+    const merging: Job = { ...job('2026-01-10T11:50:00Z', 'merge', null), batch: [5, 6, 7] };
+    const h = harness(merging, true, [5, 6, 7, 8, 9].map((issue) => card(issue, 'Merging')));
+    await tick(h.ctx, '/code', h.deps);
+    expect(args(h)).toEqual([['catch-up', '8']]);
+    expect(h.pinned).toEqual(['catch-up 0 null']);
+    expect(readState(h.ctx.statePath).jobs.map((j) => [j.stage, j.issue])).toEqual([['merge', null], ['catch-up', 8]]);
+  });
+
   it('starts no job while free disk is under the minimum, and still cleans', async () => {
     const h = harness(null, true, [card(8, 'Design'), card(9, 'Done')]);
     mkdirSync(join(h.ctx.cfg.home, 'work', 'issue-9'), { recursive: true });
