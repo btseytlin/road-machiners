@@ -69,7 +69,7 @@ Testing is one job. The testing session merges the base, plays the build, fixes 
 
 Approve moves a card to Hardening. The hardening session merges the base, attacks the change, runs `/code-review` and fixes every finding. No checks run there. Then the card moves to Merging.
 
-A merge job takes every Merging card of one base at that moment. It merges them into a clone of the base, and the merge session resolves any conflict. The merge checkpoint runs the full suite, the typecheck, the playtest and the build on the result. A failure goes back into the merge session. The base takes only a result that passed. If the base moved during the checks, the job merges it in and checks again. A failed batch labels each of its cards `factory-stuck`.
+A merge job takes up to three Merging cards of one base, the oldest first. It merges them into a clone of the base, and the merge session resolves any conflict. The merge checkpoint runs the full suite, the typecheck, the playtest and the build on the result. A failure goes back into the merge session. The base takes only a result that passed. If the base moved during the checks, the job merges it in and checks again. A failed batch labels each of its cards `factory-stuck`. The next job takes the next cards from the base as pushed, so a batch that passed stays in it when a later one fails.
 
 ![Hardening and Merging columns](diagrams/hardening.svg)
 

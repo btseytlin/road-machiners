@@ -51,6 +51,8 @@ export async function checkAndPush(ctx: Ctx, land: Landing, spent: number, fixPr
   }
 }
 
+const MERGE_BATCH_CARDS = 3;
+
 async function nextBatch(ctx: Ctx): Promise<{ base: string; cards: Card[] } | null> {
   const merging = (await ctx.github.cards()).filter((card) => card.column === 'Merging' && !card.labels.includes(STUCK_LABEL));
   let taken: { base: string; cards: Card[] } | null = null;
@@ -59,7 +61,7 @@ async function nextBatch(ctx: Ctx): Promise<{ base: string; cards: Card[] } | nu
     const waiting = merging.filter((card) => !(String(card.issue) in state.held) && !(shipping && baseBranchFor(ctx, card.labels) === state.release?.branch));
     if (waiting.length === 0) return state;
     const base = baseBranchFor(ctx, waiting[0]!.labels);
-    const cards = waiting.filter((card) => baseBranchFor(ctx, card.labels) === base);
+    const cards = waiting.filter((card) => baseBranchFor(ctx, card.labels) === base).slice(0, MERGE_BATCH_CARDS);
     taken = { base, cards };
     const batch = cards.map((card) => card.issue);
     return { ...state, jobs: state.jobs.map((job) => (job.stage === 'merge' ? { ...job, batch } : job)) };

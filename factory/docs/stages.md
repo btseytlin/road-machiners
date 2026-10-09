@@ -65,12 +65,12 @@ A branch whose every changed file since its base is a Markdown file outside `gam
 
 ## Merging
 
-- A merge job runs in the branch queue when Merging holds a card that is not stuck or held. It takes every such card whose base is the base of the first one, in board order.
+- A merge job runs in the branch queue when Merging holds a card that is not stuck or held. It takes the first three such cards whose base is the base of the first one, in board order. The first waiting card is always among them, so no card waits behind newer ones. The tick starts the next merge job for the cards left, on the base the batch pushed.
 - It clones the base into `$FACTORY_HOME/work/merge-queue` and merges each card's branch. A conflict goes to the merge session with `prompts/merge-branches.md`. An unfinished merge fails the job.
 - The merge checkpoint runs the full suite through the test cache, the typecheck, the playtest and the build on the result. A failure goes to the same session with `prompts/merge-fix.md`, which keeps the behavior the committee approved for each card. The loop ends on a pass, or when the session cost `FACTORY_MERGING_BUDGET_USD`.
 - The diff guard runs on everything the base takes. Then the job pushes the base. When GitHub rejects the push because the base moved, the job merges the new base in and checks again.
 - Each card gets `release-candidate`, a comment that names the cards merged with it, and moves to Done. A `dev` batch rebuilds `/dev/`. A release batch drops the current candidate post, so a new candidate follows.
-- A failed job labels every card of the batch `factory-stuck`.
+- A failed job labels every card of its batch `factory-stuck`. Batches pushed before it stay in the base.
 
 ## Approval
 

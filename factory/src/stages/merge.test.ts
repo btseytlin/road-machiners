@@ -112,6 +112,32 @@ describe('merge queue', () => {
     expect(state.pendingShip).toBeNull();
   });
 
+  it('takes at most three cards of the first card base, oldest first, and the next job takes the rest', async () => {
+    cards = [card(5), card(6, ['release-task']), card(7), card(8), card(9), card(10)];
+    const job = { id: 'merge---x', stage: 'merge' as const, issue: null, pid: 1, startedAt: '', log: '' };
+    updateState(`${home}/state.json`, (state) => ({ ...state, jobs: [job] }));
+    await merge(fakeCtx());
+    expect(calls.filter((call) => call.startsWith('merge '))).toEqual(['merge factory/issue-5', 'merge factory/issue-7', 'merge factory/issue-8']);
+    expect(readState(`${home}/state.json`).jobs[0].batch).toEqual([5, 7, 8]);
+    cards = cards.filter((c) => ![5, 7, 8].includes(c.issue));
+    calls = [];
+    await merge(fakeCtx());
+    expect(calls.filter((call) => call.startsWith('merge '))).toEqual(['merge factory/issue-6']);
+  });
+
+  it('keeps an earlier batch pushed and settled when a later batch fails, and labels only the failed batch', async () => {
+    cards = [card(5), card(6), card(7), card(8)];
+    await merge(fakeCtx());
+    expect(calls.filter((call) => /^(merge factory|checks|push)/.test(call))).toEqual(['merge factory/issue-5', 'merge factory/issue-6', 'merge factory/issue-7', 'checks', 'push head1 dev']);
+    cards = [card(8)];
+    calls = [];
+    shellFailures = Array(9).fill('FAIL a.test.ts');
+    await expect(merge(fakeCtx(0))).rejects.toThrow(BudgetError);
+    expect(calls.filter((call) => call.startsWith('label') && call.endsWith(STUCK_LABEL))).toEqual(['label 8 factory-stuck']);
+    expect(calls.some((call) => call.startsWith('push'))).toBe(false);
+    expect(comments.filter((text) => text.includes('merged into dev')).map((text) => text.split(' ')[0])).toEqual(['5', '6', '7']);
+  });
+
   it('has an agent resolve a conflict, and fails when the merge stays unfinished', async () => {
     merges = { 'factory/issue-6': [{ commit: 'c6', conflicts: ['game/src/a.ts'] }] };
     await merge(fakeCtx());
