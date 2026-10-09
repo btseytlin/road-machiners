@@ -1,7 +1,3 @@
-// Short-lived combat and movement effects: tracers, muzzle flash, sparks, smoke, dust and floating
-// damage numbers, like the 2D src/render/fx.ts, and what a truck puffs out as it drives. Particles live
-// in fixed pools of billboards that age and recycle, one draw call per pool, so any number of effects in
-
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
 import { TERRAIN_TYPES, type TerrainType } from '../../data/terrain';
@@ -26,10 +22,7 @@ import { liveNear, Particles, type ParticleLook } from './particles/particles';
 import { Blasts, type BlastGround } from './particles/blasts';
 import { Emissions } from './particles/emissions';
 
-const MAX_PUFFS = 2048;
-const MAX_GLOWS = 256;
 const MAX_TEXTS = 24;
-const GRAVITY = 2;
 const RISE_METERS = 1.5;
 const LABEL_ROW_PX = 22;
 
@@ -42,134 +35,6 @@ const FLASH = {
 type FloatText = { el: HTMLDivElement; pos: V3; rowPx: number; age: number; life: number; used: boolean };
 type Flash = { mesh: THREE.Mesh; size: number; age: number };
 type Pending = { left: number; run: () => void };
-
-type ParticleSpec = {
-  vel: V3;
-  life: number;
-  fromScale: number;
-  toScale: number;
-  color: number;
-  opacity: number;
-  drag: number;
-  gravity: number;
-};
-
-type Slot = { pos: THREE.Vector3; vel: THREE.Vector3; age: number; spec: ParticleSpec; used: boolean };
-
-const VERTEX = `
-  attribute vec3 offset;
-  attribute float size;
-  attribute float alpha;
-  attribute vec3 tint;
-  varying vec2 vUv;
-  varying float vAlpha;
-  varying vec3 vTint;
-  void main() {
-    vUv = uv;
-    vAlpha = alpha;
-    vTint = tint;
-    vec4 mv = modelViewMatrix * vec4(offset, 1.0);
-    mv.xy += position.xy * size;
-    gl_Position = projectionMatrix * mv;
-  }
-`;
-
-const FRAGMENT = `
-  varying vec2 vUv;
-  varying float vAlpha;
-  varying vec3 vTint;
-  void main() {
-    float r = length(vUv - 0.5) * 2.0;
-    float a = vAlpha * 0.9 * (1.0 - smoothstep(0.0, 1.0, r));
-    if (a <= 0.003) discard;
-    gl_FragColor = vec4(vTint, a);
-    #include <colorspace_fragment>
-  }
-`;
-
-class ParticlePool {
-  readonly mesh: THREE.Mesh;
-  private geo: THREE.InstancedBufferGeometry;
-  private slots: Slot[] = [];
-  private free: number[] = [];
-  private offsets: THREE.InstancedBufferAttribute;
-  private sizes: THREE.InstancedBufferAttribute;
-  private alphas: THREE.InstancedBufferAttribute;
-  private tints: THREE.InstancedBufferAttribute;
-  private color = new THREE.Color();
-
-  constructor(private capacity: number, additive: boolean) {
-    const geo = new THREE.InstancedBufferGeometry();
-    const quad = new THREE.PlaneGeometry(1, 1);
-    geo.index = quad.index;
-    geo.setAttribute('position', quad.getAttribute('position'));
-    geo.setAttribute('uv', quad.getAttribute('uv'));
-    this.offsets = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
-    this.sizes = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
-    this.alphas = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
-    this.tints = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
-    for (const a of [this.offsets, this.sizes, this.alphas, this.tints]) a.setUsage(THREE.DynamicDrawUsage);
-    geo.setAttribute('offset', this.offsets);
-    geo.setAttribute('size', this.sizes);
-    geo.setAttribute('alpha', this.alphas);
-    geo.setAttribute('tint', this.tints);
-    const mat = new THREE.ShaderMaterial({
-      vertexShader: VERTEX,
-      fragmentShader: FRAGMENT,
-      transparent: true,
-      depthWrite: false,
-      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-    });
-    geo.instanceCount = 0;
-    this.geo = geo;
-    this.mesh = new THREE.Mesh(geo, mat);
-    this.mesh.frustumCulled = false;
-    for (let i = 0; i < capacity; i++) {
-      this.slots.push({ pos: new THREE.Vector3(), vel: new THREE.Vector3(), age: 0, spec: null as never, used: false });
-      this.free.push(capacity - 1 - i);
-    }
-  }
-
-  spawn(p: V3, spec: ParticleSpec): boolean {
-    const i = this.free.pop();
-    if (i === undefined) return false;
-    const slot = this.slots[i];
-    slot.used = true;
-    slot.age = 0;
-    slot.spec = spec;
-    slot.pos.set(p.x, p.y, p.z);
-    slot.vel.set(spec.vel.x, spec.vel.y, spec.vel.z);
-    return true;
-  }
-
-  tick(dt: number): void {
-    let n = 0;
-    for (let i = 0; i < this.capacity; i++) {
-      const slot = this.slots[i];
-      if (!slot.used) continue;
-      slot.age += dt;
-      const s = slot.spec;
-      if (slot.age >= s.life) {
-        slot.used = false;
-        this.free.push(i);
-        continue;
-      }
-      const t = slot.age / s.life;
-      slot.vel.multiplyScalar(Math.exp(-s.drag * dt));
-      slot.vel.y -= s.gravity * dt;
-      slot.pos.addScaledVector(slot.vel, dt);
-      const grow = 1 - (1 - t) * (1 - t);
-      this.offsets.setXYZ(n, slot.pos.x, slot.pos.y, slot.pos.z);
-      this.sizes.setX(n, s.fromScale + (s.toScale - s.fromScale) * grow);
-      this.alphas.setX(n, s.opacity * (1 - t));
-      this.color.setHex(s.color);
-      this.tints.setXYZ(n, this.color.r, this.color.g, this.color.b);
-      n++;
-    }
-    this.geo.instanceCount = n;
-    for (const a of [this.offsets, this.sizes, this.alphas, this.tints]) a.needsUpdate = true;
-  }
-}
 
 function flashGeometry(): THREE.BufferGeometry {
   const pts: number[] = [];
@@ -265,8 +130,6 @@ export function sprayShare(ground: TerrainType): number {
 export type CardLights = { sun: THREE.DirectionalLight; sky: THREE.HemisphereLight };
 
 export class Fx3D {
-  private puffs = new ParticlePool(MAX_PUFFS, false);
-  private glows = new ParticlePool(MAX_GLOWS, true);
   private readonly shapes = createCardShapes(Math.random);
   readonly cards = {
     lit: new CardBatch(MAX_PARTICLES + MAX_VIEW_CARDS, 'lit', this.shapes, CONFIG.fxFillScreens),
@@ -289,7 +152,7 @@ export class Fx3D {
   private terrain: Terrain | null = null;
 
   constructor(private scene: THREE.Scene, private overlay: HTMLElement, private rig: CameraRig, private readonly world: () => World) {
-    scene.add(this.puffs.mesh, this.glows.mesh, ...this.cards.lit.meshes, ...this.cards.glow.meshes, ...this.chunks.meshes);
+    scene.add(...this.cards.lit.meshes, ...this.cards.glow.meshes, ...this.chunks.meshes);
     this.flashes = new MuzzleFlashes(scene);
     this.casings = new Casings(scene);
     this.ruts = new Ruts(scene);
@@ -304,18 +167,6 @@ export class Fx3D {
       el.style.display = 'none';
       overlay.appendChild(el);
       this.texts.push({ el, pos: { x: 0, y: 0, z: 0 }, rowPx: 0, age: 0, life: 1, used: false });
-    }
-  }
-
-  private puff(p: V3, color: number, count: number, opts: { speed: number; life: number; scale: number; grow: number; additive?: boolean }): void {
-    const pool = opts.additive ? this.glows : this.puffs;
-    for (let i = 0; i < count; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const up = Math.random() * 0.6;
-      const s = opts.speed * (0.4 + Math.random() * 0.6);
-      const vel = { x: Math.cos(a) * s, y: up * s, z: Math.sin(a) * s };
-      const spec: ParticleSpec = { vel, life: opts.life, fromScale: opts.scale, toScale: opts.scale * opts.grow, color, opacity: 1, drag: 0, gravity: GRAVITY };
-      if (!pool.spawn(p, spec)) return;
     }
   }
 
@@ -477,8 +328,6 @@ export class Fx3D {
   tick(playMs: number, realMs: number, world: World): void {
     const dt = playMs / 1000;
     this.terrain = world.terrain;
-    this.puffs.tick(dt);
-    this.glows.tick(dt);
     this.particles.tick(dt);
     this.glowParticles.tick(dt);
     this.chunks.tick(dt, world.terrain);
