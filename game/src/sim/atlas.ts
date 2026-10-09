@@ -1,5 +1,6 @@
 import { REGION, type LocationDef, type TownDef } from '../data/region';
 import { decksOf, type DeckSet } from './bridge';
+import { highwayAtlas } from './highway';
 import { ICARUS_KEY, type AtlasKey } from './terrain';
 
 export { ICARUS_KEY, type AtlasKey };
@@ -39,7 +40,7 @@ export function atlasOf(t: { atlas: AtlasKey }): Atlas {
   const name = atlasKeyString(key);
   let atlas = highways.get(name);
   if (!atlas) {
-    atlas = highwayAtlasOf(key.seed, key.window);
+    atlas = highwayAtlas(key.seed, key.window);
     highways.set(name, atlas);
     while (highways.size > HIGHWAYS_KEPT) highways.delete(highways.keys().next().value as string);
   }
@@ -66,8 +67,4 @@ export function atlasSites(atlas: Atlas): readonly (TownDef | LocationDef)[] {
 
 export function roadEdgeGap(atlas: Atlas, p: Vec, reach: number): number {
   return atlas.roadIndex.nearestWithin(p.x, p.y, reach + atlas.roadWidth / 2) - atlas.roadWidth / 2;
-}
-
-function highwayAtlasOf(seed: number, window: number): Atlas {
-  throw new Error(`No highway generator yet for seed ${seed} window ${window}`);
 }
