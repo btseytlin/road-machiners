@@ -82,7 +82,7 @@ async function fixUntilPasses(ctx: Ctx, land: Landing, fixes: number, conflicts:
   try {
     return await untilPasses(ctx.cfg.mergingBudgetUsd, fixes, () => timed(land.clock, 'checks', () => mergedChecks(ctx, land)), (failure) => timed(land.clock, 'fixes', () => land.agent(fixPrompt(failure))));
   } catch (error) {
-    if (error instanceof BudgetError) throw new BudgetError(`${error.message}\nThe budget counts only fix rounds. Resolving conflicts spent another $${conflicts.toFixed(2)} on conflicts.`);
+    if (error instanceof BudgetError) throw new BudgetError(`${error.message}\nThe budget counts only fix rounds. The job also spent $${conflicts.toFixed(2)} on conflicts.`);
     throw error;
   }
 }
