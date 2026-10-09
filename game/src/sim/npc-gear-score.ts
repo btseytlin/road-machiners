@@ -6,7 +6,7 @@ import { SIDES } from './armor';
 import { gunsBySide, killRate, targetOf, toughness, type Target } from './fight-odds';
 import { freeCells } from './grid';
 import { vehicleMass } from './mass';
-import { vehicleStats } from './stats';
+import { npcMassRoom, speedShare, vehicleStats } from './stats';
 import type { Vehicle, World } from './types';
 
 export type Load = { kg: number; cells: number };
@@ -27,11 +27,11 @@ export function gearScore(world: World, v: Vehicle, p: LoadoutPriorities, base: 
   const win = edge * Math.min(...wins) + (1 - edge) * (wins.reduce((a, b) => a + b, 0) / wins.length);
   const rear = tough[SIDES.indexOf('rear')];
   const survive = win + (1 - win) * (1 - edge) * (rear / (rear + base.rear));
-  return Math.log(survive) + (p.cargo / PRIORITY_TOP) * Math.log(loadFits(v, base.load));
+  return Math.log(survive) + (p.cargo / PRIORITY_TOP) * Math.log(loadFits(v, base.load, speedShare(p)));
 }
 
-function loadFits(v: Vehicle, load: Load): number {
-  const byMass = load.kg > 0 ? freeMass(v) / load.kg : 1;
+function loadFits(v: Vehicle, load: Load, share: number): number {
+  const byMass = load.kg > 0 ? freeMass(v, share) / load.kg : 1;
   const byCells = load.cells > 0 ? Math.max(1, freeCells(v)) / load.cells : 1;
   return Math.min(1, byMass, byCells);
 }
@@ -41,8 +41,8 @@ function attackerEdge(world: World, v: Vehicle): number {
   return 1 / (1 + (speed / GEAR_THREAT_SPEED) ** 2);
 }
 
-function freeMass(v: Vehicle): number {
-  return Math.max(1, chassisDef(v.chassisId).ratedMass - vehicleMass(v));
+function freeMass(v: Vehicle, share: number): number {
+  return Math.max(1, Math.min(chassisDef(v.chassisId).ratedMass - vehicleMass(v), npcMassRoom(v, share)));
 }
 
 function rivalKill(base: Pick<GearBaseline, 'rivalTarget' | 'rivalKills'>, def: WeaponDef): number {

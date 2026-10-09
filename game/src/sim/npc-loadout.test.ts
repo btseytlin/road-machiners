@@ -18,9 +18,9 @@ import { mountedItems } from './grid';
 import type { EngineDef, WeaponDef } from '../data/parts';
 import { gunDrag, isStranded, npcMassRoom, speedShare } from './stats';
 import { wornDef } from './wear';
-import { addGoods } from './inventory';
+import { addGoods, cargoRoom, removeGoods } from './inventory';
 import { CRATE_MASS } from '../data/goods';
-import { emptyWorld } from './testkit';
+import { emptyWorld, npcBrain } from './testkit';
 import type { Vehicle, World } from './types';
 import { TEST_MAP } from '../test/map';
 import TRUCK_SHAPES from '../data/truck-shapes.json';
@@ -90,6 +90,16 @@ describe('NPC equipment generation', () => {
       const goodsMass = v.items.filter((it) => it.kind === 'good').reduce((sum, it) => sum + itemMass(it), 0);
       expect(goodsMass).toBe(crates * CRATE_MASS);
       expect(vehicleMass(v)).toBeLessThanOrEqual(CHASSIS[v.chassisId].ratedMass);
+    }
+  });
+
+  it.each(['tractor', 'hauler', 'bus'])('leaves a trader on a %s room for a crate once it sells its goods', (chassisId) => {
+    for (let seed = 1; seed <= 24; seed++) {
+      const world = { ...fixture, rngState: seed, marketRng: { rngState: seed * 7919 + 1 } };
+      const loadout = generateNpcLoadout(world, NPCS.trader, chassisId);
+      const v = makeVehicle(world, { ...loadout, name: 'trader', faction: NPCS.trader.faction, brain: npcBrain('trader', { x: 50, y: 50 }, ['trader']), pos: { x: 50, y: 50 }, heading: 0 });
+      for (const [good, n] of Object.entries(goodsCount(v))) if (good !== 'parts') removeGoods(v, good, n);
+      expect(cargoRoom(v), `seed ${seed} ${loadout.level} ${describeLoadout(v)}`).toBeGreaterThan(0);
     }
   });
 
@@ -636,11 +646,11 @@ describe('loadout fingerprint', () => {
   it('rolls the same loadouts and RNG streams for every template', () => {
     const w = emptyWorld();
     const loadouts = Object.values(NPCS).flatMap((template) => Array.from({ length: 5 }, () => generateNpcLoadout(w, template)));
-    expect(sha({ loadouts, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('b8ab1d2bc29a67aa');
+    expect(sha({ loadouts, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('13489a7cf172a9a6');
   }, budget(180_000));
 
   it('populates a new world the same way', () => {
     const w = newWorld(7, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
-    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('1dddd4986b269ea6');
+    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('b0b120e551502540');
   }, budget(60_000));
 });
