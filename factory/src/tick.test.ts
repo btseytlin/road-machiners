@@ -310,6 +310,15 @@ describe('timeoutOf', () => {
 });
 
 describe('tick', () => {
+  it('records a dead catch-up job as a failure of its issue, with no stuck label and no retry', async () => {
+    const dead = job('2026-01-10T11:50:00Z', 'catch-up', 8);
+    const h = harness(dead, false, [card(8, 'Merging')]);
+    await checkJobs(h.ctx, h.deps);
+    expect(h.labels).toEqual([]);
+    expect(h.killed).toEqual(['containers catch-up-job']);
+    expect(readState(h.ctx.statePath)).toMatchObject({ jobs: [], retried: [], failures: [{ stage: 'catch-up', issue: 8, error: 'job process died without finishing' }] });
+  });
+
   it('keeps the queued ship of a ship job past its timeout once, and clears it on the second timeout', async () => {
     const ship = job('2026-01-10T08:00:00Z', 'ship', 20);
     const h = harness(ship, true);
@@ -468,6 +477,44 @@ describe('tick', () => {
   it('starts no merge job while every Merging card is stuck or held', () => {
     const cards = [card(5, 'Merging', [STUCK_LABEL]), card(6, 'Merging')];
     expect(chooseJobs(state({ held: { 6: { by: 'Ann', reason: 'r', at: 'a', stage: null } } }), cards, NOW, CFG)).toEqual([]);
+  });
+
+  describe('merge catch-up', () => {
+    const merging = (batch: number[] | undefined, caughtUp?: number[]): Job => ({ ...running('merge', null), batch, ...(caughtUp ? { caughtUp } : {}) });
+    const queue = [5, 6, 7, 8, 9, 10, 11, 12, 13].map((issue) => card(issue, 'Merging'));
+
+    it('offers no catch-up until the running merge job has taken its batch', () => {
+      expect(chooseJobs(state({ jobs: [merging(undefined)] }), queue, NOW, CFG)).toEqual([]);
+    });
+
+    it('catches up only the next two batches, oldest first, one at a time, never a card of the running batch', () => {
+      const s = state({ jobs: [merging([5, 6, 7])] });
+      expect(chooseJobs(s, queue, NOW, CFG)).toEqual([{ stage: 'catch-up', issue: 8 }]);
+      const report = evaluateSchedule(s, queue, NOW, CFG);
+      expect(report.decisions.filter((d) => d.stage === 'catch-up').map((d) => d.issue)).toEqual([8, 9, 10, 11, 12, 13]);
+    });
+
+    it('skips cards it caught up during this merge job, and stuck, held or busy cards', () => {
+      const cards = [...queue.slice(0, 4), card(9, 'Merging', [STUCK_LABEL]), card(10, 'Merging'), card(11, 'Merging')];
+      const s = state({ jobs: [merging([5, 6, 7], [8]), running('approve', 11)], held: { 10: { by: 'Ann', reason: 'r', at: 'a', stage: null } } });
+      expect(chooseJobs(s, cards, NOW, CFG)).toEqual([]);
+      expect(chooseJobs(state({ jobs: [merging([5, 6, 7], [8])] }), queue, NOW, CFG)).toEqual([{ stage: 'catch-up', issue: 9 }]);
+    });
+
+    it('waits for a running catch-up before the next one', () => {
+      expect(chooseJobs(state({ jobs: [merging([5, 6, 7], [8]), running('catch-up', 8)] }), queue, NOW, CFG)).toEqual([]);
+    });
+
+    it('starts the next merge job with no catch-up once the merge ended, and not for a card whose catch-up still runs', () => {
+      expect(chooseJobs(state(), queue, NOW, CFG)).toEqual([{ stage: 'merge', issue: null }]);
+      expect(chooseJobs(state({ jobs: [running('catch-up', 5)] }), [card(5, 'Merging')], NOW, CFG)).toEqual([]);
+      expect(chooseJobs(state({ jobs: [running('catch-up', 5)] }), [card(5, 'Merging'), card(6, 'Merging')], NOW, CFG)).toEqual([{ stage: 'merge', issue: null }]);
+    });
+
+    it('does not count a catch-up toward the card job limit', () => {
+      const spent = state({ jobs: [merging([5])], cardStarts: { 6: starts(5, 3) } });
+      expect(chooseJobs(spent, [card(5, 'Merging'), card(6, 'Merging')], NOW, CFG)).toEqual([{ stage: 'catch-up', issue: 6 }]);
+    });
   });
 
   it('hands a reply Hermes left unrouted past the limit to Hermes as an incident with no stuck label, and keeps a fresh one', async () => {

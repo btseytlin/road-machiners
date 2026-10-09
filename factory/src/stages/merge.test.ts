@@ -270,6 +270,41 @@ describe('merge queue', () => {
     expect(batch).toEqual([6]);
   });
 
+  it('logs how long the batch spent merging, checking, fixing, merging the moved base again and pushing, also when it fails', async () => {
+    pushFailures = 1;
+    await merge(fakeCtx());
+    expect(logs).toContain('batch #5 #6 took merges 0 min in 2, checks 0 min in 2, fixes 0 min in 0, remerges 0 min in 1, pushes 0 min in 2');
+    logs = [];
+    shellFailures = ['FAIL a.test.ts'];
+    await expect(merge(fakeCtx(0))).rejects.toThrow(BudgetError);
+    expect(logs).toContain('batch #5 #6 took merges 0 min in 2, checks 0 min in 1, fixes 0 min in 0, remerges 0 min in 0, pushes 0 min in 0');
+  });
+
+  it('leaves a card whose catch-up still runs to a later batch, so no card is merged by two jobs at once', async () => {
+    cards = [card(5), card(6), card(7), card(8)];
+    const merging = { id: 'merge---x', stage: 'merge' as const, issue: null, pid: 1, startedAt: '', log: '' };
+    const catching = { id: 'catch-up-5-x', stage: 'catch-up' as const, issue: 5, pid: 2, startedAt: '', log: '' };
+    updateState(`${home}/state.json`, (state) => ({ ...state, jobs: [merging, catching], approvedResolving: {} }));
+    await merge(fakeCtx());
+    expect(readState(`${home}/state.json`).jobs.find((job) => job.stage === 'merge')?.batch).toEqual([6, 7, 8]);
+    expect(calls.filter((call) => call.startsWith('merge '))).toEqual(['merge factory/issue-6', 'merge factory/issue-7', 'merge factory/issue-8']);
+  });
+
+  it('merges every waiting card exactly once across jobs while catch-ups run between them', async () => {
+    cards = [card(5), card(6), card(7), card(8), card(9)];
+    const merging = { id: 'merge---x', stage: 'merge' as const, issue: null, pid: 1, startedAt: '', log: '' };
+    const mergedOnce: string[] = [];
+    for (let round = 0; round < 3 && cards.length > 0; round++) {
+      calls = [];
+      updateState(`${home}/state.json`, (state) => ({ ...state, jobs: [merging, ...(round === 1 ? [{ id: 'c', stage: 'catch-up' as const, issue: 8, pid: 2, startedAt: '', log: '' }] : [])] }));
+      await merge(fakeCtx());
+      const taken = readState(`${home}/state.json`).jobs.find((job) => job.stage === 'merge')?.batch ?? [];
+      mergedOnce.push(...calls.filter((call) => call.startsWith('merge factory/')));
+      cards = cards.filter((c) => !taken.includes(c.issue));
+    }
+    expect(mergedOnce.sort()).toEqual(['merge factory/issue-5', 'merge factory/issue-6', 'merge factory/issue-7', 'merge factory/issue-8', 'merge factory/issue-9']);
+  });
+
   it('does nothing when no card waits', async () => {
     cards = [];
     await merge(fakeCtx());

@@ -65,12 +65,14 @@ A branch whose every changed file since its base is a Markdown file outside `gam
 
 ## Merging
 
-- A merge job runs in the branch queue when Merging holds a card that is not stuck or held. It takes the first three such cards whose base is the base of the first one, in board order. The first waiting card is always among them, so no card waits behind newer ones. The tick starts the next merge job for the cards left, on the base the batch pushed.
+- A merge job runs in the branch queue when Merging holds a card that is not stuck or held. It takes the first three such cards whose base is the base of the first one, in board order. The first waiting card is always among them, so no card waits behind newer ones, except a card whose catch-up still runs, which goes in a later batch. The tick starts the next merge job for the cards left, on the base the batch pushed.
+- Catch-up: while a merge job runs and has written its `batch`, the tick starts a `catch-up` branch job, one at a time, for each of the next six waiting cards, the next two batches, at most once per merge job. The job records its card in the merge job's `caughtUp` and merges the card's base into its issue branch with `prompts/merge-branches.md`, like any conflict between branches: an agent resolves a conflict in `work/merge-factory-issue-N`, the factory checks its diff, and only the issue branch is pushed. The card's own merge then meets only what the base gained since. A catch-up runs no checks and moves no column. It skips a card of the running batch, and a card whose branch already holds its base. A failed or dead catch-up records a failure for Hermes but labels nothing, and the merge job merges the card as before.
 - It clones the base into `$FACTORY_HOME/work/merge-queue` and merges each card's branch. A conflict goes to the merge session with `prompts/merge-branches.md`. An unfinished merge fails the job.
 - The merge checkpoint runs the full suite through the test cache, the typecheck, the playtest and the build on the result. A run past `FACTORY_CHECKS_TIMEOUT_MINUTES` loses its container and runs again, at most 3 runs, as [operations.md](operations.md#jobs-and-queues) says. A failure goes to the same session with `prompts/merge-fix.md`, which keeps the behavior the committee approved for each card. The loop ends on a pass, or when the session cost `FACTORY_MERGING_BUDGET_USD`.
 - The diff guard runs on everything the base takes. Then the job pushes the base. When GitHub rejects the push because the base moved, the job merges the new base in and checks again.
 - Each card gets `release-candidate`, a comment that names the cards merged with it, and moves to Done. A `dev` batch rebuilds `/dev/`. A release batch drops the current candidate post, so a new candidate follows.
 - A failed job labels every card of its batch `factory-stuck`. Batches pushed before it stay in the base.
+- The job log ends each batch, passed or failed, with its minutes and counts of card merges with their conflict rounds, checks runs, fix rounds, merges of a moved base and pushes.
 
 ## Approval
 

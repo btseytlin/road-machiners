@@ -16,7 +16,7 @@ A work clone with no commit checked out, like one a full disk cut short, holds n
 
 Each job's containers run on a fixed set of CPUs. `FACTORY_CPU_LIGHT`, `FACTORY_CPU_IMPLEMENT` and `FACTORY_CPU_TEST` set each pool's share, and each pool gets round(share × cores) whole CPUs, at least 1. The pools must fit the host, or every job start throws.
 
-- light: triage, waste review, design and branch jobs other than the merge and the candidate.
+- light: triage, waste review, design and branch jobs other than the merge and the candidate, so a catch-up's agent never takes the merge checks' CPUs.
 - implement: implementation, ad hoc, change, verify, harden and release playtest jobs. The Testing job runs its preview checks here.
 - test: the merge job, which runs the full suite, the candidate, which checks the frame rate, and the post-only checks.
 
@@ -105,7 +105,7 @@ Hermes's watch lists every stuck issue with its kind, like `stuck #12 Tow fee (s
 
 Each factory process sends its GitHub calls one at a time, as GitHub asks. A call that hits a rate limit waits `FACTORY_GITHUB_RETRY_BASE_SECONDS` and runs again, up to `FACTORY_GITHUB_RETRIES` times, with the wait doubled each time. Any other GitHub error fails at once. A call that runs past `FACTORY_GITHUB_TIMEOUT_SECONDS` is killed and fails, so a dead connection cannot hang a tick. It does not run again, since a write may have landed.
 
-A card stage that fails resumes once on the next tick in its own sessions, and its agent gets the error. It takes no label and records no failure. A failed job after that, a branch job that timed out, a stage that spent its budget or asked the committee, and any other failed job labels its issue `factory-stuck` and records the failure in `failures` for a day. A failed merge job labels every card of its batch and records the batch in its failure. The factory posts nothing about it. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
+A card stage that fails resumes once on the next tick in its own sessions, and its agent gets the error. It takes no label and records no failure. A failed job after that, a branch job that timed out, a stage that spent its budget or asked the committee, and any other failed job labels its issue `factory-stuck` and records the failure in `failures` for a day. A failed merge job labels every card of its batch and records the batch in its failure. The factory posts nothing about it. A failed or dead catch-up job records its failure with its issue and labels nothing, since its card stays in the merge queue, and the stuck sweep never takes it as a stuck card's cause. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
 
 An agent run that ends on the Claude weekly usage limit is the exception. The factory writes `Hermes: Claude weekly usage limit; <message>` to `$FACTORY_HOME/paused`, unless a pause is already there. The job still records its failure, but the card takes no label. Hermes resumes the factory after the reset, and the card runs its stage again.
 

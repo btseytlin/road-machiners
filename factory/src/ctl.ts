@@ -190,7 +190,7 @@ function printRows(rows: string[]): void {
 }
 
 function jobs(ctx: Ctx): void {
-  printRows(readState(ctx.statePath).jobs.map((job) => `${job.stage} ${job.issue === null ? '-' : `#${job.issue}`} pid ${job.pid} since ${job.startedAt} log ${job.log}${job.batch === undefined ? '' : ` batch ${job.batch.map((issue) => `#${issue}`).join(',')}`}`));
+  printRows(readState(ctx.statePath).jobs.map((job) => `${job.stage} ${job.issue === null ? '-' : `#${job.issue}`} pid ${job.pid} since ${job.startedAt} log ${job.log}${job.batch === undefined ? '' : ` batch ${job.batch.map((issue) => `#${issue}`).join(',')}`}${job.caughtUp === undefined ? '' : ` caught up ${job.caughtUp.map((issue) => `#${issue}`).join(',')}`}`));
 }
 
 function queues(ctx: Ctx): void {
