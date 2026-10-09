@@ -264,7 +264,7 @@ describe("critical vehicle readout", () => {
     w.player.fuel = 18.5;
     w.player.supplies = 7.25;
     expect(getHudReadout(w).resources.map((r) => r.label)).toEqual([
-      "Money",
+      "M's",
       "Fuel",
       "Supplies",
       "Driver",
@@ -340,13 +340,19 @@ describe("critical vehicle readout", () => {
 });
 
 describe("rescue readout", () => {
-  it("shows negative money as debt with a warning", () => {
+  it("shows negative money as a negative amount with a warning", () => {
     const w = emptyWorld();
     w.player.money = -120050;
     expect(getHudReadout(w).resources[0]).toMatchObject({
-      value: "Debt 1,201",
+      value: "−1,201",
+      balance: -120050,
       warning: true,
     });
+  });
+  it("gives only the M's entry a balance", () => {
+    const { resources } = getHudReadout(emptyWorld());
+    expect(resources[0]).toHaveProperty("balance");
+    expect(resources.slice(1).every((r) => !("balance" in r))).toBe(true);
   });
   it("tells a stranded player to install a spare engine it carries", () => {
     const w = newWorld(1337, startKit("combat"), TEST_MAP, defaultSetup('roaming'));

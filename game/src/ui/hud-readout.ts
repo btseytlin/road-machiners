@@ -20,7 +20,7 @@ import { dist, type Vec } from "../sim/vec";
 import type { NpcState, SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { clockLabel, vehicleName } from "./format";
-import { celsius, engineCelsius, fuelLiters, hp, kph, moneyAmount } from "./units";
+import { celsius, engineCelsius, fuelLiters, hp, kph, moneyNumber } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
 import { contextKey, type ContextAction } from './hud';
@@ -230,12 +230,6 @@ function weatherLabel(w: World, pos: Vec): string {
   return names.length ? [...new Set(names)].join(", ") : "Clear";
 }
 
-export function moneyLabel(money: number): string {
-  return money < 0
-    ? `Debt ${moneyAmount(-money)}`
-    : moneyAmount(money);
-}
-
 export type RescueReadout =
   | { kind: "knockedOut" }
   | { kind: "towed"; tower: string; town: string; fee: number }
@@ -382,8 +376,9 @@ export function getHudReadout(w: World) {
     clock: clockLabel(w.turn),
     resources: [
       {
-        label: "Money",
-        value: moneyLabel(p.money),
+        label: "M's",
+        value: moneyNumber(p.money),
+        balance: p.money,
         warning: p.money < 0,
       },
       {

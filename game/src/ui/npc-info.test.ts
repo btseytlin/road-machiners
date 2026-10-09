@@ -265,7 +265,7 @@ it('names both trucks, the destination and the fee in a tow between NPCs', () =>
   client.name = 'Client';
   refreshVision(w);
   expect(eventText(w, { t: 'towHitched', by: tower.id, client: client.id, site: 'kiln' })).toEqual({ text: 'Tower takes Client in tow to Kiln Camp.', cls: 'dim' });
-  expect(eventText(w, { t: 'towDone', by: tower.id, client: client.id, fee: 1250 })).toEqual({ text: 'Tower tows Client in and takes 13 M.', cls: 'dim' });
+  expect(eventText(w, { t: 'towDone', by: tower.id, client: client.id, fee: 1250 })).toEqual({ text: 'Tower tows Client in and takes 13 M\'s.', cls: 'dim' });
   expect(eventText(w, { t: 'towDropped', by: tower.id, client: client.id, reason: 'danger' })).toEqual({ text: 'Tower drops the tow of Client.', cls: 'dim' });
-  expect(eventText(w, { t: 'towDone', by: tower.id, client: w.player.vehicleId, fee: 1200 })).toEqual({ text: 'Tower tows you into town and takes 12 M.', cls: 'bad' });
+  expect(eventText(w, { t: 'towDone', by: tower.id, client: w.player.vehicleId, fee: 1200 })).toEqual({ text: 'Tower tows you into town and takes 12 M\'s.', cls: 'bad' });
 });

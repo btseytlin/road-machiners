@@ -158,8 +158,8 @@ Every event gets a level before it gets a channel. A level fires on its channels
 
 ## 8. Words and numbers
 
-- A unit is written once per value and in one style. Money is whole M. Fuel is L. Mass is kg. Speed is km/h. Work and cooldowns are in turns. Deadlines are game hours.
-- Money prints through `moneyText()` as "15 M", with a real minus sign for a negative amount. A change in money prints through `moneyDelta()` as "+15 M" or "−15 M". A test fails when a screen builds an " M" string by hand.
+- A unit is written once per value and in one style. Money is whole M's. Fuel is L. Mass is kg. Speed is km/h. Work and cooldowns are in turns. Deadlines are game hours.
+- `src/ui/units.ts` owns money. On a screen, money is `moneyEl()`: the M's coin, then the number. In a sentence, a log line or a title it is `moneyText()`, as "1 M" or "15 M's". A button with a price uses `pricedEl()`, as "Buy" then the coin and the number. Debt is a negative amount with a real minus sign, in danger ink. A change in money prints through `moneyDelta()` as "+15 M's" or "−15 M's". A test fails when a screen builds money text by hand.
 - A count of turns prints through `turnsText()` as "2 turns". Value and unit are plain text, never "2t".
 - Each fact kind has one formatter in `src/ui/format.ts` or `src/ui/units.ts`, and every screen calls it.
 - A number that the player's choice will change shows its after value before the choice, like the truck's mass before a buy.
@@ -228,6 +228,7 @@ Use a shared piece before writing a new rule. A screen may add its own layout to
 - `.tabs` is a row of medium tab buttons, and `.tabs.sub` the small row inside a tab.
 - `.row` is a list line with a faint line under it. `.tile` is a boxed list item edged in its `--tone`.
 - `.chip` is a small boxed value. `.tag` is an outlined word in the color of its text.
+- `.amount` is money from `moneyEl()`: the `.coin`, sized in em by the text around it, then the number. The coin colors are the `--coin-*` tokens.
 - `.meter` is a bar that fills from the left. `.s` and `.l` change its height. `.broken` turns the track to danger. `.progress` fills it with the accent for timed work and recharge.
 - `.selected` is the one look of a chosen item: accent border and accent wash. A pressed `button.on` uses it too. No screen draws its own selected look. Drawn hardware, like a switch or a truck instrument, keeps its metal and takes the accent edge only.
 - `[aria-disabled="true"]` dims a control that cannot be used now. It keeps hover and focus, so its tooltip can say why.
