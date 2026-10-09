@@ -6,9 +6,10 @@ import { siteGap } from '../sim/sites';
 import { isTerritory, territoryRoads } from '../sim/territory';
 import { dist, polylineDist, type Vec } from '../sim/vec';
 import { TERRAIN_MARGIN, type PaintCanvas } from './groundPaint';
-import { DIRT_ROAD_STYLE, paintRoadMask, REGION_ROAD_STYLE } from './roadPaint';
+import { DIRT_ROAD_STYLE, LANE_STYLE, laneLines, paintRoadMask, REGION_ROAD_STYLE } from './roadPaint';
+import { highwayAtlas } from '../sim/highway';
 import { ICARUS_DECKS } from '../sim/bridge';
-import { icarusAtlas } from '../sim/atlas';
+import { icarusAtlas, type Atlas } from '../sim/atlas';
 
 const sun = REGION.locations.filter(isTerritory).find((l) => l.id === 'fallen-sun')!;
 const SPUR_FADE = TERRITORIES['fallen-sun'].wreck!.spurFade;
@@ -44,7 +45,7 @@ class RecordingContext {
   }
 }
 
-function paintedMask(): { canvas: PaintCanvas; strokes: Stroke[] } {
+function paintedMask(atlas: Atlas = icarusAtlas()): { canvas: PaintCanvas; strokes: Stroke[] } {
   const res = 2;
   const from = -TERRAIN_MARGIN;
   const ctx = new RecordingContext();
@@ -55,7 +56,7 @@ function paintedMask(): { canvas: PaintCanvas; strokes: Stroke[] } {
     from,
     toPx: (tiles) => (tiles - from) * res,
   };
-  paintRoadMask(canvas, icarusAtlas());
+  paintRoadMask(canvas, atlas);
   return { canvas, strokes: ctx.strokes };
 }
 
@@ -129,5 +130,24 @@ describe('road mask', () => {
       .find((m) => deckAt(ICARUS_DECKS, m.x, m.y) === null && [...REGION.towns, ...REGION.locations].every((s) => siteGap(s, m) > 2))!;
     expect(channelAt(mask, RED, p)).toBe(1);
     expect(channelAt(mask, GREEN, p)).toBe(0);
+  });
+});
+
+describe('highway lane paint', () => {
+  const highway = highwayAtlas(4, 1);
+
+  it('marks four lanes: solid edges, a solid middle line and dashed dividers', () => {
+    const lines = laneLines(highway.roads[0]);
+
+    expect(lines.map((l) => l.offset)).toEqual([-2.65, 2.65, -1.5, 0, 1.5]);
+    expect(lines.map((l) => l.dashed)).toEqual([false, false, true, false, true]);
+  });
+
+  it('paints lanes and no dirt road on the highway, and no lanes on Icarus', () => {
+    const lanes = paintedMask(highway).strokes;
+
+    expect(lanes.some((s) => s.style === LANE_STYLE && s.lines.length > 0)).toBe(true);
+    expect(lanes.filter((s) => s.style === REGION_ROAD_STYLE).every((s) => s.lines.length === 0)).toBe(true);
+    expect(paintedMask().strokes.some((s) => s.style === LANE_STYLE)).toBe(false);
   });
 });

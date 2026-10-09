@@ -1,7 +1,8 @@
 
 import { REGION, type TerritoryDef } from "../data/region";
 import { TERRITORIES, type FarmRoad, type WreckRules } from "../data/territory";
-import { atlasSites, type Atlas } from "../sim/atlas";
+import { HIGHWAY } from "../data/gauntlet";
+import { atlasSites, type Atlas, type AtlasRoad } from "../sim/atlas";
 import { bridgeCut, deckAt } from "../sim/bridge";
 import { isTerritory, siteGap } from "../sim/sites";
 import { territoryRoads } from "../sim/territory";
@@ -30,6 +31,7 @@ export type RoadImage = { side: number; pixels: Uint8ClampedArray };
 
 export const REGION_ROAD_STYLE = "#f00";
 export const DIRT_ROAD_STYLE = "#0f0";
+export const LANE_STYLE = "#00f";
 
 export function paintRoadMask(c: PaintCanvas, atlas: Atlas): void {
   const ctx = c.ctx;
@@ -53,7 +55,49 @@ export function paintRoadMask(c: PaintCanvas, atlas: Atlas): void {
     for (const spur of spurs) strokeSpur(c, spur, fade, offDeck);
   }
   ctx.filter = "none";
+  for (const road of atlas.roads.filter((r) => r.lanes > 0)) paintLanes(c, road);
   ctx.globalCompositeOperation = "source-over";
+}
+
+type LaneLine = { offset: number; dashed: boolean };
+
+export function laneLines(road: AtlasRoad): LaneLine[] {
+  const half = road.width / 2;
+  const lane = road.width / road.lanes;
+  const edge = half - HIGHWAY.road.paint.edgeInset;
+  const dividers = Array.from({ length: road.lanes - 1 }, (_, i) => -half + lane * (i + 1));
+  return [{ offset: -edge, dashed: false }, { offset: edge, dashed: false }, ...dividers.map((offset) => ({ offset, dashed: Math.abs(offset) > 1e-6 }))];
+}
+
+function paintLanes(c: PaintCanvas, road: AtlasRoad): void {
+  const ctx = c.ctx;
+  const { dash, gap, line, wear } = HIGHWAY.road.paint;
+  ctx.globalCompositeOperation = "lighten";
+  ctx.strokeStyle = LANE_STYLE;
+  ctx.lineWidth = line * c.res;
+  ctx.lineCap = "butt";
+  const points = evenPoints(road.points);
+  laneLines(road).forEach((lane, k) => {
+    const shifted = offsetLine(points, lane.offset);
+    ctx.beginPath();
+    for (let i = 1; i < shifted.length; i++) {
+      const along = i * STEP;
+      const painted = !lane.dashed || along % (dash + gap) < dash;
+      if (!painted || hash2(Math.floor(along / 2), k * 37 + 11) < wear) continue;
+      ctx.moveTo(c.toPx(shifted[i - 1].x), c.toPx(shifted[i - 1].y));
+      ctx.lineTo(c.toPx(shifted[i].x), c.toPx(shifted[i].y));
+    }
+    ctx.stroke();
+  });
+}
+
+function offsetLine(points: readonly Vec[], offset: number): Vec[] {
+  return points.map((p, i) => {
+    const a = points[Math.max(0, i - 1)];
+    const b = points[Math.min(points.length - 1, i + 1)];
+    const length = dist(a, b);
+    return { x: p.x - ((b.y - a.y) / length) * offset, y: p.y + ((b.x - a.x) / length) * offset };
+  });
 }
 
 function strokeRuns(c: PaintCanvas, runs: Vec[][], width: number): void {

@@ -86,7 +86,7 @@ export const HIGHWAY = {
     minBendRadius: 60,
     profile: { amplitude: 3, wavelength: 260, seedOffset: 103 },
     sample: 2,
-    paint: { dash: 3, gap: 4, line: 0.22, edgeInset: 0.35 },
+    paint: { dash: 3, gap: 3, line: 0.22, edgeInset: 0.35, wear: 0.12 },
   },
   edge: { band: 28, height: 14 },
   relief: { amplitude: 2.4, octaves: [{ freq: 1 / 56, amp: 1, seedOffset: 201 }, { freq: 1 / 17, amp: 0.3, seedOffset: 202 }] },
