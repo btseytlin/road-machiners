@@ -9,7 +9,7 @@ import { canLoot, canScavenge, canUseOasis, scavenge, useOasis } from "../sim/lo
 import { shopAt } from "../sim/market";
 import type { World } from "../sim/types";
 import { playerCanAct, setAutoRepair, setDirect, setHeadlights, setOverdrive } from "../sim/world";
-import { combatBlocked, type ContextAction, type ContextTarget } from "../ui/hud";
+import { type ContextAction, type ContextTarget } from "../ui/hud";
 import { ContextPicker, getContextActions } from "../ui/hud-readout";
 
 export type ControlsHost = {
@@ -127,8 +127,8 @@ export class TruckContext {
   searchStock(stockId: string, combat?: number): void {
     const w = this.host.world();
     if (isBusy(playerVehicle(w))) return;
-    if (combat !== undefined) this.host.note(combatBlocked(combat));
-    else if (canScavenge(w, stockId)) {
+    if (combat !== undefined) return;
+    if (canScavenge(w, stockId)) {
       this.host.apply(scavenge(w, stockId));
       this.host.pushEvents();
     }

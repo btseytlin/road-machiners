@@ -4,7 +4,6 @@
 
 import { REGION } from '../../data/region';
 import { groundPoint, type VehicleFrame } from '../../phys/frames';
-import { PAL } from '../../render/palette';
 import type { World } from '../../sim/types';
 import type { Vec } from '../../sim/vec';
 import { el } from '../../ui/dom';
@@ -21,14 +20,7 @@ type Site = { id: string; name: string; pos: { x: number; y: number } };
 
 function labelEl(container: HTMLElement): HTMLDivElement {
   const el = document.createElement('div');
-  el.style.position = 'absolute';
-  el.style.transform = 'translate(-50%, -100%)';
-  el.style.font = '15px var(--font-mono)';
-  el.style.color = PAL.text;
-  el.style.background = '#1a1410aa';
-  el.style.padding = '3px 6px';
-  el.style.whiteSpace = 'nowrap';
-  el.style.pointerEvents = 'none';
+  el.className = 'world-label';
   container.appendChild(el);
   return el;
 }
@@ -95,7 +87,7 @@ function weaponChip(mark: WeaponMark): HTMLElement {
 function jobChip(job: JobMark): HTMLElement {
   return el('div', { class: 'marker-job' },
     el('span', {}, job.label),
-    el('span', { class: 'job-bar' }, el('span', { style: `width:${Math.round(job.progress * 100)}%` })),
+    el('span', { class: 'job-bar meter progress' }, el('span', { style: `width:${Math.round(job.progress * 100)}%` })),
   );
 }
 

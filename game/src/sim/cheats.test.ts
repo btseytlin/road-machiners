@@ -218,7 +218,7 @@ describe('frozen NPCs', () => {
   it('keeps a hostile NPC from raising a radio call', () => {
     const called = (frozen: boolean): boolean => {
       const start = frozen ? toggleFrozen(emptyWorld()) : emptyWorld();
-      const { w } = withSpawned(start, 'buggy', true);
+      const { w } = withSpawned(start, 'gunwagon', true);
       return endTurn(w, testDrive).player.call !== null;
     };
     expect(called(false)).toBe(true);

@@ -228,7 +228,7 @@ export function revealed(text: string, elapsedMs: number, charsPerSecond: number
 }
 
 export class RadioPanel {
-  readonly root = panel('radio', rightDock());
+  readonly root = panel('radio dock-panel', rightDock());
   readonly faceplate = el('div', { class: 'radio-faceplate' });
   readonly keys = el('div', { class: 'radio-keys' });
   private text = el('div', { class: 'radio-text', 'aria-live': 'polite', 'aria-busy': 'false' });

@@ -39,11 +39,11 @@ class NewGameScreen {
   private draft: WorldSetup = defaultSetup("roaming");
   private readonly opener = document.activeElement as HTMLElement | null;
   private readonly block = panel("new-game-block");
-  private readonly root = panel("new-game");
+  private readonly root = panel("new-game dialog");
   private readonly modes = el("div", { class: "mode-list", role: "radiogroup", "aria-label": "Game mode" });
   private readonly settingsButton = el("button", { class: "settings-toggle", "aria-expanded": "false", onclick: () => this.toggleSettings() }, "World Settings");
   private readonly settings = el("div", { class: "world-settings", hidden: true });
-  private readonly startButton = el("button", { class: "start", onclick: () => this.start() }, "Start");
+  private readonly startButton = el("button", { class: "start btn-l", onclick: () => this.start() }, "Start");
   private readonly onKey = (e: Event) => {
     if ((e as KeyboardEvent).code !== "Escape") return;
     e.stopPropagation();
@@ -63,7 +63,7 @@ class NewGameScreen {
       this.modes,
       this.settingsButton,
       this.settings,
-      el("div", { class: "new-game-buttons" }, el("button", { class: "back", onclick: () => this.close() }, "Back"), this.startButton),
+      el("div", { class: "new-game-buttons" }, el("button", { class: "back btn-l", onclick: () => this.close() }, "Back"), this.startButton),
     );
     this.render();
     window.addEventListener("keydown", this.onKey, true);
@@ -103,12 +103,13 @@ class NewGameScreen {
         input.setAttribute("aria-valuetext", percent(next));
       },
     });
+    const defaultAt = (def.default - def.min) / (def.max - def.min);
     return el(
       "div",
       { class: "setting-row", "data-setting": id },
-      el("label", { for: `setting-${id}` }, el("b", {}, def.name), label, el("span", { class: "dim" }, `default ${percent(def.default)}`)),
-      el("div", { class: "dim" }, def.description),
-      el("div", { class: "setting-input" }, el("span", { class: "dim" }, percent(def.min)), input, el("span", { class: "dim" }, percent(def.max))),
+      el("label", { for: `setting-${id}`, title: def.description }, def.name),
+      el("div", { class: "setting-slider" }, input, el("span", { class: "default-tick", style: `--default-at: ${defaultAt}` })),
+      label,
     );
   }
 

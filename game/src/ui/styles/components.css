@@ -1,0 +1,225 @@
+/* Shared pieces. docs/ui.md says when to use each one. A screen file adds only the layout that is its own. */
+
+/* The framed box of a modal, the save panel and the New game screen, with the scrim over the game behind it. */
+#ui .dialog {
+  padding: var(--space-9);
+  background: var(--surface-panel);
+  border: 2px solid var(--line-bright);
+  box-shadow:
+    inset 0 0 0 var(--space-2) var(--line-faint),
+    0 0 0 100vmax var(--scrim);
+}
+
+/* A panel of the right dock: the log, the contracts and the radio. */
+#ui .dock-panel {
+  box-sizing: border-box;
+  background: var(--surface-dock);
+  border: 0;
+  border-left: 2px solid var(--line-strong);
+  font-size: var(--text-dense);
+}
+
+/* A notice that floats at the top middle of the HUD and waits for a choice: rescue, stranded and dialogue. */
+#ui .notice {
+  background: var(--surface-raised);
+  border-top: 2px solid var(--line-bright);
+}
+
+/* The heading of a small HUD panel. */
+#ui .panel-title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-dense);
+}
+
+/* Text buttons have three fixed heights: small, medium and large. A plain button is medium. The listed tiles and drawn
+   hardware size themselves, and only they may be left out of this rule. Screen files place a button and set its width. */
+#ui button:where(:not(.switch, .instrument-button, .truck-instrument, .end-turn, .radio-next, .inv-item, .part-sum, .mode-card, .perk, .dialogue-option, .weapon-pick, .weapon-hold, .weapon-reload)) {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  height: var(--btn-h-m);
+  padding: 0 var(--space-5);
+  font-size: var(--text-body);
+  line-height: 1;
+  white-space: nowrap;
+}
+#ui :is(.btn-s, td button, .tabs.sub > button, .weapon-head button, .log-expand, .tip-close) {
+  height: var(--btn-h-s);
+  padding: 0 var(--space-4);
+  font-size: var(--text-dense);
+}
+#ui :is(.btn-l, .death-buttons button) {
+  height: var(--btn-h-l);
+  padding: 0 var(--space-8);
+  font-size: var(--text-lead);
+}
+#ui .btn-danger {
+  color: var(--danger-bright);
+  border-color: var(--danger-bright);
+}
+
+/* A line of a list or table that has no box of its own. */
+.row {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line-faint);
+}
+
+/* A boxed item of a list, edged on the left in its item tone. */
+.tile {
+  background: var(--surface-well);
+  border: 1px solid var(--line-soft);
+  border-left: var(--space-2) solid var(--tone, var(--line-soft));
+}
+.tile:hover {
+  border-color: var(--line-hover);
+  border-left-color: var(--tone, var(--line-soft));
+}
+
+/* A small boxed value: money, load or a count, with an optional icon. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-4) var(--space-1) var(--space-2);
+  background: var(--surface-well);
+  border: 1px solid var(--line-soft);
+}
+
+/* An outlined word that sorts a row, in the color of its text. */
+.tag {
+  padding: 0 var(--space-3);
+  font-size: var(--text-dense);
+  border: 1px solid;
+}
+
+/* A bar that fills from the left. Health by default, accent for progress. */
+.meter {
+  height: var(--meter-m);
+  background: var(--good-well);
+  overflow: hidden;
+}
+.meter > * {
+  display: block;
+  height: 100%;
+  background: var(--good);
+}
+.meter.s {
+  height: var(--meter-s);
+}
+.meter.l {
+  height: var(--meter-l);
+}
+.meter.broken {
+  background: var(--danger-ink);
+}
+.meter.progress {
+  background: var(--surface-sunk);
+}
+.meter.progress > * {
+  background: var(--accent);
+}
+
+/* The one look of a chosen item: accent border and accent wash. A pressed toggle, a picked card and a picked tile all use it. */
+#ui .selected,
+#ui button.on {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+/* A control that cannot be used now. It keeps hover and focus, and its tooltip says why. */
+#ui [aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+#ui button[aria-disabled="true"]:not(.switch):hover {
+  background: var(--surface-raised);
+  border-color: var(--line-strong);
+}
+
+/* A note that opens over its anchor on hover and focus. Words in the UI face, numbers in .num. It also gives the reason
+   for a disabled control, as one short fact like "Need 12 M more". */
+.tooltip {
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-bright);
+  color: var(--ink);
+  font: var(--text-dense) var(--font-ui);
+  text-align: left;
+  white-space: normal;
+}
+
+/* The reason a control cannot be used, shown over it on hover and focus. */
+#ui [data-reason] {
+  position: relative;
+}
+#ui [data-reason]:is(:hover, :focus-visible)::after {
+  content: attr(data-reason);
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-popup);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-bright);
+  color: var(--ink);
+  font: var(--text-dense) var(--font-ui);
+  white-space: nowrap;
+}
+
+/* A line of a tooltip breakdown: the label on the left in the UI face, the value on the right in mono. */
+.tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+.tooltip-row > .num {
+  text-align: right;
+}
+
+/* An amount of money: the M's coin, sized by the text around it, then the number. */
+.amount {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25em;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.coin {
+  display: inline-block;
+  flex: none;
+  width: 1.15em;
+  height: 1.15em;
+}
+.coin svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.coin circle {
+  fill: var(--coin-face);
+  stroke: var(--coin-rim);
+}
+.coin path {
+  stroke: var(--coin-mark);
+}
+
+/* A keyboard key or a mouse button, drawn as a keycap. */
+.key {
+  display: inline-block;
+  padding: 0 var(--space-3);
+  background: var(--steel-3);
+  color: var(--ink-bright);
+  border: 1px solid var(--steel-5);
+  border-radius: var(--radius-s);
+  box-shadow: 0 2px 0 var(--steel-1);
+  font: var(--text-dense) var(--font-mono);
+  white-space: nowrap;
+}
+
+/* A number read at a glance, in the mono face. */
+.num {
+  font: var(--text-dense) var(--font-mono);
+}
