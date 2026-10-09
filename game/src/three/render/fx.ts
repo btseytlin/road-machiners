@@ -7,12 +7,12 @@ import { PHYSICS } from '../../data/physics';
 import { TERRAIN_TYPES, type TerrainType } from '../../data/terrain';
 import { ENGINE_HEAT } from '../../data/wear';
 import { wheelMounts } from '../../phys/body';
-import { headingOf, type V3, type VehicleFrame } from '../../phys/frames';
+import { headingOf, toMap, type V3, type VehicleFrame } from '../../phys/frames';
 import { PAL } from '../../render/palette';
 import { bodyOf } from '../../sim/body';
 import { corePart, mountedParts } from '../../sim/grid';
 import { inOverdrive, isStranded, vehicleStats } from '../../sim/stats';
-import { tileAt } from '../../sim/terrain';
+import { tileAt, type Terrain } from '../../sim/terrain';
 import type { Vehicle, World } from '../../sim/types';
 import { maxHp } from '../../sim/wear';
 import type { CameraRig } from './camera';
@@ -22,6 +22,7 @@ import { Casings, Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan,
 import { CardBatch, createCardShapes } from './particles/cards';
 import { ChunkBatch } from './particles/chunks';
 import { Particles, type ParticleLook } from './particles/particles';
+import { Blasts, type BlastGround } from './particles/blasts';
 
 const MAX_PUFFS = 2048;
 const MAX_GLOWS = 256;
@@ -240,6 +241,7 @@ class MuzzleFlashes {
 
 const AMMO_BLAST_RADIUS = 0.8;
 const CLAYMORE_FX_RADIUS = 10;
+const EXPLODE_RADIUS = 1.8;
 const DUST = { color: 0xd8c098 };
 
 const MAX_PARTICLES = 4000;
@@ -279,6 +281,8 @@ export class Fx3D {
   private flashes: MuzzleFlashes;
   private casings: Casings;
   readonly ruts: Ruts;
+  private readonly blasts = new Blasts({ smoke: this.particles, glow: this.glowParticles, chunks: this.chunks });
+  private terrain: Terrain | null = null;
 
   constructor(private scene: THREE.Scene, private overlay: HTMLElement, private rig: CameraRig) {
     scene.add(this.puffs.mesh, this.glows.mesh, this.cards.lit.mesh, this.cards.glow.mesh, ...this.chunks.meshes);
@@ -315,7 +319,7 @@ export class Fx3D {
     const onFire = (m: Muzzle) => {
       this.flashes.show(m, spec.flash);
       this.casings.eject(m, spec.casing, turn);
-      this.puff(m.pos, PAL.flash, 1, { speed: 0, life: 0.12, scale: spec.flash * 0.6, grow: 1.6, additive: true });
+      this.blasts.muzzle(m.pos, m.dir, spec.flash);
       cues.fired(m);
     };
     const onLand = () => {
@@ -335,15 +339,17 @@ export class Fx3D {
   }
 
   private impact(plan: RoundPlan, big: boolean): void {
-    if (plan.impact === 'truck') this.puff(plan.land, 0xffa040, big ? 14 : 6, { speed: 4, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
-    else this.puff(plan.land, DUST.color, big ? 10 : 4, { speed: big ? 3 : 1.5, life: 0.9, scale: big ? 0.8 : 0.5, grow: 1.4 });
+    this.blasts.impact(plan.land, plan.impact === 'truck', big, this.groundAt(plan.land));
   }
 
   private blast(p: V3, radius: number): void {
-    this.puff(p, 0xffc060, 1, { speed: 0, life: 0.45, scale: radius * 1.8, grow: 1.4, additive: true });
-    this.puff(p, 0xffa040, Math.round(14 + 8 * radius), { speed: 2 + 2 * radius, life: 0.55, scale: 0.4 + 0.15 * radius, grow: 0.5, additive: true });
-    this.puff(p, DUST.color, Math.round(8 + 6 * radius), { speed: 3 + 1.2 * radius, life: 1.2, scale: 0.5 + 0.15 * radius, grow: 2 });
-    this.puff(p, 0x3a3028, Math.round(6 + 4 * radius), { speed: 0.8 + 0.5 * radius, life: 2 + 0.3 * radius, scale: 0.7 + 0.3 * radius, grow: 2.6 });
+    this.blasts.blast(p, radius, this.groundAt(p));
+  }
+
+  private groundAt(p: V3): BlastGround | null {
+    if (!this.terrain) return null;
+    const ground = TERRAIN_TYPES[this.terrain.types[tileAt(this.terrain, toMap(p))]];
+    return { color: ground.color, dust: ground.dust };
   }
 
   ammoBlast(p: V3): void {
@@ -351,24 +357,11 @@ export class Fx3D {
   }
 
   airBurst(p: V3): void {
-    for (let i = 0; i < 14; i++) {
-      const a = Math.random() * Math.PI * 2;
-      const s = 4 + Math.random() * 3;
-      const vel = { x: Math.cos(a) * s, y: 0.2 + Math.random() * 0.6, z: Math.sin(a) * s };
-      this.puffs.spawn(p, { vel, life: 0.5 + Math.random() * 0.2, fromScale: 0.2, toScale: 0.9 + Math.random() * 0.4, color: 0xe4e6e8, opacity: 0.6, drag: 3, gravity: 0 });
-    }
+    this.blasts.airBurst(p);
   }
 
   fireBurst(p: V3): void {
-    const side = () => (Math.random() - 0.5) * 1.6;
-    for (let i = 0; i < 10; i++) {
-      const vel = { x: side(), y: 2.5 + Math.random() * 1.5, z: side() };
-      this.glows.spawn(p, { vel, life: 0.8 + Math.random() * 0.3, fromScale: 0.5, toScale: 1.1, color: i % 3 === 0 ? 0xffc060 : 0xff8a30, opacity: 1, drag: 1.2, gravity: -0.5 });
-    }
-    for (let i = 0; i < 5; i++) {
-      const vel = { x: side() * 0.6, y: 1.5 + Math.random() * 1.0, z: side() * 0.6 };
-      this.puffs.spawn(p, { vel, life: 1.6 + Math.random() * 0.6, fromScale: 0.5, toScale: 1.8, color: 0x2a2622, opacity: 0.7, drag: 0.8, gravity: -0.3 });
-    }
+    this.blasts.fireBurst(p);
   }
 
   private missileSmoke(p: V3): void {
@@ -381,9 +374,7 @@ export class Fx3D {
   }
 
   explode(p: V3): void {
-    this.puff(p, 0xffa040, 30, { speed: 6, life: 0.4, scale: 0.4, grow: 0.3, additive: true });
-    this.puff(p, 0x3a3028, 16, { speed: 3, life: 1.6, scale: 1.0, grow: 2.4 });
-    this.puff(p, 0xffc060, 1, { speed: 0, life: 0.4, scale: 3.2, grow: 1.6, additive: true });
+    this.blast(p, EXPLODE_RADIUS);
   }
 
   claymoreBlast(p: V3): void {
@@ -391,8 +382,7 @@ export class Fx3D {
   }
 
   crash(p: V3): void {
-    this.puff(p, 0xffa040, 10, { speed: 5, life: 0.35, scale: 0.35, grow: 0.3, additive: true });
-    this.dust(p);
+    this.blasts.crash(p, this.groundAt(p));
   }
 
   dust(p: V3): void {
@@ -487,6 +477,7 @@ export class Fx3D {
 
   tick(playMs: number, realMs: number, world: World): void {
     const dt = playMs / 1000;
+    this.terrain = world.terrain;
     this.puffs.tick(dt);
     this.glows.tick(dt);
     this.particles.tick(dt);
