@@ -188,22 +188,8 @@ body {
 .speed-max:focus-within .speed-tip {
   display: block;
 }
-.speed-row {
-  display: grid;
-  grid-template-columns: 1fr auto 3ch;
-  gap: 12px;
-  padding: 2px 0;
-  border-bottom: 1px solid #5a6165;
-}
-.speed-row span:not(:first-child) {
-  text-align: right;
-}
-.speed-row.total {
-  font-weight: bold;
-  border-bottom: 0;
-}
-.speed-notes p {
-  margin: 2px 0 0;
+.speed-line {
+  padding: 1px 0;
 }
 #ui .truck-instrument {
   position: relative;
@@ -1299,7 +1285,6 @@ body {
   z-index: 21;
 }
 #ui:has(.modal:not([style*="display: none"])) > .top-left,
-#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .weapons,
 #ui:has(.modal:not([style*="display: none"])) > .bottom-left > .recenter,
 #ui:has(.modal:not([style*="display: none"])) > .right-dock {
   visibility: hidden;
@@ -1307,6 +1292,10 @@ body {
 #ui:has(.modal:not([style*="display: none"])) > .bottom-left > .instruments,
 #ui:has(.modal:not([style*="display: none"])) > .log {
   z-index: 21;
+}
+/* The hidden weapons leave the dock, so the instruments drop to the bottom line instead of wrapping above them. */
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .weapons {
+  display: none;
 }
 /* The wide modal reaches under the condition panel, which stands above the instruments. */
 #ui:has(.modal:not([style*="display: none"])) .truck-condition {
