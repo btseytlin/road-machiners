@@ -21,8 +21,32 @@ async function checkVisibleReadouts(page) {
   })));
   const modal = boxes.find(box => box.name.includes('modal'));
   for (const box of boxes.filter(box => box !== modal)) {
-    assert(!doRectsOverlap(modal.rect, box.rect), `${box.name} must not cover the modal`);
+    assert(!doRectsOverlap(modal.rect, box.rect), `${box.name} must not cover the modal: ${JSON.stringify([modal.rect, box.rect])}`);
   }
+}
+
+// The max-speed tooltip opens on keyboard focus and holds only short signed lines, never a table or a paragraph.
+async function checkSpeedTip(page, width) {
+  await page.focus('.speed-max');
+  assert(await page.locator('#speed-breakdown').isVisible(), 'Focusing max speed must open the tooltip');
+  const tip = await page.evaluate(() => {
+    const node = document.querySelector('.speed-tip');
+    return {
+      lines: [...node.querySelectorAll('.speed-line')].map(line => line.textContent),
+      nested: node.querySelectorAll('span, .speed-row, .total').length,
+      text: node.innerText,
+      rect: node.getBoundingClientRect().toJSON(),
+      view: { w: window.innerWidth, h: window.innerHeight },
+    };
+  });
+  assert(tip.lines.length >= 1, 'The tooltip must show a line');
+  const short = /^[^:%\u00b7|]+: ([+\u2212]\d+ km\/h|crawl( \d+ km\/h)?|max \d+ km\/h)$/;
+  for (const line of tip.lines) assert(line === 'No speed penalties' || short.test(line), `Tooltip line must be short: ${line}`);
+  assert.equal(tip.nested, 0, 'The tooltip must hold no table cells');
+  assert(!/%|Guns draw/.test(tip.text), `The tooltip must hold no percent or paragraph: ${tip.text}`);
+  assert(tip.rect.x >= 0 && tip.rect.y >= 0 && tip.rect.right <= tip.view.w && tip.rect.bottom <= tip.view.h, `The tooltip must lie on screen: ${JSON.stringify(tip.rect)}`);
+  await page.screenshot({ path: `.playtest/speed-tip-${width}.png`, timeout: 120000 });
+  await page.evaluate(() => document.activeElement?.blur());
 }
 
 async function checkInstruments(page) {
@@ -55,6 +79,7 @@ async function checkInstruments(page) {
   for (const other of [m.log, m.weapons].filter(Boolean)) {
     assert(!doRectsOverlap(panel, other), 'Instruments must not overlap the log or weapons');
   }
+  await checkSpeedTip(page, page.viewportSize().width);
 }
 
 const DOCK_VIEWPORTS = [[1920, 1080], [1280, 720], [1280, 656], [1024, 656], [900, 656], [800, 656], [700, 800]];
@@ -213,6 +238,7 @@ function assertDockIcons(looks, at) {
 
 async function checkWeaponDock(page) {
   await loadHeavyHud(page);
+  await checkSpeedTip(page, 'guns');
   const most = await page.locator('.weapon-pick').count();
   assert(most >= 6, `A random kit must give six or more guns, got ${most}`);
   for (const guns of [most, 5, 1]) {
@@ -475,7 +501,7 @@ async function checkKnobs(url, viewport) {
     await page.reload();
     await page.waitForFunction(() => document.querySelectorAll('.radio .knob').length === 4);
     assert.deepEqual(await values(), held, `${at} the levels must survive a reload`);
-    assert.equal(await page.locator('.speedometer [role=slider], .speedometer [tabindex]').count(), 0, `${at} the speedometer must hold no knob`);
+    assert.equal(await page.locator('.speedometer [role=slider], .speedometer .knob').count(), 0, `${at} the speedometer must hold no knob`);
     assert.deepEqual(errors, [], `${at} no uncaught page errors`);
   } finally {
     await page.close();
@@ -497,8 +523,8 @@ try {
     console.log('PASS: weapons dock');
     process.exit(0);
   }
-  await checkInstruments(page);
   await mkdir('.playtest', { recursive: true });
+  await checkInstruments(page);
   await fillLog(page);
   await shotLog(page, 'log-compact');
   await checkLog(page, 'compact');

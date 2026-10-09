@@ -247,13 +247,21 @@ const SOCKET_PREFIX = 'socket_';
 const loaded = new Map<ModelName, THREE.Object3D>();
 const sockets = new Map<ModelName, Map<string, THREE.Vector3>>();
 
-export async function loadModels(read: (name: ModelName) => Promise<ArrayBuffer> = fetchModel): Promise<void> {
+// read returns a model's .glb bytes. The default fetches from public/models/; tests read the files from disk.
+// progress gets (0, total) first, then (done, total) after each model is parsed.
+export async function loadModels(
+  read: (name: ModelName) => Promise<ArrayBuffer> = fetchModel,
+  progress?: (done: number, total: number) => void,
+): Promise<void> {
   const loader = new GLTFLoader();
+  let done = 0;
+  progress?.(0, NAMES.length);
   await Promise.all(
     NAMES.map(async (name) => {
       const gltf = await loader.parseAsync(await read(name), '');
       sockets.set(name, takeSockets(name, gltf.scene));
       loaded.set(name, toLambert(gltf.scene));
+      progress?.(++done, NAMES.length);
     }),
   );
   checkWeaponSockets();
