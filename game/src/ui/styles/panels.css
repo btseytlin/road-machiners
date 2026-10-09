@@ -2,7 +2,7 @@
 #ui:not(:has(.modal:not([style*="display: none"]))) .log.expanded {
   z-index: var(--z-log-open);
   width: var(--panel-l);
-  height: calc(100dvh - var(--hud-notice-top) - var(--icon-hero) - var(--space-7));
+  height: calc(100dvh - var(--hud-notice-top) - var(--icon-hero) - var(--space-7) - var(--space-4));
 }
 #ui .recenter {
   padding: 0;
@@ -68,7 +68,7 @@
 #ui .help {
   box-sizing: border-box;
   width: var(--inspection-width);
-  height: var(--inspection-height);
+  max-height: calc(100dvh - 2 * var(--hud-inset));
   max-width: calc(100vw - 2 * var(--hud-inset));
   padding: var(--space-4) 0 var(--space-2);
   overflow: auto;
@@ -81,8 +81,8 @@
 }
 .help .close {
   position: absolute;
-  right: var(--space-3);
-  top: var(--space-3);
+  right: var(--space-4);
+  top: var(--space-4);
 }
 .help > div {
   margin: var(--space-2) var(--space-4);
@@ -212,9 +212,6 @@
   width: 100%;
 }
 #ui .rescue {
-  left: 50%;
-  top: var(--hud-notice-top);
-  transform: translateX(-50%);
   min-width: var(--panel-s);
   max-width: var(--panel-m);
   text-align: center;
@@ -223,10 +220,11 @@
   margin-bottom: var(--space-2);
 }
 #ui .stranded {
-  left: 0;
-  bottom: calc(100% + var(--hud-gap));
   min-width: var(--panel-s);
   text-align: center;
+}
+#ui .status-mark {
+  padding: var(--space-2) var(--space-5);
 }
 #ui .stranded h3 {
   margin-bottom: var(--space-2);

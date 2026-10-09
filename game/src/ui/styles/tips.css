@@ -1,7 +1,4 @@
 #ui .tip {
-  left: 50%;
-  top: var(--hud-notice-top);
-  transform: translateX(-50%);
   display: flex;
   gap: var(--space-6);
   align-items: center;

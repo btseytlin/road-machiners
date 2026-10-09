@@ -44,6 +44,21 @@
   left: auto;
   transform: none;
 }
+.top-center {
+  position: absolute;
+  z-index: var(--z-toast);
+  left: 0;
+  right: 0;
+  top: var(--hud-notice-top);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--hud-gap);
+  pointer-events: none;
+}
+#ui .top-center > .panel {
+  position: static;
+}
 .top-right {
   position: absolute;
   right: var(--hud-inset);

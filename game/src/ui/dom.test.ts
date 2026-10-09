@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { isBrowserChord, overlaps } from "./dom";
+import { vi } from "vitest";
+import { disabledWith, isBrowserChord, overlaps } from "./dom";
 
 const keys = { ctrlKey: false, metaKey: false, altKey: false };
 
@@ -34,5 +35,24 @@ describe("overlaps", () => {
   it("does not hold for an empty box, as a hidden panel measures", () => {
     expect(overlaps(box(0, 0, 0, 0), box(-10, -10, 10, 10))).toBe(false);
     expect(overlaps(box(-10, -10, 10, 10), box(5, 5, 5, 5))).toBe(false);
+  });
+});
+
+describe("disabledWith", () => {
+  it("passes the click through when there is no reason", () => {
+    const click = vi.fn();
+    const attrs = disabledWith(null, click);
+    attrs.onclick();
+    expect(click).toHaveBeenCalledOnce();
+    expect(attrs["aria-disabled"]).toBeUndefined();
+  });
+
+  it("blocks the click and carries the reason when there is one", () => {
+    const click = vi.fn();
+    const attrs = disabledWith("No saves yet", click);
+    attrs.onclick();
+    expect(click).not.toHaveBeenCalled();
+    expect(attrs["aria-disabled"]).toBe("true");
+    expect(attrs["data-reason"]).toBe("No saves yet");
   });
 });

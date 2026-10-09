@@ -132,6 +132,25 @@
   white-space: normal;
 }
 
+/* The reason a control cannot be used, shown over it on hover and focus. */
+#ui [data-reason] {
+  position: relative;
+}
+#ui [data-reason]:is(:hover, :focus-visible)::after {
+  content: attr(data-reason);
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-popup);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-raised);
+  border: 1px solid var(--line-bright);
+  color: var(--ink);
+  font: var(--text-dense) var(--font-ui);
+  white-space: nowrap;
+}
+
 /* A number read at a glance, in the mono face. */
 .num {
   font: var(--text-dense) var(--font-mono);
