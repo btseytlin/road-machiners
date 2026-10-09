@@ -1060,7 +1060,7 @@ body {
 /* The hover panel grows with the hit table down to the log, since the mouse stays on the truck and cannot scroll it. */
 .info {
   right: 14px;
-  /* Below the game menu and its language row. */
+  /* Below the top-right row. */
   top: 112px;
   width: var(--inspection-width);
   min-height: var(--inspection-height);
@@ -1252,6 +1252,11 @@ body {
 }
 .save-screen > div {
   max-width: 560px;
+}
+.save-screen > .options-button {
+  position: absolute;
+  right: 14px;
+  top: 14px;
 }
 .death .death-buttons {
   display: flex;
@@ -1960,7 +1965,7 @@ canvas.view {
   padding: 0;
   border: 0;
 }
-/* The Menu button and the language control in a row; the dropdown opens under them. */
+/* The Menu button; the dropdown opens under it. */
 .game-menu {
   position: relative;
   display: flex;
@@ -1991,20 +1996,42 @@ canvas.view {
   text-align: left;
 }
 
-/* The language control: beside the Menu button, a small label and two equal buttons. */
+/* The Options panel: under the top-right row, above the game, the menus and the boot save screens. */
+#ui .options {
+  position: fixed;
+  right: 14px;
+  /* Below the camera switch, the tallest control in the row. */
+  top: 86px;
+  z-index: 65;
+  box-sizing: border-box;
+  width: 280px;
+  max-width: calc(100vw - 28px);
+  font-size: 12px;
+}
+.options h3 {
+  margin-right: 70px;
+  font-size: 14px;
+}
+.options .close {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+}
+.options h4 {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: normal;
+}
+
+/* The language row in Options: two equal buttons. */
 .language-switch {
   display: flex;
-  align-items: center;
-  justify-content: flex-end;
   gap: 6px;
 }
 
-.language-label {
-  color: var(--muted);
-  font-size: 11px;
-}
-
 .language-option {
+  flex: 1;
   min-width: 64px;
 }
 

@@ -2,14 +2,14 @@
 // and the report of what the migration kept, refunded and lost.
 
 import type { CarryReport } from '../sim/world';
-import { bindAttr, language } from '../text/language';
-import { LanguageSwitch } from './language-switch';
+import { bindAttr } from '../text/language';
 import { list, t, verbatim, type Msg } from '../text/msg';
 import { goodName, partName, settingName } from '../text/names';
 import { WORLD_SETTINGS } from '../data/modes';
 import type { SaveError } from '../three/save';
 import { download, el, panel } from './dom';
 import { openNewGame, type NewGameActions } from './new-game';
+import { OptionsPanel } from './options';
 import { moneyMsg } from './units';
 
 // Why a save does not load, in words.
@@ -58,13 +58,14 @@ function downloadSave(stored: unknown): void {
   download('roam-save.json', typeof stored === 'string' ? stored : JSON.stringify(stored), 'application/json');
 }
 
+// Boot shows these screens before any menu, so their header opens the same Options panel the Menu does.
+const options = new OptionsPanel(() => document.querySelector<HTMLElement>('.save-screen .options-button')?.focus());
+
 function savePanel(title: Msg): HTMLElement {
   const root = panel('death save-screen');
   root.setAttribute('role', 'alertdialog');
   bindAttr(root, 'aria-label', title);
-  root.append(el('h3', {}, title));
-  // Boot shows these screens before any menu, so they carry the language control in their header.
-  new LanguageSwitch(root, language());
+  root.append(el('h3', {}, title), el('button', { class: 'options-button', onclick: () => options.open() }, t('menu.options')));
   return root;
 }
 

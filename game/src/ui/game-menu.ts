@@ -1,14 +1,14 @@
-// The Menu button. Its dropdown offers New Game, Save, Load and Help. Save and Load open the slot panels, New Game opens the
-// setup screen, and Help shows the controls. While the dropdown is open it owns the keys and the pointer. The language
-// control sits beside the button, so it works in play and over any open screen.
+// The Menu button. Its dropdown offers New Game, Save, Load, Options and Help. Save and Load open the slot panels, New Game
+// opens the setup screen, Options opens the settings with the language, and Help shows the controls. While the dropdown
+// or a panel it opened is up, it owns the keys and the pointer.
 
 import { ERROR_REPORT_URL } from "../config";
-import { bindAttr, language } from "../text/language";
+import { bindAttr } from "../text/language";
 import { t, verbatim, type Msg } from "../text/msg";
 import { el, isBrowserChord, panel, topLeft, topRight } from "./dom";
 import { versionLabel } from "./hud-readout";
-import { LanguageSwitch } from "./language-switch";
 import { isNewGameOpen, openNewGame, type NewGameActions } from "./new-game";
+import { OptionsPanel } from "./options";
 import { SavePanel, type SavePanelActions } from "./save-panel";
 
 export type GameMenuActions = SavePanelActions & {
@@ -18,17 +18,18 @@ export type GameMenuActions = SavePanelActions & {
 
 const GUIDE = ["hud.guide.drive", "hud.guide.space", "hud.guide.manual", "hud.guide.pads", "hud.guide.radio", "hud.guide.combat", "hud.guide.keys", "hud.guide.camera"] as const;
 
-export type MenuEntry = "new" | "save" | "load" | "help";
+export type MenuEntry = "new" | "save" | "load" | "options" | "help";
 
 const ENTRIES: { entry: MenuEntry; label: Msg }[] = [
   { entry: "new", label: t("menu.newGame") },
   { entry: "save", label: t("menu.save") },
   { entry: "load", label: t("menu.load") },
+  { entry: "options", label: t("menu.options") },
   { entry: "help", label: t("menu.help") },
 ];
 
 export function entryEnabled(entry: MenuEntry, busy: boolean, hasSave: boolean): boolean {
-  if (entry === "help") return true;
+  if (entry === "help" || entry === "options") return true;
   if (entry === "load") return !busy && hasSave;
   return !busy;
 }
@@ -86,6 +87,7 @@ export class GameMenu {
   private items = {} as Record<MenuEntry, HTMLButtonElement>;
   private savePanel: SavePanel;
   private help: HelpPanel;
+  private options = new OptionsPanel(() => this.button.focus());
 
   private readonly onKey = (e: KeyboardEvent) => {
     if (e.code === "Escape") {
@@ -117,17 +119,16 @@ export class GameMenu {
     this.help = new HelpPanel(setup);
     this.savePanel = new SavePanel(actions);
     for (const { entry, label } of ENTRIES) {
-      const item = el("button", { role: "menuitem", onclick: () => this.choose(entry) }, label) as HTMLButtonElement;
+      const item = el("button", { role: "menuitem", "data-entry": entry, onclick: () => this.choose(entry) }, label) as HTMLButtonElement;
       this.items[entry] = item;
       this.list.append(item);
     }
     this.root.append(this.button, this.list);
-    new LanguageSwitch(this.root, language());
     this.refresh();
   }
 
   isOpen(): boolean {
-    return !this.list.hidden || this.savePanel.isOpen() || isNewGameOpen();
+    return !this.list.hidden || this.savePanel.isOpen() || this.options.isOpen() || isNewGameOpen();
   }
 
   refresh(): void {
@@ -177,6 +178,7 @@ export class GameMenu {
     this.closeList(false);
     if (entry === "save") this.savePanel.openSave();
     else if (entry === "load") this.savePanel.openLoad();
+    else if (entry === "options") this.options.open();
     else if (entry === "help") this.help.toggle();
     else this.newGame();
   }

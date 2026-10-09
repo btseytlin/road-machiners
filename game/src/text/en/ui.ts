@@ -5,6 +5,8 @@ export const UI = {
   'money.m': m('{n} M', { n: 'int' }),
   'menu.menu': 'Menu',
   'menu.help': 'Help',
+  'menu.options': 'Options',
+  'options.title': 'Options',
   'help.title': 'Controls',
   'help.errorsSent': 'Game errors are sent to the developers with your save.',
   'hud.overdriveWorn': m('Engine too worn for overdrive: repair it above {pct}% [O]', { pct: 'int' }),

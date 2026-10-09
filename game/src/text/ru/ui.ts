@@ -5,6 +5,8 @@ export const UI: Translation<typeof EN> = {
   'money.m': '{n} М',
   'menu.menu': 'Меню',
   'menu.help': 'Помощь',
+  'menu.options': 'Настройки',
+  'options.title': 'Настройки',
   'help.title': 'Управление',
   'help.errorsSent': 'Ошибки игры отправляются разработчикам вместе с сохранением.',
   'hud.overdriveWorn': 'Двигатель слишком изношен для форсажа. Нужна прочность выше {pct}% [O]',
