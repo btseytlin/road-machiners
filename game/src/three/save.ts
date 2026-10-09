@@ -306,15 +306,18 @@ export type Run = { slots: SaveSlots; runId: string; log: RunLog; mapHash: strin
 export function changeMapIfMoved(run: Run, world: World, hold: SaveHold, session: Storage, reload: () => void): boolean {
   if (world.mapHash === run.mapHash) return false;
   if (hold.held) throw new Error(`The map moved to ${world.mapHash} while saves are held, so a reboot would lose the turn`);
+  const arrival = world.events.find((e) => e.t === 'outpostReached');
+  if (!arrival) throw new Error(`The map moved to ${world.mapHash} with no outpost arrival`);
   writeSave(run.slots, 'auto', world, run.runId, Date.now());
   run.mapHash = world.mapHash;
-  requestBoot(session, SAVE_KEY, { slot: 'auto', reason: 'road' });
+  requestBoot(session, SAVE_KEY, { slot: 'auto', reason: 'road', arrival: { milestone: arrival.milestone, pay: arrival.pay, wrecks: arrival.wrecks } });
   Promise.all([run.slots.flush(), run.log.flush()]).then(reload, reportError);
   return true;
 }
 
 export class GameSaves {
   private readonly hold = new SaveHold();
+  private moving = false;
 
   constructor(private readonly run: Run, private readonly note: (text: string) => void, private readonly record: (text: string) => void) {
     run.slots.onError = (err) => this.failed(err);
@@ -360,11 +363,14 @@ export class GameSaves {
 
   afterTurn(world: World): void {
     this.hold.finishTurn();
-    if (!this.hold.held) {
-      saveWorld(this.run.slots, world, this.run.runId, CONFIG.saveTurns, Date.now());
-      saveOnArrival(this.run.slots, world, this.run.runId, Date.now());
-    }
-    changeMapIfMoved(this.run, world, this.hold, window.sessionStorage, () => window.location.reload());
+    if (this.hold.held) return;
+    saveWorld(this.run.slots, world, this.run.runId, CONFIG.saveTurns, Date.now());
+    saveOnArrival(this.run.slots, world, this.run.runId, Date.now());
+  }
+
+  changeMapIfMoved(world: World): boolean {
+    this.moving ||= changeMapIfMoved(this.run, world, this.hold, window.sessionStorage, () => window.location.reload());
+    return this.moving;
   }
 
   afterCommand(world: World): void {

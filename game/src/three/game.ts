@@ -697,6 +697,7 @@ export class Game {
 
   private beginTurn(prepared: PreparedTurn, now: number, elapsed: number): void {
     const { world, playback, towed } = this.travel.beginPlayback(this.world, prepared, now, elapsed, this.frames);
+    if (this.saves.changeMapIfMoved(world)) return;
     this.world = world;
     this.saves.logWorld(world);
     this.updateLoops();
@@ -707,12 +708,7 @@ export class Game {
       explored: playback.before.player.explored.slice(),
       from: null,
     };
-    playback.combat = this.world.events.some(
-      (e) =>
-        e.t === "shot" &&
-        this.eventPoint(e.shooter) !== null &&
-        this.eventPoint(e.target) !== null,
-    );
+    playback.combat = this.world.events.some((e) => e.t === "shot" && this.eventPoint(e.shooter) !== null && this.eventPoint(e.target) !== null);
     const timed = collisionSteps(world.events, playback.result);
     this.crashCues = new CollisionCues(timed);
     this.sound.accents(world.events, world.player.vehicleId, (e) => {

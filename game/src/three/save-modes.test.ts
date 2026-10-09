@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { startKit } from '../data/start';
 import { defaultSetup } from '../sim/settings';
 import { playerVehicle } from '../sim/damage';
-import { outpostPad } from '../sim/gauntlet';
+import { outpostPad, payOf } from '../sim/gauntlet';
 import { highwayHash } from '../sim/highway';
 import { gauntletWorld } from '../sim/testkit';
 import type { World } from '../sim/types';
@@ -98,7 +98,7 @@ describe('the window swap in the game', () => {
     const moved = arrived(world);
     expect(changeMapIfMoved(run, moved, new SaveHold(), storage, reload)).toBe(true);
     await vi.waitFor(() => expect(reload).toHaveBeenCalledOnce());
-    expect(takeBootRequest(storage, SAVE_KEY)).toEqual({ slot: 'auto', reason: 'road' });
+    expect(takeBootRequest(storage, SAVE_KEY)).toEqual({ slot: 'auto', reason: 'road', arrival: { milestone: 1, pay: payOf(1, 0), wrecks: 0 } });
     expect(loadWorld(run.slots, 'auto', TEST_MAP)?.gauntlet?.window).toBe(1);
   });
 
