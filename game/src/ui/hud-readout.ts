@@ -8,7 +8,7 @@ import { RULES } from "../data/rules";
 import { maxHp } from "../sim/wear";
 import { playerVehicle, vehicleById } from "../sim/damage";
 import { maxHealthOf } from "../sim/health";
-import { corePart, mountedItems, itemSize } from "../sim/grid";
+import { corePart, mountedItems, mountedParts, itemSize } from "../sim/grid";
 import { canOverdrive, fuelCap, gunDraw, hasWorkingEngine, inOverdrive, isStranded, isWorking, maxSpeedSteps, workingEngineCapacity, type SpeedStep } from "../sim/stats";
 import { fuelLimit, lowFuelSpeed } from "../sim/far";
 import { spareParts } from "../sim/inventory";
@@ -20,7 +20,7 @@ import { dist, type Vec } from "../sim/vec";
 import type { NpcState, SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { clockLabel, vehicleName } from "./format";
-import { celsius, engineCelsius, fuelLiters, hp, kph, moneyNumber } from "./units";
+import { celsius, engineCelsius, fuelLiters, hp, kg, kph, moneyText } from "./units";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
 import { contextKey, type ContextAction } from './hud';
@@ -34,15 +34,17 @@ import { combatTurnsLeft } from '../sim/combat';
 import { isBusy } from '../sim/jobs';
 import { npcName } from '../sim/spawn';
 
-export function overdriveSwitch(w: World): { checked: boolean; blocked: boolean; title: string } {
+export function overdriveSwitch(w: World): { checked: boolean; reason: string | null; title: string } {
   const me = playerVehicle(w);
-  const blocked = !canOverdrive(me);
+  const reason = canOverdrive(me)
+    ? null
+    : mountedParts(me, "engine").length === 0
+      ? "No engine"
+      : `Repair engine above ${Math.round(RULES.overdriveMinEngineShare * 100)}%`;
   return {
     checked: inOverdrive(w, me),
-    blocked,
-    title: blocked
-      ? `Engine too worn for overdrive: repair it above ${Math.round(RULES.overdriveMinEngineShare * 100)}% [O]`
-      : "Engine overdrive: faster, but the engine heats fast [O]",
+    reason,
+    title: reason ?? "Faster, but the engine heats fast [O]",
   };
 }
 
@@ -266,7 +268,12 @@ function townName(id: string): string {
   return town.name;
 }
 
-export type SpeedRow = { label: string; text: string; delta: number };
+export function moneyLabel(money: number): string {
+  return moneyText(money);
+}
+
+export type SpeedRow = { label: string; value: string; delta: number };
+export type TipLine = { label: string; value: string; tone: 'base' | 'bad' | 'good' | 'plain' };
 
 export type PowerChip = { text: string; detail: string; over: boolean };
 
@@ -312,23 +319,23 @@ export function speedRows(weather: string, steps: SpeedStep[]): SpeedRow[] {
   const rows: SpeedRow[] = [];
   steps.forEach((step, i) => {
     const label = labelOf(weather, step);
-    if (step.kind === 'limp') return void rows.push({ label, text: `${label}: crawl ${kph(step.speed)} km/h`, delta: 0 });
+    if (step.kind === 'limp') return void rows.push({ label, value: `crawl ${kph(step.speed)} km/h`, delta: 0 });
     if (i === 0) return;
     const delta = kph(step.speed) - kph(steps[i - 1].speed);
-    if (delta !== 0) rows.push({ label, text: `${label}: ${signed(delta, ' km/h')}`, delta });
+    if (delta !== 0) rows.push({ label, value: signed(delta, ' km/h'), delta });
   });
   return rows;
 }
-export function speedNotes(w: World, v: Vehicle, steps: SpeedStep[]): string[] {
+export function speedNotes(w: World, v: Vehicle, steps: SpeedStep[]): TipLine[] {
   const fuel = fuelLimit(w, v, steps.some((s) => s.kind === 'guns'));
-  if (fuel === 'low') return [`Low fuel: max ${kph(lowFuelSpeed(steps[steps.length - 1].speed))} km/h`];
-  if (fuel === 'empty') return ['Empty tank: crawl'];
+  if (fuel === 'low') return [{ label: 'Low fuel', value: `max ${kph(lowFuelSpeed(steps[steps.length - 1].speed))} km/h`, tone: 'bad' }];
+  if (fuel === 'empty') return [{ label: 'Empty tank', value: 'crawl', tone: 'bad' }];
   return [];
 }
 
-export function speedTip(rows: SpeedRow[], notes: string[]): string[] {
-  const lines = [...rows.map((r) => r.text), ...notes];
-  return lines.length > 0 ? lines : ['No speed penalties'];
+export function speedTip(base: number, rows: SpeedRow[], notes: TipLine[]): TipLine[] {
+  const causes = rows.map((r): TipLine => ({ label: r.label, value: r.value, tone: r.delta > 0 ? 'good' : r.delta < 0 ? 'bad' : 'plain' }));
+  return [{ label: 'Base', value: `${base} km/h`, tone: 'base' }, ...causes, ...notes];
 }
 
 function gunStep(steps: SpeedStep[]): { step: Kind<'guns'>; before: number } | null {
@@ -368,34 +375,25 @@ export function getHudReadout(w: World) {
   const heat = heatAt(w, me.pos);
   const weather = weatherLabel(w, me.pos);
   const steps = maxSpeedSteps(w, me);
+  const notes = speedNotes(w, me, steps);
+  const stormNear = w.weather.some((e) => e.kind === "storm" && dist(me.pos, e.pos) - e.radius <= TERRAIN.vision.radius);
   return {
     speed: String(kph(me.speed)),
     maxSpeed: String(kph(steps[steps.length - 1].speed)),
-    maxSpeedTip: speedTip(speedRows(weather, steps), speedNotes(w, me, steps)),
+    maxSpeedTip: speedTip(kph(steps[0].speed), speedRows(weather, steps), notes),
     manual: me.direct,
     clock: clockLabel(w.turn),
     resources: [
-      {
-        label: "M's",
-        value: moneyNumber(p.money),
-        balance: p.money,
-        warning: p.money < 0,
-      },
+      { label: "M's", value: moneyText(p.money), balance: p.money, warning: p.money < 0, icon: null },
       {
         label: "Fuel",
-        value: `${fuelLiters(p.fuel)} / ${fuelLiters(capacity)} L`,
+        value: `${fuelLiters(p.fuel)} L`,
         warning: p.fuel < capacity * RULES.lowFuelThreshold,
+        icon: "fuel" as const,
+        tip: notes.length > 0 ? `${notes[0].label}: ${notes[0].value}` : "Fuel",
       },
-      {
-        label: "Supplies",
-        value: p.supplies.toFixed(1),
-        warning: p.supplies <= RULES.suppliesLow,
-      },
-      {
-        label: "Driver",
-        value: `${hp(p.health)} / ${maxHealth}`,
-        warning: p.health < maxHealth,
-      },
+      { label: "Supplies", value: kg(p.supplies), warning: p.supplies <= RULES.suppliesLow, icon: "supplies" as const },
+      { label: "Driver", value: `${hp(p.health)}`, warning: p.health < maxHealth, icon: "driver" as const },
     ],
     survival: [
       { label: "Heat", value: `${celsius(heat)} °C`, warning: heat >= HOT },
@@ -405,17 +403,7 @@ export function getHudReadout(w: World) {
         warning: p.engineHeat >= ENGINE_HEAT.warnAt,
         progress: p.engineHeat,
       },
-      {
-        label: "Weather",
-        value: weather,
-        warning:
-          weather !== "Clear" &&
-          w.weather.some(
-            (e) =>
-              e.kind === "storm" &&
-              dist(me.pos, e.pos) - e.radius <= TERRAIN.vision.radius,
-          ),
-      },
+      ...(weather === "Clear" ? [] : [{ label: "Weather", value: weather, warning: stormNear }]),
     ],
   };
 }

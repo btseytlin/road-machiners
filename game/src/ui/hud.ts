@@ -19,16 +19,16 @@ import {
   formatVehicleState,
   type LogLine,
 } from "./format";
-import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, overdriveSwitch, versionLabel, type RescueReadout } from "./hud-readout";
+import { bugReportUrl, featureRequestUrl, getHudReadout, getRescueReadout, overdriveSwitch, versionLabel, type RescueReadout, type TipLine } from "./hud-readout";
 import { createIcon, createSpeedDial } from "./cards";
-import { aimMarks, type AimState } from "./weapons";
+import { aimMarks, TURN_PLAYING, type AimState } from "./weapons";
 import { token } from "./tokens";
 import { createSwitch } from "./switch";
 import { Tips } from "./tips";
 import { moneyEl, moneyText } from "./units";
 import { playerVehicle } from "../sim/damage";
 import { affordableRanks, pendingPerkPairs } from "../sim/progress";
-import { canDouse } from "../sim/engine-heat";
+import { douseBlock } from "../sim/engine-heat";
 import { ENGINE_HEAT } from "../data/wear";
 import type { RadioPanel } from "./radio";
 import { type ConditionAim, TruckConditionView } from "./truck-condition-view";
@@ -78,6 +78,8 @@ export type CameraMode = "centered" | "auto";
 
 const TOAST_MS = 3500;
 
+const TONE_CLASS: Record<TipLine['tone'], string> = { base: 'dim', bad: 'bad', good: 'good', plain: '' };
+
 export class MaxSpeedView {
   private readonly text = el('span', { class: 'speed-max-text' });
   private readonly lines = el('div', { class: 'speed-lines' });
@@ -90,12 +92,14 @@ export class MaxSpeedView {
 
   private shown = '';
 
-  render(maxSpeed: string, lines: string[]): void {
-    this.text.textContent = `max ${maxSpeed}`;
-    const key = lines.join('\n');
+  render(maxSpeed: string, lines: TipLine[]): void {
+    this.text.textContent = `${maxSpeed} km/h`;
+    const key = lines.map((line) => `${line.label}|${line.value}|${line.tone}`).join('\n');
     if (key === this.shown) return;
     this.shown = key;
-    this.lines.replaceChildren(...lines.map((line) => el('div', { class: 'speed-line' }, line)));
+    this.lines.replaceChildren(
+      ...lines.map((line) => el('div', { class: 'speed-line' }, el('span', {}, line.label), el('span', { class: `num ${TONE_CLASS[line.tone]}` }, line.value))),
+    );
   }
 }
 
@@ -265,8 +269,8 @@ export class Hud {
     const use = el(
       "button",
       {
-        onclick: onUse,
-        disabled: !action.ready,
+        onclick: () => action.ready && onUse(),
+        "aria-disabled": action.ready ? undefined : "true",
         class: action.combat !== undefined ? "btn-danger" : "",
         title: actionTitle(action),
       },
@@ -345,9 +349,10 @@ export class Hud {
 
   private engineButtons(w: World, busy: boolean): HTMLElement[] {
     const od = overdriveSwitch(w);
+    const lock = busy ? TURN_PLAYING : null;
     const headlights = createSwitch({
-      on: "Lights on",
-      off: "Lights off",
+      on: "Lights",
+      off: "Off",
       checked: this.actions.headlightsOn(),
       key: "L",
       title: "Headlights [L]",
@@ -358,19 +363,20 @@ export class Hud {
       off: "Normal",
       checked: od.checked,
       key: "O",
-      disabled: busy || od.blocked,
+      reason: lock ?? od.reason,
       title: od.title,
       onclick: () => this.actions.toggleOverdrive(),
     });
+    const douseReason = lock ?? douseBlock(w);
     const douse = el(
       "button",
       {
         class: "instrument-button",
-        disabled: busy || !canDouse(w),
-        onclick: () => this.actions.douseEngine(),
-        title: `Pour ${ENGINE_HEAT.douseSupplies} supplies of water over the engine to cool it [G]`,
+        "aria-disabled": douseReason === null ? undefined : "true",
+        onclick: () => douseReason === null && this.actions.douseEngine(),
+        title: douseReason ?? `Costs ${ENGINE_HEAT.douseSupplies} supplies [G]`,
       },
-      "Cool engine [G]",
+      "Cool [G]",
     );
     return [headlights, overdrive, douse];
   }
@@ -381,9 +387,9 @@ export class Hud {
       "button",
       {
         class: "instrument-button",
-        disabled: busy,
-        onclick: () => this.actions.openCharacter(),
-        title: marked ? "Driver and skills: XP to spend or a perk to pick [C]" : "Driver and skills [C]",
+        "aria-disabled": busy ? "true" : undefined,
+        onclick: () => !busy && this.actions.openCharacter(),
+        title: busy ? TURN_PLAYING : marked ? "XP to spend or a perk to pick [C]" : "Driver and skills [C]",
       },
       createIcon("driver"),
       marked ? "! [C]" : "[C]",
@@ -429,23 +435,35 @@ export class Hud {
 
   private renderReadouts(readout: ReturnType<typeof getHudReadout>): void {
     this.readoutSlot.replaceChildren(
-      ...readout.resources.map(resourceEl),
+      ...readout.resources.map((resource) =>
+        el(
+          "span",
+          {
+            class: `resource ${resource.warning ? "alert" : ""}`,
+            title: "tip" in resource ? resource.tip : resource.label,
+            "data-resource": resource.label,
+          },
+          resource.icon ? createIcon(resource.icon) : null,
+          el("strong", {}, "balance" in resource && resource.balance !== undefined ? moneyEl(resource.balance) : resource.value),
+        ),
+      ),
       ...readout.survival.map((entry) =>
         el(
           "span",
           {
-            class: `resource ${entry.warning ? "bad" : ""}`,
+            class: `resource ${entry.warning ? "alert" : ""}`,
             title: entry.label,
             "data-resource": entry.label,
           },
-          el("small", {}, entry.label),
+          entry.label === "Engine" ? createIcon("engine") : null,
           el("strong", {}, entry.value),
           "progress" in entry && entry.progress !== undefined
             ? el(
                 "span",
                 {
-                  class: "job-bar meter progress",
+                  class: "meter s progress",
                   role: "progressbar",
+                  "aria-label": "Engine heat",
                   "aria-valuenow": String(Math.round(entry.progress * 100)),
                 },
                 el("span", { style: `width:${Math.round(entry.progress * 100)}%` }),
@@ -463,16 +481,16 @@ export class Hud {
         off: "Route",
         checked: manual,
         key: "R",
-        disabled: busy,
-        title: "Manual driving: straight at the point, or follow the roads [R]",
+        reason: busy ? TURN_PLAYING : null,
+        title: "Manual drives straight at the point, route follows the roads [R]",
         onclick: () => this.actions.toggleManual(),
       }),
       createSwitch({
-        on: "Auto patch",
-        off: "No patch",
+        on: "Patch",
+        off: "Off",
         checked: w.player.autoRepair,
         key: "P",
-        disabled: busy,
+        reason: busy ? TURN_PLAYING : null,
         title: "Patch damaged parts while parked [P]",
         onclick: () => this.actions.toggleAutoRepair(),
       }),
@@ -526,22 +544,6 @@ export class Hud {
     );
     this.placeInfo();
   }
-}
-
-type Resource = ReturnType<typeof getHudReadout>["resources"][number];
-
-function resourceEl(resource: Resource): HTMLElement {
-  const attrs = {
-    title: resource.label,
-    "aria-label": `${resource.label}: ${resource.value}${resource.warning ? ", warning" : ""}`,
-    "data-resource": resource.label,
-  };
-  const bad = resource.warning ? " bad" : "";
-  const mark = resource.warning ? "! " : "";
-  if (resource.balance === undefined) {
-    return el("span", { class: `resource${bad}`, ...attrs }, el("small", {}, resource.label), el("strong", {}, mark, resource.value));
-  }
-  return el("span", { class: `resource unlabeled${bad}`, ...attrs }, el("strong", {}, mark, moneyEl(resource.balance)));
 }
 
 function infoHead(v: Vehicle, hostile: boolean): HTMLElement {

@@ -51,19 +51,19 @@
 }
 .truck-instrument > .icon {
   position: absolute;
-  left: -2px;
-  top: -2px;
+  left: 0;
+  top: 0;
   width: 16px;
   height: 16px;
 }
 
 /* Metal toggle switch: a riveted plate, the on option above the lever and the off option below. */
-#ui .instrument-actions button.switch {
+#ui :is(.instrument-actions, .weapon-head) button.switch {
+  height: auto;
   gap: 0;
   padding: 2px 8px;
-}
-/* A smaller lever keeps the switch row short. The margin takes back the space the scale frees. */
-.instrument-actions .switch-lever {
+}/* A smaller lever keeps the switch row short. The margin takes back the space the scale frees. */
+:is(.instrument-actions, .weapon-head) .switch-lever {
   transform: scale(0.7);
   margin: -4px 0;
 }
@@ -122,7 +122,6 @@
 }
 .switch-option.chosen {
   color: var(--accent);
-  text-shadow: 0 0 6px color-mix(in srgb, var(--accent-warm) 40%, transparent);
 }
 /* The lever stands on a hex nut and leans toward the chosen option. */
 .switch-lever {

@@ -54,34 +54,77 @@
 .speed-max:focus-within .speed-tip {
   display: block;
 }
+.speed-tip {
+  font-family: var(--font-ui);
+}
 .speed-line {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-5);
   padding: 1px 0;
 }
-/* Resources on the first row, heat, engine and weather on the second. */
 .readouts {
   display: grid;
   grid-template-columns: repeat(4, auto);
-  gap: var(--space-1) var(--space-5);
+  gap: var(--space-1) var(--space-4);
   align-content: center;
+  align-items: start;
+  padding: var(--space-2) var(--space-3);
+  background: var(--lcd);
+  color: var(--lcd-ink);
+  border: 1px solid var(--surface-sunk);
+  border-radius: var(--radius-s);
+  box-shadow: inset 0 1px 0 var(--shade);
+  font: var(--text-dense) var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 .resource {
   display: flex;
-  flex-direction: column;
-  white-space: nowrap;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-1);
 }
-.resource.unlabeled {
-  justify-content: flex-end;
+.resource .coin-face {
+  fill: none;
+  stroke: currentColor;
 }
-.resource small {
-  font: var(--text-caption) / 1.1 var(--font-ui);
-  color: var(--ink-muted);
+.resource .coin-mark {
+  stroke: currentColor;
 }
 .resource strong {
-  font: var(--text-dense) / 1.3 var(--font-mono);
   font-weight: normal;
 }
-.resource.bad strong {
-  color: var(--danger-ink);
+.resource .icon {
+  width: var(--icon-s);
+  height: var(--icon-s);
+}
+.resource .icon svg {
+  fill: var(--lcd-ink);
+  stroke: var(--lcd-ink);
+}
+.resource.alert {
+  background: var(--lcd-ink);
+  color: var(--lcd);
+}
+.resource.alert .icon svg {
+  fill: var(--lcd);
+  stroke: var(--lcd);
+}
+.readouts .meter {
+  flex-basis: 100%;
+  background: var(--lcd-rule);
+}
+.readouts .meter > * {
+  background: var(--lcd-ink);
+}
+.resource.alert .meter {
+  background: var(--lcd-ink);
+  box-shadow: inset 0 0 0 1px var(--lcd);
+}
+.resource.alert .meter > * {
+  background: var(--lcd);
 }
 .instrument-actions {
   grid-column: 1 / -1;
@@ -107,26 +150,27 @@
   height: var(--icon-s);
 }
 
-/* The panel stops short of the log above the end turn button; a row that does not fit wraps under the guns. */
 #ui .weapons {
   box-sizing: border-box;
   padding: var(--space-2) var(--space-4);
 }
 .weapon-head {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: var(--space-2);
   margin-bottom: var(--space-2);
 }
-#ui .weapon-head h3 {
-  margin: 0 auto 0 0;
-  font-size: var(--text-dense);
+.weapon-head .switch:last-child {
+  margin-left: auto;
 }
-.weapons fieldset {
-  display: block;
-  border: 0;
-  margin: 0;
-  padding: 0;
+#ui :is(.instruments, .weapons) [aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+#ui .weapons .weapon-pick.on {
+  background: var(--accent-wash);
+}
+.weapons .weapon-controls {
   min-width: 0;
 }
 .weapons .weapon-slots {
@@ -270,31 +314,9 @@
   stroke: var(--accent-bright);
 }
 #ui .utility-slot[data-state="aiming"] .weapon-pick {
-  background: var(--accent);
-  border-color: var(--accent-bright);
-  color: var(--ink-on-accent);
-  box-shadow: inset 0 0 0 2px var(--accent-deep);
-  animation: aim-pulse 1.2s ease-in-out infinite;
-}
-.utility-slot[data-state="aiming"] .weapon-number {
-  color: var(--ink-on-accent);
-}
-.utility-slot[data-state="aiming"] .icon svg {
-  fill: var(--accent-dim);
-  stroke: var(--ink-on-accent);
-}
-@keyframes aim-pulse {
-  50% {
-    outline: 2px solid var(--accent-bright);
-    outline-offset: 2px;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  #ui .utility-slot[data-state="aiming"] .weapon-pick {
-    animation: none;
-    outline: 2px solid var(--accent-bright);
-    outline-offset: 2px;
-  }
+  background: var(--accent-wash);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-dim);
 }
 #ui .utility-slot[data-state="set"] .weapon-pick {
   box-shadow: inset 0 0 0 2px var(--good-deep);
@@ -315,12 +337,8 @@
 .utility-slot[data-state="recharging"] [data-status] {
   color: var(--ink-muted);
 }
-#ui .utility-slot[data-state="blocked"] .weapon-pick {
-  box-shadow: inset 0 0 0 2px var(--danger-dark);
-  background: repeating-linear-gradient(135deg, var(--danger-well) 0 var(--space-3), var(--danger-well-alt) var(--space-3) var(--space-6));
-}
-.utility-slot[data-state="blocked"] .icon {
-  opacity: 0.4;
+.utility-slot[data-state="blocked"] .weapon-pick {
+  opacity: 0.55;
 }
 .utility-slot[data-state="blocked"] [data-status] {
   color: var(--danger-ink);
@@ -333,7 +351,7 @@
 }
 .slot-badge[data-badge="crosshair"]::before {
   content: "\2295";
-  color: var(--ink-on-accent);
+  color: var(--accent);
 }
 .slot-badge[data-badge="check"]::before {
   content: "\2713";
@@ -349,13 +367,6 @@
   left: var(--space-1);
   right: var(--space-1);
   bottom: var(--space-1);
-  height: var(--meter-s);
-  background: var(--surface-sunk);
-}
-.recharge-bar > span {
-  display: block;
-  height: 100%;
-  background: var(--accent-dim);
 }
 #ui .turn-control {
   right: var(--space-7);

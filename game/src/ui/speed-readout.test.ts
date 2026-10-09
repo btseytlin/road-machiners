@@ -7,7 +7,7 @@ import { lowFuelSpeed } from '../sim/far';
 import { fuelCap, gunDraw, maxSpeedSteps, workingEngineCapacity } from '../sim/stats';
 import { addVehicle, emptyWorld } from '../sim/testkit';
 import type { Vehicle, World } from '../sim/types';
-import { getHudReadout, powerChip, speedNotes, speedRows, speedTip } from './hud-readout';
+import { getHudReadout, powerChip, speedNotes, speedRows, speedTip, type TipLine } from './hud-readout';
 import { kph } from './units';
 
 function playerWith(tweak: (w: World, v: Vehicle) => void = () => undefined): { w: World; v: Vehicle } {
@@ -32,14 +32,14 @@ const CASES: Record<string, (w: World, v: Vehicle) => void> = {
   },
 };
 
-const SHORT_LINE = /^[^:%\u00b7|]+: ([+−]\d+ km\/h|crawl( \d+ km\/h)?|max \d+ km\/h)$/;
+const SHORT_VALUE = /^([+−]\d+ km\/h|\d+ km\/h|crawl( \d+ km\/h)?|max \d+ km\/h)$/;
 
-function expectShort(lines: string[], name: string): void {
+function expectShort(lines: TipLine[], name: string): void {
+  expect(lines[0], name).toMatchObject({ label: 'Base', tone: 'base' });
   for (const line of lines) {
-    if (line === 'No speed penalties') continue;
-    expect(line, name).toMatch(SHORT_LINE);
-    expect(line.length, name).toBeLessThanOrEqual(40);
-    expect(line, name).not.toMatch(/%|base|Chassis|Guns draw/);
+    expect(line.value, name).toMatch(SHORT_VALUE);
+    expect(`${line.label}: ${line.value}`.length, name).toBeLessThanOrEqual(40);
+    expect(line.label, name).not.toMatch(/Chassis|Guns draw/);
   }
 }
 
@@ -75,29 +75,31 @@ describe('max speed tooltip', () => {
       CASES.guns(world, truck);
     });
     const tip = getHudReadout(w).maxSpeedTip;
-    expect(tip).toContainEqual(expect.stringMatching(/^2 broken wheels: −\d+ km\/h$/));
-    expect(tip).toContainEqual(expect.stringMatching(/^Guns power: −\d+ km\/h$/));
+    expect(tip).toContainEqual({ label: '2 broken wheels', value: expect.stringMatching(/^−\d+ km\/h$/), tone: 'bad' });
+    expect(tip).toContainEqual({ label: 'Guns power', value: expect.stringMatching(/^−\d+ km\/h$/), tone: 'bad' });
     const stalled = playerWith(CASES.stalled);
-    expect(getHudReadout(stalled.w).maxSpeedTip).toContain(`Engine stalled: crawl ${getHudReadout(stalled.w).maxSpeed} km/h`);
+    expect(getHudReadout(stalled.w).maxSpeedTip).toContainEqual({ label: 'Engine stalled', value: `crawl ${getHudReadout(stalled.w).maxSpeed} km/h`, tone: 'plain' });
   });
 
   it('notes an empty and a low tank apart from the number', () => {
     const empty = playerWith();
     empty.w.player.fuel = 0;
-    expect(getHudReadout(empty.w).maxSpeedTip).toContain('Empty tank: crawl');
+    expect(getHudReadout(empty.w).maxSpeedTip).toContainEqual({ label: 'Empty tank', value: 'crawl', tone: 'bad' });
     const low = playerWith();
     low.w.player.fuel = fuelCap(low.v) * RULES.lowFuelThreshold * 0.5;
     const steps = maxSpeedSteps(low.w, low.v);
-    expect(getHudReadout(low.w).maxSpeedTip).toContain(`Low fuel: max ${kph(lowFuelSpeed(steps[steps.length - 1].speed))} km/h`);
+    expect(getHudReadout(low.w).maxSpeedTip).toContainEqual({ label: 'Low fuel', value: `max ${kph(lowFuelSpeed(steps[steps.length - 1].speed))} km/h`, tone: 'bad' });
   });
 
-  it('shows the compact empty state only when nothing moves the speed', () => {
-    expect(speedTip([], [])).toEqual(['No speed penalties']);
+  it('starts with the base and adds one row per cause, so the rows add up to the HUD number', () => {
+    expect(speedTip(100, [], [])).toEqual([{ label: 'Base', value: '100 km/h', tone: 'base' }]);
     for (const [name, tweak] of Object.entries(CASES)) {
       const { w, v } = playerWith(tweak);
       const steps = maxSpeedSteps(w, v);
-      const quiet = speedRows('Clear', steps).length === 0 && speedNotes(w, v, steps).length === 0;
-      expect(getHudReadout(w).maxSpeedTip.includes('No speed penalties'), name).toBe(quiet);
+      if (steps.some((s) => s.kind === 'limp')) continue;
+      const tip = getHudReadout(w).maxSpeedTip;
+      expect(tip[0].value, name).toBe(`${kph(steps[0].speed)} km/h`);
+      expect(tip.length, name).toBe(1 + speedRows('Clear', steps).length + speedNotes(w, v, steps).length);
     }
   });
 
@@ -106,7 +108,7 @@ describe('max speed tooltip', () => {
     const readout = getHudReadout(w);
     expect(readout).not.toHaveProperty('maxSpeedRows');
     expect(readout).not.toHaveProperty('maxSpeedNotes');
-    for (const row of speedRows('Clear', maxSpeedSteps(w, v))) expect(Object.keys(row).sort()).toEqual(['delta', 'label', 'text']);
+    for (const row of speedRows('Clear', maxSpeedSteps(w, v))) expect(Object.keys(row).sort()).toEqual(['delta', 'label', 'value']);
   });
 });
 

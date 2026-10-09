@@ -3,6 +3,7 @@ import type { Vehicle } from "../sim/types";
 import { el } from "./dom";
 import { conditionLabel, TruckConditionReadout } from "./hud-readout";
 import { tintedIcon, truckOutline } from "./plans";
+import { PLAN_PAD } from "../render/partLooks";
 import { token } from "./tokens";
 import "./truck-condition.css";
 
@@ -19,7 +20,7 @@ export class TruckConditionView {
   private body = el("div", { class: "condition-chassis" });
   private readout = new TruckConditionReadout();
   private nodes = new Map<string, HTMLElement>();
-  private tip = el("div", { class: "condition-tip" });
+  private tip = el("div", { class: "condition-tip tooltip" });
   private hoverId: string | null = null;
   private tiles: ConditionPart[] = [];
   private outline: HTMLElement[] = [];
@@ -41,6 +42,7 @@ export class TruckConditionView {
     const grid = baseGrid(vehicle.chassisId);
     this.body.style.width = `${grid.w * CELL}px`;
     this.body.style.height = `${grid.h * CELL}px`;
+    this.body.style.margin = `${PLAN_PAD * CELL}px 0`;
     if (this.chassisId !== vehicle.chassisId) {
       this.chassisId = vehicle.chassisId;
       for (const old of this.outline) old.remove();
@@ -65,7 +67,7 @@ export class TruckConditionView {
     const part = this.tiles.find((p) => p.id === this.hoverId);
     this.tip.style.display = part ? "" : "none";
     if (!part) return;
-    this.tip.textContent = conditionLabel(part);
+    this.tip.replaceChildren(el("span", {}, part.name), el("span", { class: part.percent === 0 ? "num bad" : "num" }, part.percent === 0 ? "broken" : `${part.percent}%`));
     this.tip.style.left = `${part.x * CELL}px`;
     this.tip.style.top = `${part.y === 0 ? (part.y + part.h) * CELL + 2 : part.y * CELL - 22}px`;
   }

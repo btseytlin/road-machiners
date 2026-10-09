@@ -61,14 +61,13 @@
   font: var(--text-caption) / var(--text-caption) var(--font-mono);
   text-align: center;
 }
-.condition-tip {
+#ui .condition-tip {
   position: absolute;
   z-index: var(--z-popup);
+  display: flex;
+  gap: var(--space-4);
   padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--line-soft);
-  background: var(--scrim-heavy);
-  color: var(--ink-bright);
-  font: var(--text-dense) var(--font-ui);
+  font-family: var(--font-ui);
   white-space: nowrap;
   pointer-events: none;
 }
