@@ -264,8 +264,8 @@ describe('immediate commands', () => {
     await run(fake(), 'repair-clone', '5', '--by', 'hermes', '--reason', 'merge left it dirty');
     await run(fake(), 'repair-clone', '6', '--backup-merge', '--reason', 'open merge', '--by', 'ann');
     expect(repairs).toEqual([
-      { issue: 5, by: 'hermes', reason: 'merge left it dirty', backupMerge: false },
-      { issue: 6, by: 'ann', reason: 'open merge', backupMerge: true },
+      { issue: 5, by: 'hermes', reason: 'merge left it dirty', backupMerge: false, refuseUnpushed: false },
+      { issue: 6, by: 'ann', reason: 'open merge', backupMerge: true, refuseUnpushed: false },
     ]);
     expect(out).toContain('repaired');
     expect(inbox()).toEqual([]);

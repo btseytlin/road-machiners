@@ -107,7 +107,7 @@ async function repairCloneCommand(ctx: Ctx, args: string[]): Promise<void> {
   const [n, ...extra] = reason.rest.filter((arg) => arg !== '--backup-merge');
   if (extra.length > 0) throw new Error(`Unexpected "${extra.join(' ')}". Usage: ${IMMEDIATE['repair-clone'].usage}`);
   const actor = resolveActor(ctx, by.value, false);
-  for (const line of await repairClone(ctx, { issue: number(n), by: actor, reason: reason.value, backupMerge })) console.log(line);
+  for (const line of await repairClone(ctx, { issue: number(n), by: actor, reason: reason.value, backupMerge, refuseUnpushed: false })) console.log(line);
 }
 
 function setStateCommand(ctx: Ctx, args: string[]): void {

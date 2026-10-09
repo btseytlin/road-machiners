@@ -3,7 +3,7 @@ import { basename, dirname, join } from 'node:path';
 import { withLockSync } from './lock';
 import type { FactoryState, Job, JobStage, PlaytestState, ReleaseState } from './types';
 
-export const EMPTY_STATE: FactoryState = { jobs: [], approvalPosts: {}, lastRelease: null, release: null, releasePost: null, pendingShip: null, pendingRemovals: [], pendingApprovals: {}, approvedResolving: {}, pendingChanges: [], pendingIncidents: [], bundles: {}, adhocReplies: {}, lastTickError: null, failures: [], builds: {}, cardStarts: {}, postCaptions: {}, devBuild: null, devFailed: null, devError: null, interrupted: [], retried: [], postOnly: [], unroutedReplies: {}, textPosts: [], lastWasteReview: null, held: {} };
+export const EMPTY_STATE: FactoryState = { jobs: [], approvalPosts: {}, lastRelease: null, release: null, releasePost: null, pendingShip: null, pendingRemovals: [], pendingApprovals: {}, approvedResolving: {}, pendingChanges: [], pendingIncidents: [], bundles: {}, adhocReplies: {}, lastTickError: null, failures: [], builds: {}, cardStarts: {}, postCaptions: {}, devBuild: null, devFailed: null, devError: null, interrupted: [], retried: [], postOnly: [], unroutedReplies: {}, textPosts: [], lastWasteReview: null, held: {}, stuck: {}, sweepError: null };
 
 const STATE_LOCK_MS = 30_000;
 

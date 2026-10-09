@@ -180,7 +180,13 @@ export type FactoryState = {
   textPosts: string[];
   lastWasteReview: string | null;
   held: Record<string, Hold>;
+  stuck: Record<string, StuckRecord>;
+  sweepError: string | null;
 };
+
+export type StuckKind = 'running' | 'held' | 'merge-batch' | 'clone-merge' | 'machine' | 'blocked' | 'unrecorded';
+export type StuckCause = { incident: string; stage: Stage | null; cause: string; log: string | null; batch: number; since: string; decision: boolean };
+export type StuckRecord = StuckCause & { column: Column; kind: StuckKind; tries: number; released: string | null; refused: string | null };
 
 export type Hold = { by: string; reason: string; at: string; stage: JobStage | null };
 
@@ -305,6 +311,7 @@ export const CLONE_LOCK_MS = 15 * 60_000;
 export const OUT_DIR = '.factory';
 export const MEDIA_DIR = '.factory-media';
 export const STUCK_LABEL = 'factory-stuck';
+export const OPEN_MARKS = ['MERGE_HEAD', 'REVERT_HEAD', 'CHERRY_PICK_HEAD', 'rebase-merge', 'rebase-apply'];
 export const WONT_DO_LABEL = 'wont-do';
 export const MAINTENANCE_LABEL = 'maintenance';
 export const RELEASE_LABEL = 'release';
