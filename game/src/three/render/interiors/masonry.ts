@@ -2,13 +2,7 @@ import { PAL } from '../../../render/palette';
 import type { SiteBuilder } from '../sites';
 
 const MAST = 3.3;
-const LAMP_MAST = 1.7;
-const PUMP_LAMPS = [
-  { x: 0.7, z: 1.9, yaw: 0.5 },
-  { x: 0.9, z: -1.8, yaw: 0 },
-  { x: -2.6, z: -1.9, yaw: 1.2 },
-  { x: 3.7, z: 0.4, yaw: 0.3 },
-];
+const PUMP_LANTERN = { x: 0.7, z: 1.9, yaw: 0.5 };
 const OASIS_LAMPS = 4;
 const OASIS_LAMP_RING = 3.3;
 
@@ -16,7 +10,7 @@ export function buildPump(b: SiteBuilder): void {
   b.addRuin(-1.7, 0, 3, 3.8);
   b.addModel('pump_station', 2.5, 0);
   b.addBox(-2, 0, 1.2, 0.85, 2, PAL.rust.side);
-  for (const l of PUMP_LAMPS) b.addMast(l.x, l.z, LAMP_MAST, l.yaw);
+  b.addLantern(PUMP_LANTERN.x, PUMP_LANTERN.z, PUMP_LANTERN.yaw);
 }
 
 export function buildLock(b: SiteBuilder): void {
@@ -36,6 +30,6 @@ export function buildOasis(b: SiteBuilder): void {
   }
   for (let i = 0; i < OASIS_LAMPS; i++) {
     const a = (i + 0.5) * Math.PI * 2 / OASIS_LAMPS;
-    b.addMast(Math.cos(a) * OASIS_LAMP_RING, Math.sin(a) * OASIS_LAMP_RING, LAMP_MAST, -a);
+    b.addLantern(Math.cos(a) * OASIS_LAMP_RING, Math.sin(a) * OASIS_LAMP_RING, -a);
   }
 }

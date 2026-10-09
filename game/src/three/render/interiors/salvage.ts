@@ -5,14 +5,6 @@ import { hoist, slew } from '../site-motion';
 import type { SiteBuilder } from '../sites';
 import { addShed } from './shed';
 
-const LAMP_MAST = 1.7;
-const YARD_LAMPS = [
-  { x: 1.0, z: 2.0, yaw: 0.6 },
-  { x: -1.1, z: 2.3, yaw: 0 },
-  { x: -2.2, z: 0.2, yaw: 1.5 },
-  { x: -0.8, z: -0.9, yaw: 0 },
-  { x: 1.3, z: -1.4, yaw: 0.4 },
-];
 const CRANE = { x: 0.1, z: 1.3, yaw: (160 * Math.PI) / 180 };
 const SLEW = { amplitude: (35 * Math.PI) / 180, period: 14 };
 const HOIST = { range: 2, period: 7 };
@@ -41,7 +33,6 @@ export function buildSalvageYard(b: SiteBuilder): void {
   b.addModel('wreck', JEEP.x, JEEP.z, JEEP.yaw).name = 'salvage-jeep';
   for (const w of WRECKS) b.addModel('wreck', w.x, w.z, w.yaw).name = 'salvage-wreck';
   for (const p of YARD_PROPS) b.addModel(p.name, p.x, p.z, p.yaw);
-  for (const l of YARD_LAMPS) b.addMast(l.x, l.z, LAMP_MAST, l.yaw);
 }
 
 function addCrane(b: SiteBuilder): void {

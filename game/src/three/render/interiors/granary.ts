@@ -23,14 +23,10 @@ const BINS = { x: 1.6, z: 1.4, size: 0.72, apart: 0.8, wall: 0.2, plank: 0.05, f
 const STACK_SACK = { w: 0.24, h: 0.12, d: 0.16 };
 const STACK_ROWS = [4, 3, 2];
 
-const LAMP_HEIGHT = 1.9;
-const GRANARY_LAMPS = [
-  { x: 1.7, z: 1.9 },
+const SHELTER_LANTERNS = [
   { x: 2.4, z: -0.6 },
-  { x: -0.5, z: 2.4 },
   { x: -2.6, z: 0.4 },
 ];
-const BELT_LIGHT = { lamp: 1, aim: { x: 0, z: -2.6, lift: 0.4 } };
 const GRAIN = FACTION_COLORS.bowl.cab;
 const SACK_COLOR = PAL.wall.top;
 const UP = new THREE.Vector3(0, 1, 0);
@@ -43,8 +39,7 @@ export function buildGranary(b: SiteBuilder): void {
   for (const shelter of SHELTERS) addShelter(b, shelter.x, shelter.z);
   for (const c of YARD_CRATES) b.addModel('crates', c.x, c.z, c.yaw);
   for (const [i, j] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) addBin(b, BINS.x + (i * BINS.apart) / 2, BINS.z + (j * BINS.apart) / 2);
-  const heads = GRANARY_LAMPS.map((l) => b.addMast(l.x, l.z, LAMP_HEIGHT, Math.atan2(-l.z, -l.x)));
-  b.addLight('flood', heads[BELT_LIGHT.lamp], BELT_LIGHT.aim, PAL.siteLight.warm);
+  for (const l of SHELTER_LANTERNS) b.addLantern(l.x, l.z, Math.atan2(l.z, -l.x));
 }
 
 function addConveyor(b: SiteBuilder): void {

@@ -101,10 +101,22 @@ export class SiteBuilder {
     this.addBox(bracket.x, bracket.z, SCONCE.reach, 0.12, 0.12, PAL.metal, height - 0.12, yaw);
     return this.addLampHead(face.x + out.x * SCONCE.reach, face.z + out.z * SCONCE.reach, height, yaw);
   }
-  // A pole with a lamp head on top. Everything stands at x, z so that pullInside() moves pole and head together.
-  addMast(x: number, z: number, height: number, yaw: number): THREE.Mesh {
-    this.addBox(x, z, 0.18, height + SINK, 0.18, PAL.metal, -SINK, yaw);
-    return this.addLampHead(x, z, height, yaw);
+  addLantern(x: number, z: number, yaw: number): THREE.Mesh {
+    const out = { x: Math.cos(yaw), z: -Math.sin(yaw) };
+    const hang = { x: x + out.x * LANTERN.arm, z: z + out.z * LANTERN.arm };
+    this.addBox(x, z, LANTERN.post, LANTERN.height + SINK, LANTERN.post, PAL.trunk, -SINK, yaw);
+    this.addBox(x + (out.x * LANTERN.arm) / 2, z + (out.z * LANTERN.arm) / 2, LANTERN.arm + LANTERN.post, LANTERN.post * 0.7, LANTERN.post * 0.7, PAL.trunk, LANTERN.height - LANTERN.post, yaw);
+    this.addBox(hang.x, hang.z, LANTERN.cap, LANTERN.cap / 3, LANTERN.cap, PAL.metal, LANTERN.height - LANTERN.post - LANTERN.drop - LANTERN.cap / 3, yaw);
+    const glass = this.addBox(hang.x, hang.z, LANTERN.glass, LANTERN.glass * 1.3, LANTERN.glass, PAL.lamp.amber, LANTERN.height - LANTERN.post - LANTERN.drop - LANTERN.cap / 3 - LANTERN.glass * 1.3, yaw);
+    this.lamps.push(glass);
+    return glass;
+  }
+  addFirePit(x: number, z: number): THREE.Mesh {
+    this.addTank(x, z, FIRE_PIT.ring, FIRE_PIT.rim, PAL.rust.dark);
+    const flame = this.addShape(new THREE.ConeGeometry(FIRE_PIT.flame * S, FIRE_PIT.flame * 2.2 * S, 5), PAL.lamp.amber, x, z, FIRE_PIT.rim + FIRE_PIT.flame * 1.1);
+    flame.castShadow = false;
+    this.lamps.push(flame);
+    return flame;
   }
   addWorkLight(kind: SiteLightKind, x: number, z: number, height: number, aim: { x: number; z: number; lift?: number }, color: number, range?: number, intensity?: number): void {
     const anchor = new THREE.Group();
@@ -216,6 +228,8 @@ const SINK = 0.3;
 const DOOR_THICKNESS = 0.4;
 const GATE_APRON_AIM = 2.5;
 const WORK_MAST = 3.3;
+const LANTERN = { height: 1.15, post: 0.09, arm: 0.28, cap: 0.17, glass: 0.11, drop: 0.04 };
+const FIRE_PIT = { ring: 0.45, rim: 0.12, flame: 0.16 };
 const FILL = { height: 6, reach: 1.6 };
 const SCONCE = { every: 3, reach: 0.7, height: 2.3, throw: 2.5, gap: 1.5 };
 const WASH = { mast: 2.4, aim: 3.8, lift: 3 };

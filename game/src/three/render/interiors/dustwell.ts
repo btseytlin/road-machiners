@@ -16,14 +16,7 @@ const TANK_OUTLET = (2.6 + 0.45) / 4;
 const SQUAT = { x: -0.1, z: 1.9, height: 0.42 };
 const SHED = { x: 0.3, z: -0.3, yaw: -Math.PI / 2 };
 const PIPE = { size: 0.08, lift: 0.12, support: 0.6 };
-const LAMP_HEIGHT = 1.9;
-const DUSTWELL_LAMPS = [
-  { x: 1.5, z: 1.3 },
-  { x: -1.7, z: 1.4 },
-  { x: -1.2, z: -1.7 },
-  { x: 2.4, z: -0.3 },
-];
-const PUMP_LIGHT = { lamp: 3, aim: { x: PUMP.x + 0.6, z: PUMP.z, lift: 0.3 } };
+const PUMP_LANTERN = { x: -1.7, z: 1.4, yaw: -Math.PI / 2 };
 
 export function buildDustwell(b: SiteBuilder): void {
   addPumpjack(b);
@@ -31,8 +24,7 @@ export function buildDustwell(b: SiteBuilder): void {
   b.addModel('storage_tank', SQUAT.x, SQUAT.z, 0.6, new THREE.Vector3(1, SQUAT.height, 1)).name = 'dustwell-tank';
   addShed(b, 'dustwell', SHED);
   addPipes(b);
-  const heads = DUSTWELL_LAMPS.map((l) => b.addMast(l.x, l.z, LAMP_HEIGHT, Math.atan2(-l.z, -l.x)));
-  b.addLight('flood', heads[PUMP_LIGHT.lamp], PUMP_LIGHT.aim, PAL.siteLight.sodium);
+  b.addLantern(PUMP_LANTERN.x, PUMP_LANTERN.z, PUMP_LANTERN.yaw);
 }
 
 function addPumpjack(b: SiteBuilder): void {

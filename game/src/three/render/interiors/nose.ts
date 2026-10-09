@@ -56,7 +56,6 @@ const CRATES = [
   { u: 12.5, v: -17 },
   { u: 10.5, v: 15.5 },
 ];
-const LAMP_MAST = 1.7;
 const LAMPS = { rows: [-1.5, -4, -6.5, -9, -11.5, -14, -16.5, -19, -21.5], along: 2, reach: 26, count: 14, gap: 2.5, keepOut: 0.6, span: 0.4 };
 const RUBBLE = { count: 44, scale: [2, 6], reach: 29.3 };
 const ROCK_SINK = 0.25 * 1.1;
@@ -87,7 +86,7 @@ export function buildNose(b: SiteBuilder, site: Site): void {
   b.root.userData.homes = addShelters(b, site, f, taken);
   addRubble(b, site, f, [...gateDiscs(site), ...taken]);
   b.root.userData.structures = taken;
-  lampSpots(site, f, taken).forEach((s, i) => b.addMast(s.x, s.z, LAMP_MAST, i * 0.7));
+  lampSpots(site, f, taken).forEach((s, i) => b.addLantern(s.x, s.z, i * 0.7));
 }
 
 function lampSpots(site: Site, f: Frame, taken: Disc[]): Spot[] {
