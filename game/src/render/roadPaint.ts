@@ -1,6 +1,6 @@
 // Road look for the ground shader. The mask marks where region roads (red) and territory dirt roads (green) lie on
 // the map, and where fused glass (blue) lies. The detail is a small tiling image of packed dirt with gravel, cracked
-// patches and potholes, drawn in pixels a third the size of the ground paint pixels. The tone is slow noise that varies the road and wanders its
+// patches and potholes, drawn in pixels a third the size of the ground paint pixels. The tone is slow noise that varies the road and wanders its Each blurred dirt stroke is clipped to its own bounds so the blur stays local.
 
 import { REGION, type TerritoryDef } from "../data/region";
 import { TERRITORIES, type FarmRoad, type WreckRules } from "../data/territory";
@@ -23,6 +23,8 @@ const WRECKS: { territory: TerritoryDef; wreck: WreckRules }[] = REGION.location
 const WIDTH = REGION.roadWidth * 0.9;
 const BLUR = 2.4;
 const DIRT_BLUR = 0.8;
+// The blur leaves nothing past 4 sigma, so clipping a stroke to that reach changes no pixel.
+export const BLUR_REACH = 4;
 const STEP = 0.5;
 const CRACK_MIX = 0.3;
 const CRACK_CELL = 16;
@@ -44,34 +46,58 @@ export function paintRoadMask(c: PaintCanvas): void {
   ctx.filter = `blur(${BLUR * c.res}px)`;
   ctx.globalCompositeOperation = "copy";
   ctx.drawImage(ctx.canvas, 0, 0);
-  ctx.filter = `blur(${DIRT_BLUR * c.res}px)`;
+  const dirtBlur = DIRT_BLUR * c.res;
+  ctx.filter = `blur(${dirtBlur}px)`;
   ctx.globalCompositeOperation = "lighten";
   ctx.strokeStyle = DIRT_ROAD_STYLE;
   for (const { territory, wreck } of WRECKS) {
     const { roads, spurs } = territoryRoads(territory);
     const fade = wreck.spurFade;
-    for (const road of roads) strokeRuns(c, runsWhere(evenPoints(road.points), offDeck), road.width * 0.9);
-    for (const spur of spurs) strokeSpur(c, spur, fade);
+    for (const road of roads) strokeRuns(c, runsWhere(evenPoints(road.points), offDeck), road.width * 0.9, dirtBlur);
+    for (const spur of spurs) strokeSpur(c, spur, fade, dirtBlur);
   }
   ctx.filter = "none";
   ctx.globalCompositeOperation = "source-over";
 }
 
-function strokeRuns(c: PaintCanvas, runs: Vec[][], width: number): void {
+function strokeRuns(c: PaintCanvas, runs: Vec[][], width: number, blurPx = 0): void {
   const ctx = c.ctx;
   ctx.globalAlpha = 1;
   ctx.lineWidth = width * c.res;
   ctx.lineCap = "butt";
+  const lines = runs.map((run) => run.map((p) => ({ x: c.toPx(p.x), y: c.toPx(p.y) })));
+  if (blurPx > 0) return strokeClipped(ctx, lines, blurPx);
   ctx.beginPath();
-  for (const run of runs) run.forEach((p, i) => (i === 0 ? ctx.moveTo(c.toPx(p.x), c.toPx(p.y)) : ctx.lineTo(c.toPx(p.x), c.toPx(p.y))));
+  for (const line of lines) line.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
   ctx.stroke();
 }
 
-function strokeSpur(c: PaintCanvas, spur: FarmRoad, fade: number): void {
+// Strokes pixel-space lines with the style already set, clipped so the blur layer covers only the stroke's bounds.
+export function strokeClipped(ctx: CanvasRenderingContext2D, lines: readonly (readonly { x: number; y: number }[])[], blurPx: number): void {
+  if (!Number.isFinite(blurPx) || blurPx < 0) throw new Error(`Blur radius must be finite and not negative: ${blurPx}`);
+  const drawn = lines.filter((line) => line.length > 1);
+  if (drawn.length === 0) return;
+  const points = drawn.flat();
+  const reach = ctx.lineWidth / 2 + BLUR_REACH * blurPx + 2;
+  const left = Math.floor(Math.min(...points.map((p) => p.x)) - reach);
+  const top = Math.floor(Math.min(...points.map((p) => p.y)) - reach);
+  const right = Math.ceil(Math.max(...points.map((p) => p.x)) + reach);
+  const bottom = Math.ceil(Math.max(...points.map((p) => p.y)) + reach);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(left, top, right - left, bottom - top);
+  ctx.clip();
+  ctx.beginPath();
+  for (const line of drawn) line.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+  ctx.stroke();
+  ctx.restore();
+}
+
+function strokeSpur(c: PaintCanvas, spur: FarmRoad, fade: number, blurPx: number): void {
   const points = evenPoints(spur.points);
   const left = tilesToEnd(points);
   const width = spur.width * 0.9;
-  strokeRuns(c, runsWhere(points.filter((_, i) => left[i] >= fade), offDeck), width);
+  strokeRuns(c, runsWhere(points.filter((_, i) => left[i] >= fade), offDeck), width, blurPx);
   const ctx = c.ctx;
   ctx.lineCap = "round";
   for (let i = 1; i < points.length; i++) {
@@ -79,10 +105,7 @@ function strokeSpur(c: PaintCanvas, spur: FarmRoad, fade: number): void {
     if (k >= 1 || k <= 0 || !offDeck(points[i - 1]) || !offDeck(points[i])) continue;
     ctx.globalAlpha = k;
     ctx.lineWidth = width * k * c.res;
-    ctx.beginPath();
-    ctx.moveTo(c.toPx(points[i - 1].x), c.toPx(points[i - 1].y));
-    ctx.lineTo(c.toPx(points[i].x), c.toPx(points[i].y));
-    ctx.stroke();
+    strokeClipped(ctx, [[{ x: c.toPx(points[i - 1].x), y: c.toPx(points[i - 1].y) }, { x: c.toPx(points[i].x), y: c.toPx(points[i].y) }]], blurPx);
   }
   ctx.globalAlpha = 1;
 }
