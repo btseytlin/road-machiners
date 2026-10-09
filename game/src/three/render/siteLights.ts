@@ -22,12 +22,12 @@ const SHADOW_MAP = 1024;
 const SHADOW_BIAS = 0.3;
 
 export const LOOKS: Record<SiteLightKind, Look> = {
-  flood: { color: PAL.siteLight.sodium, intensity: 40, range: 18, angle: 38 * DEG, penumbra: 0.6, decay: 1, shadow: false },
+  flood: { color: PAL.siteLight.sodium, intensity: 20, range: 18, angle: 38 * DEG, penumbra: 0.6, decay: 1, shadow: false },
   wash: { color: PAL.siteLight.sodium, intensity: 60, range: 32, angle: 17 * DEG, penumbra: 0.6, decay: 1, shadow: false },
   gate: { color: PAL.siteLight.sodium, intensity: 70, range: 22, angle: 30 * DEG, penumbra: 0.5, decay: 1, shadow: false },
-  fire: { color: PAL.siteLight.fire, intensity: 30, range: 12, angle: 60 * DEG, penumbra: 0.8, decay: 1, shadow: false },
+  fire: { color: PAL.siteLight.fire, intensity: 15, range: 12, angle: 60 * DEG, penumbra: 0.8, decay: 1, shadow: false },
   window: { color: PAL.siteLight.amber, intensity: 10, range: 10, angle: 85 * DEG, penumbra: 1, decay: 1, shadow: false },
-  fill: { color: PAL.siteLight.amber, intensity: 180, range: 40, angle: 60 * DEG, penumbra: 1, decay: 1, shadow: true },
+  fill: { color: PAL.siteLight.amber, intensity: 40, range: 40, angle: 60 * DEG, penumbra: 1, decay: 1, shadow: true },
 };
 
 export function lookOf(light: SiteLight): Look {
