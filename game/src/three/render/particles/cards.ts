@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { count } from '../../../perf';
 
 export const CARD_SHAPES = 4;
 const ATLAS_PX = 256;
@@ -7,6 +8,8 @@ const SHAPE_LUMPS = { min: 4, spread: 3 };
 const SHAPE_BLUR_PX = 6;
 const CARD_LIGHT = { scatter: 0.7 };
 const CARD_ORDER = { lit: 904, glow: 906 };
+const FILL_ALPHA_STEPS = 64;
+export const OVERFILL_COUNTER = 'fx.cards.overfilled';
 
 export type CardLight = { sunDir: THREE.Vector3; sun: THREE.Color; sky: THREE.Color; ground: THREE.Color };
 
@@ -108,7 +111,8 @@ export class CardBatch {
   private readonly cards: Card[] = [];
   private readonly depth = new THREE.Vector3();
 
-  constructor(private readonly capacity: number, private readonly kind: 'lit' | 'glow', shapes: THREE.Texture) {
+  constructor(private readonly capacity: number, private readonly kind: 'lit' | 'glow', shapes: THREE.Texture, private readonly fillScreens: number) {
+    if (!(fillScreens > 0)) throw new Error(`CardBatch needs a positive fill ceiling, got ${fillScreens}`);
     const quad = new THREE.PlaneGeometry(1, 1);
     this.geo.index = quad.index;
     this.geo.setAttribute('position', quad.getAttribute('position'));
@@ -152,6 +156,7 @@ export class CardBatch {
   }
 
   flush(camera: THREE.Camera): void {
+    this.fitFill(camera);
     if (this.kind === 'lit') this.sortBackToFront(camera);
     this.cards.forEach((c, i) => {
       this.offsets.setXYZ(i, c.x, c.y, c.z);
@@ -167,6 +172,22 @@ export class CardBatch {
       a.needsUpdate = true;
     }
     this.cards.length = 0;
+  }
+
+  private fitFill(camera: THREE.Camera): void {
+    const e = camera.projectionMatrix.elements;
+    if (e[15] !== 1) throw new Error('The card fill ceiling needs an orthographic camera');
+    const screensOf = (c: Card) => c.size * e[0] * 0.5 * (c.size + Math.hypot(c.sx, c.sy, c.sz)) * e[5] * 0.5;
+    let total = 0;
+    for (const c of this.cards) total += screensOf(c);
+    if (total <= this.fillScreens) return;
+    const step = (c: Card) => Math.round(c.alpha * FILL_ALPHA_STEPS);
+    this.cards.sort((a, b) => step(b) - step(a));
+    let used = 0;
+    let kept = 0;
+    while (kept < this.cards.length && used + screensOf(this.cards[kept]) <= this.fillScreens) used += screensOf(this.cards[kept++]);
+    count(OVERFILL_COUNTER, this.cards.length - kept);
+    this.cards.length = kept;
   }
 
   private sortBackToFront(camera: THREE.Camera): void {

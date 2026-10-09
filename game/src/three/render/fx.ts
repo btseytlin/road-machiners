@@ -19,6 +19,7 @@ import type { CameraRig } from './camera';
 import { tirePoints, Ruts } from './ruts';
 import type { GroundAt } from './lines';
 import { Casings, Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan, type ShotCues } from './projectiles';
+import { CONFIG } from '../../config';
 import { CardBatch, createCardShapes } from './particles/cards';
 import { ChunkBatch } from './particles/chunks';
 import { Particles, type ParticleLook } from './particles/particles';
@@ -265,8 +266,8 @@ export class Fx3D {
   private glows = new ParticlePool(MAX_GLOWS, true);
   private readonly shapes = createCardShapes(Math.random);
   readonly cards = {
-    lit: new CardBatch(MAX_PARTICLES + MAX_VIEW_CARDS, 'lit', this.shapes),
-    glow: new CardBatch(MAX_GLOW_PARTICLES + MAX_VIEW_CARDS, 'glow', this.shapes),
+    lit: new CardBatch(MAX_PARTICLES + MAX_VIEW_CARDS, 'lit', this.shapes, CONFIG.fxFillScreens),
+    glow: new CardBatch(MAX_GLOW_PARTICLES + MAX_VIEW_CARDS, 'glow', this.shapes, CONFIG.fxFillScreens),
   };
   private readonly particles = new Particles(MAX_PARTICLES);
   private readonly glowParticles = new Particles(MAX_GLOW_PARTICLES);
