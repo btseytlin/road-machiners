@@ -39,10 +39,6 @@
     width: calc(100vw - 2 * var(--hud-inset));
     height: calc(100dvh - var(--narrow-log-bottom) - var(--hud-hover-top) - var(--hud-gap));
   }
-  .info {
-    top: var(--narrow-info-top);
-    max-height: calc(100dvh - var(--narrow-info-top) - var(--narrow-log-bottom) - var(--narrow-log-height) - var(--hud-gap));
-  }
   #ui .modal {
     padding: var(--space-8) var(--space-7);
     height: calc(100dvh - var(--narrow-modal-clearance));

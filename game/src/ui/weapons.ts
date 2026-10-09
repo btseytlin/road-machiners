@@ -123,27 +123,8 @@ export function aimActions(h: AimHost) {
   const guns = () => weaponsForClick(h.world(), h.selected());
   return {
     aimState: (id: string) => aimStateOf(h.world(), h.selected(), !h.canAim(), id),
-    aimBody: (id: string) => h.canAim() && h.apply(toggleBodyAim(h.world(), guns(), vehicleById(h.world(), id))),
     aimPart: (id: string, partId: string) => h.canAim() && h.apply(aimAtPart(h.world(), guns(), vehicleById(h.world(), id), partId)),
   };
-}
-
-// The line above the card's diagram. It holds the Body chip, whose tooltip names the chosen guns. It is missing for a player without guns.
-export function aimLine(state: AimState, onBody: () => void): HTMLElement | null {
-  if (!state.hasGuns) return null;
-  const chip = el(
-    "button",
-    {
-      class: "aim-body",
-      "aria-pressed": String(state.bodyAimed),
-      disabled: state.locked,
-      title: `Body shot with ${state.guns}: rounds hit whatever part they reach. Click again to stop.`,
-      onclick: onBody,
-    },
-    "Body",
-    ...(state.body.length ? [el("span", { class: "condition-aim" }, state.body.join(" "))] : []),
-  );
-  return el("div", { class: "aim-line dim" }, chip);
 }
 
 // The Body chip aims the chosen guns at a vehicle's body. When all of them already do, it clears them. A gun on a part moves to the body.

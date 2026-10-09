@@ -37,7 +37,7 @@
 #ui .info .truck-condition {
   position: static;
   width: fit-content;
-  margin: var(--space-4) auto 0;
+  margin: 0;
 }
 .condition-part.aimable {
   cursor: crosshair;

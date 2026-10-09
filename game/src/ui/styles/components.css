@@ -45,7 +45,7 @@
   line-height: 1;
   white-space: nowrap;
 }
-#ui :is(.btn-s, td button, .tabs.sub > button, .weapon-head button, .log-expand, .tip-close, .aim-body) {
+#ui :is(.btn-s, td button, .tabs.sub > button, .weapon-head button, .log-expand, .tip-close) {
   height: var(--btn-h-s);
   padding: 0 var(--space-4);
   font-size: var(--text-dense);

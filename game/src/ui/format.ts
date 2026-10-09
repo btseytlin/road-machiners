@@ -86,7 +86,7 @@ function aidWorkLabel(world: World, v: Vehicle, s: NpcState): string {
 export function workProgress(work: WorkLeft): number {
   return 1 - work.turnsLeft / work.total;
 }
-import { damage, fuelLiters, hp, moneyDelta, moneyText, turnsText as turnsLabel } from './units';
+import { damage, fuelLiters, hp, kph, moneyDelta, moneyText, turnsText as turnsLabel } from './units';
 import { npcName } from '../sim/spawn';
 
 export function wearLabel(part: PartInstance): string {
@@ -188,6 +188,14 @@ export function formatNpcStates(world: World, vehicle: Vehicle): string[] {
   if (combat === null) return out;
   out.splice(own < 0 ? out.length : held.slice(0, own).filter((s) => s.kind !== 'combat').length, 0, combat);
   return out;
+}
+
+export function formatVehicleState(world: World, vehicle: Vehicle): string {
+  const motion = vehicle.speed > 0 ? `Moving, ${kph(vehicle.speed)} km/h` : 'Parked';
+  const left = shutDownTurnsLeft(world, vehicle);
+  const shutDown = left > 0 ? turnsText('Shut down', left) : null;
+  const brain = vehicle.brain ? [formatNpcActivity(world, vehicle), ...formatNpcStates(world, vehicle)] : [];
+  return [motion, shutDown, ...brain].filter((part) => part !== null).join('. ');
 }
 
 function turnsText(label: string, turnsLeft: number | null): string {
