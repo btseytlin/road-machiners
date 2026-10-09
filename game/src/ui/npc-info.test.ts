@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { chooseOn } from '../sim/tracks';
 import { STATE_TURNS } from '../data/npcs';
 import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
 import { playerVehicle } from '../sim/damage';
-import { corePart } from '../sim/grid';
+import { corePart, hasLoot, isLoot } from '../sim/grid';
 import type { GameEvent } from '../sim/types';
 import { addState } from '../sim/states';
 import { refreshVision } from '../sim/vision';
-import { eventText, formatNpcActivity, formatNpcCargo, formatNpcMark, formatNpcStates, formatNpcTraits } from './format';
+import { eventText, formatNpcActivity, formatNpcCargo, formatNpcMark, formatNpcPass, formatNpcStates, formatNpcTraits } from './format';
 import { PERK_NUMBERS } from '../data/skills';
 import { makePart } from '../sim/factory';
 import { addGoods, stowPart } from '../sim/inventory';
@@ -268,4 +269,54 @@ it('names both trucks, the destination and the fee in a tow between NPCs', () =>
   expect(eventText(w, { t: 'towDone', by: tower.id, client: client.id, fee: 1250 })).toEqual({ text: 'Tower tows Client in and takes 13 M.', cls: 'dim' });
   expect(eventText(w, { t: 'towDropped', by: tower.id, client: client.id, reason: 'danger' })).toEqual({ text: 'Tower drops the tow of Client.', cls: 'dim' });
   expect(eventText(w, { t: 'towDone', by: tower.id, client: w.player.vehicleId, fee: 1200 })).toEqual({ text: 'Tower tows you into town and takes 12 M.', cls: 'bad' });
+});
+
+describe('the pass line of a hunting raider', () => {
+  function hunter() {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 32, y: 30 });
+    npc.brain = { ...npcBrain('buggy', npc.pos, ['raider']), goals: [{ kind: 'raid', targetId: null, destination: null, phase: 'act', reason: 'watch the road for prey' }] };
+    refreshVision(w);
+    return { w, npc, player: playerVehicle(w) };
+  }
+
+  it('says why a raider that chose to keep on the player lets them pass', () => {
+    const { w, npc, player } = hunter();
+    addGoods(w, player, 'scrap', 2);
+    chooseOn(w, npc, player.id, player.pos, 'keep', true);
+    expect(formatNpcPass(w, npc)).toMatch(/^Lets you pass: /);
+  });
+
+  it('says there is nothing worth taking when the player has no loot', () => {
+    const { w, npc, player } = hunter();
+    player.items = player.items.filter((item) => !isLoot(player.chassisId, item));
+    expect(hasLoot(player)).toBe(false);
+    expect(formatNpcPass(w, npc)).toBe('Lets you pass: nothing worth taking');
+  });
+
+  it('shows nothing for a raider that has not chosen, or is not hunting', () => {
+    const { w, npc, player } = hunter();
+    addGoods(w, player, 'scrap', 2);
+    expect(formatNpcPass(w, npc)).toBeNull();
+    chooseOn(w, npc, player.id, player.pos, 'keep', true);
+    npc.brain!.goals = [{ kind: 'sell', targetId: null, destination: null, phase: 'travel', reason: 'sell carried cargo' }];
+    expect(formatNpcPass(w, npc)).toBeNull();
+  });
+
+  it('draws no randomness and changes nothing', () => {
+    const { w, npc, player } = hunter();
+    addGoods(w, player, 'scrap', 2);
+    chooseOn(w, npc, player.id, player.pos, 'keep', true);
+    const before = structuredClone(w);
+    formatNpcPass(w, npc);
+    expect(w).toEqual(before);
+  });
+
+  it('logs a passed prey only with the full log flag', () => {
+    const { w, npc, player } = hunter();
+    const event: GameEvent = { t: 'preyPassed', vehicle: npc.id, prey: player.id, reason: 'poorLoad' };
+    expect(eventText(w, event)).toBeNull();
+    w.player.fullLog = true;
+    expect(eventText(w, event)?.text).toContain('load not worth the risk');
+  });
 });

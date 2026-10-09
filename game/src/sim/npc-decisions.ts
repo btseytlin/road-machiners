@@ -12,7 +12,7 @@ import {
 } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { fightsAgainst, huntsForLoot, inCombatWithOther, isHostile } from './combat';
+import { fightsAgainst, huntsForLoot, inCombatWithOther, inFeud, isHostile } from './combat';
 import { ramFactor, ramImpact } from './crash-contact';
 import { isDefeated, isKnockedOut } from './defeat';
 import { fightOdds, type FightOdds } from './fight-odds';
@@ -36,7 +36,7 @@ import { territoryAt, territoryGrounds } from './territory';
 import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
-import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
+import type { Contact, NpcActivity, PassReason, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 import { huntsOffRoad } from './hunt-style';
@@ -720,6 +720,16 @@ function guardFactor(vehicle: Vehicle, subject: Vehicle, nearGuards: number): nu
 
 export function huntCurve(vehicle: Vehicle): AppealCurve {
   return huntsOffRoad(vehicle.brain ?? undefined) ? NPC_BEHAVIOR.lootAppeal.hunt : NPC_BEHAVIOR.lootAppeal.raid;
+}
+
+// Why a hunting raider that judges `other` at `danger` would let it pass. The one owner of the pass reasons, read by the
+// sighting roll, which records the reason, and by the hover, which shows it.
+export function passReason(world: World, hunter: Vehicle, other: Vehicle, danger: number): PassReason {
+  if (!huntsPrey(hunter)) throw new Error(`${hunter.id} is not a raider, so it has no pass reason`);
+  if (!hasLoot(other) && !inFeud(world, hunter, other)) return 'nothing';
+  if (inCombatWithOther(world, hunter, other.id)) return 'busy';
+  if (!isManageable(hunter, danger)) return 'outgunned';
+  return appealOf(world, hunter, other, huntCurve(hunter)) < 1 ? 'poorLoad' : 'chance';
 }
 
 function fightFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {

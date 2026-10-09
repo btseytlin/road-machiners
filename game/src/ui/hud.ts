@@ -13,6 +13,7 @@ import {
   contractSummary,
   eventText,
   formatNpcActivity,
+  formatNpcPass,
   workLabel,
   workProgress,
   formatNpcCargo,
@@ -558,9 +559,11 @@ export class Hud {
 function infoHeading(w: World, v: Vehicle): HTMLElement[] {
   if (!v.brain) return [el("h3", {}, v.name)];
   const activity = formatNpcActivity(w, v);
+  const pass = formatNpcPass(w, v);
   return [
     el("h3", {}, v.brain.driver),
     ...(activity ? [el("div", { class: "npc-activity" }, activity)] : []),
+    ...(pass ? [el("div", { class: "npc-activity" }, pass)] : []),
     el("div", { class: "dim" }, v.name),
   ];
 }

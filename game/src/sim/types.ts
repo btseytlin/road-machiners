@@ -343,6 +343,8 @@ export type ShotRound = {
 };
 export type VehicleHits = { vehicle: string; hits: PartHit[] };
 
+export type PassReason = 'nothing' | 'busy' | 'outgunned' | 'poorLoad' | 'chance';
+
 export type GameEvent =
   | { t: 'activity'; vehicle: string; previous: NpcActivity['kind'] | null; activity: NpcActivity['kind'] | null; reason: string }
   | { t: 'stall'; vehicle: string; goal: NpcActivity['kind'] | null; reason: string }
@@ -358,6 +360,7 @@ export type GameEvent =
   | { t: 'spawn'; vehicle: string }
   | { t: 'despawn'; vehicle: string }
   | { t: 'hostile'; vehicle: string; against: string }
+  | { t: 'preyPassed'; vehicle: string; prey: string; reason: PassReason }
   | { t: 'practice'; source: XpSource; amount: number; difficulty: number | null; target: string; xp: number }
   | { t: 'skillUp'; skill: SkillId; level: number }
   | { t: 'money'; amount: number; reason: string }

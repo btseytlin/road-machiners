@@ -14,10 +14,11 @@ import { addGoods, cargoRoom } from './inventory';
 import { cancelJob } from './jobs';
 import { isFree } from './spawn';
 import { bodyStop } from './meeting-stop';
+import { huntsOffRoad } from './hunt-style';
 import {
   tradeOffers, tradeSpend, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolStopsOf, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, npcSenses, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, noteStripped, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition, firepower,
+  passReason, lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, noteStripped, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition, firepower,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -549,8 +550,13 @@ type HostileDecision = 'hostileSeen' | 'contactHeard';
 function rollOnHostile<D extends HostileDecision>(world: World, vehicle: Vehicle, decision: D, id: string, at: Vec): DecisionOptions[D] {
   if (!offersChoice(world, vehicle, decision, id)) return 'keep' as DecisionOptions[D];
   const seen = decision === 'hostileSeen';
-  const option = decide(world, vehicle, decision, id, seen ? perceiveDanger(world, vehicle, vehicleById(world, id)) : null);
+  const prey = vehicleById(world, id);
+  const danger = seen ? perceiveDanger(world, vehicle, prey) : null;
+  const option = decide(world, vehicle, decision, id, danger);
   chooseOn(world, vehicle, id, at, option, seen);
+  if (danger !== null && option === 'keep' && huntsPrey(vehicle) && huntsOffRoad(vehicle.brain ?? undefined)) {
+    world.events.push({ t: 'preyPassed', vehicle: vehicle.id, prey: id, reason: passReason(world, vehicle, prey, danger) });
+  }
   return option;
 }
 

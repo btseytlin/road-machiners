@@ -14,10 +14,10 @@ import { knockOutNpc } from './defeat';
 import { chooseOption, currentOptions } from './dialogue';
 import { contactsOf } from './detect';
 import { campGoodPrice, campPartPrice } from './economy';
-import { corePart, goodsCount } from './grid';
+import { corePart, goodsCount, isLoot } from './grid';
 import { addGoods, spareParts } from './inventory';
 import { CLEARANCE, isTransientWreck, nearCliff, terrainNav } from './nav/layer';
-import { decide, fightOddsAgainst, huntingGrounds, judgeDanger, lawmanTowns, raiderGrounds, raiderPatrolPosts, usefulContacts } from './npc-decisions';
+import { decide, fightOddsAgainst, huntingGrounds, judgeDanger, lawmanTowns, passReason, raiderGrounds, raiderPatrolPosts, usefulContacts } from './npc-decisions';
 import { finishGoal, resolveNpcActivities, topGoal } from './npc-activities';
 import { yieldTo } from './parley';
 import { route } from './path';
@@ -25,7 +25,7 @@ import { getResources } from './resources';
 import { siteGates, sitePads, siteUnder, type Site } from './sites';
 import { isFree } from './spawn';
 import { fuelCap } from './stats';
-import { stateOf } from './states';
+import { addState, stateOf } from './states';
 import { isRoadTile } from './terrain';
 import { hazardZones } from './territory';
 import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
@@ -344,6 +344,68 @@ describe('the watch', () => {
     planNpcOrders(w);
     expect(w.events).toContainEqual(expect.objectContaining({ t: 'activity', vehicle: raider.id, previous: 'investigate', reason: 'spotted the truck it heard' }));
     expect(topGoal(raider)).toMatchObject({ kind: 'fight', targetId: trader.id });
+  });
+
+  it('records one preyPassed event for a fresh keep on visible prey, and none on a repeat sighting', () => {
+    const { w, raider, player } = watchingRaiderSeeing();
+    addGoods(w, player, 'scrap', 2);
+    forceOption('hostileSeen', 'keep');
+    planNpcOrders(w);
+    w.turn++;
+    planNpcOrders(w);
+    const passed = w.events.filter((e) => e.t === 'preyPassed');
+    expect(passed).toHaveLength(1);
+    expect(passed[0]).toMatchObject({ vehicle: raider.id, prey: player.id });
+  });
+
+  it('records no event for a raider that is not hunting', () => {
+    const { w, raider, player } = watchingRaiderSeeing();
+    addGoods(w, player, 'scrap', 2);
+    raider.brain!.goals = [{ ...raidGoal(raider.pos), kind: 'sell', destination: null }];
+    forceOption('hostileSeen', 'keep');
+    planNpcOrders(w);
+    expect(w.events.some((e) => e.t === 'preyPassed')).toBe(false);
+  });
+
+  describe('pass reasons', () => {
+    function staged() {
+      const s = watchingRaiderSeeing();
+      return { ...s, danger: () => judgeDanger(s.w, s.raider, s.player) };
+    }
+
+    it('is nothing when the prey has no loot and no feud', () => {
+      const { w, raider, player, danger } = staged();
+      player.items = player.items.filter((item) => !isLoot(player.chassisId, item));
+      expect(passReason(w, raider, player, danger())).toBe('nothing');
+    });
+
+    it('is busy when the raider fights another truck', () => {
+      const { w, raider, player, danger } = staged();
+      addGoods(w, player, 'electronics', 6);
+      const other = addVehicle(w, 'traders', 'hauler', ['mg'], { x: raider.pos.x - 8, y: raider.pos.y });
+      addState(w, 'combat', raider.id, other.id, { kind: 'none' });
+      expect(passReason(w, raider, player, danger())).toBe('busy');
+    });
+
+    it('is outgunned when the danger is not manageable', () => {
+      const { w, raider, player } = staged();
+      addGoods(w, player, 'electronics', 6);
+      expect(passReason(w, raider, player, NPC_BEHAVIOR.threatRatio * 5)).toBe('outgunned');
+    });
+
+    it('is a poor load for a light cargo, and chance for a rich one', () => {
+      const { w, raider, player, danger } = staged();
+      addGoods(w, player, 'scrap', 2);
+      expect(passReason(w, raider, player, danger())).toBe('poorLoad');
+      addGoods(w, player, 'electronics', 6);
+      expect(passReason(w, raider, player, danger())).toBe('chance');
+    });
+
+    it('throws for a subject that is not a raider', () => {
+      const { w, player, danger } = staged();
+      const trader = addVehicle(w, 'traders', 'hauler', ['mg'], { x: 5, y: 5 });
+      expect(() => passReason(w, trader, player, danger())).toThrow(/not a raider/);
+    });
   });
 
   it('springs on prey that drives into sight, and the fight follows', () => {

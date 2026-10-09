@@ -16,9 +16,12 @@ import { REGION } from '../data/region';
 import { goodsCount } from '../sim/grid';
 import { spareParts } from '../sim/inventory';
 import { carriedPart } from '../sim/salvage';
-import { playerSees } from '../sim/vision';
+import { canVehicleSee, playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
-import { npcTraits } from '../sim/npc-decisions';
+import { judgeDanger, npcTraits, passReason } from '../sim/npc-decisions';
+import { huntsOffRoad } from '../sim/hunt-style';
+import { isHostile } from '../sim/combat';
+import { trackOf } from '../sim/tracks';
 import { hasPerk } from '../sim/progress';
 import { aidData, pleaData, statesHeld, strayData, towData } from '../sim/states';
 import { RULES } from '../data/rules';
@@ -27,7 +30,7 @@ import { clockOf } from '../sim/sun';
 import type { PartHit } from '../sim/armor';
 import { shotDamage } from '../sim/combat';
 import { shutDownTurnsLeft } from '../sim/utility';
-import type { GameEvent, GridItem, Job, NpcState, Obstacle, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
+import type { GameEvent, GridItem, PassReason, Job, NpcState, Obstacle, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { fillLine } from './dialogue';
 
 export function jobLabel(world: World, v: Vehicle, job: Job): string {
@@ -136,6 +139,26 @@ export function formatNpcActivity(world: World, vehicle: Vehicle): string | null
   const activity = topGoal(vehicle);
   if (!activity) return null;
   return activity.reason.charAt(0).toUpperCase() + activity.reason.slice(1);
+}
+
+const PASS_TEXT: Record<PassReason, string> = {
+  nothing: 'nothing worth taking',
+  busy: 'busy with another fight',
+  outgunned: 'too tough to take on',
+  poorLoad: 'load not worth the risk',
+  chance: 'let you be this time',
+};
+
+// The line for a hunting raider that sees the player and lets them pass. It reads the sim's passReason() and draws nothing.
+export function formatNpcPass(world: World, vehicle: Vehicle): string | null {
+  if (!vehicle.brain || !playerSees(world, vehicle.pos)) return null;
+  if (vehicle.faction !== 'raiders' || !huntsOffRoad(vehicle.brain)) return null;
+  const player = playerVehicle(world);
+  const track = trackOf(vehicle, player.id);
+  const kept = track?.choice === 'keep' && track.chosenInSight;
+  const ignored = canVehicleSee(world, vehicle, player.pos) && !isHostile(world, vehicle, player);
+  if (!kept && !ignored) return null;
+  return `Lets you pass: ${PASS_TEXT[passReason(world, vehicle, player, judgeDanger(world, vehicle, player))]}`;
 }
 
 export function formatNpcTraits(world: World, vehicle: Vehicle): string | null {
@@ -558,6 +581,10 @@ function activityText(world: World, e: Extract<GameEvent, { t: 'activity' }>): L
   return world.player.fullLog && vehicle ? { text: `${npcName(vehicle)}: ${e.activity ?? 'idle'} — ${e.reason}`, cls: 'dim' } : null;
 }
 
+function preyPassedText(world: World, e: Extract<GameEvent, { t: 'preyPassed' }>): LogLine | null {
+  return world.player.fullLog ? { text: `${vehicleName(world, e.vehicle)} lets ${vehicleName(world, e.prey)} pass: ${PASS_TEXT[e.reason]}`, cls: 'dim' } : null;
+}
+
 function stallText(world: World, e: Extract<GameEvent, { t: 'stall' }>): LogLine | null {
   return world.player.fullLog ? { text: `Bug: ${vehicleName(world, e.vehicle)} stuck on ${e.goal ?? 'idle'} (${e.reason}), gave it up`, cls: 'bad' } : null;
 }
@@ -609,6 +636,7 @@ function claymoreText(world: World, e: Extract<GameEvent, { t: 'claymore' }>): L
 const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
   activity: activityText,
   stall: stallText,
+  preyPassed: preyPassedText,
   info: infoText,
   townPatch: () => ({ text: 'You patch your truck with scrap.', cls: 'good' }),
   scrapPatch: (_, e) => ({ text: `You patch up your car with scrap until it starts moving again.${e.fuel > 0 ? ` Townsfolk spare you ${fuelLiters(e.fuel)} L of fuel.` : ''}`, cls: 'good' }),
