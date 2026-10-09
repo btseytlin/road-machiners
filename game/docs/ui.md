@@ -53,6 +53,11 @@ Use a shared piece before writing a new rule. A screen may add its own layout to
 - `.tooltip` is a note that opens over its anchor.
 - `.num` is a number in the mono face. `.dim`, `.good` and `.bad` color a word.
 
+## Words
+
+- Every UI word costs. Use the fewest words that stay clear, such as You and Them for the two gun lists.
+- No arrow characters as connectors in UI text, such as You → it. Name the thing in words, such as You and Them. An arrow is allowed only as the name of an arrow key.
+
 ## New screen checklist
 
 - Put the screen's rules in one file under `src/ui/styles/` and import it in `style.css` after `components.css`.
