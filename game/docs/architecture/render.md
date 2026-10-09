@@ -39,3 +39,7 @@
 - Shop and NPC part lists are compact rows from `PartRows` in `src/ui/part-rows.ts`, one open at a time, with trade buttons only in the open detail. `keepPlace()` holds scroll and focus across the screens' full redraws.
 
 - Sun shadows: `lightScene()` snaps the shadow box to whole texels around the truck, so static shadows hold still while it drives. `src/three/render/shadowFilter.ts` owns the shadow filter, a fixed 3×3 grid of compare taps that replaces three's noise-rotated disk. Heat haze never shifts the shadow term.
+
+## Boot screen
+
+`#boot` is static markup in `index.html`, so it paints before any game code loads. A tiny inline script in the page marks it failed when the game module does not load. `src/ui/boot-progress.ts` (`BootProgress`) holds the boot steps and throws on a step that is misused or changed after a failure. `src/ui/boot-screen.ts` (`BootScreen`) renders it. `src/three/main.ts` wraps each boot step in `boot.track()`. The bar counts finished steps, and models and sounds count files, so nothing on it is a guess. New boot work goes through `track()`, so the bar stays honest. The screen hides while the save rescue panel waits and is removed after the first frame. Every boot string is in `BOOT_TEXT`. `npm run boot:check` tests it in a browser.
