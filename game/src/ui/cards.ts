@@ -254,11 +254,18 @@ export function statGrid(diffs: StatDiff[]): HTMLElement {
         { class: "stat", title: d.stat.label },
         createIcon(d.stat.icon),
         el("span", { class: "stat-name" }, ICON_NAMES[d.stat.icon]),
-        el("span", { class: "stat-val" }, d.stat.text, el("small", {}, d.stat.unit)),
+        el("span", { class: "stat-val" }, statValue(d.stat)),
         d.delta === null ? el("span") : el("span", { class: `delta ${d.verdict}` }, d.delta === 0 ? "=" : d.text),
       ),
     ),
   );
+}
+
+const TIGHT_UNITS = ["°", "×"];
+
+export function statValue(s: Stat): string {
+  if (s.unit === "") return s.text;
+  return TIGHT_UNITS.includes(s.unit) ? `${s.text}${s.unit}` : `${s.text} ${s.unit}`;
 }
 
 export function footprint(w: number, h: number): HTMLElement {
@@ -302,7 +309,7 @@ export function statChip(d: StatDiff): HTMLElement {
     "span",
     { class: "stat-chip", title: d.stat.label },
     createIcon(d.stat.icon),
-    el("span", { class: "stat-val" }, d.stat.text, el("small", {}, d.stat.unit)),
+    el("span", { class: "stat-val" }, statValue(d.stat)),
     d.delta === null ? null : el("span", { class: `delta ${d.verdict}` }, d.delta === 0 ? "=" : d.text),
   );
 }
@@ -342,15 +349,19 @@ export function partCard(o: PartCardOptions): HTMLElement {
   return card;
 }
 
-export function partDetail(world: World, part: PartInstance, base: PartInstance | null, action: HTMLElement): HTMLElement[] {
-  const diffs = diffStats(partStats(world, part), base ? partStats(world, base) : null);
+export function partDetail(world: World, part: PartInstance, base: PartInstance | null): HTMLElement[] {
+  const rest = diffStats(partStats(world, part), base ? partStats(world, base) : null).slice(1);
+  const hpText = hpReadout(part);
   return [
-    conditionRow(part),
     ...(base ? [compareLine(base)] : []),
-    conditionMeter(part),
-    statGrid(diffs),
-    el("div", { class: "card-foot" }, el("span"), action),
-  ].filter((n): n is HTMLElement => n !== null);
+    el("div", { class: "part-hp" }, conditionMeter(part), hpText ? el("span", { class: "num dim" }, hpText) : null),
+    ...(rest.length ? [statGrid(rest)] : []),
+  ];
+}
+
+function hpReadout(part: PartInstance): string | null {
+  const status = conditionStatus(part);
+  return status.tone === "dim" && conditionTier(part) !== "junk" ? status.text : null;
 }
 
 export function compareBase(selected: PartInstance | null, part: PartInstance): PartInstance | null {

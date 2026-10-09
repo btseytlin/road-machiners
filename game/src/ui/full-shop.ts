@@ -71,7 +71,7 @@ export class FullShopScreen {
     );
     this.root.replaceChildren(
       el("button", { class: "close", onclick: () => this.close() }, "Leave [Esc]"),
-      el("h3", {}, "Full shop: every part, free", truckChips(w)),
+      el("h3", {}, "Full shop", truckChips(w)),
       el("div", { class: "town-split" }, truck, shop),
     );
     this.inventory.fitTo(truck);
