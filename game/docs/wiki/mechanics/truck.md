@@ -12,7 +12,7 @@ Stores raise how much fuel and supplies a truck carries. A jerrycan rack adds 60
 
 Cargo parts add full-width rows to the grid while mounted and working. A roof rack adds one row, a cargo box adds three. A broken cargo part's rows go dead, at the bottom of the cargo rows, and whatever lay on them falls onto a pile beside the truck. Dead rows still slow rounds like empty cells. Repairing the part brings the rows back empty.
 
-Goods come in crates. One crate fills one cell and weighs 50 kg, whatever the good, and each goods cell shows that mass. Crates can be moved or dumped anywhere. Dragging an item onto another swaps them if both fit. Spare parts ride in the grid or wait in garage storage.
+Goods come in crates. One crate fills one cell and weighs 50 kg, whatever the good, and inspecting a goods cell says so. Crates can be moved or dumped anywhere. Dragging an item onto another swaps them if both fit. Spare parts ride in the grid or wait in garage storage.
 
 Equipment changes at a shop are instant. Away from a shop, a change is a refit job:
 
