@@ -11,7 +11,7 @@ import type { UiHost } from "./host";
 import { makePart } from "../sim/factory";
 import { mountPart } from "../sim/inventory";
 import { wornReload } from "../sim/utility";
-import { HoverHold, UtilityRow, WeaponPanel, aimAtPart, aimMarks, aimsBody, bodyMarks, InspectPin, aimLine, type AimState, gunsLabel, aimName, ammoCells, canForceReload, getWeaponReadout, toggleBodyAim, vehicleMarks, shortStatus, weaponGrid, BLOCK_SHORT, utilityKey, utilitySlots, utilityStatus } from "./weapons";
+import { HoverHold, UtilityRow, WeaponPanel, aimAtPart, aimMarks, aimsBody, bodyMarks, InspectPin, aimLine, type AimState, gunsLabel, aimName, ammoCells, canForceReload, reloadBlock, getWeaponReadout, toggleBodyAim, vehicleMarks, shortStatus, weaponGrid, BLOCK_SHORT, utilityKey, utilitySlots, utilityStatus } from "./weapons";
 
 function createDuel() {
   const world = emptyWorld();
@@ -435,7 +435,7 @@ describe("weapon panel keys and the turn button", () => {
 
   it("the Q, X and All buttons run their keys", () => {
     const { host, button } = build();
-    for (const [text, code] of [["Auto fire [Q]", "KeyQ"], ["Hide [X]", "KeyX"], ["All [0]", "Digit0"]] as const) {
+    for (const [text, code] of [["Auto fire", "KeyQ"], ["Show", "KeyX"], ["All", "Digit0"]] as const) {
       button(text).fire("click");
       expect(host.runKey).toHaveBeenLastCalledWith(code);
     }
@@ -454,17 +454,18 @@ describe("weapon panel keys and the turn button", () => {
 
   it("Auto fire shows its state and Hold is disabled with nothing to hold", () => {
     const off = build(false, (w) => { playerVehicle(w).weaponOrders = {}; });
-    expect(off.button("Auto fire").attrs.get("aria-pressed")).toBe("false");
-    expect(off.button("Hold").attrs.has("disabled")).toBe(true);
+    expect(off.button("Auto fire").attrs.get("aria-checked")).toBe("false");
+    expect(off.button("Hold").attrs.get("aria-disabled")).toBe("true");
+    expect(off.button("Hold").attrs.get("title")).toBe("No target set");
     const on = build(false, (w) => { w.player.autoFire = true; });
-    expect(on.button("Auto fire").attrs.get("aria-pressed")).toBe("true");
-    expect(on.button("Auto fire").className).toBe("on");
-    expect(on.button("Hold").attrs.has("disabled")).toBe(false);
+    expect(on.button("Auto fire").attrs.get("aria-checked")).toBe("true");
+    expect(on.button("Auto fire").className).toBe("switch");
+    expect(on.button("Hold").attrs.has("aria-disabled")).toBe(false);
   });
 
   it("Hold is enabled with an order and clears it with auto fire off", () => {
     const { host, button } = build();
-    expect(button("Hold").attrs.has("disabled")).toBe(false);
+    expect(button("Hold").attrs.has("aria-disabled")).toBe(false);
     button("Hold").fire("click");
     const applied = host.apply.mock.calls[0][0] as World;
     expect(applied.player.autoFire).toBe(false);
@@ -575,6 +576,53 @@ describe("aim line", () => {
 
   it("is missing without guns", () => {
     expect(aimLine({ guns: "all guns", body: [], bodyAimed: false, locked: false, hasGuns: false }, vi.fn())).toBeNull();
+  });
+});
+
+describe("disabled reasons on the weapon bar", () => {
+  const ui = new FakeNode("div");
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  function build(phase: "Moving" | null, setup: (w: World) => void = () => {}) {
+    ui.children = [];
+    vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t), createElementNS: (_ns: string, t: string) => new FakeNode(t), getElementById: () => ui });
+    vi.stubGlobal("window", new FakeNode("window"));
+    const { world } = createDuel();
+    setup(world);
+    const host = {
+      world: () => world, apply: vi.fn(), announce: vi.fn(), selectedWeapon: () => null, selectWeapon: vi.fn(), selectedUtility: () => null, selectUtility: vi.fn(),
+      pressTurn: vi.fn(), releaseTurn: vi.fn(), runKey: vi.fn(), autoTravel: () => false, getTurnPhase: () => phase,
+    } satisfies UiHost;
+    new WeaponPanel(host).render();
+    const find = (text: string) => (ui.children as FakeNode[]).map((n) => n.find((b) => b.tag === "button" && b.text().includes(text))).find(Boolean)!;
+    return { host, find };
+  }
+
+  it("names the turn while it plays on every control", () => {
+    const { host, find } = build("Moving");
+    for (const text of ["Auto fire", "All", "Hold"]) {
+      expect(find(text).attrs.get("aria-disabled")).toBe("true");
+      expect(find(text).attrs.get("title")).toBe("Turn playing");
+    }
+    find("Auto fire").fire("click");
+    expect(host.runKey).not.toHaveBeenCalled();
+  });
+
+  it("names a knocked out driver", () => {
+    const { find } = build(null, (w) => { w.player.state = "knockedOut"; });
+    expect(find("Auto fire").attrs.get("title")).toBe("Knocked out");
+  });
+
+  it("says why Reload does nothing", () => {
+    const { gun } = createDuel();
+    expect(reloadBlock(gun)).toBe("Magazine full");
+    gun.part.gun = { cooldown: 0, ammo: 0, reloadWork: 0 };
+    expect(reloadBlock(gun)).toBe("Reloading");
+    gun.part.gun = { cooldown: 0, ammo: 1, reloadWork: 0 };
+    expect(reloadBlock(gun)).toBeNull();
+    gun.part.hp = 0;
+    expect(reloadBlock(gun)).toBe("Broken");
   });
 });
 
@@ -753,11 +801,11 @@ describe("a utility slot's look", () => {
     for (const part of [sprout, mortar]) if (!mountPart(w, me, part)) throw new Error(`No room for ${part.defId}`);
     edit(w, { sprout: sprout.id, mortar: mortar.id });
     const host = { selectedUtility: () => mortar.id } as unknown as UiHost;
-    const row = new UtilityRow(host).render(w) as unknown as FakeNode;
+    const row = new UtilityRow(host).render(w, null) as unknown as FakeNode;
     const slots = row.children as FakeNode[];
     const badge = (slot: FakeNode) => slot.find((n) => n.className === "slot-badge")?.attrs.get("data-badge") ?? null;
     const bar = (slot: FakeNode) => {
-      const fill = slot.find((n) => n.className === "recharge-bar")?.children[0];
+      const fill = slot.find((n) => n.className.includes("recharge-bar"))?.children[0];
       return fill instanceof FakeNode ? fill.attrs.get("style") : null;
     };
     return { slots, badge, bar, sprout, mortar };
