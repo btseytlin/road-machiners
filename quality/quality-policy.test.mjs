@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SEPARATOR, checkComments, checkFragmentation, checkGuidance, checkSeparators, collectComponents, inspectSource, isGuidance } from './quality-policy.mjs';
+import { SEPARATOR, checkComments, checkFragmentation, checkGuidance, checkSeparators, collectComponents, inspectSource, isGuidance, stripComments } from './quality-policy.mjs';
 
 function makeSource(lines) {
   return Array.from({ length: lines }, (_, index) => `export const value${index} = ${index};`).join('\n');
@@ -64,20 +64,35 @@ test('names each line with the middle dot separator', () => {
   assert.deepEqual(checkSeparators(texts), ['game/src/hud.ts:2: middle dot separator. Use a comma or a colon.']);
 });
 
-test('allows a short module docstring and no other comment', () => {
-  const codes = source => checkComments('game/src/example.ts', source, 3).map(finding => finding.code);
-  assert.deepEqual(codes('// one\n// two\n// three\nexport const a = 1;\n'), []);
-  assert.deepEqual(codes('// one\n// two\n// three\n// four\nexport const a = 1;\n'), ['quality/long-docstring']);
+test('rejects every comment including a module docstring', () => {
+  const codes = source => checkComments('game/src/example.ts', source).map(finding => finding.code);
+  assert.deepEqual(codes('// header\nexport const a = 1;\n'), ['quality/no-comment']);
   assert.deepEqual(codes('export const a = 1;\n// later\nexport const b = 2;\n'), ['quality/no-comment']);
   assert.deepEqual(codes('export const a = 1; // trailing\n'), ['quality/no-comment']);
   assert.deepEqual(codes('export const url = "https://example.com"; export const b = "// text";\n'), []);
-  assert.deepEqual(codes('// only\n// comments\n'), []);
-  assert.throws(() => checkComments('game/src/example.ts', '', undefined), /must be a positive integer/);
+});
+
+test('strips comments and leaves no blank scar', () => {
+  const strip = source => stripComments('game/src/example.ts', source);
+  assert.equal(strip('// header\n// more\nexport const a = 1;\n'), 'export const a = 1;\n');
+  assert.equal(strip('/**\n * Docs.\n */\nexport const a = 1;\n'), 'export const a = 1;\n');
+  assert.equal(strip('export const a = 1; // trailing\nexport const b = 2;\n'), 'export const a = 1;\nexport const b = 2;\n');
+  assert.equal(strip('function f() {\n  // note\n  return 1;\n}\n'), 'function f() {\n  return 1;\n}\n');
+  assert.equal(strip('const a = 1 /* x */ + 2;\n'), 'const a = 1 + 2;\n');
+  assert.equal(strip('return/* x */a;\n'.replace('return', 'const b = typeof')), 'const b = typeof a;\n');
+  assert.equal(strip('export const url = "https://example.com"; // x'), 'export const url = "https://example.com";');
+  assert.equal(strip('// @ts-ignore\nexport const a = 1; // why\n'), '// @ts-ignore\nexport const a = 1;\n');
+});
+
+test('strips nothing from clean code and keeps JSDoc types in JavaScript', () => {
+  assert.equal(stripComments('game/src/example.ts', 'export const a = 1;\n'), 'export const a = 1;\n');
+  const typed = '/** @type {number} */\nexport const a = 1; // note\n';
+  assert.equal(stripComments('factory/dashboard/page.js', typed), '/** @type {number} */\nexport const a = 1;\n');
 });
 
 test('allows JSDoc type comments only in JavaScript files', () => {
   const source = 'export const a = 1;\n/** @param {number} x */\nexport function f(x) { return /** @type {number} */ (x); }\n';
-  assert.deepEqual(checkComments('factory/dashboard/page.js', source, 3), []);
-  assert.equal(checkComments('game/src/example.ts', source, 3).length, 2);
-  assert.equal(checkComments('factory/dashboard/page.js', 'export const a = 1;\n/** A prose note. */\n', 3).length, 1);
+  assert.deepEqual(checkComments('factory/dashboard/page.js', source), []);
+  assert.equal(checkComments('game/src/example.ts', source).length, 2);
+  assert.equal(checkComments('factory/dashboard/page.js', 'export const a = 1;\n/** A prose note. */\n').length, 1);
 });
