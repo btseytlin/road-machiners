@@ -284,7 +284,7 @@ async function failJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Prom
   for (const issue of job.batch ?? []) await ctx.github.addLabel(issue, STUCK_LABEL);
   forgetResume(ctx, job);
   const reason = alive ? `timed out after ${timeoutOf(ctx.cfg, job.stage)} minutes` : 'job process died without finishing';
-  await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), reason, job.log);
+  await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), reason, job.log, job.batch ?? []);
 }
 
 export function timeoutOf(cfg: FactoryConfig, stage: JobStage): number {
@@ -403,7 +403,7 @@ async function expireReplies(ctx: Ctx): Promise<void> {
   for (const [messageId, reply] of late) {
     updateState(ctx.statePath, (state) => ({ ...state, unroutedReplies: Object.fromEntries(Object.entries(state.unroutedReplies).filter(([id]) => id !== messageId)) }));
     const text = reply.text.replace(/\s+/g, ' ');
-    await reportFailure(ctx, 'feedback', null, `Route the reply ${messageId} to the approval post ${reply.postId} of issue #${reply.issue} on your best reading, unrouted for ${ctx.cfg.replyRouteMinutes} minutes: ${text}`, null);
+    await reportFailure(ctx, 'feedback', null, `Route the reply ${messageId} to the approval post ${reply.postId} of issue #${reply.issue} on your best reading, unrouted for ${ctx.cfg.replyRouteMinutes} minutes: ${text}`, null, []);
   }
 }
 

@@ -118,7 +118,7 @@ export const QUEUE_OF: Record<JobStage, Queue> = {
   playtest: 'verify',
 };
 export type Route = 'answer' | 'patch' | 'redesign';
-export type Failure = { stage: Stage; issue: number | null; error: string; log: string | null; at: string };
+export type Failure = { stage: Stage; issue: number | null; error: string; log: string | null; at: string; batch?: number[]; decision?: boolean };
 export type ChangeRequest ={ id: number; text: string; by: string };
 export type Removal = { issue: number; by: string; text: string };
 

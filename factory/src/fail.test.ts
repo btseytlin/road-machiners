@@ -3,7 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { failureIssue, pruneFailures, reportFailure, summarizeError } from './fail';
+import { CommitteeDecisionError } from './diff-guard';
 import { UsageLimitError } from './pause';
+import { BudgetError } from './stages/checkpoint';
 import { EMPTY_STATE, readState, writeState } from './state';
 import type { Ctx, FactoryState } from './types';
 
@@ -31,7 +33,7 @@ describe('reportFailure', () => {
   it('records the failure for Hermes and labels the issue, with no chat post', async () => {
     const labels: string[] = [];
     const { ctx, statePath } = setup(async () => { labels.push('stuck'); });
-    await reportFailure(ctx, 'implement', 4, new Error('agent failed'), 'l');
+    await reportFailure(ctx, 'implement', 4, new Error('agent failed'), 'l', []);
     expect(readState(statePath).failures).toEqual([{ stage: 'implement', issue: 4, error: 'agent failed', log: 'l', at: NOW.toISOString() }]);
     expect(labels).toEqual(['stuck']);
   });
@@ -39,14 +41,22 @@ describe('reportFailure', () => {
   it('records a usage-limit failure but leaves the card unlabeled, so it runs again after the pause', async () => {
     const labels: string[] = [];
     const { ctx, statePath } = setup(async () => { labels.push('stuck'); });
-    await reportFailure(ctx, 'implement', 4, new UsageLimitError('agent hit the usage limit'), 'l');
+    await reportFailure(ctx, 'implement', 4, new UsageLimitError('agent hit the usage limit'), 'l', []);
     expect(readState(statePath).failures).toHaveLength(1);
     expect(labels).toEqual([]);
   });
 
+  it('records the batch of a merge failure and marks a spent budget or a committee question as a decision', async () => {
+    const { ctx, statePath } = setup(async () => undefined);
+    await reportFailure(ctx, 'merge', null, new Error('timed out'), 'm', [6, 7]);
+    await reportFailure(ctx, 'verify', 4, new BudgetError('The stage spent $9 of its $8 budget'), 'v', []);
+    await reportFailure(ctx, 'design', 5, new CommitteeDecisionError('The agent needs a committee decision: x'), 'd', []);
+    expect(readState(statePath).failures.map(({ batch, decision }) => ({ batch, decision }))).toEqual([{ batch: [6, 7], decision: undefined }, { batch: undefined, decision: true }, { batch: undefined, decision: true }]);
+  });
+
   it('records the failure before a label that fails, so Hermes still sees it', async () => {
     const { ctx, statePath } = setup(async () => { throw new Error('x509: certificate is not standards compliant'); });
-    await expect(reportFailure(ctx, 'implement', 4, new Error('agent failed'), 'l')).rejects.toThrow('x509');
+    await expect(reportFailure(ctx, 'implement', 4, new Error('agent failed'), 'l', [])).rejects.toThrow('x509');
     expect(readState(statePath).failures).toHaveLength(1);
   });
 

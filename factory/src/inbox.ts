@@ -82,7 +82,7 @@ async function handleControl(ctx: Ctx, raw: string): Promise<void> {
     await applyControl(ctx, command);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await reportFailure(ctx, 'control', null, `${card}${message}`, null);
+    await reportFailure(ctx, 'control', null, `${card}${message}`, null, []);
   }
 }
 

@@ -340,6 +340,7 @@ describe('tick', () => {
     writeState(h.ctx.statePath, state({ jobs: [merge] }));
     await checkJobs(h.ctx, h.deps);
     expect(h.labels).toEqual([`6:${STUCK_LABEL}`, `7:${STUCK_LABEL}`]);
+    expect(readState(h.ctx.statePath).failures).toMatchObject([{ stage: 'merge', issue: null, error: 'timed out after 30 minutes', batch: [6, 7] }]);
   });
 
   it('kills a job past the timeout by its id, clears it and reports, when it already resumed once', async () => {
