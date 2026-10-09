@@ -10,6 +10,7 @@
     "boot:check": "node scripts/boot-check.mjs",
     "ui-playtest": "node scripts/ui-playtest.mjs http://localhost:5173",
     "perf": "node scripts/perf.mjs",
+    "site:shot": "node scripts/site-shot.mjs",
     "sfx:gen": "vite-node scripts/sfx-gen.mjs",
     "sfx:import": "vite-node scripts/sfx-import.mjs",
     "sfx:board": "vite --open /sound.html",

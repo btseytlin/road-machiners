@@ -16,8 +16,12 @@ import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
 import { SiteMotion, type Motion } from './site-motion';
 import { buildBowl } from './interiors/bowl';
-import { buildDustwell, buildGranary, buildSalvageYard } from './interiors/compounds';
+import { buildCamp } from './interiors/camp';
+import { buildDustwell } from './interiors/dustwell';
+import { buildGranary } from './interiors/granary';
+import { buildLock, buildOasis, buildPump } from './interiors/masonry';
 import { buildNose } from './interiors/nose';
+import { buildSalvageYard } from './interiors/salvage';
 import { NIGHT_POOLS, type PoolLamp } from './lightPools';
 import { SITE_LIGHT_POOL, type SiteLight, type SiteLightKind } from './siteLights';
 
@@ -90,6 +94,12 @@ export class SiteBuilder {
     const head = this.addBox(x, z, 0.24 / LAMP_SHRINK, 0.22 / LAMP_SHRINK, 0.45 / LAMP_SHRINK, PAL.lamp.amber, top + 0.06 / LAMP_SHRINK, yaw);
     this.lamps.push(head);
     return head;
+  }
+  addWallLamp(face: { x: number; z: number }, out: { x: number; z: number }, height: number): THREE.Mesh {
+    const yaw = Math.atan2(-out.z, out.x);
+    const bracket = { x: face.x + (out.x * SCONCE.reach) / 2, z: face.z + (out.z * SCONCE.reach) / 2 };
+    this.addBox(bracket.x, bracket.z, SCONCE.reach, 0.12, 0.12, PAL.metal, height - 0.12, yaw);
+    return this.addLampHead(face.x + out.x * SCONCE.reach, face.z + out.z * SCONCE.reach, height, yaw);
   }
   // A pole with a lamp head on top. Everything stands at x, z so that pullInside() moves pole and head together.
   addMast(x: number, z: number, height: number, yaw: number): THREE.Mesh {
@@ -206,7 +216,6 @@ const SINK = 0.3;
 const DOOR_THICKNESS = 0.4;
 const GATE_APRON_AIM = 2.5;
 const WORK_MAST = 3.3;
-const FIRE_MAST = 0.7;
 const FILL = { height: 6, reach: 1.6 };
 const SCONCE = { every: 3, reach: 0.7, height: 2.3, throw: 2.5, gap: 1.5 };
 const WASH = { mast: 2.4, aim: 3.8, lift: 3 };
@@ -353,10 +362,7 @@ function outermost(mounts: Mount[], centre: Vec2): Mount[] {
 }
 
 function hangSconce(b: SiteBuilder, m: Mount): void {
-  const yaw = Math.atan2(-m.n.z, m.n.x);
-  const bracket = { x: m.face.x + (m.n.x * SCONCE.reach) / 2, z: m.face.z + (m.n.z * SCONCE.reach) / 2 };
-  b.addBox(bracket.x, bracket.z, SCONCE.reach, 0.12, 0.12, PAL.metal, SCONCE.height - 0.12, yaw);
-  b.addLampHead(m.lamp.x, m.lamp.z, SCONCE.height, yaw);
+  b.addWallLamp(m.face, m.n, SCONCE.height);
 }
 
 const PIECE_DEPTH: Partial<Record<FortressKind, number>> = { wall: FORTRESS.wallDepth, tower: FORTRESS.towerSize };
@@ -411,23 +417,6 @@ function dressGate(b: SiteBuilder, site: Site, fort: FortGate, guarded: boolean)
   b.addBox(flag.x, flag.z, 0.05, 1, 0.8, PAL.rust.top, SET.gatePoleHeight - 1.1 + lift(flag.x, flag.z), -a);
 }
 
-function buildPump(b: SiteBuilder): void {
-  b.addRuin(-1.7, 0, 3, 3.8);
-  b.addModel('pump_station', 2.5, 0);
-  b.addBox(-2, 0, 1.2, 0.85, 2, PAL.rust.side);
-  b.addWorkLight('flood', 3.2, 2.6, WORK_MAST, { x: 2.5, z: 0, lift: 1.5 }, PAL.siteLight.warm);
-  b.addWash(1, PAL.siteLight.warm);
-}
-
-function buildLock(b: SiteBuilder): void {
-  for (const x of [-1.6, 1.6]) b.addBox(x, 0, 0.6, 1.1, 3.8, PAL.wall.side);
-  b.addBox(0, 0, 2.6, 0.05, 3.8, PAL.water);
-  b.addModel('lock_gate', 0, 0, Math.PI / 2);
-  b.addRuin(3.7, 0, 1.7, 2);
-  b.addWorkLight('flood', 2.4, 2.4, WORK_MAST, { x: 0, z: 0, lift: 1 }, PAL.siteLight.warm);
-  b.addWash(0.9, PAL.siteLight.warm);
-}
-
 function sampleSightOnDeck(obj: THREE.Object3D, deck: Deck): void {
   obj.updateMatrixWorld(true);
   const p = new THREE.Vector3();
@@ -470,16 +459,6 @@ function buildWingDeck(t: Terrain): THREE.Group {
   return root;
 }
 
-function buildOasis(b: SiteBuilder): void {
-  b.addTank(0, 0, 2.8, 0.04, PAL.waterLight);
-  for (let i = 0; i < 9; i++) {
-    const a = i * Math.PI * 2 / 9;
-    b.addModel('palm', Math.cos(a) * 4, Math.sin(a) * 4, a * 2.3);
-  }
-  b.addWorkLight('flood', 1.9, 3.1, WORK_MAST, { x: -1.5, z: -2.5, lift: 1.5 }, PAL.siteLight.warm);
-  b.addWash(1, PAL.siteLight.warm);
-}
-
 function buildWrecks(b: SiteBuilder, id: string): void {
   if (id === 'podfield') {
     for (let i = 0; i < 7; i++) {
@@ -503,23 +482,6 @@ function buildWingSalvage(b: SiteBuilder): void {
   b.addBox(-3, 3, 2.2, 0.9, 1.3, PAL.rust.dark, 0, 0.2);
   b.addBox(-1, 4, 1.8, 0.12, 0.9, PAL.rust.side, 0.1, 0.6);
   b.addModel('crates', -3.8, 2.6, 0.5);
-}
-
-function buildCamp(b: SiteBuilder, id: string): void {
-  const turn = id === 'kiln' ? 1.3 : 0;
-  for (let i = 0; i < 3; i++) {
-    const a = turn + i * 2.1;
-    const x = Math.cos(a) * 3.2;
-    const z = Math.sin(a) * 3.2;
-    b.addBox(x, z, 1.8, 1.1, 1.4, i % 2 ? PAL.rust.side : PAL.metal, 0, -a);
-    b.addBox(x, z, 2.1, 0.12, 1.7, PAL.rust.top, 1.1, -a + 0.1);
-  }
-  b.addTank(0, 0, 0.7, 0.12, PAL.rust.dark);
-  for (const a of [turn + 1, turn + 1.3]) b.addTank(Math.cos(a) * 4.3, Math.sin(a) * 4.3, 0.45, 0.9, PAL.rust.top);
-  b.addHull(Math.cos(turn + 3.1) * 3.6, Math.sin(turn + 3.1) * 3.6, 3, 1.4, turn + 1.6);
-  b.addModel('crates', Math.cos(turn + 5.2) * 3.5, Math.sin(turn + 5.2) * 3.5, turn);
-  b.addLight('fire', b.addMast(0, 0, FIRE_MAST, 0), { x: -0.4, z: -0.4 }, PAL.siteLight.fire);
-  b.addWash(1, PAL.siteLight.warm);
 }
 
 function closeSite(b: SiteBuilder, site: Site, t: Terrain): void {

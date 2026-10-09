@@ -114,12 +114,13 @@ function haloTexture(): THREE.DataTexture {
 }
 
 export class NightPools {
+  readonly level = { value: 0 };
   private readonly uniforms = {
     poolMap: { value: null as THREE.DataTexture | null },
     poolSpan: { value: 1 },
     poolPush: { value: POOLS.push * S },
     poolGain: { value: POOLS.gain },
-    poolLevel: { value: 0 },
+    poolLevel: this.level,
     poolColor: { value: new THREE.Color(PAL.siteLight.sodium) },
   };
   private readonly lit = new WeakSet<THREE.Material>();
@@ -137,7 +138,7 @@ export class NightPools {
 
   setLevel(level: number): void {
     if (!this.uniforms.poolMap.value) throw new Error('Night pools were never baked');
-    this.uniforms.poolLevel.value = level;
+    this.level.value = level;
     this.haloMaterial.opacity = level;
   }
 
