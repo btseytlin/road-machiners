@@ -194,7 +194,7 @@ const DOOR_THICKNESS = 0.4;
 const GATE_APRON_AIM = 2.5;
 const WORK_MAST = 3.3;
 const FIRE_MAST = 0.7;
-const WASH = { mast: 2.4, aim: 3.8, lift: 3.3 };
+const WASH = { mast: 2.4, aim: 3.8, lift: 3 };
 
 function edgeStyle(site: Site): WallStyle {
   const edge = 'edge' in site ? site.edge : undefined;

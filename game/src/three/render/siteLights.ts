@@ -18,8 +18,8 @@ export const SITE_LIGHT_FADE_S = 1.5;
 export const GATE_APRON_MARGIN = 3;
 
 export const LOOKS: Record<SiteLightKind, Look> = {
-  flood: { color: PAL.siteLight.sodium, intensity: 50, range: 18, angle: 32 * DEG, penumbra: 0.5, decay: 1 },
-  wash: { color: PAL.siteLight.sodium, intensity: 85, range: 40, angle: 18 * DEG, penumbra: 0.6, decay: 1 },
+  flood: { color: PAL.siteLight.sodium, intensity: 170, range: 18, angle: 38 * DEG, penumbra: 0.6, decay: 1 },
+  wash: { color: PAL.siteLight.sodium, intensity: 240, range: 32, angle: 17 * DEG, penumbra: 0.6, decay: 1 },
   gate: { color: PAL.siteLight.sodium, intensity: 70, range: 22, angle: 30 * DEG, penumbra: 0.5, decay: 1 },
   fire: { color: PAL.siteLight.fire, intensity: 30, range: 12, angle: 60 * DEG, penumbra: 0.8, decay: 1 },
 };
