@@ -188,22 +188,8 @@ body {
 .speed-max:focus-within .speed-tip {
   display: block;
 }
-.speed-row {
-  display: grid;
-  grid-template-columns: 1fr auto 3ch;
-  gap: 12px;
-  padding: 2px 0;
-  border-bottom: 1px solid #5a6165;
-}
-.speed-row span:not(:first-child) {
-  text-align: right;
-}
-.speed-row.total {
-  font-weight: bold;
-  border-bottom: 0;
-}
-.speed-notes p {
-  margin: 2px 0 0;
+.speed-line {
+  padding: 1px 0;
 }
 #ui .truck-instrument {
   position: relative;
@@ -1299,7 +1285,6 @@ body {
   z-index: 21;
 }
 #ui:has(.modal:not([style*="display: none"])) > .top-left,
-#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .weapons,
 #ui:has(.modal:not([style*="display: none"])) > .bottom-left > .recenter,
 #ui:has(.modal:not([style*="display: none"])) > .right-dock {
   visibility: hidden;
@@ -1307,6 +1292,10 @@ body {
 #ui:has(.modal:not([style*="display: none"])) > .bottom-left > .instruments,
 #ui:has(.modal:not([style*="display: none"])) > .log {
   z-index: 21;
+}
+/* The hidden weapons leave the dock, so the instruments drop to the bottom line instead of wrapping above them. */
+#ui:has(.modal:not([style*="display: none"])) > .bottom-left > .weapons {
+  display: none;
 }
 /* The wide modal reaches under the condition panel, which stands above the instruments. */
 #ui:has(.modal:not([style*="display: none"])) .truck-condition {
@@ -1568,20 +1557,6 @@ body {
   height: 1px;
   overflow: hidden;
   clip-path: inset(50%);
-}
-/* The crate mass on a goods cell, along its bottom edge over the icon. */
-.inv-item-mass {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  font-size: 9px;
-  line-height: 11px;
-  text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  color: #d8d2bc;
-  background: rgba(20, 26, 29, 0.72);
 }
 .inv-item.mounted {
   border-color: #a4a074;
@@ -2761,6 +2736,51 @@ canvas.view {
   gap: 24px;
   padding: 8px 12px;
 }
+
+/* Boot screen: static markup in index.html, driven by src/ui/boot-screen.ts. Below the crash screen (100000). */
+#boot {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+  background: #1b1c1d;
+  color: #e0d8ca;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#boot[hidden] { display: none; }
+#boot.leaving { opacity: 0; transition: opacity 250ms; }
+#boot .boot-box { width: min(440px, calc(100vw - 32px)); display: flex; flex-direction: column; gap: 14px; }
+#boot .boot-title {
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e06a3c;
+  font: 700 30px / 1.1 var(--font-ui);
+  color: #dac7a2;
+}
+#boot .boot-bar { display: flex; gap: 3px; height: 8px; }
+#boot .boot-seg { flex: 1; background: #33383b; }
+#boot .boot-seg.done { background: #e06a3c; }
+#boot .boot-seg.failed { background: #ff7058; }
+#boot .boot-seg.running {
+  background: repeating-linear-gradient(45deg, #e06a3c 0 6px, #33383b 6px 12px);
+  background-size: 17px 17px;
+  animation: boot-stripe 1.2s linear infinite;
+}
+@keyframes boot-stripe { to { background-position: 17px 0; } }
+#boot.failed .boot-seg.running { animation: none; }
+#boot .boot-stage { margin: 0; min-height: 1.4em; font: 16px / 1.4 var(--font-ui); color: #e0d8ca; }
+#boot.failed .boot-stage { color: #ff7058; }
+#boot .boot-steps { margin: 0; padding: 0; list-style: none; font: 12px / 1.6 var(--font-mono); color: #aaa69e; }
+#boot .boot-steps li { display: flex; justify-content: space-between; gap: 12px; }
+#boot .boot-steps li.running { color: #e0d8ca; }
+#boot .boot-steps li.failed { color: #ff7058; }
+@media (prefers-reduced-motion: reduce) {
+  #boot .boot-seg.running { animation: none; }
+  #boot.leaving { transition: none; }
+}
+#boot .boot-live { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); margin: 0; }
 .save-panel .save-exports {
   display: flex;
   gap: 8px;
