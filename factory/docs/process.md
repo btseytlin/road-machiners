@@ -105,6 +105,7 @@ Members, other jobs and releases push all the time, so any branch may move while
 - An agent stage merges the new commits of its issue branch into the work before each push. When GitHub rejects the push because the branch moved again, it merges again and pushes again.
 - A conflict with those commits goes to an agent in the same job. The agent keeps both sides, and the stage goes on. An unfinished merge fails the stage.
 - Testing and Hardening also merge those commits and the base before their agent starts, so the session works on them.
+- Design does the same on the host before its agent starts, since the agent cannot fetch. A clean clone takes the base: a fast-forward, or a merge that keeps its own commits and its task files. It needs no issue branch on GitHub. A clone with uncommitted changes stays as it is, and the agent is told it may lack recent base work. A conflict goes to an agent in the same job, never to the author, and a retry gives that unfinished merge to an agent again. Any other unfinished merge fails the stage for `factory repair-clone`.
 - The merge queue moves `dev` or the release only with a result its checks passed. A base that moved meanwhile is merged in and checked again.
 - A merge into `main` or the release that GitHub rejects because a target moved runs again on the new tips.
 - A conflict between whole branches never stops the factory. It covers the release cut, Ship, the hotfix fan-out and the reverts of Remove. The step keeps the conflicted merge in a work clone of the target, and an agent resolves it with `prompts/merge-branches.md`, or `prompts/revert-merge.md` for a revert. The factory checks that the commit finished the merge and that the agent's own changes pass the diff checks. Then the step pushes as before. A target that moved meanwhile gets the merge again, and a new agent round only if that conflicts too. A hotfix that conflicts with `main` at approve goes back to Testing.
@@ -112,7 +113,7 @@ Members, other jobs and releases push all the time, so any branch may move while
 ![Branches](diagrams/branches.svg)
 
 - The release cut merges `main` into `dev` first when `dev` lacks any of it. It opens a tracking issue labeled `release` and two cleanup tasks. `lastRelease` changes only when the cut succeeds or finds nothing new, so a failed cut runs again on the next tick.
-- Ship merges `main` into the release, the release into `main` and `main` into `dev` in one push. Then it builds `main` and pushes it to itch.io. A game change on `main` that the release lacks is merged into the release at once instead, and Ship stops. The release moved, so a new candidate follows for the committee to play.
+- Ship merges `main` into the release, the release into `main` and `main` into `dev` in one push. Then it builds `main` and pushes it to itch.io. A change on `main` never stops a ship. Ship takes whatever `main` holds, game changes included, since only a member puts game changes on `main` outside a release or a hotfix.
 - A hotfix merges its branch into `main`, and `main` into `dev` and the open release, in one push. Then it ships like a release.
 - Remove reverts a feature's merge in both `dev` and the release, and sends its issue back to Design.
 

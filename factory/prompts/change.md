@@ -17,7 +17,7 @@ Record every automatic decision in its Hands-off decisions section.
 Git ignores the task file. Never commit it and never force-add it.
 
 Your cwd is factory/, but you may edit any file in the repo when the request needs it, like the quality gate at the root or the game.
-A game edit follows ../game/CLAUDE.md and ../game/docs/DESIGN.md. Run the game's tests near your change too.
+A game edit follows ../game/CLAUDE.md and ../game/docs/DESIGN.md. A UI or overlay edit also follows ../game/docs/ui.md. Run the game's tests near your change too.
 While you work, run only the tests near your change with `npx vitest run <files>`.
 Before you finish, run `npm test` and `npm run typecheck` once. Every test must pass.
 Commit in phases on the current branch.

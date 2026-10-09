@@ -6,7 +6,7 @@ export interface SwitchOptions {
   checked: boolean;
   key?: string;
   title: string;
-  disabled?: boolean;
+  reason?: string | null;
   onclick: () => void;
 }
 
@@ -18,15 +18,16 @@ export function createSwitch(o: SwitchOptions): HTMLElement {
       name,
       chosen && o.key ? el("kbd", {}, `[${o.key}]`) : null,
     );
+  const reason = o.reason ?? null;
   return el(
     "button",
     {
       class: "switch",
       role: "switch",
       "aria-checked": String(o.checked),
-      disabled: o.disabled,
-      title: o.title,
-      onclick: o.onclick,
+      "aria-disabled": reason === null ? undefined : "true",
+      title: reason ?? o.title,
+      onclick: () => reason === null && o.onclick(),
     },
     option(o.on, o.checked),
     el(

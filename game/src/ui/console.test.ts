@@ -20,7 +20,7 @@ describe("runCommand dispatch", () => {
     const result = runCommand(w, "money 5000");
 
     expect(result.world?.player.money).toBe(500000);
-    expect(result.lines).toEqual(["money set to 5,000 M"]);
+    expect(result.lines).toEqual(["money set to 5,000 M's"]);
   });
 
   it("sets money in M with up to two decimals", () => {

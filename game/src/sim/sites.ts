@@ -68,6 +68,12 @@ export function canUseSite(pos: Vec, site: Site): boolean {
   return sitePads(site).some((pad) => onPad(pos, pad, site.pos));
 }
 
+export const GOAL_REACH = RULES.arriveRadius * 2;
+
+export function reachedSite(pos: Vec, site: Site): boolean {
+  return isTerritory(site) ? siteGap(site, pos) <= GOAL_REACH : canUseSite(pos, site);
+}
+
 function onPad(pos: Vec, pad: Vec, center: Vec): boolean {
   const a = Math.atan2(pad.y - center.y, pad.x - center.x);
   const dx = pos.x - pad.x;

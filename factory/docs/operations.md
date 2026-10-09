@@ -16,9 +16,9 @@ A work clone with no commit checked out, like one a full disk cut short, holds n
 
 Each job's containers run on a fixed set of CPUs. `FACTORY_CPU_LIGHT`, `FACTORY_CPU_IMPLEMENT` and `FACTORY_CPU_TEST` set each pool's share, and each pool gets round(share × cores) whole CPUs, at least 1. The pools must fit the host, or every job start throws.
 
-- light: triage, waste review, design and branch jobs other than the merge.
+- light: triage, waste review, design and branch jobs other than the merge and the candidate.
 - implement: implementation, ad hoc, change, verify, harden and release playtest jobs. The Testing job runs its preview checks here.
-- test: the merge job, which runs the full suite, and the post-only checks.
+- test: the merge job, which runs the full suite, the candidate, which checks the frame rate, and the post-only checks.
 
 On the 8-core host that is CPU 0, CPUs 1-3 and CPUs 4-7. A pool never borrows from another, so the merge checks always get their CPUs. Docker pins containers with `--cpuset-cpus`. A step run by hand is not pinned.
 
@@ -100,9 +100,9 @@ When a member acts on a post by button or reply, the factory adds a status line 
 
 ## Ledger and waste review
 
-Every job adds one line to `$FACTORY_HOME/ledger.jsonl` when it ends: its id, stage, issue, start, end, outcome and agent runs. The tick writes the line of a job that died or timed out, and `pause-card` the line of the job it held, with the outcome `held`. The dashboard and the waste review count a held job as neither finished nor failed, and its spend as no waste, since its stage continues in the same sessions. Each agent run reads its model, cost and minutes from the `result` event of its stream-json output. A finished agent run with no `result` event fails its job.
+Every job adds one line to `$FACTORY_HOME/ledger.jsonl` when it ends: its id, stage, issue, start, end, outcome and agent runs. The tick writes the line of a job that died or timed out, and `pause-card` the line of the job it held, with the outcome `held`. The dashboard and the waste review count a held job as neither finished nor failed, and its spend as no waste, since its stage continues in the same sessions. Each agent run reads its model, cost and minutes from the `result` event of its stream-json output. The cost is the CLI's `total_cost_usd`, which covers only that run, since the container keeps no Claude cost state. So each ledger record holds only its own spend, and the dashboard sums records. A finished agent run with no `result` event fails its job.
 
-A run cut off before its `result` event still costs money. This covers a crash, a timeout, a dead job process and a usage limit. Every run keeps its Claude Code transcript on the host, in the issue's sessions folder or in `$FACTORY_HOME/usage/<job>.projects`. The run's open record in `$FACTORY_HOME/usage/<job>.run.json` names it. Whoever ends the run or the job prices that transcript at `FACTORY_MODEL_PRICES` and marks the run `fromTranscript`. These list prices give the same cost Claude Code reports for a finished run. The dashboard shows the spend of every job that failed, died or timed out as wasted.
+A run cut off before its `result` event still costs money. This covers a crash, a timeout, a dead job process and a usage limit. Every run keeps its Claude Code transcript on the host, in the issue's sessions folder or in `$FACTORY_HOME/usage/<job>.projects`. The run's open record in `$FACTORY_HOME/usage/<job>.run.json` names it. Whoever ends the run or the job prices that transcript at `FACTORY_MODEL_PRICES` and marks the run `fromTranscript`. Only transcript messages stamped at or after the run's start count, so a resumed session is not charged twice. These list prices give the same cost Claude Code reports for a finished run. The dashboard shows the spend of every job that failed, died, timed out or was stopped as wasted.
 
 Before the factory deletes a sessions folder or a run's projects folder, it copies every transcript in it to `$FACTORY_HOME/transcripts/<session>/`, with its subagents. The transcripts are kept to analyze what agents did, where they got stuck and what to optimize. Each run in the ledger names its `sessionId`, so a ledger line leads to its transcripts. An ad hoc task sees the ledger and the archive read only, so a member asks Hermes for such an analysis. The folder is a Claude Code projects folder, so `transcriptUsage()` in `src/transcript.ts` reads it.
 

@@ -17,6 +17,7 @@ export const NPC_BEHAVIOR = {
   escortFeePerTile: 5,
   weakDecline: 20,
   escortWaitGap: 12,
+  escortCatchUpGap: 40,
   lawGateReach: LAW_GATE_REACH,
   patrolRadius: LAW_GATE_REACH + TERRAIN.vision.radius * 4,
   patrolSpacing: 4,
@@ -33,6 +34,8 @@ export const NPC_BEHAVIOR = {
   hurtFullFlee: 0.1,
   missFlee: 0.5,
   manageableFight: 5,
+  threatLeave: 10,
+  warnAnswerTurns: 5,
   keepWork: 400,
   noticeMemory: 3,
   fleeMemory: 30,
@@ -100,7 +103,7 @@ export const HUNT = {
 };
 
 export const MEMORY = {
-  turns: { prices: TIME.turnsPerDay } satisfies Record<MemoryFact['kind'], number>,
+  turns: { prices: TIME.turnsPerDay, stripped: TIME.turnsPerDay } satisfies Record<MemoryFact['kind'], number>,
 };
 
 export const TRADE_TIP = { share: 0.2 };

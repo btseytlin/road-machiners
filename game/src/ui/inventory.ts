@@ -57,15 +57,14 @@ import {
   itemState,
   lootGoodItem,
   lootPartItem,
-  partTitle,
   refitItems,
   removalIds,
   storageItem,
   footprint,
 } from "./inventory-draw";
-import { fuelLiters, kg, moneyText } from "./units";
+import { fuelLiters, kg, moneyEl, moneyText, pricedEl } from "./units";
 import { maxSpeedSteps } from "../sim/stats";
-import { moneyLabel, powerChip } from "./hud-readout";
+import { powerChip } from "./hud-readout";
 import {
   doubleClickCommand,
   HOLD_TO_DRAG_MS,
@@ -170,14 +169,13 @@ export class InventoryView {
           "div",
           { class: "inv-truck" },
           el("div", { class: "truck-shell" }, grid),
-          this.legend(),
         ),
         el(
           "div",
           { class: "inv-side" },
           ...this.refitBanner(me),
           this.sideList(w),
-          ...(this.dumpZone ? [el("div", { class: "inv-dump", "data-drop": "dump" }, "Drop here to dump")] : []),
+          ...(this.dumpZone ? [el("div", { class: "inv-dump", "data-drop": "dump" }, "Dump")] : []),
           this.inspection,
         ),
         ...(this.truck ? [this.truckEl(w, this.truck)] : []),
@@ -185,29 +183,6 @@ export class InventoryView {
       this.error ? el("div", { class: "bad" }, this.error) : el("div"),
     );
     return this.root;
-  }
-
-  private legend(): HTMLElement {
-    return el(
-      "details",
-      { class: "dim inv-legend" },
-      el("summary", {}, "Mounts & controls"),
-      el(
-        "div",
-        {},
-        "Top view, nose up. Brown cells are deck mounts for weapons, scanners and cargo frames. Blue-grey cells are the engine mount. The cells around the truck are armor mounts. Hover a cell to see what it mounts.",
-      ),
-      el(
-        "div",
-        {},
-        "A part works only when it lies fully on one kind of mount. The marks on a gun show its blocked sides.",
-      ),
-      el(
-        "div",
-        {},
-        "Drag to move or swap. R or right click turns an item.",
-      ),
-    );
   }
 
   private itemEl(w: World, it: GridItem): HTMLElement {
@@ -250,7 +225,7 @@ export class InventoryView {
     const node = this.itemEl(w, item);
     const left = v.job?.kind === "refit" ? v.job.turnsLeft : 0;
     node.classList.add("refitting");
-    node.title = `Refit: ${left === 1 ? "1 turn" : `${left} turns`} left`;
+    node.title = `${itemName(item)}, refit: ${turnsText(left)} left`;
     return node;
   }
 
@@ -302,10 +277,7 @@ export class InventoryView {
     const selection = this.selection(w);
     if (!selection) {
       this.selectedItem = null;
-      this.inspection.replaceChildren(
-        el("h3", {}, "Equipment"),
-        el("p", {}, "Select a part or cargo to inspect it."),
-      );
+      this.inspection.replaceChildren();
     } else if (selection.own) this.showItem(w, selection.item, selection.mounted);
     else this.showTruckItem(w, selection.item, false);
   }
@@ -346,21 +318,19 @@ export class InventoryView {
 
   private refitBanner(me: Vehicle): HTMLElement[] {
     if (me.job?.kind !== "refit") return [];
-    const left = me.job.turnsLeft;
     return [
       el(
         "div",
         { class: "inv-refit" },
-        el("span", {}, `Refit: ${left === 1 ? "1 turn" : `${left} turns`} left`),
-        el("button", { title: "Stop the refit and leave every part where it was", onclick: () => this.run(cancelRefit) }, "Cancel refit"),
+        el("span", {}, `Refit: ${turnsText(me.job.turnsLeft)} left`),
+        el("button", { title: "Leave every part where it was", onclick: () => this.run(cancelRefit) }, "Cancel refit"),
       ),
     ];
   }
 
-  private sideList(w: World): HTMLElement {
+  private sideList(w: World): HTMLElement | null {
     if (this.loot) return this.lootEl(w, this.loot);
-    if (this.instant) return el("div", { class: "dim" }, "Parts fit at once: drag them onto a mount or off it.");
-    return shopAt(w) ? this.storageEl(w) : el("div", { class: "dim" }, "Park at a shop to use garage storage. Drag onto a mount to start a refit.");
+    return !this.instant && shopAt(w) ? this.storageEl(w) : null;
   }
 
   private showItem(w: World, item: GridItem, mounted: boolean): void {
@@ -368,7 +338,6 @@ export class InventoryView {
       el("div", { class: "card-head" }, itemIconEl(item), el("div", { class: "card-name" }, el("b", {}, itemName(item)), el("span", { class: "dim" }, itemState(item, mounted)))),
       el("div", { class: "inv-actions" }, ...this.itemActions(w, item, mounted)),
       ...(item.kind === "part" ? partDetails(w, playerVehicle(w), item.part, mounted) : []),
-      ...(item.kind === "part" && !this.instant && !shopAt(w) ? [el("p", { class: "dim" }, "Drag onto a mount or off it to start a refit.")] : []),
     );
   }
 
@@ -405,16 +374,14 @@ export class InventoryView {
       {
         class: "inv-patch",
         disabled: reason !== null,
-        title:
-          reason ??
-          `Patch: ${plan.turns} turns, ${plan.parts} of ${plan.needed} parts, +${Math.round(plan.hp)} HP`,
+        title: reason ?? `${plan.parts} of ${plan.needed} parts, +${Math.round(plan.hp)} HP`,
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();
           this.run((world) => startRepair(world, part.id));
         },
       },
-      reason ? `Patch (${reason})` : `Patch ${plan.turns}t/${plan.parts}p`,
+      `Patch ${turnsText(plan.turns)}, ${partsText(plan.parts)}`,
     );
   }
 
@@ -431,14 +398,14 @@ export class InventoryView {
       {
         class: "inv-patch",
         disabled: w.player.money < cost,
-        title: w.player.money < cost ? "Not enough money" : title,
+        title: w.player.money < cost ? `Need ${moneyText(cost - w.player.money)} more` : title,
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();
           this.run((world) => repairPart(world, part.id));
         },
       },
-      `${action} ${moneyText(cost)}`,
+      pricedEl(action, cost),
     );
   }
 
@@ -453,14 +420,14 @@ export class InventoryView {
       {
         class: "inv-patch",
         disabled: reason !== null,
-        title: reason ?? `Strip: ${STRIP.turns} turns for ${stripYield(me, part)} parts`,
+        title: reason ?? undefined,
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();
           this.run((world) => startStrip(world, part.id));
         },
       },
-      reason ? "Strip" : `Strip ${STRIP.turns}t/${stripYield(me, part)}p`,
+      `Strip ${turnsText(STRIP.turns)}, ${partsText(stripYield(me, part))}`,
     );
   }
 
@@ -477,14 +444,14 @@ export class InventoryView {
       {
         class: "inv-patch",
         disabled: reason !== null,
-        title: reason ?? `Weld: ${turns} turns for a ${partDef(PERK_NUMBERS.welder.part).name}, spends ${scrap} scrap metal`,
+        title: reason ?? `Spends ${scrap} scrap`,
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();
           this.run((world) => startWeld(world));
         },
       },
-      reason ? `Weld (${reason})` : `Weld ${turns}t`,
+      `Weld ${partDef(PERK_NUMBERS.welder.part).name}, ${turnsText(turns)}`,
     );
   }
 
@@ -493,7 +460,7 @@ export class InventoryView {
       const d = partDef(p.defId);
       const chip = el(
         "div",
-        { class: "inv-chip", style: toneStyle(p.defId), title: partTitle(p) },
+        { class: "inv-chip", style: toneStyle(p.defId) },
         partIconEl(p),
         el("span", {}, d.name),
         conditionTag(p),
@@ -510,10 +477,8 @@ export class InventoryView {
     return el(
       "div",
       { class: "inv-storage", "data-drop": "storage" },
-      el("h3", {}, "Garage storage"),
-      ...(chips.length
-        ? chips
-        : [el("div", { class: "dim" }, "Drop parts here to store them.")]),
+      el("h3", {}, "Storage"),
+      ...chips,
     );
   }
 
@@ -523,7 +488,7 @@ export class InventoryView {
       const d = partDef(p.defId);
       const chip = el(
         "div",
-        { class: "inv-chip", style: toneStyle(p.defId), title: partTitle(p) },
+        { class: "inv-chip", style: toneStyle(p.defId) },
         partIconEl(p),
         el("span", {}, d.name),
         conditionTag(p),
@@ -566,7 +531,7 @@ export class InventoryView {
       el(
         "button",
         { onclick: () => this.run((world) => takeStores(world, stock.id)) },
-        `Take fuel ${fuelLiters(stock.fuel ?? 0)} L, supplies ${(stock.supplies ?? 0).toFixed(1)}`,
+        `Take ${fuelLiters(stock.fuel ?? 0)} L fuel, ${(stock.supplies ?? 0).toFixed(1)} supplies`,
       ),
     ];
   }
@@ -598,11 +563,6 @@ export class InventoryView {
             ),
           ]
         : []),
-      el(
-        "div",
-        { class: "dim" },
-        "Drag items onto the grid.",
-      ),
     );
   }
 
@@ -618,7 +578,6 @@ export class InventoryView {
       { class: "inv-truck inv-target" },
       el("h3", {}, `${npcName(target)}, ${gaveUp(target) ? "gave up" : "knocked out"}`),
       el("div", { class: "truck-shell" }, grid),
-      el("div", { class: "dim" }, "Drag items onto your grid."),
     );
   }
 
@@ -859,7 +818,7 @@ function offGridCommand(target: string | null | undefined, itemId: string): (w: 
 }
 
 export class InventoryScreen {
-  private root = panel("modal");
+  private root = panel("modal dialog");
   private view: InventoryView;
 
   constructor(private host: UiHost) {
@@ -921,7 +880,7 @@ export function truckChips(w: World, opts: { freeCells: boolean } = { freeCells:
     "span",
     { class: "chips" },
     el("span", { class: "chip" }, createIcon("truck"), chassisDef(me.chassisId).name),
-    el("span", { class: `chip${w.player.money < 0 ? " bad" : ""}`, title: "Money" }, createIcon("money"), moneyLabel(w.player.money)),
+    el("span", { class: "chip" }, moneyEl(w.player.money)),
     opts.freeCells ? el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`) : null,
     el(
       "span",
@@ -953,7 +912,15 @@ function weldBlocker(w: World, me: Vehicle): string | null {
   if (!isParkedForWork(w, me)) return "Stop to weld";
   if (me.job) return "Busy";
   const scrap = PERK_NUMBERS.welder.scrap;
-  return (goodsCount(me).scrap ?? 0) < scrap ? `Needs ${scrap} scrap` : null;
+  return (goodsCount(me).scrap ?? 0) < scrap ? `Need ${scrap} scrap` : null;
+}
+
+function turnsText(n: number): string {
+  return n === 1 ? "1 turn" : `${n} turns`;
+}
+
+function partsText(n: number): string {
+  return n === 1 ? "1 part" : `${n} parts`;
 }
 
 function fieldPatchable(part: PartInstance): boolean {
@@ -962,7 +929,7 @@ function fieldPatchable(part: PartInstance): boolean {
 }
 
 function shopOnlyPatch(part: PartInstance): HTMLElement | null {
-  return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true }, "Patch (shop only)") : null;
+  return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true, title: "Shop only" }, "Patch") : null;
 }
 
 function partDetails(w: World, me: Vehicle, part: PartInstance, mounted: boolean): HTMLElement[] {

@@ -18,7 +18,8 @@ The factory fails the stage if the merge is left unfinished.
 
 You own this stage until the committee can play it.
 Playtest game behavior with the progression recorder, as `CLAUDE.md` says. Use the browser for what the screen shows.
-Fix every problem you find yourself, in this session: a bug, a blocker, or a look that does not match the issue, the task file, the reference images or `game/docs/DESIGN.md`.
+Fix every problem you find yourself, in this session: a bug, a blocker, or a look that does not match the issue, the task file, the reference images, `game/docs/DESIGN.md` or, for the UI and overlays, `game/docs/ui.md`.
+Playtest game behavior with the progression recorder, as `CLAUDE.md` says. Use the browser for what the screen shows.
 Commit each fix on the current branch.
 Do not review the code, fix nitpicks or optimize here. That runs after the committee approves, if they do.
 

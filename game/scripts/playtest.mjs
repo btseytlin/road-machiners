@@ -1,6 +1,7 @@
-// Boots the game in headless Chromium on the GPU, plays turns, and fails on page errors, the crash screen,
+// Boots the game in headless Chromium on the Metal GPU, plays turns, and fails on page errors, the crash screen,
 // a blank canvas or a low frame rate. Screenshots go to .playtest/.
 // It also fails on HUD panels whose single control does not fill the panel, so a click in the box's edge or corner is dead.
+// With --cpu, Chromium draws in software and the frame rate is printed but not checked.
 import { mkdirSync } from 'node:fs';
 import { chromium } from 'playwright';
 import { gpuArgs, isSoftware, rendererOf } from './gpu.mjs';
@@ -35,6 +36,11 @@ page.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
 await page.goto(url);
 await page.waitForFunction(() => window.__ROAM__, null, { timeout: BOOT_LIMIT_MS });
 await page.waitForTimeout(1000);
+if (await page.$('#boot')) {
+  await browser.close();
+  console.error('FAIL\nThe boot screen is still on the page after the game started.');
+  process.exit(1);
+}
 await page.screenshot({ path: '.playtest/start.png' });
 
 const hitProblems = [];

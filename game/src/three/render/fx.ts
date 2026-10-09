@@ -257,12 +257,7 @@ export class Fx3D {
     this.projectiles = new Projectiles(scene, (p) => this.missileSmoke(p));
     for (let i = 0; i < MAX_TEXTS; i++) {
       const el = document.createElement('div');
-      el.style.position = 'absolute';
-      el.style.transform = 'translate(-50%, -50%)';
-      el.style.font = 'bold 15px var(--font-mono)';
-      el.style.textShadow = '0 1px 2px #1a1410';
-      el.style.pointerEvents = 'none';
-      el.style.display = 'none';
+      el.className = 'float-text';
       overlay.appendChild(el);
       this.texts.push({ el, pos: { x: 0, y: 0, z: 0 }, rowPx: 0, age: 0, life: 1, used: false });
     }
