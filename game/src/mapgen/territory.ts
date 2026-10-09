@@ -20,7 +20,7 @@ import { at, markRoads, type Touch } from './marks';
 import { prop, ruleRng, tileOf } from './oldworld';
 
 export const TERRITORY_SEED_OFFSET = 9100;
-const TRIES = 1000;
+const TRIES = 5000;
 const REACTOR_MARGIN = 2;
 const DEBRIS_BAND: [number, number] = [0, 1.5];
 

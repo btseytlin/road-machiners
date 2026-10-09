@@ -1,0 +1,116 @@
+.top-left {
+  position: absolute;
+  z-index: var(--z-hud);
+  left: var(--hud-inset);
+  top: var(--hud-inset);
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+#ui .top-left > .panel {
+  position: static;
+}
+/* The weapons keep the bottom line, and the instruments go above them only when the two do not fit side by side. */
+.bottom-left {
+  position: absolute;
+  left: var(--hud-inset);
+  bottom: var(--hud-inset);
+  display: flex;
+  flex-direction: row-reverse;
+  flex-wrap: wrap-reverse;
+  justify-content: flex-end;
+  align-items: stretch;
+  gap: var(--hud-gap);
+  max-width: calc(100vw - var(--space-8) - var(--right-column));
+}
+#ui .bottom-left > .panel {
+  position: static;
+}
+#ui .bottom-left > .instruments {
+  order: 1;
+}
+#ui .bottom-left > .weapons {
+  order: 0;
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+#ui .bottom-left > .truck-stack {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + var(--space-4));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--hud-gap);
+}
+#ui .truck-stack > .panel,
+#ui .truck-stack > .truck-condition {
+  position: static;
+}
+#ui .bottom-left > .recenter {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--hud-gap));
+  left: auto;
+  transform: none;
+}
+.top-center {
+  position: absolute;
+  z-index: var(--z-toast);
+  left: 0;
+  right: 0;
+  top: var(--hud-notice-top);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--hud-gap);
+  pointer-events: none;
+}
+#ui .top-center > .panel {
+  position: static;
+}
+.top-right {
+  position: absolute;
+  right: var(--hud-inset);
+  top: var(--hud-inset);
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+#ui .top-right > .panel {
+  position: static;
+  padding: var(--space-3) var(--space-4);
+}
+#ui .top-right > .game-menu,
+#ui .top-right > .camera-mode {
+  padding: 0;
+  border: 0;
+}
+.game-menu {
+  position: relative;
+  display: flex;
+  gap: var(--space-3);
+  font-size: var(--text-dense);
+}
+.game-menu [role=menu] {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-2));
+  z-index: var(--z-menu);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  min-width: calc(var(--space-10) * 5);
+  max-width: calc(100vw - 2 * var(--hud-inset));
+  padding: var(--space-2);
+  background: var(--surface-panel);
+  border: 1px solid var(--line-strong);
+}
+.game-menu [role=menu][hidden] {
+  display: none;
+}
+#ui .game-menu [role=menu] button {
+  width: 100%;
+  justify-content: flex-start;
+}

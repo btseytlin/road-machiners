@@ -25,7 +25,6 @@ const STINGS: {
   cue: CueId;
   match: (e: GameEvent, playerId: string) => boolean;
 }[] = [
-  { cue: "defeat", match: (e) => e.t === "knockout" },
   { cue: "level-up", match: (e) => e.t === "skillUp" },
   { cue: "discover", match: (e) => e.t === "discover" },
   { cue: "money", match: (e) => e.t === "money" && e.amount > 0 },

@@ -7,18 +7,20 @@ import type { DecisionOptions, TraitId } from './npcs';
 
 type PatchDeal = DecisionOptions['patchDeal'];
 
-export type TopicId = 'directions' | 'tow' | 'towFree' | 'askTow' | 'patch' | 'patchRequest' | 'demand' | 'surrender' | 'giveUp' | 'claim' | 'trade' | 'truce' | 'mercy' | 'rob' | 'warnOff' | 'truceOffer' | 'mercyPlea' | 'offerTow' | 'releaseTow' | 'offerPatch' | 'offerPatchWorn' | 'marketNews' | 'rumor' | 'tips' | 'buyTruce' | 'offerAid' | 'askAid' | 'aidOffer' | 'yieldDemand' | 'spillClaim';
+export type TopicId = 'directions' | 'tow' | 'towFree' | 'askTow' | 'patch' | 'patchRequest' | 'demand' | 'surrender' | 'giveUp' | 'claim' | 'trade' | 'truce' | 'mercy' | 'rob' | 'warnOff' | 'truceOffer' | 'mercyPlea' | 'offerTow' | 'releaseTow' | 'offerPatch' | 'offerPatchWorn' | 'marketNews' | 'rumor' | 'tips' | 'buyTruce' | 'offerAid' | 'askAid' | 'aidOffer' | 'yieldDemand' | 'spillClaim' | 'lootWarning';
 export type ConditionId =
   | 'knowsTown' | 'offersPaidTow' | 'offersFreeTow' | 'canTowPlayer' | 'playerNeedsPatch' | 'npcNeedsPatch' | 'npcWorn' | 'npcOffRope' | 'hasDeal' | 'noDeal' | 'demandsCargo' | 'demandsSurrender' | 'demandsGiveUp' | 'guardsClaim'
   | 'atOdds' | 'atPeace' | 'noPlayerPlea' | 'demandsToll' | 'npcHasCargo' | 'offersTruce' | 'begsMercy'
   | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'claimsPlayerLoot' | 'holdsOn' | 'canTowNpc' | 'towedByPlayer' | 'noTrade' | 'npcCalm'
   | 'knowsLastTown' | 'hearsRumor' | 'rumorOfSite' | 'rumorOfWreck' | 'canPayTruce'
-  | 'npcLow' | 'playerLow' | 'noAid' | 'aidGiven' | 'aidRefused' | 'offersAid' | 'npcBeaten' | 'notOfferedYield' | 'claimsSpill';
+  | 'npcLow' | 'playerLow' | 'noAid' | 'aidGiven' | 'aidRefused' | 'offersAid' | 'npcBeaten' | 'notOfferedYield' | 'claimsSpill'
+  | 'warnsPlayerOff' | 'yieldsLoot' | 'fightsForLoot';
 export type EffectId =
   | 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch' | 'handOver' | 'surrender' | 'giveUp' | 'backOffClaim' | 'defyClaim'
   | 'acceptPlea' | 'refusePlea' | 'settlePlea' | 'payToll' | 'refuseToll' | 'withdrawPlea' | 'settleThreat' | 'settleWarning' | 'hitchNpc' | 'hitchNpcFree' | 'releaseNpc' | 'startTrade'
-  | 'revealRumor' | 'payTruce' | 'giveAidPaid' | 'giveAidFree' | 'takeAid' | 'acceptAidOffer' | 'refuseAidOffer' | 'yieldToPlayer' | 'askStandDown' | 'standDownPlea' | 'abandonSpill';
-export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'warnAnswer' | 'npcTowTerms' | 'lastTownPrices' | 'nearestRumor' | 'tradeTip' | 'trucePrice' | 'aidWanted' | 'aidAnswer' | 'aidOffered' | 'yieldAnswer';
+  | 'revealRumor' | 'payTruce' | 'giveAidPaid' | 'giveAidFree' | 'takeAid' | 'acceptAidOffer' | 'refuseAidOffer' | 'yieldToPlayer' | 'askStandDown' | 'standDownPlea' | 'abandonSpill'
+  | 'leaveLootWarning' | 'refuseLootWarning' | 'fightLootWarning' | 'hangUpLootWarning';
+export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'warnAnswer' | 'npcTowTerms' | 'lastTownPrices' | 'nearestRumor' | 'tradeTip' | 'trucePrice' | 'aidWanted' | 'aidAnswer' | 'aidOffered' | 'yieldAnswer' | 'lootWarningTerms';
 
 export type DialogueOption = { text: string; when: ConditionId[]; effects: EffectId[]; go: string };
 export type DialogueNode = { line: string; options: DialogueOption[] };
@@ -384,6 +386,28 @@ export const TOPICS: Record<TopicId, Topic> = {
       fightBack: { line: 'Over my dead body.', options: [{ text: 'Have it your way.', when: [], effects: [], go: END }] },
     },
   },
+  lootWarning: {
+    id: 'lootWarning',
+    once: false,
+    ask: null,
+    raise: { when: ['warnsPlayerOff'], priority: 4, duringFeud: false, duringCombat: false },
+    prepare: 'lootWarningTerms',
+    hangUp: ['hangUpLootWarning'],
+    start: 'warn',
+    nodes: {
+      warn: {
+        line: '{warnLine}',
+        options: [
+          { text: 'Rolling on.', when: [], effects: ['leaveLootWarning'], go: END },
+          { text: 'Find your own.', when: ['yieldsLoot'], effects: ['refuseLootWarning'], go: 'backsOff' },
+          { text: 'Find your own.', when: ['fightsForLoot'], effects: ['refuseLootWarning'], go: 'fights' },
+          { text: 'Make me.', when: [], effects: ['fightLootWarning'], go: 'fights' },
+        ],
+      },
+      backsOff: { line: 'Keep your scraps, then.', options: [{ text: 'Thought so.', when: [], effects: [], go: END }] },
+      fights: { line: 'Then we settle it the hard way.', options: [{ text: 'Bring it.', when: [], effects: [], go: END }] },
+    },
+  },
   truceOffer: {
     id: 'truceOffer',
     once: false,
@@ -601,7 +625,7 @@ export const TOPICS: Record<TopicId, Topic> = {
           { text: 'Too much.', when: [], effects: [], go: HUB },
         ],
       },
-      paid: { line: 'Money is in. Guns down.', options: [{ text: 'Over and out.', when: [], effects: [], go: END }] },
+      paid: { line: "The M's are in. Guns down.", options: [{ text: 'Over and out.', when: [], effects: [], go: END }] },
     },
   },
   offerAid: {
@@ -691,6 +715,7 @@ export type Voice = {
   greeting: string;
   repeatLine: string;
   refusal: string;
+  warnOff: string;
   honksBack: boolean;
 };
 
@@ -698,20 +723,20 @@ export type TraitTalk = { voice: Voice | null; topics: TopicId[] };
 
 export const HONK_RANGE = DETECT.sound.limp;
 
-const PARLEY: TopicId[] = ['spillClaim', 'surrender', 'giveUp', 'claim', 'truce', 'mercy', 'yieldDemand', 'buyTruce', 'rob', 'warnOff', 'truceOffer', 'mercyPlea', 'offerTow', 'releaseTow', 'offerPatch', 'offerPatchWorn', 'offerAid'];
+const PARLEY: TopicId[] = ['spillClaim', 'surrender', 'giveUp', 'claim', 'truce', 'mercy', 'yieldDemand', 'buyTruce', 'rob', 'lootWarning', 'warnOff', 'truceOffer', 'mercyPlea', 'offerTow', 'releaseTow', 'offerPatch', 'offerPatchWorn', 'offerAid'];
 
 export const TRAIT_TALK: Record<TraitId, TraitTalk> = {
-  trader: { voice: { greeting: 'Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tips', 'tow', 'towFree', 'askTow', 'askAid', 'aidOffer', 'patch', 'patchRequest', 'trade', ...PARLEY] },
-  scavenger: { voice: { greeting: 'Yeah? Make it quick.', repeatLine: 'I told you already.', refusal: 'Get off my channel.', honksBack: true }, topics: ['directions', 'rumor', 'tips', 'tow', 'towFree', 'askTow', 'askAid', 'aidOffer', 'patch', 'patchRequest', 'trade', ...PARLEY] },
-  raider: { voice: { greeting: 'Get lost.', repeatLine: 'Get lost.', refusal: 'Heh. No.', honksBack: false }, topics: ['demand', ...PARLEY] },
+  trader: { voice: { greeting: 'Go ahead.', repeatLine: 'We already talked about that.', refusal: 'Nothing to say to you.', warnOff: 'This one\'s spoken for, friend. Move along.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tips', 'tow', 'towFree', 'askTow', 'askAid', 'aidOffer', 'patch', 'patchRequest', 'trade', ...PARLEY] },
+  scavenger: { voice: { greeting: 'Yeah? Make it quick.', repeatLine: 'I told you already.', refusal: 'Get off my channel.', warnOff: 'That\'s my pick. Roll on.', honksBack: true }, topics: ['directions', 'rumor', 'tips', 'tow', 'towFree', 'askTow', 'askAid', 'aidOffer', 'patch', 'patchRequest', 'trade', ...PARLEY] },
+  raider: { voice: { greeting: 'Get lost.', repeatLine: 'Get lost.', refusal: 'Heh. No.', warnOff: 'Off my loot. Now.', honksBack: false }, topics: ['demand', ...PARLEY] },
   scumbag: { voice: null, topics: ['demand', ...PARLEY] },
   coward: { voice: null, topics: PARLEY },
   brave: { voice: null, topics: PARLEY },
-  lawman: { voice: { greeting: 'Speak up.', repeatLine: 'Heard you the first time.', refusal: 'Clear the channel.', honksBack: true }, topics: ['directions', 'tow', 'towFree', 'askTow', 'askAid', 'aidOffer', ...PARLEY] },
-  courier: { voice: { greeting: 'Make it short.', repeatLine: 'Said that already.', refusal: 'No time. Out.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tips', 'tow', 'towFree', 'askTow', 'askAid', 'aidOffer', 'trade', ...PARLEY] },
-  roamer: { voice: { greeting: 'What do you want?', repeatLine: 'Old news, friend.', refusal: 'Not talking.', honksBack: true }, topics: ['directions', 'rumor', 'tips', 'tow', 'towFree', 'askTow', 'askAid', 'aidOffer', 'patch', 'patchRequest', 'trade', ...PARLEY] },
-  vulture: { voice: { greeting: 'Keep it short.', repeatLine: 'Already said.', refusal: 'Nothing for you.', honksBack: false }, topics: ['directions', 'rumor', 'tips', 'tow', 'towFree', 'patchRequest', 'trade', ...PARLEY] },
-  supplier: { voice: { greeting: 'Listening.', repeatLine: 'We covered that.', refusal: 'Keep off this channel.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tips', 'tow', 'towFree', 'askTow', 'askAid', 'aidOffer', 'trade', ...PARLEY] },
-  guard: { voice: { greeting: 'State your business.', repeatLine: 'Heard you.', refusal: 'Move along.', honksBack: false }, topics: ['directions', ...PARLEY] },
-  merc: { voice: { greeting: 'Talk.', repeatLine: 'You said that.', refusal: 'Not interested.', honksBack: false }, topics: ['directions', ...PARLEY] },
+  lawman: { voice: { greeting: 'Speak up.', repeatLine: 'Heard you the first time.', refusal: 'Clear the channel.', warnOff: 'Leave that salvage be and move on.', honksBack: true }, topics: ['directions', 'tow', 'towFree', 'askTow', 'askAid', 'aidOffer', ...PARLEY] },
+  courier: { voice: { greeting: 'Make it short.', repeatLine: 'Said that already.', refusal: 'No time. Out.', warnOff: 'I\'m taking that one. Clear off.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tips', 'tow', 'towFree', 'askTow', 'askAid', 'aidOffer', 'trade', ...PARLEY] },
+  roamer: { voice: { greeting: 'What do you want?', repeatLine: 'Old news, friend.', refusal: 'Not talking.', warnOff: 'Saw this one first. Find another.', honksBack: true }, topics: ['directions', 'rumor', 'tips', 'tow', 'towFree', 'askTow', 'askAid', 'aidOffer', 'patch', 'patchRequest', 'trade', ...PARLEY] },
+  vulture: { voice: { greeting: 'Keep it short.', repeatLine: 'Already said.', refusal: 'Nothing for you.', warnOff: 'Mine. Go pick another carcass.', honksBack: false }, topics: ['directions', 'rumor', 'tips', 'tow', 'towFree', 'patchRequest', 'trade', ...PARLEY] },
+  supplier: { voice: { greeting: 'Listening.', repeatLine: 'We covered that.', refusal: 'Keep off this channel.', warnOff: 'We\'re taking this one. Keep moving.', honksBack: true }, topics: ['directions', 'marketNews', 'rumor', 'tips', 'tow', 'towFree', 'askTow', 'askAid', 'aidOffer', 'trade', ...PARLEY] },
+  guard: { voice: { greeting: 'State your business.', repeatLine: 'Heard you.', refusal: 'Move along.', warnOff: 'Back away from that salvage.', honksBack: false }, topics: ['directions', ...PARLEY] },
+  merc: { voice: { greeting: 'Talk.', repeatLine: 'You said that.', refusal: 'Not interested.', warnOff: 'That\'s mine. Walk away.', honksBack: false }, topics: ['directions', ...PARLEY] },
 };

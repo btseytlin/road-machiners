@@ -7,6 +7,7 @@
     "test": "vitest run",
     "test:cached": "vite-node scripts/test-cache.mjs --",
     "playtest": "node scripts/playtest.mjs",
+    "boot:check": "node scripts/boot-check.mjs",
     "ui-playtest": "node scripts/ui-playtest.mjs http://localhost:5173",
     "perf": "node scripts/perf.mjs",
     "sfx:gen": "vite-node scripts/sfx-gen.mjs",
@@ -29,6 +30,7 @@
     "icons": "node scripts/icons.mjs",
     "models:shapes": "node scripts/prop-shapes.mjs && node scripts/truck-shapes.mjs",
     "save:shape": "vite-node scripts/save-shape.mjs",
+    "old-spots": "vite-node scripts/old-spots.mjs",
     "wiki": "vite-node scripts/wiki.mjs",
     "itch": "node scripts/itch-publish.mjs"
   },

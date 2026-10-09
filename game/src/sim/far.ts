@@ -32,10 +32,13 @@ export function fuelLimit(w: World, v: Vehicle, burnsFuel: boolean): 'low' | 'em
   return fuel < fuelCap(v) * RULES.lowFuelThreshold ? 'low' : null;
 }
 
+export function lowFuelSpeed(maxSpeed: number): number {
+  return maxSpeed * RULES.lowFuelSpeedFactor;
+}
 export function fuelLimited(w: World, v: Vehicle, s: VehicleStats, speed: number, order: MoveOrder | null): VehicleStats {
   const fuel = getResources(w, v).fuel;
   const low = fuelLimit(w, v, s.fuelPerTile > 0) === 'low';
-  const limit = low ? Math.max(s.maxSpeed * RULES.lowFuelSpeedFactor, speed - s.brake) : s.maxSpeed;
+  const limit = low ? Math.max(lowFuelSpeed(s.maxSpeed), speed - s.brake) : s.maxSpeed;
   const capped = low ? { ...s, maxSpeed: limit } : s;
   const wanted = order?.kind === 'through' ? throughSpeed(capped, speed, dist(v.pos, order.dest), order.pace) : Math.min(capped.maxSpeed, speed + capped.accel);
   if (wanted * s.fuelPerTile <= fuel) return capped;

@@ -1,10 +1,14 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { CONDITION } from "../data/wear";
 import type { PartInstance } from "../sim/types";
 import { conditionTier } from "./format";
 
-const css = readFileSync(new URL("./style.css", import.meta.url), "utf8");
+const styles = new URL("./styles/", import.meta.url);
+const css = [
+  readFileSync(new URL("./tokens.css", import.meta.url), "utf8"),
+  ...readdirSync(styles).filter((f) => f.endsWith(".css")).map((f) => readFileSync(new URL(f, styles), "utf8")),
+].join("\n");
 
 function luminance(hex: string): number {
   const [r, g, b] = [1, 3, 5].map((i) => {
@@ -20,9 +24,9 @@ function contrast(a: string, b: string): number {
 }
 
 function colorOf(tier: string): string {
-  const m = css.match(new RegExp(`\\.cond-${tier}\\s*\\{[^}]*?\\bcolor:\\s*(#[0-9a-fA-F]{6}|var\\(--[a-z-]+\\))`));
-  if (!m) throw new Error(`no .cond-${tier} color in style.css`);
-  const v = m[1]!.match(/^var\((--[a-z-]+)\)$/);
+  const m = css.match(new RegExp(`\\.cond-${tier}\\s*\\{[^}]*?\\bcolor:\\s*(#[0-9a-fA-F]{6}|var\\(--[a-z0-9-]+\\))`));
+  if (!m) throw new Error(`no .cond-${tier} color in the styles`);
+  const v = m[1]!.match(/^var\((--[a-z0-9-]+)\)$/);
   return v ? css.match(new RegExp(`${v[1]}:\\s*(#[0-9a-fA-F]{6})`))![1]! : m[1]!;
 }
 
