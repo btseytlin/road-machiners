@@ -16,7 +16,8 @@ import { shutDownTurnsLeft } from '../../sim/utility';
 import { dist, type Vec } from '../../sim/vec';
 import { playerSees } from '../../sim/vision';
 import { HarpoonLinesView } from './lines';
-import type { FxCards } from './particles/cards';
+import { CARD_SHAPES, type Card, type FxCards } from './particles/cards';
+import { newWake, stepWake, WakeTracker, type WakeMover, type WakeState } from './particles/wake';
 import type { VehicleView } from './vehicle';
 
 const S = PHYSICS.metersPerTile;
@@ -144,63 +145,81 @@ export class Flight {
 
 type FlightLook = { casing: number; length: number; radius: number; trail: number; trailPuffs: number; trailLag: number; trailSize: number; trailOpacity: number };
 
-type Flying = { flight: Flight; head: THREE.Mesh; trail: THREE.Sprite[] };
+type Flying = { flight: Flight; head: THREE.Mesh; trail: Card[]; live: Card[] };
 
 const UP = new THREE.Vector3(0, 1, 0);
 const HEADING = new THREE.Vector3();
 const FLIGHT_LOOKAHEAD = 0.01;
+const FLIGHT_CARDS = 100;
+const TRAIL_SPIN = 2.4;
 
 class FlightsView {
   readonly root = new THREE.Group();
   private readonly flying: Flying[] = [];
   private readonly headGeometry: THREE.CylinderGeometry;
   private readonly headMaterial: THREE.MeshLambertMaterial;
-  private readonly trailTexture = createSmokeTexture();
+  private readonly trailColor: THREE.Color;
 
   constructor(private readonly look: FlightLook) {
     this.headGeometry = new THREE.CylinderGeometry(look.radius * S, look.radius * S, look.length * S, 8);
     this.headMaterial = new THREE.MeshLambertMaterial({ color: look.casing });
+    this.trailColor = new THREE.Color(look.trail);
   }
 
   launch(flight: Flight): void {
     const head = new THREE.Mesh(this.headGeometry, this.headMaterial);
     head.renderOrder = FLARE_ORDER;
-    const trail = Array.from({ length: this.look.trailPuffs }, () => {
-      const puff = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.trailTexture, color: this.look.trail, transparent: true, depthWrite: false }));
-      puff.renderOrder = FLARE_ORDER - 1;
-      return puff;
-    });
-    this.root.add(head, ...trail);
-    this.flying.push({ flight, head, trail });
+    const trail = Array.from({ length: this.look.trailPuffs }, (_, i) => this.trailCard(i));
+    this.root.add(head);
+    this.flying.push({ flight, head, trail, live: [] });
   }
 
-  draw(_cards: FxCards): void {}
+  draw(cards: FxCards): void {
+    let left = FLIGHT_CARDS;
+    for (const body of this.flying) {
+      const n = Math.min(body.live.length, left);
+      for (let i = 0; i < n; i++) cards.lit.push(body.live[i]);
+      left -= n;
+    }
+  }
 
   update(nowMs: number): void {
     for (const body of [...this.flying]) {
       const t = body.flight.share(nowMs);
       if (t >= 1) this.land(body);
-      else this.fly(body, t);
+      else this.fly(body, t, nowMs);
     }
   }
 
-  private fly(body: Flying, t: number): void {
+  private trailCard(i: number): Card {
+    const { r, g, b } = this.trailColor;
+    const shape = i % CARD_SHAPES;
+    const spin = i * TRAIL_SPIN;
+    return { x: 0, y: 0, z: 0, size: 0, spin, shape, r, g, b, alpha: 0, sx: 0, sy: 0, sz: 0 };
+  }
+
+  private fly(body: Flying, t: number, nowMs: number): void {
     const at = body.flight.at(t);
     const ahead = body.flight.at(t + FLIGHT_LOOKAHEAD);
     body.head.position.copy(at);
     body.head.quaternion.setFromUnitVectors(UP, HEADING.set(ahead.x - at.x, ahead.y - at.y, ahead.z - at.z).normalize());
-    body.trail.forEach((puff, i) => {
+    body.live.length = 0;
+    body.trail.forEach((card, i) => {
       const lag = (i + 1) * this.look.trailLag;
-      puff.visible = t > lag;
-      puff.position.copy(body.flight.at(Math.max(0, t - lag)));
-      puff.scale.setScalar(this.look.trailSize * S * (1 + i * 0.25));
-      puff.material.opacity = this.look.trailOpacity * (1 - i / body.trail.length);
+      if (t <= lag) return;
+      const p = body.flight.at(Math.max(0, t - lag));
+      card.x = p.x;
+      card.y = p.y;
+      card.z = p.z;
+      card.size = this.look.trailSize * S * (1 + i * 0.25);
+      card.spin = i * TRAIL_SPIN + nowMs * 0.0004;
+      card.alpha = this.look.trailOpacity * (1 - i / body.trail.length);
+      body.live.push(card);
     });
   }
 
   private land(body: Flying): void {
-    this.root.remove(body.head, ...body.trail);
-    for (const puff of body.trail) puff.material.dispose();
+    this.root.remove(body.head);
     this.flying.splice(this.flying.indexOf(body), 1);
   }
 }
@@ -220,10 +239,17 @@ function launchPoint(world: World, views: ReadonlyMap<string, VehicleView>, e: U
   return groundPoint(world.terrain, contact ? contact.center : target);
 }
 
-const SMOKE_ORDER = 905;
 const SMOKE_LOOK = {
   basePuffs: 16,
   puffsPerArea: 2.2,
+  maxPuffs: 120,
+  cardBudget: 800,
+  cardSize: 0.95,
+  clearance: 0.3,
+  lit: { toward: 0x8a847d, lift: 0.5 },
+  tint: { min: 0.6, max: 1.4 },
+  heightShade: { low: 0.55, high: 1.35 },
+  turnRate: 0.12,
   size: { min: 3, max: 4 },
   opacity: { min: 0.8, max: 0.9 },
   inset: 1.3,
@@ -240,14 +266,15 @@ export const SHELL = { flightMs: 900, apex: 3 };
 const SHELL_LOOK: FlightLook = { casing: PAL.shell.casing, length: 0.05, radius: 0.015, trail: PAL.shell.trail, trailPuffs: 6, trailLag: 0.05, trailSize: 0.5, trailOpacity: 0.55 };
 const RIM_SAMPLES = 8;
 
-type Puff = { sprite: THREE.Sprite; home: THREE.Vector3; size: number; opacity: number; seed: number };
-type CloudView = { group: THREE.Group; puffs: Puff[]; bornMs: number; from: THREE.Vector3 };
+type Puff = { home: THREE.Vector3; size: number; opacity: number; seed: number; side: number; spin: number; shade: number; card: Card; wake: WakeState };
+type CloudView = { ground: THREE.Vector3; puffs: Puff[]; bornMs: number; from: THREE.Vector3; limit: number };
+type Step = { nowMs: number; cutaway: Cutaway | null; movers: readonly WakeMover[]; dt: number };
 
 class SmokeCloudsView {
   readonly root = new THREE.Group();
   private readonly views = new Map<string, CloudView>();
-  private readonly texture = createSmokeTexture();
   private readonly shells = new FlightsView(SHELL_LOOK);
+  private readonly wake = new WakeTracker();
 
   constructor() {
     this.root.add(this.shells.root);
@@ -255,30 +282,27 @@ class SmokeCloudsView {
 
   draw(cards: FxCards): void {
     this.shells.draw(cards);
+    for (const view of this.views.values()) {
+      for (let i = 0; i < view.limit; i++) if (view.puffs[i].card.alpha > 0.003) cards.lit.push(view.puffs[i].card);
+    }
   }
 
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null, cutaway: Cutaway | null): void {
     const shown = new Map(world.smoke.filter((c) => volleyShown(clock, 'smoke', c.id) && isShown(world, c)).map((c) => [c.id, c]));
-    for (const [id, view] of this.views) {
-      if (shown.has(id)) continue;
-      this.root.remove(view.group);
-      for (const p of view.puffs) p.sprite.material.dispose();
-      this.views.delete(id);
-    }
+    for (const id of this.views.keys()) if (!shown.has(id)) this.views.delete(id);
+    const { movers, dt } = this.wake.update(positionsOf(views), nowMs);
+    const share = Math.floor(SMOKE_LOOK.cardBudget / Math.max(1, shown.size));
     for (const c of shown.values()) {
       const view = this.views.get(c.id) ?? this.makeView(world, views, c, madeThisTurn(clock, 'smoke', c.id), nowMs);
-      place(terrain, view, c, nowMs, cutaway);
+      view.limit = Math.min(view.puffs.length, share);
+      place(terrain, view, c, { nowMs, cutaway, movers, dt });
     }
     this.shells.update(nowMs);
   }
 
   private makeView(world: World, views: ReadonlyMap<string, VehicleView>, c: SmokeCloud, fresh: boolean, nowMs: number): CloudView {
-    const group = new THREE.Group();
-    group.position.copy(groundPoint(world.terrain, c.pos));
-    const puffs = puffsOf(c, this.texture);
-    group.add(...puffs.map((p) => p.sprite));
-    this.root.add(group);
-    const view = { group, puffs, ...this.billow(world, views, c, fresh, nowMs) };
+    const ground = new THREE.Vector3().copy(groundPoint(world.terrain, c.pos));
+    const view = { ground, puffs: puffsOf(c), limit: 0, ...this.billow(world, views, c, fresh, nowMs) };
     this.views.set(c.id, view);
     return view;
   }
@@ -297,8 +321,12 @@ class SmokeCloudsView {
   }
 }
 
-export function puffsOf(c: SmokeCloud, texture: THREE.Texture): Puff[] {
-  const count = Math.round(SMOKE_LOOK.basePuffs + SMOKE_LOOK.puffsPerArea * c.r * c.r);
+function positionsOf(views: ReadonlyMap<string, VehicleView>): Map<string, { x: number; z: number }> {
+  return new Map([...views].map(([id, view]) => [id, view.center()]));
+}
+
+export function puffsOf(c: SmokeCloud): Puff[] {
+  const count = Math.min(SMOKE_LOOK.maxPuffs, Math.round(SMOKE_LOOK.basePuffs + SMOKE_LOOK.puffsPerArea * c.r * c.r));
   const seed = hashId(c.id);
   return Array.from({ length: count }, (_, i) => {
     const k = seed + i * 17;
@@ -308,12 +336,27 @@ export function puffsOf(c: SmokeCloud, texture: THREE.Texture): Puff[] {
     const a = hash2(k, 5) * 2 * Math.PI;
     const band = low ? SMOKE_LOOK.low : SMOKE_LOOK.high;
     const home = new THREE.Vector3(Math.cos(a) * r * S, (band.from + (band.to - band.from) * hash2(k, 7)) * S, Math.sin(a) * r * S);
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, color: PAL.smoke, transparent: true, opacity: 0, depthWrite: false }));
-    sprite.renderOrder = SMOKE_ORDER;
     const size = SMOKE_LOOK.size.min + (SMOKE_LOOK.size.max - SMOKE_LOOK.size.min) * hash2(k, 11);
     const opacity = SMOKE_LOOK.opacity.min + (SMOKE_LOOK.opacity.max - SMOKE_LOOK.opacity.min) * hash2(k, 13);
-    return { sprite, home, size, opacity, seed: k };
+    const spin = hash2(k, 29) * 2 * Math.PI;
+    const shade = SMOKE_LOOK.tint.min + (SMOKE_LOOK.tint.max - SMOKE_LOOK.tint.min) * hash2(k, 41);
+    return { home, size, opacity, seed: k, side: hash2(k, 37) < 0.5 ? -1 : 1, spin, shade, card: smokeCard(k, spin), wake: newWake() };
   });
+}
+
+const SMOKE_COLOR = new THREE.Color(PAL.smoke).lerp(new THREE.Color(SMOKE_LOOK.lit.toward), SMOKE_LOOK.lit.lift);
+
+function smokeCard(k: number, spin: number): Card {
+  const shape = Math.floor(hash2(k, 43) * CARD_SHAPES);
+  return { x: 0, y: 0, z: 0, size: 0, spin, shape, r: 0, g: 0, b: 0, alpha: 0, sx: 0, sy: 0, sz: 0 };
+}
+
+function shadeCard(card: Card, shade: number, height: number): void {
+  const { low, high } = SMOKE_LOOK.heightShade;
+  const k = shade * (low + (high - low) * Math.min(1, Math.max(0, height / (SMOKE_LOOK.high.to * S))));
+  card.r = SMOKE_COLOR.r * k;
+  card.g = SMOKE_COLOR.g * k;
+  card.b = SMOKE_COLOR.b * k;
 }
 
 function isShown(world: World, c: { source: string; pos: Vec; r: number }): boolean {
@@ -346,19 +389,33 @@ export function cutShare(cut: Cutaway | null, p: THREE.Vector3, half: number): n
   return floor + (1 - floor) * t * t * (3 - 2 * t);
 }
 
-function place(terrain: Terrain, view: CloudView, c: SmokeCloud, nowMs: number, cutaway: Cutaway | null): void {
-  view.group.position.y = heightAt(terrain, c.pos.x, c.pos.y) * S;
-  const grown = easeOut(Math.min(1, Math.max(0, (nowMs - view.bornMs) / SMOKE_LOOK.billowMs)));
+const PUFF_LOCAL = new THREE.Vector3();
+const PUFF_SPOT = { x: 0, z: 0, height: 0 };
+
+function place(terrain: Terrain, view: CloudView, c: SmokeCloud, step: Step): void {
+  view.ground.y = heightAt(terrain, c.pos.x, c.pos.y) * S;
+  const grown = easeOut(Math.min(1, Math.max(0, (step.nowMs - view.bornMs) / SMOKE_LOOK.billowMs)));
   const fade = Math.min(1, grown * 2) * (c.turnsLeft <= 1 ? SMOKE_LOOK.lastTurn : 1);
-  const t = nowMs / 1000 / SMOKE_LOOK.wobbleSeconds;
-  for (const p of view.puffs) {
-    const wx = (valueNoise(p.seed * 0.11 + t, 2.3) - 0.5) * 2 * SMOKE_LOOK.wobble * S;
-    const wz = (valueNoise(5.1, p.seed * 0.11 + t) - 0.5) * 2 * SMOKE_LOOK.wobble * S;
-    p.sprite.position.lerpVectors(view.from, p.home, grown).add({ x: wx, y: 0, z: wz });
-    p.sprite.scale.setScalar(p.size * S * (0.3 + 0.7 * grown));
-    const at = PUFF_AT.copy(p.sprite.position).add(view.group.position);
-    p.sprite.material.opacity = p.opacity * fade * cutShare(cutaway, at, (p.size * S) / 2);
-  }
+  for (let i = 0; i < view.limit; i++) placePuff(view, view.puffs[i], step, grown, fade);
+}
+
+function placePuff(view: CloudView, p: Puff, step: Step, grown: number, fade: number): void {
+  const t = step.nowMs / 1000 / SMOKE_LOOK.wobbleSeconds;
+  const wx = (valueNoise(p.seed * 0.11 + t, 2.3) - 0.5) * 2 * SMOKE_LOOK.wobble * S;
+  const wz = (valueNoise(5.1, p.seed * 0.11 + t) - 0.5) * 2 * SMOKE_LOOK.wobble * S;
+  const local = PUFF_LOCAL.lerpVectors(view.from, p.home, grown);
+  PUFF_SPOT.x = view.ground.x + local.x + wx;
+  PUFF_SPOT.z = view.ground.z + local.z + wz;
+  PUFF_SPOT.height = local.y;
+  stepWake(p.wake, PUFF_SPOT, p.side, step.movers, step.dt);
+  const card = p.card;
+  card.size = p.size * S * SMOKE_LOOK.cardSize * (0.3 + 0.7 * grown);
+  card.x = PUFF_SPOT.x + p.wake.ox;
+  card.y = view.ground.y + Math.max(local.y, card.size * SMOKE_LOOK.clearance);
+  card.z = PUFF_SPOT.z + p.wake.oz;
+  shadeCard(card, p.shade, local.y);
+  card.spin = p.spin + (step.nowMs / 1000) * SMOKE_LOOK.turnRate * p.side;
+  card.alpha = p.opacity * fade * cutShare(step.cutaway, PUFF_AT.set(card.x, card.y, card.z), (p.size * S) / 2);
 }
 
 function easeOut(t: number): number {
@@ -367,10 +424,6 @@ function easeOut(t: number): number {
 
 function easeIn(t: number): number {
   return t * t;
-}
-
-function createSmokeTexture(): THREE.CanvasTexture {
-  return radialTexture([[0, 1], [0.45, 0.85], [0.75, 0.4], [1, 0]]);
 }
 
 function radialTexture(stops: [number, number][]): THREE.CanvasTexture {
