@@ -11,7 +11,7 @@ function card(alpha: number, size: number): Card {
 }
 
 function drawn(batch: CardBatch): number {
-  return (batch.mesh.geometry as THREE.InstancedBufferGeometry).instanceCount;
+  return (batch.meshes[0].geometry as THREE.InstancedBufferGeometry).instanceCount;
 }
 
 describe('card fill ceiling', () => {
@@ -29,7 +29,7 @@ describe('card fill ceiling', () => {
     batch.flush(camera);
     expect(drawn(batch)).toBe(2);
     expect(perfSnapshot()[OVERFILL_COUNTER].calls - before).toBe(4);
-    const tints = batch.mesh.geometry.getAttribute('tint');
+    const tints = batch.meshes[0].geometry.getAttribute('tint');
     const kept = [tints.getW(0), tints.getW(1)].sort();
     expect(kept[0]).toBeCloseTo(0.8);
     expect(kept[1]).toBeCloseTo(0.9);

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { count } from '../../../perf';
+import { PROP_BIT, TRUCK_BIT } from '../models';
 
 export const CARD_SHAPES = 4;
 const ATLAS_PX = 256;
@@ -60,6 +61,9 @@ const VERTEX = `
     vec2 ax = reach > 0.0001 ? along / reach : vec2(1.0, 0.0);
     vec2 corner = position.xy * sizeSpin.x;
     mv.xy += reach > 0.0001 ? ax * position.x * (sizeSpin.x + reach) + vec2(-ax.y, ax.x) * corner.y - along * 0.5 : corner;
+    #ifdef OVER_SOLIDS
+    mv.z -= sizeSpin.x * 0.5;
+    #endif
     gl_Position = projectionMatrix * mv;
   }
 `;
@@ -100,14 +104,20 @@ const GLOW_FRAGMENT = `
 `;
 
 export class CardBatch {
-  readonly mesh: THREE.Mesh;
+  readonly meshes: readonly THREE.Mesh[];
   private readonly geo = new THREE.InstancedBufferGeometry();
+  private readonly uniforms = {
+    shapes: { value: null as THREE.Texture | null },
+    sunDir: { value: new THREE.Vector3(0, 1, 0) },
+    sunColor: { value: new THREE.Color() },
+    skyColor: { value: new THREE.Color() },
+    groundColor: { value: new THREE.Color() },
+  };
   private readonly offsets: THREE.InstancedBufferAttribute;
   private readonly stretches: THREE.InstancedBufferAttribute;
   private readonly sizeSpins: THREE.InstancedBufferAttribute;
   private readonly shapes: THREE.InstancedBufferAttribute;
   private readonly tints: THREE.InstancedBufferAttribute;
-  private readonly material: THREE.ShaderMaterial;
   private readonly cards: Card[] = [];
   private readonly depth = new THREE.Vector3();
 
@@ -123,27 +133,17 @@ export class CardBatch {
     this.shapes = this.attribute('shape', 1);
     this.tints = this.attribute('tint', 4);
     this.geo.instanceCount = 0;
-    this.material = new THREE.ShaderMaterial({
-      vertexShader: VERTEX,
-      fragmentShader: kind === 'lit' ? LIT_FRAGMENT : GLOW_FRAGMENT,
-      uniforms: {
-        shapes: { value: shapes },
-        sunDir: { value: new THREE.Vector3(0, 1, 0) },
-        sunColor: { value: new THREE.Color() },
-        skyColor: { value: new THREE.Color() },
-        groundColor: { value: new THREE.Color() },
-      },
-      transparent: true,
-      depthWrite: false,
-      blending: kind === 'lit' ? THREE.NormalBlending : THREE.AdditiveBlending,
+    this.meshes = [false, true].map((overSolids) => {
+      const mesh = new THREE.Mesh(this.geo, cardMaterial(kind, this.uniforms, overSolids));
+      mesh.frustumCulled = false;
+      mesh.renderOrder = kind === 'lit' ? CARD_ORDER.lit : CARD_ORDER.glow;
+      return mesh;
     });
-    this.mesh = new THREE.Mesh(this.geo, this.material);
-    this.mesh.frustumCulled = false;
-    this.mesh.renderOrder = kind === 'lit' ? CARD_ORDER.lit : CARD_ORDER.glow;
+    this.uniforms.shapes.value = shapes;
   }
 
   light(l: CardLight): void {
-    const u = this.material.uniforms;
+    const u = this.uniforms;
     u.sunDir.value.copy(l.sunDir);
     u.sunColor.value.copy(l.sun);
     u.skyColor.value.copy(l.sky);
@@ -202,6 +202,23 @@ export class CardBatch {
     this.geo.setAttribute(name, a);
     return a;
   }
+}
+
+function cardMaterial(kind: 'lit' | 'glow', uniforms: Record<string, THREE.IUniform>, overSolids: boolean): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    vertexShader: VERTEX,
+    fragmentShader: kind === 'lit' ? LIT_FRAGMENT : GLOW_FRAGMENT,
+    defines: overSolids ? { OVER_SOLIDS: '' } : {},
+    uniforms,
+    transparent: true,
+    depthWrite: false,
+    blending: kind === 'lit' ? THREE.NormalBlending : THREE.AdditiveBlending,
+    stencilWrite: true,
+    stencilRef: 0,
+    stencilFuncMask: TRUCK_BIT | PROP_BIT,
+    stencilWriteMask: 0,
+    stencilFunc: overSolids ? THREE.NotEqualStencilFunc : THREE.EqualStencilFunc,
+  });
 }
 
 export function createCardShapes(random: () => number): THREE.CanvasTexture {

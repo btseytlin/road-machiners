@@ -282,7 +282,7 @@ export class Fx3D {
   readonly ruts: Ruts;
 
   constructor(private scene: THREE.Scene, private overlay: HTMLElement, private rig: CameraRig) {
-    scene.add(this.puffs.mesh, this.glows.mesh, this.cards.lit.mesh, this.cards.glow.mesh, ...this.chunks.meshes);
+    scene.add(this.puffs.mesh, this.glows.mesh, ...this.cards.lit.meshes, ...this.cards.glow.meshes, ...this.chunks.meshes);
     this.flashes = new MuzzleFlashes(scene);
     this.casings = new Casings(scene);
     this.ruts = new Ruts(scene);
