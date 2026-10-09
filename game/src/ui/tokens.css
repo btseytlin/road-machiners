@@ -187,6 +187,9 @@
   --meter-l: 6px;
   --pip: 10px;
   --dial-size: 66px;
+  --slider-thumb: 12px;
+  --slider-track: 4px;
+  --slider-tick: 20px;
 
   /* Panel widths and heights */
   --panel-s: 260px;
