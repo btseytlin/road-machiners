@@ -246,10 +246,15 @@ const MAX_PARTICLES = 4000;
 const MAX_CHUNKS = 600;
 
 const SPRAY = {
+  surfacePower: 2.5,
   dust: { perMeter: 6, groundShare: 0.45, life: 2.6, size: { from: 0.5, to: 3.8 }, alpha: { peak: 0.55, fadeIn: 0.1 }, drag: 1.8, gravity: -0.4 },
   haze: { perMeter: 0.35, life: 12, size: { from: 2.5, to: 9 }, alpha: { peak: 0.3, fadeIn: 0.08 }, drag: 0.8, gravity: -0.05, back: 1.2, spread: 0.8, rise: 0.3, lift: 0.8 },
   clods: { perMeter: 1.4, minMetersPerSecond: 2.5, back: { min: 0.15, spread: 0.3 }, up: { min: 1.2, spread: 2.6 }, aside: 1.4, lift: 0.15, size: { min: 0.1, spread: 0.2 }, life: 1.6, shade: 0.72 },
 } as const;
+
+export function sprayShare(ground: TerrainType): number {
+  return ground.dust ** SPRAY.surfacePower;
+}
 
 export type CardLights = { sun: THREE.DirectionalLight; sky: THREE.HemisphereLight };
 
@@ -593,9 +598,10 @@ export class TruckFx {
 
   private dust(world: World, v: Vehicle, pose: Pose, back: V3, tires: V3[], dt: number): void {
     const ground = TERRAIN_TYPES[world.terrain.types[tileAt(world.terrain, v.pos)]];
-    const rate = SPRAY.dust.perMeter * v.speed * PHYSICS.metersPerTile * ground.dust;
     const metersPerSecond = v.speed * PHYSICS.metersPerTile;
-    const clodRate = metersPerSecond > SPRAY.clods.minMetersPerSecond ? SPRAY.clods.perMeter * metersPerSecond * ground.dust : 0;
+    const loose = sprayShare(ground);
+    const rate = SPRAY.dust.perMeter * metersPerSecond * loose;
+    const clodRate = metersPerSecond > SPRAY.clods.minMetersPerSecond ? SPRAY.clods.perMeter * metersPerSecond * loose : 0;
     const mounts = wheelMounts(bodyOf(v.chassisId));
     for (const [i, tire] of tires.entries()) {
       const side = Math.sign(mounts[i].z);
@@ -604,7 +610,7 @@ export class TruckFx {
       this.puffs(rate * front, dt, () => this.fx.wheelDust(tire, back, out, ground));
       this.puffs(clodRate * front, dt, () => this.fx.clod(tire, back, out, metersPerSecond, ground));
     }
-    const hazeRate = SPRAY.haze.perMeter * metersPerSecond * ground.dust;
+    const hazeRate = SPRAY.haze.perMeter * metersPerSecond * loose;
     const [left, right] = tires.slice(-2);
     const rear = { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2, z: (left.z + right.z) / 2 };
     this.puffs(hazeRate, dt, () => this.fx.dustHaze(rear, back, ground));

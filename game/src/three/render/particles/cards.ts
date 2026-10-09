@@ -6,6 +6,7 @@ const ATLAS_CELLS = 2;
 const SHAPE_LUMPS = { min: 4, spread: 3 };
 const SHAPE_BLUR_PX = 6;
 const CARD_LIGHT = { scatter: 0.7 };
+const CARD_ORDER = { lit: 904, glow: 906 };
 
 export type CardLight = { sunDir: THREE.Vector3; sun: THREE.Color; sky: THREE.Color; ground: THREE.Color };
 
@@ -122,6 +123,7 @@ export class CardBatch {
     });
     this.mesh = new THREE.Mesh(this.geo, this.material);
     this.mesh.frustumCulled = false;
+    this.mesh.renderOrder = kind === 'lit' ? CARD_ORDER.lit : CARD_ORDER.glow;
   }
 
   light(l: CardLight): void {
