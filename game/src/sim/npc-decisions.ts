@@ -748,7 +748,7 @@ function keepFactor(world: World, vehicle: Vehicle, decision: DecisionId, subjec
   if (decision !== 'hostileSeen' && decision !== 'contactHeard') return 1;
   const other = subjectOf(world, decision, subject);
   const restrained = isBusy(vehicle) && !isWeak(world, vehicle) && !threatens(world, vehicle, other);
-  return (restrained ? NPC_BEHAVIOR.keepWork : 1);
+  return restrained ? NPC_BEHAVIOR.keepWork : 1;
 }
 
 function ramWeight(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): number {

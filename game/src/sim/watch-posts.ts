@@ -69,11 +69,13 @@ function pickHide(world: World, map: PostMap, ground: Vec): Vec | null {
   let bestRank: [number, number] = [Infinity, Infinity];
   for (const p of candidates(ground)) {
     if (!qualifiesAsHide(world, map, p)) continue;
-    const rank: [number, number] = [exposure(world, map, p, bestRank[0]), seesGround(world, p, ground) ? 0 : 1];
-    if (rank[0] > bestRank[0] || (rank[0] === bestRank[0] && rank[1] >= bestRank[1])) continue;
+    const seen = exposure(world, map, p, bestRank[0]);
+    if (seen > bestRank[0]) continue;
+    const blind = seesGround(world, p, ground) ? 0 : 1;
+    if (seen === bestRank[0] && blind >= bestRank[1]) continue;
     best = p;
-    bestRank = rank;
-    if (rank[0] === 0 && rank[1] === 0) break;
+    bestRank = [seen, blind];
+    if (seen === 0 && blind === 0) break;
   }
   return best;
 }
