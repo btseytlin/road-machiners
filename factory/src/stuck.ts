@@ -19,6 +19,7 @@ const GITHUB_DOWN = /\bgh\b.*(timed out after|rate limit|HTTP 5\d\d|connection (
 const DISK_FULL = /no space left on device|ENOSPC/i;
 const DECISION = /budget|committee decision/i;
 const UNRECORDED = 'no failure names this card';
+const BOARD_LAG_MS = 5 * 60_000;
 
 export async function clearStuck(ctx: Ctx, issue: number): Promise<void> {
   await ctx.github.removeLabel(issue, STUCK_LABEL);
@@ -40,7 +41,11 @@ function recordOf(input: SweepInput, card: Card): StuckRecord {
   const same = prev !== undefined && prev.incident === cause.incident;
   const tries = prev !== undefined && prev.column === card.column ? prev.tries : 0;
   const record = { ...cause, column: card.column, tries, released: same ? prev.released : null, refused: same ? prev.refused : null };
-  return { ...record, kind: kindOf(input, card, record) };
+  return { ...record, kind: same && record.released !== null ? releasedKind(input, prev, record.released) : kindOf(input, card, record) };
+}
+
+function releasedKind(input: SweepInput, prev: StuckRecord, released: string): StuckKind {
+  return input.now.getTime() - new Date(released).getTime() < BOARD_LAG_MS ? prev.kind : 'blocked';
 }
 
 function causeOf(input: SweepInput, issue: number, prev: StuckRecord | undefined): StuckCause {
@@ -186,13 +191,14 @@ async function releaseOne(ctx: Ctx, issue: number, batch: number): Promise<boole
     ctx.log('tick', issue, `stuck sweep: released into the next merge batch, half of a failed batch of ${batch}`);
     return true;
   } catch (error) {
+    updateRecord(ctx, issue, (record) => ({ ...record, released: null }));
     ctx.log('tick', issue, `stuck sweep: could not release the card, it stays stuck and the next tick tries again: ${errorText(error)}`);
     return false;
   }
 }
 
 async function actOnFirst(ctx: Ctx, records: Records, kind: StuckKind, action: (issue: number, record: StuckRecord) => Promise<unknown>): Promise<number[]> {
-  const found = Object.entries(records).find(([, record]) => record.kind === kind);
+  const found = Object.entries(records).find(([, record]) => record.kind === kind && record.released === null);
   if (found === undefined) return [];
   const issue = Number(found[0]);
   markTry(ctx, issue);

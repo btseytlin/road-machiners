@@ -156,6 +156,23 @@ describe('the stuck sweep', () => {
     expect(kinds(b)).toMatchObject({ 4: 'blocked' });
   });
 
+  it('waits out a board that still lists a removed label, and gives a label that comes back with no new failure to Hermes', async () => {
+    const gh = 'gh api graphql failed with exit 1: HTTP 502';
+    const b = board([stuck(4, 'Design'), stuck(10, 'Merging'), stuck(11, 'Merging')], { failures: [failure(4, gh, { stage: 'design' }), mergeDown([10, 11], minutesAgo(30))] });
+    const lagging = b.cards;
+    await sweep(b);
+    expect(b.removed).toEqual([10, 4]);
+    b.cards = lagging;
+    await sweep(b);
+    expect(kinds(b)).toEqual({ 4: 'machine', 10: 'merge-batch', 11: 'merge-batch' });
+    expect(b.removed).toEqual([10, 4, 10]);
+    b.ctx.now = () => new Date(NOW.getTime() + 6 * 60_000);
+    b.cards = lagging;
+    await sweep(b);
+    expect(kinds(b)).toEqual({ 4: 'blocked', 10: 'blocked', 11: 'merge-batch' });
+    expect(b.removed).toEqual([10, 4, 10, 11]);
+  });
+
   it('touches no card with a running job or a hold', async () => {
     const b = board([stuck(4, 'Testing'), stuck(5, 'Testing')], { jobs: [{ ...mergeJob([]), stage: 'verify', issue: 4 }], held: { 5: { by: 'ann', reason: 'r', at: NOW.toISOString(), stage: null } }, failures: [failure(4, 'unfinished merge'), failure(5, 'unfinished merge')] });
     openMerge(b, 4);
