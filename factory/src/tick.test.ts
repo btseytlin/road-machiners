@@ -295,7 +295,7 @@ function harness(job: Job | null, alive: boolean, cards: Card[] = [], comments: 
   const cfg = { home: dir, webRoot: join(dir, 'web'), repo: 'o/r', committeeChat: 'c', triageTimeoutMinutes: 30, designTimeoutMinutes: 30, implementTimeoutMinutes: 120, verifyTimeoutMinutes: 30, testTimeoutMinutes: 30, branchTimeoutMinutes: 30, mergeTimeoutMinutes: 30, replyRouteMinutes: 15, needsInfoHours: 24, minFreeGb: 0.001, minAvailableGb: 1, logDays: 14, transcriptDays: 10, testCacheDays: 14, cpuLight: 0.25, cpuImplement: 0.25, cpuTest: 0.5, vitestWorkersImplement: 2, vitestWorkersTest: 4, ...CFG };
   const repo = { fetch: async () => {},headHash: async (branch: string) => { if (branch === RELEASE.branch) return 'rel0001'; if (branch !== 'dev') throw new Error(`unexpected branch ${branch}`); return devHead; } };
   const ctx = { cfg, github, telegram, repo, statePath, now: () => NOW, log: () => undefined } as unknown as Ctx;
-  const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, removeContainers: async (_run, id) => { killed.push(`containers ${id}`); }, spawn: (args, _cwd, _log, id, cpus, testWorkers) => { parseStage(args[0]); spawned.push([...args, id]); pinned.push(`${args[0]} ${cpus} ${testWorkers}`); return 77; }, cores: () => 4 };
+  const deps: TickDeps = { isAlive: () => alive, kill: async (_run, pid, id) => { killed.push(`${pid} ${id}`); }, removeContainers: async (_run, id) => { killed.push(`containers ${id}`); }, spawn: (args, _cwd, _log, id, cpus, testWorkers) => { parseStage(args[0]); spawned.push([...args, id]); pinned.push(`${args[0]} ${cpus} ${testWorkers}`); return 77; }, cores: () => 4, repair: async () => { throw new Error('no repair expected'); } };
   return { ctx, sent, labels, removed, deps, killed, spawned, pinned };
 }
 
@@ -341,6 +341,16 @@ describe('tick', () => {
     await checkJobs(h.ctx, h.deps);
     expect(h.labels).toEqual([`6:${STUCK_LABEL}`, `7:${STUCK_LABEL}`]);
     expect(readState(h.ctx.statePath).failures).toMatchObject([{ stage: 'merge', issue: null, error: 'timed out after 30 minutes', batch: [6, 7] }]);
+  });
+
+  it('releases half of a timed-out merge batch and starts its merge in the same tick, with every stuck card recorded', async () => {
+    const cards = [card(6, 'Merging', [STUCK_LABEL]), card(7, 'Merging', [STUCK_LABEL]), card(8, 'Testing', [STUCK_LABEL])];
+    const h = harness(null, false, cards);
+    writeState(h.ctx.statePath, state({ failures: [{ stage: 'merge', issue: null, error: 'timed out after 30 minutes', log: '/m.log', at: hoursAgo(1), batch: [6, 7] }] }));
+    await tick(h.ctx, '/code', h.deps);
+    expect(h.removed).toEqual([`6:${STUCK_LABEL}`]);
+    expect(args(h)).toEqual([['merge', '-']]);
+    expect(readState(h.ctx.statePath).stuck).toMatchObject({ 6: { kind: 'merge-batch', tries: 1 }, 7: { kind: 'merge-batch', tries: 0 }, 8: { kind: 'unrecorded' } });
   });
 
   it('kills a job past the timeout by its id, clears it and reports, when it already resumed once', async () => {

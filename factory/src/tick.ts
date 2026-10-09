@@ -10,8 +10,10 @@ import { recordJob } from './ledger';
 import { reportAttempt, reportScheduler } from './observability';
 import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
+import { repairClone } from './repair-clone';
 import { clearSessions, markResumed } from './sessions';
 import { openTasks } from './stages/release-common';
+import { sweepStuck, type Repair } from './stuck';
 import { clearQueued, isQueued, orderKey, readState, updateState } from './state';
 import { sweepTranscripts } from './transcript-archive';
 import { askedAt, isAnswered } from './questions';
@@ -228,6 +230,7 @@ export type TickDeps = {
   removeContainers: (run: Run, id: string) => Promise<void>;
   spawn: (args: string[], cwd: string, log: string, id: string, cpus: string, testWorkers: number | null) => number;
   cores: () => number;
+  repair: Repair;
 };
 export const REAL_DEPS: TickDeps = {
   isAlive,
@@ -235,6 +238,7 @@ export const REAL_DEPS: TickDeps = {
   removeContainers: removeJobContainers,
   spawn: spawnJob,
   cores: availableParallelism,
+  repair: repairClone,
 };
 
 function dropJob(ctx: Ctx, job: Job): void {
@@ -445,12 +449,13 @@ function movedPast(state: FactoryState, posted: string | null, head: string | nu
 }
 
 async function startJobs(ctx: Ctx, codeDir: string, deps: TickDeps): Promise<void> {
-  const cards = await releaseAnswered(ctx, await ctx.github.cards());
-  cleanBuilds(ctx, cards);
-  cleanWork(ctx, cards);
+  const answered = await releaseAnswered(ctx, await ctx.github.cards());
+  cleanBuilds(ctx, answered);
+  cleanWork(ctx, answered);
   updateState(ctx.statePath, pruneCaptions);
   updateState(ctx.statePath, pruneFailures(ctx.now()));
   const free = freeGb(ctx.cfg.home);
+  const cards = await sweepStuck(ctx, answered, free >= ctx.cfg.minFreeGb, deps.repair);
   if (free < ctx.cfg.minFreeGb) {
     reportScheduler(ctx.cfg.home, 'disk-low', ctx.now());
     return ctx.log('tick', null, `disk low: ${free} GB free, under ${ctx.cfg.minFreeGb} GB, starts nothing`);
