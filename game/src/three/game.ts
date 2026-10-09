@@ -522,7 +522,6 @@ export class Game {
     Escape: { run: () => { if (this.modalOpen()) this.screens.closeAll(null); else this.pin.clear(); this.selectUtility(null); } },
   };
 
-
   private selectUtility(id: string | null): void {
     if (this.anim || (id !== null && this.modalOpen())) return;
     this.utilityAim.select(id);
