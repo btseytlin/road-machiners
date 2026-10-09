@@ -4,6 +4,12 @@ import { PARTS, type PartDef } from './parts';
 import type { Weighted } from './npcs';
 import { TIME } from './time';
 
+// The effort model. The unit of effort is one turn of play. The wage is the net money a player
+// earns per turn, after fuel, supplies and repairs, at each tier. An item's effort is its value
+// divided by its tier's wage. `bands` gives the target effort range per tier and item kind, so a
+// test can keep every def inside its band. A haul's travel pay is estimated turns of work times the
+// tier 1 wage, whatever the good, so contracts pay like salvage.
+
 export type Tier = 1 | 2 | 3;
 
 export type ItemKind = 'weapon' | 'engine' | 'armor' | 'cargo' | 'scanner' | 'store' | 'utility' | 'chassis' | 'good';
@@ -66,14 +72,26 @@ export const CONTRACTS = {
   warnTurns: Math.round(TIME.turnsPerDay / 12),
 
   haul: {
-    durationFactor: 8,
-    rewardFactor: 5,
+    // The standard window is the estimated travel turns times this factor plus `slackTurns`, counted from
+    // acceptance. Measured on every shop pair: the slower loaded truck needs up to 1.33 times the estimate,
+    // and the factor gives it half again on top and keeps the window at twice the rush window.
+    durationFactor: 2.5,
+    // Room for one stop for fuel, a repair or a fight, so a short route is not left with no leeway.
+    slackTurns: Math.round(TIME.turnsPerDay / 4),
+    // A multiple of the salvage wage `EFFORT.wage[1]`, for every good. The estimate counts one way. Set so
+    // the median route's standard haul of a mid load nets the middle of the hourly money that scavenging
+    // and trading earn on the midgame kit, counting the empty drive back, and fuel.
+    rewardFactor: 24,
+    // On top of the wage, the client pays a small cut of the hauled goods' value, since carrying
+    // something worth money is worth more to the client than empty road time.
     valueShare: 0.05,
     units: [3, 12] as [number, number],
     penaltyShare: 1,
     xpPerEffort: 0.003,
     rush: {
       chance: 0.25,
+      // The rush window is the estimated travel turns times this factor: tight, but a truck driving straight there makes it.
+      // The slower measured loaded truck needs up to 1.33 times the estimate, and the window keeps 1.1 times that.
       durationFactor: 1.5,
       premium: 1.75,
     },

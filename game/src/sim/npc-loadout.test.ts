@@ -628,6 +628,6 @@ describe('loadout fingerprint', () => {
 
   it('populates a new world the same way', () => {
     const w = newWorld(7, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
-    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('758b0c30d5ff9f8b');
+    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('5bcae50c8cf73a5d');
   }, budget(60_000));
 });

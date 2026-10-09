@@ -3,10 +3,23 @@ import { Mesh, type MeshLambertMaterial } from 'three';
 import { loadModels, model, socket } from './models';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
-await loadModels(async (name) => {
-  const url = FILES[`/public/models/${name}.glb`];
-  if (!url) throw new Error(`Missing model file for ${name}`);
-  return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0)).buffer;
+const progress: [number, number][] = [];
+await loadModels(
+  async (name) => {
+    const url = FILES[`/public/models/${name}.glb`];
+    if (!url) throw new Error(`Missing model file for ${name}`);
+    return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0)).buffer;
+  },
+  (done, total) => progress.push([done, total]),
+);
+
+describe('loadModels progress', () => {
+  it('reports 0 first, then one more file each time, ending at the total', () => {
+    const total = progress[0][1];
+    expect(total).toBe(Object.keys(FILES).length);
+    expect(progress.map(([done]) => done)).toEqual(Array.from({ length: total + 1 }, (_, i) => i));
+    expect(progress.every(([, t]) => t === total)).toBe(true);
+  });
 });
 
 function materialsOf(name: Parameters<typeof model>[0]): MeshLambertMaterial[] {
