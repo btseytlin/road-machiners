@@ -32,7 +32,7 @@ import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './test
 import type { NpcActivity, Vehicle, World } from './types';
 import { dist, polylineDist, type Vec } from './vec';
 import { hasLineOfFire } from './vision';
-import { isWatching, watchPost } from './watch-posts';
+import { exposureAt, hidesOf, isWatching, watchPost } from './watch-posts';
 import { defaultSetup } from './settings';
 import { endTurn, newWorld } from './world';
 
@@ -76,16 +76,37 @@ describe('watch posts on the map', () => {
     }
   });
 
-  it('see the ground each one watches', () => {
+  it('have the least road exposure among the hides of their ground', () => {
     let posts = 0;
     for (const ground of huntingGrounds()) {
       const post = watchPost(w, ground);
       if (!post) continue;
       posts++;
-      expect(dist(post, ground)).toBeLessThanOrEqual(TERRAIN.vision.radius);
-      expect(hasLineOfFire(w, post, ground), `${post.x},${post.y} to ${ground.x},${ground.y}`).toBe(true);
+      const least = Math.min(...hidesOf(w, ground).map((p) => exposureAt(w, p)));
+      expect(exposureAt(w, post), `${post.x},${post.y} for ${ground.x},${ground.y}`).toBe(least);
     }
     expect(posts).toBeGreaterThan(0);
+  });
+
+  it('hide at least 11 of the 16 road grounds from road traffic', () => {
+    const roadGrounds = huntingGrounds().filter((g) => REGION.roads.some((road) => polylineDist(g, road) <= REGION.roadWidth));
+    expect(roadGrounds.length).toBe(16);
+    const hidden = roadGrounds.filter((g) => watchPost(w, g) !== null && exposureAt(w, watchPost(w, g)!) === 0);
+    expect(hidden.length).toBeGreaterThanOrEqual(11);
+  });
+
+  it('build for every camp on a fresh terrain within the time budget', () => {
+    const fresh = { ...mapWorld(), terrain: { ...TEST_MAP.terrain } };
+    terrainNav(fresh.terrain);
+    watchPost(fresh, huntingGrounds()[0]);
+    const start = performance.now();
+    for (const camp of CAMPS) {
+      raiderGrounds(fresh, camp);
+      raiderPatrolPosts(fresh, camp);
+    }
+    const ms = performance.now() - start;
+    console.log(`posts of all camps on a fresh terrain: ${ms.toFixed(0)} ms`);
+    expect(ms).toBeLessThan(4000);
   });
 
   it('take a ground far from roads as its own post', () => {

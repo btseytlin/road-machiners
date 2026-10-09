@@ -1,6 +1,8 @@
-// Watch posts and the watch. A raid ends at a post beside its hunting ground: off the road, outside sites, hazards and
-// lawman reach, clear for any raider's truck and in sight of the ground. There the raider watches HUNT.watchTurns
-// turns, parked and silent, for prey that comes into sight. Posts are pure geometry over the terrain and the map's
+// Watch posts and the watch. A raid ends at a hide within a dash of its hunting ground: off the road, outside sites,
+// hazards and lawman reach, and clear for any raider's truck. A hide is picked by road exposure, the road sample points
+// within day sight that it has a line of sight to, so a road ground gets a spot that hills, props or distance hide from
+// road traffic. Of equal hides, one in sight of the ground wins, then the nearest ring. There the raider watches
+// HUNT.watchTurns turns, parked and silent, and springs on prey it hears or sees. Posts are pure geometry over the terrain and the map's
 
 import { chassisDef } from '../data/chassis';
 import { HUNT, NPCS } from '../data/npcs';
@@ -11,7 +13,7 @@ import { CELL, CLEARANCE, nearCliff, staticSet, terrainNav, tileIndex, type Stat
 import type { Blocker } from './nav/buckets';
 import { lawmanTowns } from './npc-decisions';
 import { propsAlong } from './prop-index';
-import { ROAD_INDEX } from './road-index';
+import { INDEX_CELL, ROAD_INDEX } from './road-index';
 import { siteGates, siteUnder } from './sites';
 import type { Terrain } from './terrain';
 import { hazardZones, type HazardZone } from './territory';
@@ -24,7 +26,9 @@ function postReach(): number {
   return Math.max(...radii) + CLEARANCE + CELL;
 }
 
-type PostMap = { reach: number; nav: TerrainNav; statics: StaticSet; gates: Vec[]; hazards: HazardZone[]; posts: Map<string, Vec | null>; lists: Map<string, readonly Vec[]> };
+type RoadSamples = Map<number, Vec[]>;
+
+type PostMap = { reach: number; roadSamples: RoadSamples; nav: TerrainNav; statics: StaticSet; gates: Vec[]; hazards: HazardZone[]; posts: Map<string, Vec | null>; lists: Map<string, readonly Vec[]> };
 
 const maps = new WeakMap<Terrain, PostMap>();
 
@@ -33,6 +37,7 @@ function postMap(world: World): PostMap {
   if (hit) return hit;
   const map: PostMap = {
     reach: postReach(),
+    roadSamples: roadSamplesOf(),
     nav: terrainNav(world.terrain),
     statics: staticSet(fixedProps(world), world.terrain),
     gates: lawmanTowns().flatMap((town) => siteGates(town)),
@@ -53,9 +58,72 @@ export function watchPost(world: World, ground: Vec): Vec | null {
   const key = `${ground.x},${ground.y}`;
   const cached = map.posts.get(key);
   if (cached !== undefined) return cached;
-  const post = candidates(ground).find((p) => qualifies(world, map, p, ground)) ?? null;
+  const post = pickHide(world, map, ground);
   map.posts.set(key, post);
   return post;
+}
+
+// The lexicographic minimum of (road exposure, out of sight of the ground, candidate order) over the hides.
+function pickHide(world: World, map: PostMap, ground: Vec): Vec | null {
+  let best: Vec | null = null;
+  let bestRank: [number, number] = [Infinity, Infinity];
+  for (const p of candidates(ground)) {
+    if (!qualifiesAsHide(world, map, p)) continue;
+    const rank: [number, number] = [exposure(world, map, p, bestRank[0]), seesGround(world, p, ground) ? 0 : 1];
+    if (rank[0] > bestRank[0] || (rank[0] === bestRank[0] && rank[1] >= bestRank[1])) continue;
+    best = p;
+    bestRank = rank;
+    if (rank[0] === 0 && rank[1] === 0) break;
+  }
+  return best;
+}
+
+export function hidesOf(world: World, ground: Vec): Vec[] {
+  const map = postMap(world);
+  return candidates(ground).filter((p) => qualifiesAsHide(world, map, p));
+}
+
+function roadSamplesOf(): RoadSamples {
+  const out: RoadSamples = new Map();
+  const add = (p: Vec): void => {
+    const key = cellKey(Math.floor(p.x / INDEX_CELL), Math.floor(p.y / INDEX_CELL));
+    const cell = out.get(key);
+    if (cell) cell.push(p);
+    else out.set(key, [p]);
+  };
+  for (const road of REGION.roads) {
+    for (let i = 0; i + 1 < road.length; i++) {
+      const a = road[i];
+      const b = road[i + 1];
+      const steps = Math.max(1, Math.ceil(dist(a, b) / HUNT.roadSample));
+      for (let k = 0; k < steps; k++) add({ x: a.x + ((b.x - a.x) * k) / steps, y: a.y + ((b.y - a.y) * k) / steps });
+    }
+    add(road[road.length - 1]);
+  }
+  return out;
+}
+
+function cellKey(cx: number, cy: number): number {
+  return (cy + 1000) * 4096 + cx + 1000;
+}
+
+// How many road sample points within day sight the spot has a line of sight to. It stops counting past `limit`, since
+// a spot with more exposure than the best so far cannot win.
+function exposure(world: World, map: PostMap, p: Vec, limit = Infinity): number {
+  const reach = TERRAIN.vision.radius;
+  let seen = 0;
+  for (let cy = Math.floor((p.y - reach) / INDEX_CELL); cy <= Math.floor((p.y + reach) / INDEX_CELL); cy++) {
+    for (let cx = Math.floor((p.x - reach) / INDEX_CELL); cx <= Math.floor((p.x + reach) / INDEX_CELL); cx++) {
+      for (const sample of map.roadSamples.get(cellKey(cx, cy)) ?? []) {
+        if (dist(p, sample) <= reach && sees(world, p, sample) && ++seen > limit) return seen;
+      }
+    }
+  }
+  return seen;
+}
+
+export function exposureAt(world: World, p: Vec): number {
+  return exposure(world, postMap(world), p);
 }
 
 export function postsOf(world: World, key: string, grounds: readonly Vec[]): readonly Vec[] {
@@ -90,8 +158,8 @@ function candidates(ground: Vec): Vec[] {
   return out;
 }
 
-function qualifies(world: World, map: PostMap, p: Vec, ground: Vec): boolean {
-  return onMap(world, map, p) && clearOfRoads(p) && clearOfPlaces(map, p) && drivable(map, p) && seesGround(world, p, ground);
+function qualifiesAsHide(world: World, map: PostMap, p: Vec): boolean {
+  return onMap(world, map, p) && clearOfRoads(p) && clearOfPlaces(map, p) && drivable(map, p);
 }
 
 function onMap(world: World, map: PostMap, p: Vec): boolean {
@@ -130,9 +198,12 @@ function blocks(b: Blocker, p: Vec, reach: number): boolean {
 }
 
 function seesGround(world: World, p: Vec, ground: Vec): boolean {
-  if (dist(p, ground) > TERRAIN.vision.radius) return false;
-  const line = sightLine(world.terrain, p, ground);
-  return clearOverTerrain(world.terrain, line) && hasLineOfSight(world.terrain, line, fixedSightProps(world, p, ground), []);
+  return dist(p, ground) <= TERRAIN.vision.radius && sees(world, p, ground);
+}
+
+function sees(world: World, a: Vec, b: Vec): boolean {
+  const line = sightLine(world.terrain, a, b);
+  return clearOverTerrain(world.terrain, line) && hasLineOfSight(world.terrain, line, fixedSightProps(world, a, b), []);
 }
 
 function fixedSightProps(world: World, a: Vec, b: Vec): Obstacle[] {

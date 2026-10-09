@@ -95,8 +95,9 @@ export const HUNT = {
   lawReach: NPC_BEHAVIOR.patrolRadius + TERRAIN.vision.radius,
   offRoadGoals: ['raid', 'patrol', 'investigate'] as const,
   postRoadGap: 6,
-  postRings: [10, 14, 7],
-  postBearings: 16,
+  postRings: [7, 10, 14, 18, 22],
+  roadSample: 4,
+  postBearings: 12,
   patrolPostSpacing: 20,
   watchTurns: 40,
 };
