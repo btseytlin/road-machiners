@@ -1,6 +1,5 @@
 
 import { atlasOf, atlasSites } from '../../sim/atlas';
-import { runOutposts } from '../../sim/fury-road';
 import { groundPoint, type VehicleFrame } from '../../phys/frames';
 import type { World } from '../../sim/types';
 import type { Vec } from '../../sim/vec';
@@ -35,18 +34,26 @@ function place(el: HTMLDivElement, world: World, pos: Vec, rig: CameraRig, limit
 export class Labels {
   private els = new Map<string, HTMLDivElement>();
   private rumors = new Map<string, HTMLDivElement>();
-  private outposts = new Map<string, HTMLDivElement>();
 
   constructor(private readonly container: HTMLElement) {}
 
   update(world: World, rig: CameraRig, limit: SightLimit): void {
-    for (const s of atlasSites(atlasOf(world.terrain))) {
+    const sites = atlasSites(atlasOf(world.terrain));
+    for (const s of sites) {
       const el = this.siteLabel(s.id);
       el.textContent = world.player.discovered.includes(s.id) ? s.name : '???';
       place(el, world, s.pos, rig, limit, playerExplored(world, s.pos));
     }
+    this.dropGoneSites(new Set(sites.map((s) => s.id)));
     this.updateRumors(world, rig, limit);
-    this.updateOutposts(world, rig, limit);
+  }
+
+  private dropGoneSites(ids: Set<string>): void {
+    for (const [id, el] of this.els) {
+      if (ids.has(id)) continue;
+      el.remove();
+      this.els.delete(id);
+    }
   }
 
   private siteLabel(id: string): HTMLDivElement {
@@ -54,26 +61,6 @@ export class Labels {
     if (known) return known;
     const made = labelEl(this.container);
     this.els.set(id, made);
-    return made;
-  }
-
-  private updateOutposts(world: World, rig: CameraRig, limit: SightLimit): void {
-    const posts = runOutposts(world);
-    const ids = new Set(posts.map((p) => p.name));
-    for (const [id, el] of this.outposts) {
-      if (ids.has(id)) continue;
-      el.remove();
-      this.outposts.delete(id);
-    }
-    for (const post of posts) place(this.outpostLabel(post.name, post.name), world, post.pad, rig, limit, true);
-  }
-
-  private outpostLabel(id: string, name: string): HTMLDivElement {
-    const known = this.outposts.get(id);
-    if (known) return known;
-    const made = labelEl(this.container);
-    made.textContent = name;
-    this.outposts.set(id, made);
     return made;
   }
 

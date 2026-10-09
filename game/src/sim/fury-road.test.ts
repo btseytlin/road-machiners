@@ -221,6 +221,18 @@ describe('arriving at an outpost', () => {
     expect(() => moveWindow(alive)).toThrow(/alive/);
   });
 
+  it('discovers the outpost fort as any site, with its line and its XP', () => {
+    const w = furyRoadWorld();
+    parkOnNext(w);
+    const xp = w.player.xp;
+
+    const after = endTurn(w, still);
+
+    expect(after.player.discovered).toContain('outpost-1');
+    expect(after.events).toContainEqual({ t: 'discover', location: 'outpost-1' });
+    expect(after.player.xp).toBeGreaterThan(xp);
+  });
+
   it('names a move for every world field', () => {
     expect(Object.keys(WINDOW_MOVE).sort()).toEqual(Object.keys(furyRoadWorld()).sort());
   });
@@ -271,17 +283,14 @@ describe('a Fury Road world on the highway', () => {
   it('shows no Icarus place in three hundred turns of the run', () => {
     let w = furyRoadWorld(5);
     const ids = w.obstacles.map((o) => o.id);
-    const events: string[] = [];
     for (let i = 0; i < 300 && w.player.state === 'active'; i++) {
       const me = playerVehicle(w);
       if (me.order === null) me.order = { kind: 'stopAt', dest: outpostPad(w, runOf(w).window + 1) };
       w = endTurn(w, still);
-      events.push(...w.events.map((e) => e.t));
     }
 
     expect(ids.some((id) => /^(site|pond|cw)-/.test(id))).toBe(false);
-    expect(events).not.toContain('discover');
-    expect(w.player.discovered).toEqual([]);
+    expect(w.player.discovered.every((id) => /^outpost-\d+$/.test(id))).toBe(true);
     expect(w.salvage).toEqual([]);
   }, 120_000);
 });

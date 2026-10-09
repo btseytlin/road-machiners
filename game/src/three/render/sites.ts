@@ -1,12 +1,12 @@
 
 import * as THREE from 'three';
 import { REGION, type SiteLocationDef, type SiteEdge, type TownDef } from '../../data/region';
-import { FORTRESS_SITES, FORTRESS_STYLES } from '../../data/fortress';
-import { fortressGates, insideCurtain, onFortressRock, type FortGate } from '../../sim/fortress';
+import { FORTRESS_STYLES } from '../../data/fortress';
+import { fortressGates, fortressStyle, insideCurtain, onFortressRock, type FortGate } from '../../sim/fortress';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
-import { isFortress, siteGates } from '../../sim/sites';
+import { isFortress, siteGates, siteLook } from '../../sim/sites';
 import { atlasOf } from '../../sim/atlas';
 import { deckById, deckCenterAt, type Deck } from '../../sim/bridge';
 import { deckSegments, heightAt, type DeckSegment, type Terrain } from '../../sim/terrain';
@@ -289,7 +289,7 @@ function dressGate(b: SiteBuilder, site: Site, fort: FortGate, guarded: boolean)
   }
   if (!guarded) return;
   const lift = (x: number, z: number) => b.groundAt(face.x - site.pos.x, face.y - site.pos.y) - b.groundAt(x, z);
-  const depth = FORTRESS_STYLES[FORTRESS_SITES[site.id].style].gate.depth;
+  const depth = FORTRESS_STYLES[fortressStyle(site)].gate.depth;
   const pole = at(-depth / 2, width / 2 - 0.6);
   b.addBox(pole.x, pole.z, 0.12, SET.gatePoleHeight - height, 0.12, PAL.trunk, height + lift(pole.x, pole.z), -a);
   const flag = at(-depth / 2 + 0.5, width / 2 - 0.6);
@@ -477,8 +477,8 @@ type BuiltSite = { root: THREE.Group; movers: Mover[] };
 
 function buildSite(t: Terrain, site: Site): BuiltSite {
   const b = new SiteBuilder(t, site);
-  const decor = SITE_DECOR[site.id];
-  if (decor === undefined) throw new Error(`Missing landmark model for ${site.id}`);
+  const decor = SITE_DECOR[siteLook(site)];
+  if (decor === undefined) throw new Error(`Missing landmark model for ${siteLook(site)}`);
   decor(b, site, t);
   closeSite(b, site, t);
   b.root.traverse((o) => {

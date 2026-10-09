@@ -18,12 +18,18 @@ export const OUTPOSTS: readonly LocationDef[] = STALL_MARKETS.map((id) => {
 const GATES = new Map<string, Vec[]>();
 const PADS = new Map<string, Vec[]>();
 
+export function siteLook(site: Site): string {
+  return 'look' in site && site.look !== undefined ? site.look : site.id;
+}
+
 export function isFortress(site: Site): boolean {
-  return site.id in FORTRESS_SITES;
+  return siteLook(site) in FORTRESS_SITES;
 }
 
 export function siteGates(site: Site): Vec[] {
   if (isTerritory(site)) return [];
+  const given = givenGates(site);
+  if (given) return given;
   let gates = GATES.get(site.id);
   if (!gates) {
     const crossings = REGION.roads.flatMap((road) => road.slice(1).flatMap((b, i) => siteEdgeCrossings(site, road[i], b)));
@@ -45,16 +51,25 @@ function hasGatePerRoad(site: Site): boolean {
 
 export function sitePads(site: Site): Vec[] {
   if (isTerritory(site)) return [];
+  if (givenGates(site)) return padsOf(site);
   let pads = PADS.get(site.id);
   if (!pads) {
-    const out = site.radius + REGION.sites.pad.length / 2;
-    pads = siteGates(site).map((g) => {
-      const a = Math.atan2(g.y - site.pos.y, g.x - site.pos.x);
-      return { x: site.pos.x + Math.cos(a) * out, y: site.pos.y + Math.sin(a) * out };
-    });
+    pads = padsOf(site);
     PADS.set(site.id, pads);
   }
   return pads;
+}
+
+function givenGates(site: Site): Vec[] | null {
+  return 'gates' in site && site.gates !== undefined ? [...site.gates] : null;
+}
+
+function padsOf(site: Site): Vec[] {
+  const out = site.radius + REGION.sites.pad.length / 2;
+  return siteGates(site).map((g) => {
+    const a = Math.atan2(g.y - site.pos.y, g.x - site.pos.x);
+    return { x: site.pos.x + Math.cos(a) * out, y: site.pos.y + Math.sin(a) * out };
+  });
 }
 
 export function nearestPad(site: Site, from: Vec): Vec {

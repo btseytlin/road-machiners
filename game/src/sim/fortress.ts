@@ -3,8 +3,8 @@
 //
 
 import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES, type FortressBastions, type FortressKind, type FortressSite, type FortressStyle, type FortressStyleDef } from '../data/fortress';
-import { siteGates, type Site } from './sites';
-import type { PropKind } from './terrain';
+import { siteGates, siteLook, type Site } from './sites';
+import type { BakedProp, PropKind } from './terrain';
 import { bearing, DEG, dist, pointInPolygon, polygonEdgeDist, segmentDist, type Vec } from './vec';
 
 export const FORT_PROPS = {
@@ -145,9 +145,33 @@ function pieceRect(style: FortressStyleDef, piece: FortressPiece): Rect {
 }
 
 function fortressOf(site: Site): FortressSite {
-  const def: FortressSite | undefined = FORTRESS_SITES[site.id];
+  const def: FortressSite | undefined = FORTRESS_SITES[siteLook(site)];
   if (def === undefined) throw new Error(`Site ${site.id} is no fortress`);
-  return def;
+  return 'turn' in site && site.turn !== undefined ? { ...def, turn: site.turn } : def;
+}
+
+export function fortressStyle(site: Site): FortressStyle {
+  return fortressOf(site).style;
+}
+
+export function fortressProps(site: Site): BakedProp[] {
+  const style = fortressStyle(site);
+  return fortressPieces(site).map((piece) => bakedPiece(style, piece));
+}
+
+function bakedPiece(style: FortressStyle, piece: FortressPiece): BakedProp {
+  const base = { kind: fortProp(style, piece.kind), r: piece.r, group: 0, step: 0 };
+  if (piece.kind === 'gate') {
+    const yaw = piece.yaw - Math.PI / 2;
+    const { gate, gateFlare } = FORTRESS_STYLES[style];
+    return { ...base, pos: along(piece.pos, { x: Math.cos(yaw), y: Math.sin(yaw) }, gate.depth / 2 - gateFlare), yaw };
+  }
+  if (piece.kind === 'bastion') {
+    const yaw = piece.yaw - Math.PI / 2;
+    return { ...base, pos: along(piece.pos, { x: Math.cos(yaw), y: Math.sin(yaw) }, -FORTRESS.bastionBack), yaw };
+  }
+  if (piece.kind === 'inner') return { ...base, pos: piece.pos, yaw: piece.yaw - Math.PI / 2 };
+  return { ...base, pos: piece.pos, yaw: piece.yaw };
 }
 
 function styleOf(site: Site): FortressStyleDef {

@@ -7,7 +7,13 @@ export type Curve = { first: number; step: number; max: number };
 
 export const FURY_ROAD = {
   spawnOffsets: [-3, -1, 1, 3, -9, 9, -13, 13],
-  outpost: { padRadius: 3, padOffset: 9 },
+  outpost: {
+    look: 'salvage-yard',
+    radius: 6,
+    across: 19.5,
+    spur: { from: 3, half: 1.5 },
+    flat: { back: 6, half: 8, blend: 4 },
+  },
   waves: [
     [{ from: 'ahead', templates: ['buggy'], level: 'light' }],
     [

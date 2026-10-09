@@ -1,21 +1,20 @@
 // The fortress bake layer: each fortress site's layout pieces from src/sim/fortress.ts as baked props, the pit dug
 // inside a curtain, and the rock masses of Nose from src/sim/nose.ts.
 
-import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES, NOSE_APRON, type FortressStyle } from '../data/fortress';
+import { FORTRESS_SITES, NOSE_APRON } from '../data/fortress';
 import { REGION } from '../data/region';
 import { TERRAIN } from '../data/terrain';
-import { along, fortProp, fortressOutline, fortressPieces, pitDepth, type FortressPiece } from '../sim/fortress';
+import { fortressOutline, fortressProps, pitDepth } from '../sim/fortress';
 import { boxDistance, propBoxes, propObstacle, type PosedBox } from '../sim/mapgen';
 import { noseRocks } from '../sim/nose';
 import { sitePads, type Site } from '../sim/sites';
 import { dist, segmentDist, type Vec } from '../sim/vec';
-import type { BakedProp } from '../sim/terrain';
 import { typeCode, type MapDraft } from './bake';
 
 export function fortressLayer(d: MapDraft): MapDraft {
   const sites = [...REGION.towns, ...REGION.locations].filter((site) => site.id in FORTRESS_SITES);
   for (const site of sites) if (FORTRESS_SITES[site.id].pit !== undefined) digPit(d, site);
-  const props = sites.flatMap((site) => fortressPieces(site).map((piece) => bakedPiece(FORTRESS_SITES[site.id].style, piece)));
+  const props = sites.flatMap(fortressProps);
   const nose = sites.find((site) => site.id === 'nose');
   if (nose === undefined) throw new Error('Nose is no fortress site, and its rock masses stand in its frame');
   const rocks = noseRocks(nose);
@@ -102,19 +101,4 @@ function typePit(d: MapDraft, box: CornerBox, depth: Float32Array): void {
       if (corners.some((c) => c > 0)) d.types[(box.y0 + y) * d.size + box.x0 + x] = corners.every((c) => c === corners[0]) ? field : scree;
     }
   }
-}
-
-function bakedPiece(style: FortressStyle, piece: FortressPiece): BakedProp {
-  const base = { kind: fortProp(style, piece.kind), r: piece.r, group: 0, step: 0 };
-  if (piece.kind === 'gate') {
-    const yaw = piece.yaw - Math.PI / 2;
-    const { gate, gateFlare } = FORTRESS_STYLES[style];
-    return { ...base, pos: along(piece.pos, { x: Math.cos(yaw), y: Math.sin(yaw) }, gate.depth / 2 - gateFlare), yaw };
-  }
-  if (piece.kind === 'bastion') {
-    const yaw = piece.yaw - Math.PI / 2;
-    return { ...base, pos: along(piece.pos, { x: Math.cos(yaw), y: Math.sin(yaw) }, -FORTRESS.bastionBack), yaw };
-  }
-  if (piece.kind === 'inner') return { ...base, pos: piece.pos, yaw: piece.yaw - Math.PI / 2 };
-  return { ...base, pos: piece.pos, yaw: piece.yaw };
 }

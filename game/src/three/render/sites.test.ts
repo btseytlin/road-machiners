@@ -16,6 +16,7 @@ import { heightAt, type Terrain } from '../../sim/terrain';
 import { TEST_MAP } from '../../test/map';
 import { ICARUS_DECKS } from '../../sim/bridge';
 import { ICARUS_KEY } from '../../sim/atlas';
+import { highwayMap } from '../../sim/highway';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
 await loadModels(async (name) => {
@@ -627,5 +628,17 @@ describe('deck models', () => {
     onMap.traverse((o) => {
       if (o instanceof Mesh && !bridgeModel(o)) expect(o.geometry.getAttribute('sightAt'), o.name).toBeUndefined();
     });
+  });
+});
+
+describe('a Fury Road outpost fort', () => {
+  it('builds the Salvage Yard interior inside its own curtain beside the highway', () => {
+    const map = highwayMap(3, 0);
+    const { root } = buildSites(map.terrain);
+    const fort = root.getObjectByName('landmark-outpost-1');
+    const yard = sites.getObjectByName('landmark-salvage-yard')!;
+
+    expect(fort).toBeDefined();
+    expect(fort!.children.length).toBe(yard.children.length);
   });
 });

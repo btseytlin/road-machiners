@@ -1,12 +1,14 @@
 import { FURY_ROAD, HIGHWAY, type BandRule, type GroundBand } from '../data/fury-road';
+import { REGION, type SiteLocationDef } from '../data/region';
 import type { TerrainTypeId } from '../data/terrain';
 import type { Atlas } from './atlas';
 import { NO_DECKS } from './bridge';
+import { fortressProps } from './fortress';
 import { INDEX_CELL, RoadIndex } from './road-index';
 import { hashRandom, nextRandom, randInt, randRange, type Rng } from './rng';
 import type { BakedMap, BakedProp, PropKind, Terrain } from './terrain';
 import type { WorldSetup } from './types';
-import type { Vec } from './vec';
+import { DEG, type Vec } from './vec';
 
 const SIZE = HIGHWAY.size;
 const ROAD = HIGHWAY.road;
@@ -115,9 +117,16 @@ export function acrossOf(seed: number, at: RoadPos): number {
   return (at.u - centerU(seed, at.n)) / Math.hypot(1, centerSlope(seed, at.n));
 }
 
-export type OutpostSite = { milestone: number; n: number; side: 1 | -1; pad: RoadPos };
+export type OutpostSite = { milestone: number; n: number; side: 1 | -1; center: RoadPos; out: number };
 
 const SITES = new Map<string, OutpostSite>();
+const FORTS = new Map<string, SiteLocationDef>();
+const POST = FURY_ROAD.outpost;
+const PAD = REGION.sites.pad;
+
+export function outpostName(milestone: number): string {
+  return `Outpost ${milestone}`;
+}
 
 export function outpostSite(seed: number, j: number): OutpostSite {
   if (!Number.isInteger(j) || j < 1) throw new Error(`Milestone ${j} has no outpost`);
@@ -126,10 +135,60 @@ export function outpostSite(seed: number, j: number): OutpostSite {
   if (!site) {
     const n = milestoneAt(j);
     const side: 1 | -1 = randInt(stretchStream(seed, j, 'post'), 0, 1) === 0 ? 1 : -1;
-    site = { milestone: j, n, side, pad: roadAt(seed, n, side * FURY_ROAD.outpost.padOffset) };
+    const out = roadHeading(seed, n) + Math.PI / 2 + (side > 0 ? Math.PI : 0);
+    site = { milestone: j, n, side, center: roadAt(seed, n, side * POST.across), out };
     SITES.set(key, site);
   }
   return site;
+}
+
+export function outpostFort(seed: number, window: number, j: number): SiteLocationDef {
+  const key = `${seed}:${window}:${j}`;
+  let fort = FORTS.get(key);
+  if (!fort) {
+    const site = outpostSite(seed, j);
+    const pos = fromRoad(window, site.center.n, site.center.u);
+    const gate = { x: pos.x + Math.cos(site.out) * POST.radius, y: pos.y + Math.sin(site.out) * POST.radius };
+    fort = { id: `outpost-${j}`, name: outpostName(j), kind: 'convoy', pos, radius: POST.radius, look: POST.look, turn: site.out / DEG - 45, gates: [gate] };
+    FORTS.set(key, fort);
+  }
+  return fort;
+}
+
+function windowForts(seed: number, window: number): SiteLocationDef[] {
+  return [window, window + 1].filter((j) => j >= 1).map((j) => outpostFort(seed, window, j));
+}
+
+type FortFrame = { out: number; lat: number };
+
+function fortFrame(seed: number, at: RoadPos): FortFrame | null {
+  const j = nearestMilestone(at.n);
+  if (j < 1) return null;
+  const site = outpostSite(seed, j);
+  const dn = at.n - site.center.n;
+  const du = at.u - site.center.u;
+  const dx = (du - dn) / ROOT2;
+  const dy = -(du + dn) / ROOT2;
+  const cos = Math.cos(site.out);
+  const sin = Math.sin(site.out);
+  return { out: dx * cos + dy * sin, lat: dy * cos - dx * sin };
+}
+
+function fortFlat(f: FortFrame | null): number {
+  if (!f) return 0;
+  const front = POST.across - ROAD.asphalt;
+  const past = Math.hypot(Math.max(0, -POST.flat.back - f.out, f.out - front), Math.max(0, Math.abs(f.lat) - POST.flat.half));
+  return 1 - smooth01(past / POST.flat.blend);
+}
+
+function inStrip(f: FortFrame, from: number, to: number, half: number): boolean {
+  return f.out >= from && f.out <= to && Math.abs(f.lat) <= half;
+}
+
+function onFortConcrete(f: FortFrame | null): boolean {
+  if (!f) return false;
+  const front = POST.across - ROAD.asphalt + 0.5;
+  return inStrip(f, POST.radius, POST.radius + PAD.length, PAD.width / 2) || inStrip(f, POST.spur.from, front, POST.spur.half);
 }
 
 export function highwayStart(seed: number): { pos: Vec; heading: number } {
@@ -152,9 +211,9 @@ export function ridgeRise(d: number): number {
   return ROAD.ridge.rise * smooth01((d - ROAD.badlands) / ROAD.ridge.run);
 }
 
-function cornerHeight(seed: number, at: RoadPos, d: number): number {
+function cornerHeight(seed: number, at: RoadPos, d: number, flat: number): number {
   const lift = smooth01((d - ROAD.flatTo) / ROAD.blend) * relief(seed, at);
-  return roadHeight(seed, at.n) + lift + ridgeRise(d);
+  return roadHeight(seed, at.n) + (1 - flat) * (lift + ridgeRise(d));
 }
 
 function bandOf(bands: GroundBand[], v: number): TerrainTypeId {
@@ -163,8 +222,9 @@ function bandOf(bands: GroundBand[], v: number): TerrainTypeId {
   return band.type;
 }
 
-function tileType(seed: number, at: RoadPos, d: number): TerrainTypeId {
+function tileType(seed: number, at: RoadPos, d: number, concrete: boolean): TerrainTypeId {
   if (d <= ROAD.asphalt) return 'asphalt';
+  if (concrete) return 'concrete';
   const g = HIGHWAY.ground;
   if (d > ROAD.badlands) return g.ridge;
   const v = noise2(at.u * g.scale, at.n * g.scale, seed + g.seedOffset);
@@ -178,13 +238,13 @@ function landOf(seed: number, window: number): Pick<Terrain, 'heights' | 'types'
   for (let y = 0; y <= SIZE; y++) {
     for (let x = 0; x <= SIZE; x++) {
       const at = toRoad(window, { x, y });
-      heights[y * row + x] = cornerHeight(seed, at, Math.abs(acrossOf(seed, at)));
+      heights[y * row + x] = cornerHeight(seed, at, Math.abs(acrossOf(seed, at)), fortFlat(fortFrame(seed, at)));
     }
   }
   for (let y = 0; y < SIZE; y++) {
     for (let x = 0; x < SIZE; x++) {
       const at = toRoad(window, { x: x + 0.5, y: y + 0.5 });
-      types[y * SIZE + x] = tileType(seed, at, Math.abs(acrossOf(seed, at)));
+      types[y * SIZE + x] = tileType(seed, at, Math.abs(acrossOf(seed, at)), onFortConcrete(fortFrame(seed, at)));
     }
   }
   return { heights, types };
@@ -286,11 +346,9 @@ function windowPieces(seed: number, window: number): RoadPiece[] {
 }
 
 function bakedProps(seed: number, window: number): BakedProp[] {
-  return windowPieces(seed, window).flatMap((p) => {
-    const pos = fromRoad(window, p.at.n, p.at.u);
-    const inside = pos.x >= p.r && pos.x <= SIZE - p.r && pos.y >= p.r && pos.y <= SIZE - p.r;
-    return inside ? [{ kind: p.kind, pos, r: p.r, yaw: p.yaw, group: p.group, step: p.step }] : [];
-  });
+  const pieces = windowPieces(seed, window).map((p) => ({ kind: p.kind, pos: fromRoad(window, p.at.n, p.at.u), r: p.r, yaw: p.yaw, group: p.group, step: p.step }));
+  const forts = windowForts(seed, window).flatMap(fortressProps);
+  return [...pieces, ...forts].filter((p) => p.pos.x >= p.r && p.pos.x <= SIZE - p.r && p.pos.y >= p.r && p.pos.y <= SIZE - p.r);
 }
 
 export function highwayMap(seed: number, window: number): BakedMap {
@@ -321,7 +379,7 @@ export function highwayAtlas(seed: number, window: number): Atlas {
     roadWidth: width,
     roadIndex: new RoadIndex([line], INDEX_CELL),
     towns: [],
-    locations: [],
+    locations: windowForts(seed, window),
     decks: NO_DECKS,
     hazards: [],
     oldSpots: false,

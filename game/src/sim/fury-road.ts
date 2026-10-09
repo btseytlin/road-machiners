@@ -5,7 +5,8 @@ import { RULES } from '../data/rules';
 import { chassisDef } from '../data/chassis';
 import { inCombat } from './combat';
 import { playerVehicle } from './damage';
-import { fromRoad, highwayMap, milestoneAt, outpostSite, roadPoint, STRIDE, stretchStream, toRoad } from './highway';
+import { highwayMap, milestoneAt, outpostFort, outpostName, outpostSite, roadPoint, STRIDE, stretchStream, toRoad } from './highway';
+import { canUseSite, sitePads } from './sites';
 import { mapObstacles } from './mapgen';
 import { rollPartStock } from './market';
 import { fightCornered, topGoal } from './npc-activities';
@@ -27,9 +28,7 @@ export const OUTPOST_PAY = 'outpostPay';
 export type Outpost = OutpostFacts & { name: string; pad: Vec };
 export type FuryRoadReadout = { stretch: number; toOutpost: number; outpost: string };
 
-export function outpostName(milestone: number): string {
-  return `Outpost ${milestone}`;
-}
+export { outpostName };
 
 function curveAt(c: Curve, j: number): number {
   return Math.min(c.max, c.first + c.step * (j - 1));
@@ -86,8 +85,7 @@ function runOf(world: World): FuryRoadRun {
 }
 
 export function outpostPad(world: World, milestone: number): Vec {
-  const pad = outpostSite(world.seed, milestone).pad;
-  return fromRoad(runOf(world).window, pad.n, pad.u);
+  return sitePads(outpostFort(world.seed, runOf(world).window, milestone))[0];
 }
 
 function outpostOf(world: World, facts: OutpostFacts): Outpost {
@@ -211,7 +209,11 @@ function retryLater(world: World, group: WaveGroup): void {
 
 function parkedOnPad(world: World, milestone: number): boolean {
   const me = playerVehicle(world);
-  return me.speed <= RULES.parkedSpeed && dist(me.pos, outpostPad(world, milestone)) <= FURY_ROAD.outpost.padRadius;
+  return me.speed <= RULES.parkedSpeed && onOutpostPad(world, me.pos, milestone);
+}
+
+function onOutpostPad(world: World, pos: Vec, milestone: number): boolean {
+  return canUseSite(pos, outpostFort(world.seed, runOf(world).window, milestone));
 }
 
 function arrivedAtNext(world: World, run: FuryRoadRun): boolean {
@@ -376,13 +378,8 @@ export function outpostNear(world: World): Outpost | null {
   const run = world.furyRoad;
   if (!run) return null;
   const me = playerVehicle(world);
-  const facts = run.outposts.find((post) => post.paid && dist(me.pos, outpostPad(world, post.milestone)) <= FURY_ROAD.outpost.padRadius);
+  const facts = run.outposts.find((post) => post.paid && onOutpostPad(world, me.pos, post.milestone));
   return facts ? outpostOf(world, facts) : null;
-}
-
-export function runOutposts(world: World): Outpost[] {
-  const run = world.furyRoad;
-  return run ? run.outposts.map((facts) => outpostOf(world, facts)) : [];
 }
 
 export function furyRoadReadout(world: World): FuryRoadReadout | null {
