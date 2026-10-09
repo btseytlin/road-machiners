@@ -343,7 +343,8 @@ describe('the watch', () => {
     w.turn++;
     planNpcOrders(w);
     expect(w.events).toContainEqual(expect.objectContaining({ t: 'activity', vehicle: raider.id, previous: 'investigate', reason: 'spotted the truck it heard' }));
-    expect(topGoal(raider)).toMatchObject({ kind: 'fight', targetId: trader.id });
+    expect(w.events).toContainEqual(expect.objectContaining({ t: 'activity', vehicle: raider.id, activity: 'fight', reason: 'fight a hostile in sight' }));
+    expect(raider.brain!.goals.some((g) => g.kind === 'investigate')).toBe(false);
   });
 
   it('records one preyPassed event for a fresh keep on visible prey, and none on a repeat sighting', () => {

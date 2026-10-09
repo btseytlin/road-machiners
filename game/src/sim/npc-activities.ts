@@ -589,12 +589,13 @@ function interrupt(world: World, vehicle: Vehicle, goal: NpcActivity): void {
     dropTow(world, tow, 'danger');
     if (popGoal(world, vehicle, 'dropped the tow').kind !== 'tow') throw new Error(`${vehicle.id} held a tow without a tow goal on top`);
   }
-  if (goal.kind === 'flee') dropChases(world, vehicle, goal.targetId);
+  if (goal.kind === 'flee') dropChases(world, vehicle, goal.targetId, 'ran from it');
+  if (goal.kind === 'fight') dropChases(world, vehicle, goal.targetId, 'spotted the truck it heard');
   pushGoal(world, vehicle, goal);
 }
 
-function dropChases(world: World, vehicle: Vehicle, threatId: string | null): void {
-  for (const goal of goalsOf(vehicle).filter((g) => g.kind === 'investigate' && g.targetId === threatId)) dropGoal(world, vehicle, goal, 'ran from it');
+function dropChases(world: World, vehicle: Vehicle, targetId: string | null, reason: string): void {
+  for (const goal of goalsOf(vehicle).filter((g) => g.kind === 'investigate' && g.targetId === targetId)) dropGoal(world, vehicle, goal, reason);
 }
 
 function fleeFrom(world: World, vehicle: Vehicle, profile: NpcProfile, threatId: string, threatPos: Vec, reason: string): NpcActivity {
@@ -862,9 +863,9 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   onGrievances(world, vehicle);
   onParley(world, vehicle);
   dropInvalidGoals(world, vehicle, contacts);
-  onContactSpotted(world, vehicle);
   onAttacked(world, vehicle, profile);
   onHostilesSeen(world, vehicle, profile);
+  onContactSpotted(world, vehicle);
   onContactsHeard(world, vehicle, profile, contacts);
   onPreySeen(world, vehicle);
   onHoldUp(world, vehicle);
