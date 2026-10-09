@@ -17,6 +17,13 @@ export function chooseOn(world: World, vehicle: Vehicle, id: string, at: Vec, ch
   tracksOf(vehicle)[id] = { at: { ...at }, turn: world.turn, sighted: inSight || known?.sighted === true, seenSince, choice, chosenInSight: inSight };
 }
 
+export function refreshTrack(world: World, vehicle: Vehicle, id: string, at: Vec): void {
+  const known = trackOf(vehicle, id);
+  if (!known) throw new Error(`${vehicle.id} has no track of ${id} to refresh`);
+  known.at = { ...at };
+  known.turn = world.turn;
+}
+
 export function comesInSight(world: World, track: Track): boolean {
   return track.seenSince === world.turn;
 }

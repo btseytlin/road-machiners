@@ -22,7 +22,7 @@ import { grantXp, isPerkId, pickedFromPair } from './progress';
 import { isTerritory, nearestPad, type Site } from './sites';
 import { territoryEntries } from './territory';
 import { isFree, spawnAt } from './spawn';
-import { addState, settleStates, stateOf } from './states';
+import { declareFeud, settleStates } from './states';
 import { isTowed } from './tow';
 import { clockOf } from './sun';
 import type { Faction, Vehicle, World } from './types';
@@ -355,16 +355,7 @@ function spawnInDraft(w: World, tpl: NpcTemplate, hostile: boolean): void {
   const spot = firstFree(w, circle, radius, null) ?? freeSpotNear(w, me.pos, radius, null);
   if (!spot) throw new CheatError(`No free spot to spawn ${tpl.name}`);
   const v = spawnAt(w, tpl, loadout, spot);
-  if (hostile) turnHostile(w, v);
-}
-
-function turnHostile(w: World, v: Vehicle): void {
-  const me = w.player.vehicleId;
-  if (!stateOf(w, 'feud', v.id, me)) {
-    addState(w, 'feud', v.id, me, { kind: 'feud', robbery: false });
-    w.events.push({ t: 'hostile', vehicle: v.id, against: me });
-  }
-  if (v.brain && !(me in v.brain.attackers)) v.brain.attackers[me] = false;
+  if (hostile) declareFeud(w, v, w.player.vehicleId);
 }
 
 function otherVehicle(w: World, vehicleId: string): Vehicle {
@@ -375,7 +366,7 @@ function otherVehicle(w: World, vehicleId: string): Vehicle {
 }
 
 export function makeHostile(world: World, vehicleId: string): World {
-  return update(world, (w) => turnHostile(w, otherVehicle(w, vehicleId)));
+  return update(world, (w) => declareFeud(w, otherVehicle(w, vehicleId), w.player.vehicleId));
 }
 
 function killTargets(w: World, target: string): Vehicle[] {

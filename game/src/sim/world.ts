@@ -43,6 +43,7 @@ import { advanceAid, readyAid } from './aid';
 import type { GridItem, MoveOrder, PartInstance, UtilityOrder, Vehicle, WeaponOrder, World, WorldSettings, WorldSetup, XpSource } from './types';
 import { defaultSetup, modeRules, parseSetup, repairSetup } from './settings';
 import { gauntletStart, layGauntlet } from './gauntlet-layout';
+import { advanceGauntlet } from './gauntlet';
 import { canOverdrive, vehicleStats } from './stats';
 import { playerSees, practiceContacts, refreshVision } from './vision';
 import { noteEscape } from './escape';
@@ -346,6 +347,7 @@ export function endTurn(
     advanceKnockout(w);
     checkKnockout(w);
     advanceNpcKnockouts(w);
+    advanceGauntlet(w);
     spawnNpcs(w);
     advanceShops(w);
     practiceContacts(w, refreshVision(w));

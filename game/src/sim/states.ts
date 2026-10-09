@@ -125,6 +125,16 @@ export function addState(w: World, kind: StateKindId, holder: string, other: str
   return s;
 }
 
+export function declareFeud(w: World, v: Vehicle, otherId: string): void {
+  const held = stateOf(w, 'feud', v.id, otherId);
+  if (held) held.turnsLeft = turnsOf('feud');
+  else {
+    addState(w, 'feud', v.id, otherId, { kind: 'feud', robbery: false });
+    w.events.push({ t: 'hostile', vehicle: v.id, against: otherId });
+  }
+  if (v.brain && !(otherId in v.brain.attackers)) v.brain.attackers[otherId] = false;
+}
+
 export function stateOf(w: World, kind: StateKindId, holder: string, other: string): NpcState | null {
   return w.states.find((s) => s.kind === kind && s.holder === holder && s.other === other) ?? null;
 }
