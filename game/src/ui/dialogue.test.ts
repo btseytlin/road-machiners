@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tipText } from './dialogue';
+import { haulText, tipText } from './dialogue';
 
 describe('trading tip text', () => {
   it('names the site and the good of a dear tip', () => {
@@ -17,5 +17,16 @@ describe('trading tip text', () => {
 
   it('says there is nothing to tell without a tip', () => {
     expect(tipText({ kind: 'tip', tip: null })).toBe('Nothing worth telling.');
+  });
+});
+
+describe('haul text', () => {
+  it('names goods by count and parts by name, joined in one list', () => {
+    expect(haulText({ kind: 'haul', goods: { scrap: 2 }, parts: [] })).toBe('2 scrap metal');
+    expect(haulText({ kind: 'haul', goods: { scrap: 2, salt: 1 }, parts: ['mg'] })).toBe('2 scrap metal, 1 salt and mg turret');
+  });
+
+  it('never names an empty haul', () => {
+    expect(() => haulText({ kind: 'haul', goods: {}, parts: [] })).toThrow(/empty haul/);
   });
 });
