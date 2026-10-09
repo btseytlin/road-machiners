@@ -109,3 +109,18 @@ Details: [economy](wiki/mechanics/economy.md), [economy reference](wiki/economy.
 The game shows what the player needs to decide and hides what they should discover. The HUD shows state. The log tells important events and the story, never mechanical state like reloads. Hidden things, like a driver's traits, show themselves through behavior first.
 
 In-character and out-of-character info is separated. For example, in talking NPCs never mention "turns", "quests" or things like that to avoid immersion-breaking. 
+
+## Game modes
+
+Roaming is the sandbox every section above describes. Another mode is a separate world picked at New game, and it changes only the rules it names. Every mode keeps the world settings, the truck, driving and tactical combat.
+
+Gauntlet is a highway combat run on Icarus's roads: a seeded course of stretches between outposts, fought against escalating hostile groups, with no traffic, salvage or shops. The committee approved these exceptions for Gauntlet only:
+
+- Combat: hostile groups find the player and fight to the wreck. A fight ends when a truck is wrecked or the two part. A wreck leaves no loot, and beating a truck pays at the next outpost.
+- Defeat and recovery: nobody is knocked out. A beaten NPC is wrecked, and a beaten player ends the run. A stranded player with no way to patch ends the run. There are no tows, beacon or town patches. Restart run starts a new run with the same settings.
+- Social: no radio, hails, horn, pleas, truces, mercy or surrender.
+- Economy: money comes from outpost payouts, not loot or trade. Outposts sell repairs, fuel, supplies, a few parts and repair parts.
+- Life is valued (principle 4) does not hold: every fight is to the wreck.
+
+Details: [Gauntlet](wiki/mechanics/gauntlet.md).
+
