@@ -1,12 +1,13 @@
 import { cardFlow, moveCard } from '../card-events';
-import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { CHECKS_TIMEOUT_MARK } from '../container';
 import { readApproval, type Approval } from '../clone-checks';
 import { readShown, type Shown } from '../evidence';
 import { postWithEvidence } from '../evidence-post';
 import { checkScope, publishBuild, recordBuild } from '../deploy';
 import { stripAnsi } from '../fail';
 import { readState, updateState } from '../state';
-import { BRANCH, GAME_DIR, OUT_DIR, type Ctx, type InlineButton } from '../types';
+import { BRANCH, GAME_DIR, OUT_DIR, type Ctx, type InlineButton, type Stage } from '../types';
 import { bundleOf } from './bundle';
 import { HOTFIX_BASE, agentHome, agentLog, baseBranchFor, playtestCommand, workDir } from './common';
 
@@ -118,7 +119,7 @@ export async function postCheckpoint(ctx: Ctx, issue: number, base: string, buil
   if (kind === 'docs') return runScript(ctx, issue, base, build, buildScript);
   const playtest = playtestCommand(ctx.cfg, false);
   const script = kind === 'full' ? checkScript(playtest) : previewScript(playtest);
-  return checkUntilReal(() => runScript(ctx, issue, base, build, script), (run) => ctx.log('verify', issue, `the checks only timed out, run ${run} of ${CHECK_RUNS}, running them again`));
+  return checkUntilReal(() => runScript(ctx, issue, base, build, script, 'verify'), (run) => ctx.log('verify', issue, `the checks only timed out, run ${run} of ${CHECK_RUNS}, running them again`));
 }
 
 export function testCacheMount(ctx: Ctx): Record<string, string> {
@@ -127,22 +128,38 @@ export function testCacheMount(ctx: Ctx): Record<string, string> {
   return { [cache]: '/test-cache' };
 }
 
-async function runScript(ctx: Ctx, issue: number, base: string, build: string, script: string): Promise<string | null> {
+async function runScript(ctx: Ctx, issue: number, base: string, build: string, script: string, stage: Stage = 'checks'): Promise<string | null> {
   checkScope(build);
   const dir = checkDir(ctx, issue);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(`${ctx.cfg.home}/work`, { recursive: true });
   await ctx.repo.prepareWorkClone(BRANCH(issue), base, dir);
-  const log = agentLog(ctx, issue, 'checks');
+  return runChecks(ctx, { stage, issue }, dir, script, agentLog(ctx, issue, 'checks'), { BUILD_SCOPE: build });
+}
+
+const PROGRESS_MS = 5 * 60_000;
+
+export async function runChecks(ctx: Ctx, at: { stage: Stage; issue: number | null }, dir: string, script: string, log: string, env: Record<string, string>): Promise<string | null> {
+  const started = Date.now();
+  const progress = setInterval(() => ctx.log(at.stage, at.issue, checksProgress(log, started)), PROGRESS_MS);
   try {
-    await ctx.container.shell(dir, script, log, { BUILD_SCOPE: build }, testCacheMount(ctx));
+    await ctx.container.shell(dir, script, log, env, testCacheMount(ctx), ctx.cfg.checksTimeoutMinutes);
     return null;
   } catch (error) {
     return checkFailure(log, error);
+  } finally {
+    clearInterval(progress);
   }
 }
 
-const TIMEOUT_LINE = /(Test|Hook) timed out in \d+ms|Timeout calling "onTaskUpdate"/;
+export function checksProgress(log: string, started: number): string {
+  const minutes = Math.round((Date.now() - started) / 60_000);
+  if (!existsSync(log)) return `the checks still run after ${minutes} min, with no log yet`;
+  const step = readFileSync(log, 'utf8').match(/^\[checks\] .*$/gm)?.at(-1) ?? 'no step yet';
+  return `the checks still run after ${minutes} min, log ${Math.round(statSync(log).size / 1024)} KB, last step: ${step}`;
+}
+
+const TIMEOUT_LINE = new RegExp(`(Test|Hook) timed out in \\d+ms|Timeout calling "onTaskUpdate"|${CHECKS_TIMEOUT_MARK} \\d+ minute limit`);
 
 export function timeoutOnly(failure: string): boolean {
   const errors = failure.split('\n').filter((line) => /Error:|timed out in/.test(line));
@@ -155,7 +172,7 @@ export async function checkUntilReal(check: () => Promise<string | null>, onTime
   for (let run = 1; ; run++) {
     const failure = await check();
     if (failure === null || !timeoutOnly(failure)) return failure;
-    if (run === CHECK_RUNS) throw new Error(`The factory checks timed out ${CHECK_RUNS} times, under load. No test failed for another reason.\n${failure}`);
+    if (run === CHECK_RUNS) throw new Error(`The factory checks timed out ${CHECK_RUNS} times, under load or in a hung step. No test failed for another reason.\n${failure}`);
     onTimeout(run);
   }
 }

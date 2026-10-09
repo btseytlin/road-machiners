@@ -7,7 +7,7 @@ import { BRANCH, GAME_DIR, RELEASE_CANDIDATE_LABEL, STUCK_LABEL, type AgentSessi
 import { withWorkFolder } from '../work-lock';
 import { closeMerged } from './approval';
 import { runCost, untilPasses } from './checkpoint';
-import { checkFailure, checkScript, checkUntilReal, testCacheMount } from './checks';
+import { checkScript, checkUntilReal, runChecks } from './checks';
 import { guardAgainstAll } from '../diff-guard';
 import { BASE_BRANCH, baseBranchFor, fillPrompt, playtestCommand, resetOutputs } from './common';
 import { releaseLog } from './release-common';
@@ -100,14 +100,7 @@ export async function mergeIn(ctx: Ctx, land: Landing, { branch, message, reason
 async function mergedChecks(ctx: Ctx, land: Landing): Promise<string | null> {
   const log = releaseLog(ctx, `${land.stage}-checks-${land.into.replaceAll('/', '-')}`);
   const script = checkScript(playtestCommand(ctx.cfg, false));
-  return checkUntilReal(async () => {
-    try {
-      await ctx.container.shell(land.dir, script, log, { BUILD_SCOPE: land.stage }, testCacheMount(ctx));
-      return null;
-    } catch (error) {
-      return checkFailure(log, error);
-    }
-  }, (run) => ctx.log(land.stage, null, `the checks only timed out, run ${run}, running them again`));
+  return checkUntilReal(() => runChecks(ctx, { stage: land.stage, issue: null }, land.dir, script, log, { BUILD_SCOPE: land.stage }), (run) => ctx.log(land.stage, null, `the checks only timed out, run ${run}, running them again`));
 }
 
 async function pushed(ctx: Ctx, land: Landing): Promise<boolean> {

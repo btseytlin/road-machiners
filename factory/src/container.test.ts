@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { describe, expect, it } from 'vitest';
-import { EVIDENCE_CHECK_COMMAND, dockerContainer, readPeakGb, usageLimitMessage } from './container';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { CHECKS_TIMEOUT_MARK, EVIDENCE_CHECK_COMMAND, dockerContainer, readPeakGb, usageLimitMessage } from './container';
 import { recordJob, takeUsage } from './ledger';
 import { UsageLimitError } from './pause';
 import type { FactoryConfig, Run, RunOptions } from './types';
@@ -308,7 +308,7 @@ describe('agent usage', () => {
         const id = args[args.indexOf('--session-id') + 1];
         mkdirSync(`${projects}/-work-game`, { recursive: true });
         const usage = { input_tokens: 0, output_tokens: 100_000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 } };
-        writeFileSync(`${projects}/-work-game/${id}.jsonl`, `${JSON.stringify({ type: 'assistant', message: { id: 'm1', model: 'opus', usage } })}\n`);
+        writeFileSync(`${projects}/-work-game/${id}.jsonl`, `${JSON.stringify({ type: 'assistant', timestamp: new Date().toISOString(), message: { id: 'm1', model: 'opus', usage } })}\n`);
       }
       return agentRun(1, '')(cmd, args, opts);
     };
@@ -344,5 +344,54 @@ describe('usage limit', () => {
   it('finds no limit in a normal failure, and fails loud on a limit result with no message', () => {
     expect(usageLimitMessage(`${AGENT_RESULT}\n`)).toBeNull();
     expect(() => usageLimitMessage(JSON.stringify({ type: 'result', api_error_status: 429 }))).toThrow('no message');
+  });
+  describe('a checks run with a time limit', () => {
+    afterEach(() => vi.useRealTimers());
+
+    function hangingRun(): { run: Run; calls: Call[] } {
+      const calls: Call[] = [];
+      let release = (): void => undefined;
+      const run: Run = async (cmd, args, opts) => {
+        calls.push({ cmd, args, opts });
+        if (args[0] === 'run' && args[1] === '--rm') return new Promise((done) => { release = () => done({ code: 137, stdout: '', stderr: '' }); });
+        if (args[0] === 'rm') release();
+        return { code: 0, stdout: args[0] === 'inspect' ? 'true sha:1' : args[0] === 'image' ? 'sha:1\n' : '', stderr: '' };
+      };
+      return { run, calls };
+    }
+
+    it('removes its named container at the limit, writes the timeout to the log and throws it', async () => {
+      vi.useFakeTimers();
+      mkdirSync(HOME, { recursive: true });
+      const log = `${HOME}/checks.log`;
+      writeFileSync(log, '[checks] 10:00:00 tests and typecheck\n');
+      const { run, calls } = hangingRun();
+      const shell = dockerContainer(run, cfg, 'merge---x').shell('/c', 'x', log, {}, {}, 45);
+      const failed = expect(shell).rejects.toThrow(`${CHECKS_TIMEOUT_MARK} 45 minute limit`);
+      await vi.advanceTimersByTimeAsync(45 * 60_000);
+      await failed;
+      const started = runCall(calls);
+      const name = started.args[started.args.indexOf('--name') + 1];
+      expect(name).toMatch(/^factory-checks-/);
+      expect(started.opts?.timeoutMs).toBe(47 * 60_000);
+      expect(calls.map((call) => call.args.join(' '))).toContain(`rm -f ${name}`);
+      expect(readFileSync(log, 'utf8')).toMatch(new RegExp(`tests and typecheck\n\nCheckTimeoutError: .*${CHECKS_TIMEOUT_MARK} 45 minute limit`));
+    });
+
+    it('leaves a run that ends in time alone, and a failing run fails as before', async () => {
+      vi.useFakeTimers();
+      const done = fakeRun();
+      await dockerContainer(done.run, cfg, 'merge---x').shell('/c', 'x', '/l', {}, {}, 45);
+      await vi.advanceTimersByTimeAsync(60 * 60_000);
+      expect(done.calls.some((call) => call.args[0] === 'rm')).toBe(false);
+      await expect(dockerContainer(fakeRun(1).run, cfg, 'merge---x').shell('/c', 'x', '/l', {}, {}, 45)).rejects.toThrow('exit 1');
+    });
+
+    it('names no container and sets no limit without one', async () => {
+      const { run, calls } = fakeRun();
+      await dockerContainer(run, cfg, 'merge---x').shell('/c', 'x', '/l');
+      expect(runCall(calls).args).not.toContain('--name');
+      expect(runCall(calls).opts?.timeoutMs).toBeUndefined();
+    });
   });
 });

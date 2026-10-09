@@ -18,6 +18,9 @@ let shellFailures: string[] = [];
 let pushFailures = 0;
 let diff = '';
 let messages: string[] = [];
+let limits: (number | undefined)[] = [];
+let logs: string[] = [];
+const HUNG = 'CheckTimeoutError: the checks ran past their 45 minute limit, and the factory removed their container.';
 
 const card = (issue: number, labels: string[] = []): Card => ({ itemId: `i${issue}`, issue, column: 'Merging', labels });
 const result = `${JSON.stringify({ type: 'result', total_cost_usd: 1, duration_ms: 1000 })}\n`;
@@ -34,6 +37,8 @@ beforeEach(() => {
   pushFailures = 0;
   diff = '';
   messages = [];
+  limits = [];
+  logs = [];
   deployed.length = 0;
   writeState(`${home}/state.json`, { ...structuredClone(EMPTY_STATE), approvedResolving: { 5: 'Ann', 6: 'Bob' }, release: { issue: 20, branch: 'release/2026-09-29', day: '2026-09-29', postId: 300, removed: [9], tasks: [], candidateSha: null, playtest: { seed: 1, runs: 0, passed: null, blocked: null, notes: [] } }, pendingShip: 'ann' });
 });
@@ -41,8 +46,8 @@ afterEach(() => rmSync(home, { recursive: true, force: true }));
 
 function fakeCtx(budget = 5): Ctx {
   const fake = {
-    cfg: { home, buildModel: 'sonnet', mergingBudgetUsd: budget, gpu: false, publicUrl: 'https://play.test', committeeChat: 'chat' },
-    log: () => undefined,
+    cfg: { home, buildModel: 'sonnet', mergingBudgetUsd: budget, checksTimeoutMinutes: 45, gpu: false, publicUrl: 'https://play.test', committeeChat: 'chat' },
+    log: (_stage: string, _issue: number | null, msg: string) => { logs.push(msg); },
     statePath: `${home}/state.json`,
     now: () => new Date('2026-09-30T10:00:00Z'),
     github: {
@@ -55,8 +60,9 @@ function fakeCtx(budget = 5): Ctx {
     telegram: { sendMessage: async (_chat: string, text: string) => { calls.push(`message ${text}`); return 1; } },
     container: {
       agent: async (run: AgentRun) => { runs.push(run); calls.push('agent'); return result; },
-      shell: async () => {
+      shell: async (_dir: string, _script: string, _log: string, _env?: Record<string, string>, _mounts?: Record<string, string>, limit?: number) => {
         calls.push('checks');
+        limits.push(limit);
         const failure = shellFailures.shift();
         if (failure !== undefined) throw new Error(failure);
       },
@@ -166,6 +172,47 @@ describe('merge queue', () => {
     expect(calls).toContain('label 5 factory-stuck');
     expect(calls).toContain('label 6 factory-stuck');
     expect(calls.some((call) => call.startsWith('push'))).toBe(false);
+  });
+
+  it('runs each checks run with the time limit, and runs a timed-out run again before it pushes', async () => {
+    shellFailures = [HUNG];
+    await merge(fakeCtx());
+    expect(limits).toEqual([45, 45]);
+    expect(runs).toEqual([]);
+    expect(logs).toContain('the checks only timed out, run 1, running them again');
+    expect(calls.filter((call) => /^(checks|push)/.test(call))).toEqual(['checks', 'checks', 'push head1 dev']);
+  });
+
+  it('fails the batch after three timed-out runs, with no agent round and no push', async () => {
+    shellFailures = [HUNG, HUNG, HUNG];
+    await expect(merge(fakeCtx())).rejects.toThrow('timed out 3 times, under load or in a hung step');
+    expect(runs).toEqual([]);
+    expect(calls.some((call) => call.startsWith('push'))).toBe(false);
+    expect(calls).toContain('label 5 factory-stuck');
+  });
+
+  it('hands a real test failure to the agent even when the run then hung', async () => {
+    shellFailures = [`FAIL a.test.ts\nAssertionError: expected 1 to be 2\n${HUNG}`];
+    await merge(fakeCtx());
+    expect(runs).toHaveLength(1);
+    expect(runs[0]!.prompt).toContain('expected 1 to be 2');
+    expect(calls).toContain('push head1 dev');
+  });
+
+  it('lets a slow run that ends inside its limit pass, and notes its progress every 5 minutes', async () => {
+    vi.useFakeTimers();
+    try {
+      const ctx = fakeCtx();
+      ctx.container.shell = async () => { calls.push('checks'); await new Promise((done) => setTimeout(done, 38 * 60_000)); };
+      const merged = merge(ctx);
+      await vi.advanceTimersByTimeAsync(38 * 60_000);
+      await merged;
+      expect(logs.filter((line) => line.startsWith('the checks still run after'))).toHaveLength(7);
+      expect(logs).toContain('the checks still run after 35 min, with no log yet');
+      expect(calls).toContain('push head1 dev');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('merges the moved base again and checks again when GitHub rejects the push', async () => {
