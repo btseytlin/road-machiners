@@ -159,6 +159,8 @@ Every event gets a level before it gets a channel. A level fires on its channels
 ## 8. Words and numbers
 
 - A unit is written once per value and in one style. Money is whole M. Fuel is L. Mass is kg. Speed is km/h. Work and cooldowns are in turns. Deadlines are game hours.
+- Money prints through `moneyText()` as "15 M", with a real minus sign for a negative amount. A change in money prints through `moneyDelta()` as "+15 M" or "−15 M". A test fails when a screen builds an " M" string by hand.
+- A count of turns prints through `turnsText()` as "2 turns". Value and unit are plain text, never "2t".
 - Each fact kind has one formatter in `src/ui/format.ts` or `src/ui/units.ts`, and every screen calls it.
 - A number that the player's choice will change shows its after value before the choice, like the truck's mass before a buy.
 - A label is a noun. A button is a verb. A reason is a short fact.
@@ -227,7 +229,10 @@ Use a shared piece before writing a new rule. A screen may add its own layout to
 - `.row` is a list line with a faint line under it. `.tile` is a boxed list item edged in its `--tone`.
 - `.chip` is a small boxed value. `.tag` is an outlined word in the color of its text.
 - `.meter` is a bar that fills from the left. `.s` and `.l` change its height. `.broken` turns the track to danger. `.progress` fills it with the accent for timed work and recharge.
-- `.tooltip` is a note that opens over its anchor.
+- `.selected` is the one look of a chosen item: accent border and accent wash. A pressed `button.on` uses it too. No screen draws its own selected look. Drawn hardware, like a switch or a truck instrument, keeps its metal and takes the accent edge only.
+- `[aria-disabled="true"]` dims a control that cannot be used now. It keeps hover and focus, so its tooltip can say why.
+- `.tooltip` is a note that opens over its anchor. Words use the UI face and numbers use `.num`. It also gives the reason for a disabled control, as one short fact like "Need 12 M more".
+- `.tooltip-row` is one line of a tooltip breakdown: the label on the left in the UI face and the value on the right in mono, like Base and then each cause.
 - `.num` is a number in the mono face. `.dim`, `.good` and `.bad` color a word.
 
 ## 13. How to build a screen

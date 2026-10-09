@@ -121,15 +121,39 @@
   background: var(--accent);
 }
 
-/* A note that opens over its anchor on hover and focus. */
+/* The one look of a chosen item: accent border and accent wash. A pressed toggle, a picked card and a picked tile all use it. */
+#ui .selected,
+#ui button.on {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+
+/* A control that cannot be used now. It keeps hover and focus, and its tooltip says why. */
+#ui [aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* A note that opens over its anchor on hover and focus. Words in the UI face, numbers in .num. It also gives the reason
+   for a disabled control, as one short fact like "Need 12 M more". */
 .tooltip {
   padding: var(--space-4) var(--space-5);
   background: var(--surface-raised);
   border: 1px solid var(--line-bright);
   color: var(--ink);
-  font: var(--text-dense) var(--font-mono);
+  font: var(--text-dense) var(--font-ui);
   text-align: left;
   white-space: normal;
+}
+
+/* A line of a tooltip breakdown: the label on the left in the UI face, the value on the right in mono. */
+.tooltip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-5);
+}
+.tooltip-row > .num {
+  text-align: right;
 }
 
 /* A number read at a glance, in the mono face. */
