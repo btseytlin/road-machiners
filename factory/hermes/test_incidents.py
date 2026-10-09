@@ -11,10 +11,10 @@ from pathlib import Path
 SCRIPT = Path(__file__).parent / "factory-incidents.sh"
 
 
-def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = None, audit: str = "exit 0", review: str | None = None, gh: str = "exit 0", dev: dict | None = None, error_alert: str | None = None) -> list[str]:
+def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = None, audit: str = "exit 0", review: str | None = None, gh: str = "exit 0", dev: dict | None = None, error_alert: str | None = None, state: dict | None = None) -> list[str]:
     home = tmp_path / "home"
     (home / "state").mkdir(parents=True)
-    (home / "state" / "state.json").write_text(json.dumps({"failures": [], "lastTickError": None, "devFailed": None, **(dev or {})}))
+    (home / "state" / "state.json").write_text(json.dumps({"failures": [], "lastTickError": None, "devFailed": None, **(dev or {}), **(state or {})}))
     if review is not None:
         (home / "review-pending").write_text(review)
     if error_alert is not None:
@@ -29,7 +29,7 @@ def run(tmp_path: Path, health: dict | None, pause_age_minutes: int | None = Non
         os.utime(paused, (old, old))
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    # gh runs its own --jq, so the stub prints finished lines. The factory wrapper runs `factory audit`. Each stub runs what the test gives.
+    # gh prints the JSON of the stuck issues, and the script joins it with the state. The factory wrapper runs `factory audit`. Each stub runs what the test gives.
     stub(bin_dir, "gh", gh)
     stub(bin_dir, "factory", audit)
     script = tmp_path / "factory-incidents.sh"
@@ -110,12 +110,24 @@ def test_each_audit_line_is_a_drift_line(tmp_path):
 
 
 SINCE = r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ"
-STUCK = "echo 'stuck #9 Tow fee'; echo 'stuck #7 Broken truck'"
+STUCK = "echo '[{\"number\":9,\"title\":\"Tow fee\"},{\"number\":7,\"title\":\"Broken truck\"}]'"
 DRIFT = "echo '#5 testPhase checks but column Design'"
 
 
 def test_a_healthy_run_prints_every_source_in_order(tmp_path):
     assert run(tmp_path, health(), gh=STUCK, audit=DRIFT) == ["stuck #7 Broken truck", "stuck #9 Tow fee", "drift: #5 testPhase checks but column Design"]
+
+
+def test_every_stuck_issue_is_listed_with_the_kind_the_stuck_sweep_gave_it(tmp_path):
+    args = tmp_path / "gh-args"
+    gh = f"echo \"$@\" > {args}; {STUCK}"
+    record = {"incident": "9:merge:t", "kind": "merge-batch"}
+    assert run(tmp_path, health(), gh=gh, state={"stuck": {"9": record}}) == ["stuck #7 Broken truck", "stuck #9 Tow fee (sweep: merge-batch)"]
+    assert "--limit 1000" in args.read_text()
+
+
+def test_a_crashed_stuck_sweep_is_one_stable_line(tmp_path):
+    assert run(tmp_path, health(), state={"sweepError": "boom\nat x"}) == ["stuck sweep failed: boom"]
 
 
 def test_a_failed_audit_with_no_known_answer_prints_one_stable_line(tmp_path):

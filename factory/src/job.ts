@@ -90,9 +90,14 @@ export async function runJob(ctx: Ctx, stage: JobStage, issue: number | null): P
 async function failed(ctx: Ctx, stage: JobStage, issue: number | null, job: Job | null, error: unknown): Promise<boolean> {
   const retry = retriesItself(ctx, stage, issue, error);
   if (retry) resumeOnce(ctx, stage, issue, error);
-  else await reportFailure(ctx, stage, failureIssue(stage, issue, readState(ctx.statePath)), error, job?.log ?? null);
+  else await reportFailure(ctx, stage, failureIssue(stage, issue, readState(ctx.statePath)), error, job?.log ?? null, batchOf(ctx, job));
   await noteProgress(ctx, stage, issue, job, retry ? 'stopped' : 'failed');
   return retry;
+}
+
+function batchOf(ctx: Ctx, job: Job | null): number[] {
+  if (job === null) return [];
+  return readState(ctx.statePath).jobs.find((other) => other.id === job.id)?.batch ?? [];
 }
 
 function ledgerEntry(ctx: Ctx, job: Job | null, stage: JobStage, issue: number | null): { id: string | null; stage: JobStage; issue: number | null; startedAt: string } {

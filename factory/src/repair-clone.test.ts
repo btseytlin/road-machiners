@@ -10,7 +10,7 @@ import type { Ctx, FactoryConfig, FactoryState } from './types';
 vi.setConfig({ testTimeout: 60_000 });
 
 const ID = ['-c', 'user.name=t', '-c', 'user.email=t@t'];
-const ORDER = { issue: 5, by: 'hermes', reason: 'merge left the clone dirty', backupMerge: false };
+const ORDER = { issue: 5, by: 'hermes', reason: 'merge left the clone dirty', backupMerge: false, refuseUnpushed: false };
 const DEV_FILES = 1284;
 
 async function setup() {
@@ -144,6 +144,16 @@ describe('repairClone', () => {
     expect((await git(join(backup, 'clone'), 'rev-parse', 'HEAD')).trim()).toBe(local);
     expect(out.join('\n')).toContain('1 commits on no GitHub branch');
     expect((await git(work, 'rev-parse', 'HEAD')).trim()).toBe(await hub('factory/issue-5'));
+  });
+
+  it('leaves a clone with commits that never reached GitHub as it is when the order refuses unpushed work', async () => {
+    const { home, ctx, git, work } = await setup();
+    writeFileSync(join(work, 'f.txt'), 'unpushed\n');
+    await git(work, 'commit', '-qam', 'unpushed work');
+    const local = (await git(work, 'rev-parse', 'HEAD')).trim();
+    await expect(repairClone(ctx, { ...ORDER, refuseUnpushed: true })).rejects.toThrow('1 commits on no GitHub branch');
+    expect(backups(home)).toEqual([]);
+    expect((await git(work, 'rev-parse', 'HEAD')).trim()).toBe(local);
   });
 
   it('checks out the branch head and dev as GitHub has them now, not as the host clone last saw them', async () => {

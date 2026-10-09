@@ -134,7 +134,7 @@ describe('read commands', () => {
     const f = board();
     writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), postOnly: [5] });
     const before = readFileSync(f.ctx.statePath, 'utf8');
-    for (const args of [['audit'], ['cards'], ['card', '5'], ['jobs'], ['queues'], ['release'], ['failures'], ['help']]) await run(f, ...args);
+    for (const args of [['audit'], ['cards'], ['card', '5'], ['jobs'], ['queues'], ['release'], ['failures'], ['stuck'], ['help']]) await run(f, ...args);
     expect(readFileSync(f.ctx.statePath, 'utf8')).toBe(before);
     expect(f.calls.filter((call) => /^(comment|move|removeLabel|editIssue)/.test(call))).toEqual([]);
     expect(inbox()).toEqual([]);
@@ -185,9 +185,24 @@ describe('read commands', () => {
     expect(out).toEqual(['#5 held by Ann (r) but a design job is running']);
   });
 
+  it('stuck and card print the sweep record, failures prints a merge batch, and stuck shows a sweep crash', async () => {
+    const f = board();
+    const record = { incident: '5:merge:t', stage: 'merge' as const, cause: 'timed out after 240 minutes\nmore', log: '/m.log', batch: 10, since: 't', decision: false, column: 'Merging' as const, kind: 'merge-batch' as const, tries: 1, released: 'r', refused: null };
+    const merge = { stage: 'merge' as const, issue: null, error: 'timed out after 240 minutes', log: '/m.log', at: 't', batch: [5, 7] };
+    writeState(f.ctx.statePath, { ...structuredClone(EMPTY_STATE), stuck: { '5': record }, failures: [merge], sweepError: 'boom\nmore' });
+    await run(f, 'stuck');
+    expect(out).toEqual(['sweep error: boom', '#5 merge-batch in Merging, incident 5:merge:t, tries 1, released r: timed out after 240 minutes (log /m.log)']);
+    out.length = 0;
+    await run(f, 'card', '5');
+    expect(out).toContain('stuck sweep: merge-batch in Merging, incident 5:merge:t, tries 1, released r: timed out after 240 minutes (log /m.log)');
+    out.length = 0;
+    await run(f, 'failures');
+    expect(out).toEqual(['t merge: timed out after 240 minutes (log /m.log) batch #5,#7']);
+  });
+
   it('help lists every command', async () => {
     await run(fake(), 'help');
-    for (const name of ['status', 'cards', 'card N', 'jobs', 'queues', 'release', 'failures', 'log N', 'audit', 'move N', 'merge N', 'ship', 'cut', 'remove N', 'drop', 'merge-change', 'pause-card N', 'resume-card N', 'retry N', 'pause', 'resume', 'repair-clone N']) {
+    for (const name of ['status', 'cards', 'card N', 'jobs', 'queues', 'release', 'failures', 'stuck', 'log N', 'audit', 'move N', 'merge N', 'ship', 'cut', 'remove N', 'drop', 'merge-change', 'pause-card N', 'resume-card N', 'retry N', 'pause', 'resume', 'repair-clone N']) {
       expect(out.some((line) => line.startsWith(name))).toBe(true);
     }
   });
@@ -264,8 +279,8 @@ describe('immediate commands', () => {
     await run(fake(), 'repair-clone', '5', '--by', 'hermes', '--reason', 'merge left it dirty');
     await run(fake(), 'repair-clone', '6', '--backup-merge', '--reason', 'open merge', '--by', 'ann');
     expect(repairs).toEqual([
-      { issue: 5, by: 'hermes', reason: 'merge left it dirty', backupMerge: false },
-      { issue: 6, by: 'ann', reason: 'open merge', backupMerge: true },
+      { issue: 5, by: 'hermes', reason: 'merge left it dirty', backupMerge: false, refuseUnpushed: false },
+      { issue: 6, by: 'ann', reason: 'open merge', backupMerge: true, refuseUnpushed: false },
     ]);
     expect(out).toContain('repaired');
     expect(inbox()).toEqual([]);

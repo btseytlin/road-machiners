@@ -4,7 +4,7 @@ import { DROP_QUEUES, isGated, resolveActor, writeControl, type ControlAction, t
 import { pauseFile, pausedReason } from './pause';
 import { repairClone } from './repair-clone';
 import { clearStuck } from './stuck';
-import { MOVE_TARGETS, cardDrift, cardPosition, holdDrift, releaseDrift, runningJobs, type MoveTarget } from './position';
+import { MOVE_TARGETS, cardDrift, cardPosition, holdDrift, releaseDrift, runningJobs, stuckText, type MoveTarget } from './position';
 import { readState, updateState } from './state';
 import { editState } from './state-edit';
 import { STUCK_LABEL, type Card, type Ctx, type FactoryState, type Hold, type PlaytestState, type ReleasePost, type ReleaseState } from './types';
@@ -24,6 +24,7 @@ const READ: Record<string, { usage: string; help: string; run: Handler }> = {
   queues: { usage: 'queues', help: 'list the pending queues', run: queues },
   release: { usage: 'release', help: 'print the open release', run: release },
   failures: { usage: 'failures', help: 'list the recent failed jobs', run: failures },
+  stuck: { usage: 'stuck', help: "list the stuck sweep's record of each stuck card: its kind, incident, cause and what the sweep did", run: stuckRecords },
   log: { usage: 'log N [stage]', help: 'print the tail of the newest log of a card', run: log },
   audit: { usage: 'audit', help: 'print each drift between stores, and nothing when all agree', run: audit },
   help: { usage: 'help', help: 'list the commands', run: help },
@@ -107,7 +108,7 @@ async function repairCloneCommand(ctx: Ctx, args: string[]): Promise<void> {
   const [n, ...extra] = reason.rest.filter((arg) => arg !== '--backup-merge');
   if (extra.length > 0) throw new Error(`Unexpected "${extra.join(' ')}". Usage: ${IMMEDIATE['repair-clone'].usage}`);
   const actor = resolveActor(ctx, by.value, false);
-  for (const line of await repairClone(ctx, { issue: number(n), by: actor, reason: reason.value, backupMerge })) console.log(line);
+  for (const line of await repairClone(ctx, { issue: number(n), by: actor, reason: reason.value, backupMerge, refuseUnpushed: false })) console.log(line);
 }
 
 function setStateCommand(ctx: Ctx, args: string[]): void {
@@ -175,6 +176,7 @@ function cardFacts(found: Card, state: FactoryState): string[] {
     `running job: ${shown(running.join(', '))}`,
     `failures: ${shown(own.join(' | '))}`,
     `held: ${holdText(state.held[key])}`,
+    `stuck sweep: ${stuckText(state.stuck[key])}`,
   ];
 }
 
@@ -233,7 +235,13 @@ function playtestLines(playtest: PlaytestState, runs: number): string[] {
 }
 
 function failures(ctx: Ctx): void {
-  printRows(readState(ctx.statePath).failures.map((row) => `${row.at} ${row.stage}${row.issue === null ? '' : ` #${row.issue}`}: ${row.error.split('\n')[0]} (log ${row.log ?? 'none'})`));
+  printRows(readState(ctx.statePath).failures.map((row) => `${row.at} ${row.stage}${row.issue === null ? '' : ` #${row.issue}`}: ${row.error.split('\n')[0]} (log ${row.log ?? 'none'})${row.batch === undefined ? '' : ` batch ${row.batch.map((issue) => `#${issue}`).join(',')}`}`));
+}
+
+function stuckRecords(ctx: Ctx): void {
+  const state = readState(ctx.statePath);
+  if (state.sweepError !== null) console.log(`sweep error: ${state.sweepError.split('\n')[0]}`);
+  printRows(Object.entries(state.stuck).map(([issue, record]) => `#${issue} ${stuckText(record)}`));
 }
 
 function newestLog(dir: string, issue: number, stage: string | null): string {

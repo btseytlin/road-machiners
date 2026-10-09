@@ -1,6 +1,8 @@
+import { CommitteeDecisionError } from './diff-guard';
 import { UsageLimitError } from './pause';
+import { BudgetError } from './stages/checkpoint';
 import { updateState } from './state';
-import { STUCK_LABEL, type Ctx, type FactoryState, type JobStage, type Stage } from './types';
+import { STUCK_LABEL, type Ctx, type FactoryState, type Failure, type JobStage, type Stage } from './types';
 
 const ANSI = new RegExp(String.raw`\u001b\[[0-9;]*[A-Za-z]`, 'g');
 const FAILURE_LINE = /FAIL|Error|error:|failed|×/;
@@ -25,12 +27,17 @@ export function failureIssue(stage: JobStage, issue: number | null, state: Facto
   return issue;
 }
 
-export async function reportFailure(ctx: Ctx, stage: Stage, issue: number | null, error: unknown, log: string | null): Promise<void> {
+export async function reportFailure(ctx: Ctx, stage: Stage, issue: number | null, error: unknown, log: string | null, batch: number[]): Promise<void> {
   const message = error instanceof Error ? error.message : String(error);
   ctx.log(stage, issue, `failed: ${message}`);
-  const failure = { stage, issue, error: summarizeError(message), log, at: ctx.now().toISOString() };
+  const failure: Failure = { stage, issue, error: summarizeError(message), log, at: ctx.now().toISOString(), ...causeOf(error, batch) };
   updateState(ctx.statePath, (state) => ({ ...state, failures: [...state.failures, failure] }));
   if (issue !== null && !(error instanceof UsageLimitError)) await ctx.github.addLabel(issue, STUCK_LABEL);
+}
+
+function causeOf(error: unknown, batch: number[]): Pick<Failure, 'batch' | 'decision'> {
+  const decision = error instanceof BudgetError || error instanceof CommitteeDecisionError;
+  return { ...(batch.length > 0 ? { batch } : {}), ...(decision ? { decision } : {}) };
 }
 
 export function pruneFailures(now: Date): (state: FactoryState) => FactoryState {

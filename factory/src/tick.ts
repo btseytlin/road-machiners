@@ -10,8 +10,10 @@ import { recordJob } from './ledger';
 import { reportAttempt, reportScheduler } from './observability';
 import { pruneCaptions } from './post-status';
 import { isAlive, killJob, removeJobContainers, spawnJob } from './jobs';
+import { repairClone } from './repair-clone';
 import { clearSessions, markResumed } from './sessions';
 import { openTasks } from './stages/release-common';
+import { sweepStuck, type Repair } from './stuck';
 import { clearQueued, isQueued, orderKey, readState, updateState } from './state';
 import { sweepTranscripts } from './transcript-archive';
 import { askedAt, isAnswered } from './questions';
@@ -228,6 +230,7 @@ export type TickDeps = {
   removeContainers: (run: Run, id: string) => Promise<void>;
   spawn: (args: string[], cwd: string, log: string, id: string, cpus: string, testWorkers: number | null) => number;
   cores: () => number;
+  repair: Repair;
 };
 export const REAL_DEPS: TickDeps = {
   isAlive,
@@ -235,6 +238,7 @@ export const REAL_DEPS: TickDeps = {
   removeContainers: removeJobContainers,
   spawn: spawnJob,
   cores: availableParallelism,
+  repair: repairClone,
 };
 
 function dropJob(ctx: Ctx, job: Job): void {
@@ -284,7 +288,7 @@ async function failJob(ctx: Ctx, job: Job, alive: boolean, deps: TickDeps): Prom
   for (const issue of job.batch ?? []) await ctx.github.addLabel(issue, STUCK_LABEL);
   forgetResume(ctx, job);
   const reason = alive ? `timed out after ${timeoutOf(ctx.cfg, job.stage)} minutes` : 'job process died without finishing';
-  await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), reason, job.log);
+  await reportFailure(ctx, job.stage, failureIssue(job.stage, job.issue, readState(ctx.statePath)), reason, job.log, job.batch ?? []);
 }
 
 export function timeoutOf(cfg: FactoryConfig, stage: JobStage): number {
@@ -403,7 +407,7 @@ async function expireReplies(ctx: Ctx): Promise<void> {
   for (const [messageId, reply] of late) {
     updateState(ctx.statePath, (state) => ({ ...state, unroutedReplies: Object.fromEntries(Object.entries(state.unroutedReplies).filter(([id]) => id !== messageId)) }));
     const text = reply.text.replace(/\s+/g, ' ');
-    await reportFailure(ctx, 'feedback', null, `Route the reply ${messageId} to the approval post ${reply.postId} of issue #${reply.issue} on your best reading, unrouted for ${ctx.cfg.replyRouteMinutes} minutes: ${text}`, null);
+    await reportFailure(ctx, 'feedback', null, `Route the reply ${messageId} to the approval post ${reply.postId} of issue #${reply.issue} on your best reading, unrouted for ${ctx.cfg.replyRouteMinutes} minutes: ${text}`, null, []);
   }
 }
 
@@ -445,12 +449,13 @@ function movedPast(state: FactoryState, posted: string | null, head: string | nu
 }
 
 async function startJobs(ctx: Ctx, codeDir: string, deps: TickDeps): Promise<void> {
-  const cards = await releaseAnswered(ctx, await ctx.github.cards());
-  cleanBuilds(ctx, cards);
-  cleanWork(ctx, cards);
+  const answered = await releaseAnswered(ctx, await ctx.github.cards());
+  cleanBuilds(ctx, answered);
+  cleanWork(ctx, answered);
   updateState(ctx.statePath, pruneCaptions);
   updateState(ctx.statePath, pruneFailures(ctx.now()));
   const free = freeGb(ctx.cfg.home);
+  const cards = await sweepStuck(ctx, answered, free >= ctx.cfg.minFreeGb, deps.repair);
   if (free < ctx.cfg.minFreeGb) {
     reportScheduler(ctx.cfg.home, 'disk-low', ctx.now());
     return ctx.log('tick', null, `disk low: ${free} GB free, under ${ctx.cfg.minFreeGb} GB, starts nothing`);

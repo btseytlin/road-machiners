@@ -3,15 +3,14 @@ import { join, relative } from 'node:path';
 import { withLock } from './lock';
 import { readState, updateState } from './state';
 import { clearStuck } from './stuck';
-import { BRANCH, CLONE_LOCK_MS, MEDIA_DIR, OUT_DIR, TASK_DIR, WORK_DIR, WORK_LOCK, type Ctx, type FactoryState, type Hold } from './types';
+import { BRANCH, CLONE_LOCK_MS, MEDIA_DIR, OPEN_MARKS, OUT_DIR, TASK_DIR, WORK_DIR, WORK_LOCK, type Ctx, type FactoryState, type Hold } from './types';
 
-export type RepairOrder = { issue: number; by: string; reason: string; backupMerge: boolean };
+export type RepairOrder = { issue: number; by: string; reason: string; backupMerge: boolean; refuseUnpushed: boolean };
 export type RepairFs = { move: (from: string, to: string) => void; copy: (from: string, to: string) => void };
 const REAL_FS: RepairFs = { move: renameSync, copy: (from, to) => cpSync(from, to, { recursive: true }) };
 
 const FACTORY_DIRS = new Set([OUT_DIR, TASK_DIR, MEDIA_DIR]);
 const SKIP_DIRS = new Set(['.git', 'node_modules']);
-const OPEN_MARKS = ['MERGE_HEAD', 'REVERT_HEAD', 'CHERRY_PICK_HEAD', 'rebase-merge', 'rebase-apply'];
 const NO_HOOKS = ['-c', 'core.hooksPath=/dev/null'];
 
 export const backupRoot = (home: string): string => join(home, 'clone-backups');
@@ -60,9 +59,7 @@ async function repairOnce(ctx: Ctx, order: RepairOrder, fs: RepairFs): Promise<s
   const dir = WORK_DIR(ctx.cfg.home, order.issue);
   const git = gitIn(ctx);
   const old = await inspect(git, dir, order.issue);
-  if ((old.open.length > 0 || old.conflicts.length > 0) && !order.backupMerge) {
-    throw new Error(`${dir} has ${describeOpen(old)}. Add --backup-merge to back it up as it is.`);
-  }
+  requireRepairable(dir, old, order);
   await ctx.repo.fetch();
   const backup = newBackupDir(ctx.cfg.home, order.issue, ctx.now());
   const fresh = join(backup, 'fresh');
@@ -151,6 +148,11 @@ async function inspect(git: Git, dir: string, issue: number): Promise<OldClone> 
     conflicts: lines(await must(git, dir, ['diff', '--name-only', '--diff-filter=U'])),
     unpushed: lines(await must(git, dir, ['rev-list', 'HEAD', '--not', '--remotes=origin'])),
   };
+}
+
+function requireRepairable(dir: string, old: OldClone, order: RepairOrder): void {
+  if ((old.open.length > 0 || old.conflicts.length > 0) && !order.backupMerge) throw new Error(`${dir} has ${describeOpen(old)}. Add --backup-merge to back it up as it is.`);
+  if (order.refuseUnpushed && old.unpushed.length > 0) throw new Error(`${dir} holds ${old.unpushed.length} commits on no GitHub branch, so it stays as it is for a repair by hand.`);
 }
 
 function describeOpen(old: OldClone): string {

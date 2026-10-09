@@ -48,6 +48,17 @@ describe('runJob', () => {
     expect(readLedger(ROOT, new Date(0)).filter((line) => line.kind === 'job')).toMatchObject([{ kind: 'job', id: 'b', stage: 'change', issue: 9, outcome: 'failed', agents: [] }]);
   });
 
+  it('records the batch a failed merge job wrote on its entry', async () => {
+    rmSync(ROOT, { recursive: true, force: true });
+    mkdirSync(ROOT, { recursive: true });
+    const statePath = join(ROOT, 'state.json');
+    writeState(statePath, { ...structuredClone(EMPTY_STATE), jobs: [{ id: 'm', stage: 'merge', issue: null, pid: 1, startedAt: '', log: 'l', batch: [6, 7] }] });
+    const github = { cards: async () => { throw new Error('offline'); } };
+    const ctx = { cfg: { home: ROOT, repo: 'o/r', committeeChat: 'c' } as FactoryConfig, statePath, now: () => new Date(), log: () => undefined, github } as unknown as Ctx;
+    await runJob(ctx, 'merge', null);
+    expect(readState(statePath).failures).toMatchObject([{ stage: 'merge', issue: null, error: 'offline', batch: [6, 7] }]);
+  });
+
   describe('a failed card stage', () => {
     const setup = (interrupted: number[]) => {
       rmSync(ROOT, { recursive: true, force: true });

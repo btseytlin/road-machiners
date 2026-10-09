@@ -75,11 +75,37 @@ A repair fetches the host clone, then clones GitHub's `factory/issue-N` exactly,
 
 A failure after the move keeps the backup where it is, moves the half-made clone to `failed-fresh` in the backup and leaves `work/issue-N` free. The error prints the `mv` that restores the old clone. Nothing deletes a backup. The tick sweep reads only `work/`, so Hermes deletes a backup once the card is past the trouble. A failed repair leaves the stuck label and the failures in place.
 
+## Stuck sweep
+
+A stuck card waits for a person, so the tick explains each one and clears the ones no person needs. Every tick that is not paused, after cleanup and before the disk check, `sweepStuck` in `src/stuck.ts` reads the board the tick already fetched, every page of it. It writes one record in `stuck` for each open stuck card and changes nothing else on a card it cannot explain.
+
+A record holds the cause: the card's newest failure, or the newest merge failure whose `batch` holds the card. A record keeps its cause after the failure leaves `failures`. Its incident is the issue, the stage and the time of that failure, so a new failure opens a new incident. A card with no failure gets an `unrecorded` incident at the time the sweep first saw it. The record goes when the label goes by any other hand, or when the card leaves the column the sweep released it in.
+
+Each record has a kind. The first that fits wins:
+
+- `running`: a job of the card runs, or the card is in the running merge batch. The sweep waits.
+- `held`: the card is held. The sweep waits.
+- `unrecorded`: no failure names the card. It stays for Hermes, since an empty budget or a committee question may have aged out of `failures`.
+- `blocked`: an empty budget, a committee question, the release tracking card, an action the sweep already took in this column, a refused action, and every other failure, like a failed check. It stays for Hermes.
+- `merge-batch`: a Merging card of a merge batch of two or more cards that timed out or died.
+- `clone-merge`: a Design, Implementation, Testing or Hardening card whose work clone has an open merge, revert, cherry-pick or rebase.
+- `machine`: a GitHub call that timed out, hit the rate limit, got a 5xx or lost its connection, since the tick just read the board, or a full disk once `FACTORY_MIN_FREE_GB` is free again.
+
+The sweep acts with the commands Hermes uses, and writes `tries` and `released` on the record before it acts:
+
+- `merge-batch`: while no merge job runs and no unstuck Merging card of the same base waits, it runs `retry` on the first half, rounded up, of the oldest failed batch, by issue number. The next merge job takes exactly that half. A half that times out again is halved again, and a card that times out alone is `blocked`. A label GitHub refuses to remove stays, and the next tick tries again.
+- `clone-merge`: `repair-clone` with `--backup-merge`, by `factory`, one card per tick and only with the disk above `FACTORY_MIN_FREE_GB`. It also refuses a clone with commits on no GitHub branch, so no unpushed work leaves the clone.
+- `machine`: `retry`, one card per tick.
+
+The board lists a write up to a minute late, so a card the sweep released keeps its kind for 5 minutes while the board still shows the label. The sweep does not repair or retry it again, and a merge release of it only removes the label once more. A label still there after that, with no new failure, is `blocked`. A clone repair or machine retry runs once per card per column. An action that fails writes its reason in `refused`, turns the record `blocked` and does not run again for that incident. A crash of the whole sweep writes `sweepError`, the tick goes on with the cards as they were, and the next sweep that passes clears it. The sweep reads GitHub only through the tick's board, and its only GitHub writes are the label removals.
+
+Hermes's watch lists every stuck issue with its kind, like `stuck #12 Tow fee (sweep: merge-batch)`, and a `stuck sweep failed:` line for `sweepError`. A line holds for one incident, so Hermes wakes on a new failure or when the sweep gives a card back. `factory stuck` prints every record, and `factory card N` the card's one.
+
 ## Failures and Hermes
 
 Each factory process sends its GitHub calls one at a time, as GitHub asks. A call that hits a rate limit waits `FACTORY_GITHUB_RETRY_BASE_SECONDS` and runs again, up to `FACTORY_GITHUB_RETRIES` times, with the wait doubled each time. Any other GitHub error fails at once. A call that runs past `FACTORY_GITHUB_TIMEOUT_SECONDS` is killed and fails, so a dead connection cannot hang a tick. It does not run again, since a write may have landed.
 
-A card stage that fails resumes once on the next tick in its own sessions, and its agent gets the error. It takes no label and records no failure. A failed job after that, a branch job that timed out, a stage that spent its budget or asked the committee, and any other failed job labels its issue `factory-stuck` and records the failure in `failures` for a day. A failed merge job labels every card of its batch. The factory posts nothing about it. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
+A card stage that fails resumes once on the next tick in its own sessions, and its agent gets the error. It takes no label and records no failure. A failed job after that, a branch job that timed out, a stage that spent its budget or asked the committee, and any other failed job labels its issue `factory-stuck` and records the failure in `failures` for a day. A failed merge job labels every card of its batch and records the batch in its failure. The factory posts nothing about it. A stuck release step labels the tracking issue. Removing the label lets the factory try again.
 
 An agent run that ends on the Claude weekly usage limit is the exception. The factory writes `Hermes: Claude weekly usage limit; <message>` to `$FACTORY_HOME/paused`, unless a pause is already there. The job still records its failure, but the card takes no label. Hermes resumes the factory after the reset, and the card runs its stage again.
 

@@ -24,11 +24,12 @@ digraph hardening {
   MC -> MM [label="failure: back into\nthe merge session"];
   MC -> MC [label="timed out or past\nFACTORY_CHECKS_TIMEOUT_MINUTES:\nrun again, at most 3 runs"];
   MP -> MM [label="base moved:\nmerge it in, check again"];
+  XS -> MM [label="timed out or died:\nthe stuck sweep releases\nhalf the batch"];
   MP -> MM [label="cards left: the next\njob takes the next batch"];
   edge [color="#6b7280", fontcolor="#6b7280"];
   XA -> HM;
   HM -> MM [label="docs only:\nno session"];
   XO -> MM;
-  MC -> XS [label="budget spent or\n3 timed-out runs"];
+  MC -> XS [label="budget spent, timeout\nor job death"];
   MP -> XN;
 }

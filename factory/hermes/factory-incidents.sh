@@ -30,8 +30,12 @@ from_source() {
   fi
 }
 
+# Every open stuck issue, past gh's default of 30, with the stuck sweep's kind from the state. The kind holds for one incident,
+# so a line changes only when a new failure comes or the sweep leaves the card to Hermes.
 stuck() {
-  timeout -k 5 "$gh_seconds" gh issue list -R "$FACTORY_REPO" --label factory-stuck --state open --json number,title --jq '.[] | "stuck #\(.number) \(.title)"' | sort
+  local list
+  list=$(timeout -k 5 "$gh_seconds" gh issue list -R "$FACTORY_REPO" --label factory-stuck --state open --limit 1000 --json number,title) || return
+  jq -r --slurpfile state /factory/home/state/state.json '.[] | ($state[0].stuck // {})[.number | tostring].kind as $kind | "stuck #\(.number) \(.title)" + (if $kind then " (sweep: \($kind))" else "" end)' <<<"$list" | sort
 }
 
 # Each drift between the stores of one card or of the release. Audit lines hold no times, so each prints once.
@@ -51,6 +55,7 @@ from_source "stuck list" stuck
 # Each failed job of the last day, with its first error line and log. The log name holds the start time, so each failure prints once.
 jq -r '.failures // [] | .[] | "failed \(.stage)\(if .issue then " #\(.issue)" else "" end): \(.error | split("\n")[0]) (log \(.log // "none"))"' /factory/home/state/state.json
 jq -r '.lastTickError // empty | "tick crash: " + (split("\n")[0])' /factory/home/state/state.json
+jq -r '.sweepError // empty | "stuck sweep failed: " + (split("\n")[0])' /factory/home/state/state.json
 # The line names the commit and the first line of what broke, so Hermes fixes dev or reverts the merge that broke it.
 jq -r 'select(.devFailed != null) | "dev build failed at \(.devFailed)" + (if .devError then ": " + (.devError | split("\n")[0]) else "" end)' /factory/home/state/state.json
 # factory-update could not deploy main. Its log is logs/update.log.

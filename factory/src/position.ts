@@ -1,5 +1,5 @@
 // The position model of a card. docs/state.md describes each position and the stores it spans.
-import { RELEASE_LABEL, isCleanupTask, type Card, type FactoryState, type Hold, type Job, type JobStage, type ReleasePost, type ReleaseState } from './types';
+import { RELEASE_LABEL, isCleanupTask, type Card, type FactoryState, type Hold, type Job, type JobStage, type ReleasePost, type ReleaseState, type StuckRecord } from './types';
 
 export type Position = 'triage' | 'design' | 'implement' | 'verify' | 'post' | 'approval' | 'harden' | 'merging' | 'done';
 export const MOVE_TARGETS = ['triage', 'design', 'implement', 'verify', 'approval', 'harden', 'merging', 'done'] as const;
@@ -110,4 +110,11 @@ function openReleaseDrift(release: ReleaseState, cards: Card[]): string[] {
 
 function missingTasks(release: ReleaseState, cards: Card[]): string[] {
   return release.tasks.filter((issue) => !cards.some((card) => card.issue === issue)).map((issue) => `release task #${issue} missing from the board`);
+}
+
+export function stuckText(record: StuckRecord | undefined): string {
+  if (record === undefined) return 'none';
+  const released = record.released === null ? '' : `, released ${record.released}`;
+  const refused = record.refused === null ? '' : `, refused: ${record.refused.split('\n')[0]}`;
+  return `${record.kind} in ${record.column}, incident ${record.incident}, tries ${record.tries}${released}${refused}: ${record.cause.split('\n')[0]} (log ${record.log ?? 'none'})`;
 }
