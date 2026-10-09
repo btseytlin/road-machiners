@@ -97,6 +97,7 @@ export function rollStock(world: World, table: LootTable, id: string, pos: Vec, 
 }
 
 export function stockOldSpots(world: World, map: BakedMap): void {
+  if (!modeRules(world).salvage) return;
   const picks = oldSpotPicks(map);
   const ids = new Set(picks.map(oldStockId));
   const stray = world.salvage.find((stock) => oldSpotOf(stock) && !ids.has(stock.id));

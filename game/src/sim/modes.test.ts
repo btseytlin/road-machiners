@@ -49,11 +49,11 @@ describe('a new world by mode', () => {
 
     expect(world.gauntlet).toBeNull();
     expect(fingerprint(world)).toEqual({
-      streams: [440598765, 2109351013, 1468231572, 1936023925],
-      nextId: 971,
-      counts: [22, 3717, 110, 5],
+      streams: [1952458593, -794062549, 1468231572, 1936023925],
+      nextId: 964,
+      counts: [22, 3717, 116, 5],
       npcs: [['buggy', 322.32, 389.12], ['buggy', 115.02, 75.38], ['buggy', 119.05, 80.22]],
-      bowlStock: ['harpoon', 'smokeMortar', 'mg', 'smokeMortar', 'recoilless', 'spacedArmor', 'trailerBox', 'heavyFrame', 'rack', 'longRifle', 'sprout', 'patcherCrane'],
+      bowlStock: ['ceramicPlates', 'scrapSheet', 'battleRifle', 'plates', 'longRifle', 'caltrops', 'battleRifle', 'steelPlate'],
     });
   });
 
