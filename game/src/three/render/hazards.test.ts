@@ -255,6 +255,27 @@ describe('HazardViews', () => {
     expect(slickWidth()).toBe(0);
   });
 
+  it('burns a gone flare out instead of dropping its glow at once', () => {
+    const world = emptyWorld();
+    world.flares.push({ id: 'f1', source: world.player.vehicleId, pos: { x: 34, y: 30 }, r: 10, turnsLeft: 3 });
+    const views = new HazardViews();
+    const glowAt = (nowMs: number) => {
+      views.update(world, world.terrain, new Map(), nowMs, null, new THREE.PerspectiveCamera());
+      const cards = recordedCards();
+      views.draw(cards.batches);
+      return cards.glow.reduce((sum, c) => sum + c.alpha, 0);
+    };
+    const lit = glowAt(5000);
+    world.flares = [];
+    glowAt(5016);
+
+    const fading = glowAt(5300);
+    expect(fading).toBeGreaterThan(0);
+    expect(fading).toBeLessThan(lit);
+    for (let ms = 5400; ms < 8000; ms += 100) glowAt(ms);
+    expect(glowAt(8000)).toBe(0);
+  });
+
   it('draws smoke, oil, caltrops, flares and pulses without a ground band', () => {
     const world = emptyWorld();
     const me = world.vehicles[0];

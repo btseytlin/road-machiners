@@ -153,6 +153,7 @@ const HEADING = new THREE.Vector3();
 const FLIGHT_LOOKAHEAD = 0.01;
 const FLIGHT_CARDS = 100;
 const TRAIL_SPIN = 2.4;
+const TRAIL_FADE_MS = 600;
 
 class FlightsView {
   readonly root = new THREE.Group();
@@ -187,7 +188,7 @@ class FlightsView {
   update(nowMs: number): void {
     for (const body of [...this.flying]) {
       const t = body.flight.share(nowMs);
-      if (t >= 1) this.land(body);
+      if (t >= 1) this.land(body, nowMs);
       else this.fly(body, t, nowMs);
     }
   }
@@ -214,14 +215,20 @@ class FlightsView {
       card.z = p.z;
       card.size = this.look.trailSize * S * (1 + i * 0.25);
       card.spin = i * TRAIL_SPIN + nowMs * 0.0004;
-      card.alpha = this.look.trailOpacity * (1 - i / body.trail.length);
+      card.alpha = this.trailAlpha(body, i);
       body.live.push(card);
     });
   }
 
-  private land(body: Flying): void {
+  private trailAlpha(body: Flying, i: number): number {
+    return this.look.trailOpacity * (1 - i / body.trail.length);
+  }
+
+  private land(body: Flying, nowMs: number): void {
     this.root.remove(body.head);
-    this.flying.splice(this.flying.indexOf(body), 1);
+    const gone = dissolvedShare(body.flight.startMs + body.flight.ms, nowMs, TRAIL_FADE_MS);
+    if (gone >= 1) return void this.flying.splice(this.flying.indexOf(body), 1);
+    body.trail.forEach((card, i) => (card.alpha = this.trailAlpha(body, i) * (1 - gone)));
   }
 }
 
@@ -259,6 +266,7 @@ const SMOKE_LOOK = {
   high: { from: 1.3, to: 2.3, spread: 0.8 },
   billowMs: 1500,
   lastTurn: 0.55,
+  dissolve: { ms: 1000, grow: 0.4, rise: 0.8 },
   wobble: 0.35,
   wobbleSeconds: 5,
   cutaway: { inner: 0.9, clear: 0.6, floor: 0.04 },
@@ -268,7 +276,7 @@ const SHELL_LOOK: FlightLook = { casing: PAL.shell.casing, length: 0.05, radius:
 const RIM_SAMPLES = 8;
 
 type Puff = { home: THREE.Vector3; size: number; opacity: number; seed: number; side: number; spin: number; shade: number; card: Card; wake: WakeState };
-type CloudView = { ground: THREE.Vector3; puffs: Puff[]; bornMs: number; from: THREE.Vector3; limit: number };
+type CloudView = { cloud: SmokeCloud; ground: THREE.Vector3; puffs: Puff[]; bornMs: number; from: THREE.Vector3; limit: number; goneMs: number | null };
 type Step = { nowMs: number; cutaway: Cutaway | null; movers: readonly WakeMover[]; dt: number };
 
 class SmokeCloudsView {
@@ -290,20 +298,20 @@ class SmokeCloudsView {
 
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null, cutaway: Cutaway | null): void {
     const shown = new Map(world.smoke.filter((c) => volleyShown(clock, 'smoke', c.id) && isShown(world, c)).map((c) => [c.id, c]));
-    for (const id of this.views.keys()) if (!shown.has(id)) this.views.delete(id);
+    ageOut(this.views, shown, nowMs, SMOKE_LOOK.dissolve.ms);
+    for (const c of shown.values()) (this.views.get(c.id) ?? this.makeView(world, views, c, madeThisTurn(clock, 'smoke', c.id), nowMs)).cloud = c;
     const { movers, dt } = this.wake.update(positionsOf(views), nowMs);
-    const share = Math.floor(SMOKE_LOOK.cardBudget / Math.max(1, shown.size));
-    for (const c of shown.values()) {
-      const view = this.views.get(c.id) ?? this.makeView(world, views, c, madeThisTurn(clock, 'smoke', c.id), nowMs);
+    const share = Math.floor(SMOKE_LOOK.cardBudget / Math.max(1, this.views.size));
+    for (const view of this.views.values()) {
       view.limit = Math.min(view.puffs.length, share);
-      place(terrain, view, c, { nowMs, cutaway, movers, dt });
+      place(terrain, view, { nowMs, cutaway, movers, dt });
     }
     this.shells.update(nowMs);
   }
 
   private makeView(world: World, views: ReadonlyMap<string, VehicleView>, c: SmokeCloud, fresh: boolean, nowMs: number): CloudView {
     const ground = new THREE.Vector3().copy(groundPoint(world.terrain, c.pos));
-    const view = { ground, puffs: puffsOf(c), limit: 0, ...this.billow(world, views, c, fresh, nowMs) };
+    const view = { cloud: c, ground, puffs: puffsOf(c), limit: 0, goneMs: null, ...this.billow(world, views, c, fresh, nowMs) };
     this.views.set(c.id, view);
     return view;
   }
@@ -393,14 +401,28 @@ export function cutShare(cut: Cutaway | null, p: THREE.Vector3, half: number): n
 const PUFF_LOCAL = new THREE.Vector3();
 const PUFF_SPOT = { x: 0, z: 0, height: 0 };
 
-function place(terrain: Terrain, view: CloudView, c: SmokeCloud, step: Step): void {
+function place(terrain: Terrain, view: CloudView, step: Step): void {
+  const c = view.cloud;
   view.ground.y = heightAt(terrain, c.pos.x, c.pos.y) * S;
   const grown = easeOut(Math.min(1, Math.max(0, (step.nowMs - view.bornMs) / SMOKE_LOOK.billowMs)));
-  const fade = Math.min(1, grown * 2) * (c.turnsLeft <= 1 ? SMOKE_LOOK.lastTurn : 1);
-  for (let i = 0; i < view.limit; i++) placePuff(view, view.puffs[i], step, grown, fade);
+  const gone = dissolvedShare(view.goneMs, step.nowMs, SMOKE_LOOK.dissolve.ms);
+  const fade = Math.min(1, grown * 2) * (c.turnsLeft <= 1 ? SMOKE_LOOK.lastTurn : 1) * (1 - gone);
+  for (let i = 0; i < view.limit; i++) placePuff(view, view.puffs[i], step, grown, fade, gone);
 }
 
-function placePuff(view: CloudView, p: Puff, step: Step, grown: number, fade: number): void {
+export function dissolvedShare(goneMs: number | null, nowMs: number, ms: number): number {
+  return goneMs === null ? 0 : Math.min(1, Math.max(0, (nowMs - goneMs) / ms));
+}
+
+function ageOut(views: Map<string, { goneMs: number | null }>, shown: ReadonlyMap<string, unknown>, nowMs: number, ms: number): void {
+  for (const [id, view] of views) {
+    if (shown.has(id)) view.goneMs = null;
+    else if (view.goneMs === null) view.goneMs = nowMs;
+    else if (nowMs - view.goneMs >= ms) views.delete(id);
+  }
+}
+
+function placePuff(view: CloudView, p: Puff, step: Step, grown: number, fade: number, gone: number): void {
   const t = step.nowMs / 1000 / SMOKE_LOOK.wobbleSeconds;
   const wx = (valueNoise(p.seed * 0.11 + t, 2.3) - 0.5) * 2 * SMOKE_LOOK.wobble * S;
   const wz = (valueNoise(5.1, p.seed * 0.11 + t) - 0.5) * 2 * SMOKE_LOOK.wobble * S;
@@ -410,9 +432,9 @@ function placePuff(view: CloudView, p: Puff, step: Step, grown: number, fade: nu
   PUFF_SPOT.height = local.y;
   stepWake(p.wake, PUFF_SPOT, p.side, step.movers, step.dt);
   const card = p.card;
-  card.size = p.size * S * SMOKE_LOOK.cardSize * (0.3 + 0.7 * grown);
+  card.size = p.size * S * SMOKE_LOOK.cardSize * (0.3 + 0.7 * grown) * (1 + SMOKE_LOOK.dissolve.grow * gone);
   card.x = PUFF_SPOT.x + p.wake.ox;
-  card.y = view.ground.y + Math.max(local.y, card.size * SMOKE_LOOK.clearance);
+  card.y = view.ground.y + Math.max(local.y, card.size * SMOKE_LOOK.clearance) + SMOKE_LOOK.dissolve.rise * S * gone;
   card.z = PUFF_SPOT.z + p.wake.oz;
   shadeCard(card, p.shade, local.y);
   card.spin = p.spin + (step.nowMs / 1000) * SMOKE_LOOK.turnRate * p.side;
@@ -658,10 +680,11 @@ export const FLARE_LOOK = {
   light: { intensity: 60, reach: 1.6, decay: 1 },
   flicker: { share: 0.25, speed: 6 },
   lastTurn: 0.55,
+  burnOutMs: 1000,
 };
 const FLARE_FLIGHT: FlightLook = { casing: PAL.flare.casing, length: 0.09, radius: 0.024, trail: PAL.flare.trail, trailPuffs: 10, trailLag: 0.04, trailSize: 0.55, trailOpacity: 0.5 };
 
-type FlareView = { at: THREE.Vector3; shine: FlareShine | null; igniteMs: number; bornTurn: number; emit: { sparks: number; smoke: number } };
+type FlareView = { flare: Flare; at: THREE.Vector3; shine: FlareShine | null; igniteMs: number; bornTurn: number; goneMs: number | null; emit: { sparks: number; smoke: number } };
 type FlareShine = { bright: number; haloScale: number; haloAlpha: number };
 
 const FLARE_SPARK: ParticleLook = { life: 0.9, size: { from: 0.45, to: 0.12 }, colors: [0xfff4d0, 0xffb040, 0xff5014], alpha: { peak: 1, fadeIn: 0.05 }, drag: 0.6, gravity: 9, streak: 0.14, form: 'round' };
@@ -717,14 +740,12 @@ class FlaresView {
     this.sparks.tick(dt);
     this.smoke.tick(dt);
     const shown = new Map(world.flares.filter((f) => volleyShown(clock, 'flares', f.id) && flareShown(world, f)).map((f) => [f.id, f]));
-    for (const [id] of this.views) if (!shown.has(id)) this.views.delete(id);
-    while (this.lights.length < shown.size) this.addLight();
+    ageOut(this.views, shown, nowMs, FLARE_LOOK.burnOutMs);
+    for (const f of shown.values()) (this.views.get(f.id) ?? this.makeView(world, views, f, madeThisTurn(clock, 'flares', f.id), nowMs)).flare = f;
+    while (this.lights.length < this.views.size) this.addLight();
     this.lights.forEach((light) => (light.intensity = 0));
     const progress = clock ? clock.progress : 1;
-    [...shown.values()].forEach((f, i) => {
-      const view = this.views.get(f.id) ?? this.makeView(world, views, f, madeThisTurn(clock, 'flares', f.id), nowMs);
-      this.place(terrain, view, this.lights[i], f, { nowMs, turn: world.turn, progress, dt });
-    });
+    [...this.views.values()].forEach((view, i) => this.place(terrain, view, this.lights[i], { nowMs, turn: world.turn, progress, dt }));
     this.flights.update(nowMs);
   }
 
@@ -742,16 +763,18 @@ class FlaresView {
       const from = launchPoint(world, views, shot, f.pos);
       this.flights.launch(new Flight(from, top, (top.y - from.y) / 4, FLARE_LOOK.flightMs, nowMs));
     }
-    const view = { at: new THREE.Vector3(), shine: null, igniteMs: shot ? nowMs + FLARE_LOOK.flightMs : -Infinity, bornTurn: world.turn, emit: { sparks: 0, smoke: 0 } };
+    const view = { flare: f, at: new THREE.Vector3(), shine: null, igniteMs: shot ? nowMs + FLARE_LOOK.flightMs : -Infinity, bornTurn: world.turn, goneMs: null, emit: { sparks: 0, smoke: 0 } };
     this.views.set(f.id, view);
     return view;
   }
 
-  private place(terrain: Terrain, view: FlareView, light: THREE.PointLight, f: Flare, at: { nowMs: number; turn: number; progress: number; dt: number }): void {
+  private place(terrain: Terrain, view: FlareView, light: THREE.PointLight, at: { nowMs: number; turn: number; progress: number; dt: number }): void {
+    const f = view.flare;
     const lit = Math.min(1, Math.max(0, (at.nowMs - view.igniteMs) / FLARE_LOOK.igniteMs));
     const burst = lit > 0 ? 1 - Math.min(1, (at.nowMs - view.igniteMs) / FLARE_LOOK.burst.ms) : 0;
     const wave = 1 - FLARE_LOOK.flicker.share * valueNoise((at.nowMs / 1000) * FLARE_LOOK.flicker.speed, hashId(f.id) % 97);
-    const bright = lit * wave * (f.turnsLeft <= 1 ? FLARE_LOOK.lastTurn : 1);
+    const left = 1 - dissolvedShare(view.goneMs, at.nowMs, FLARE_LOOK.burnOutMs);
+    const bright = lit * wave * (f.turnsLeft <= 1 ? FLARE_LOOK.lastTurn : 1) * left * left;
     const sunk = Math.max(0, at.turn - view.bornTurn - 1 + at.progress) * FLARE_LOOK.sink;
     const { halo, burst: wide } = FLARE_LOOK;
     view.at.set(f.pos.x * S, (heightAt(terrain, f.pos.x, f.pos.y) + FLARE_LOOK.height - sunk) * S, f.pos.y * S);
