@@ -14,6 +14,7 @@ import { isFortress, siteGates } from '../../sim/sites';
 import { deckAt, deckById } from '../../sim/bridge';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import { TEST_MAP } from '../../test/map';
+import { GATE_APRON_MARGIN, groundHits, SITE_LIGHT_POOL } from './siteLights';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
 await loadModels(async (name) => {
@@ -21,7 +22,8 @@ await loadModels(async (name) => {
   if (!url) throw new Error(`Missing model file for ${name}`);
   return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0)).buffer;
 });
-const { root: sites, movers } = buildSites({ size: 1, heights: [0, 0, 0, 0], types: ['hardpan'] });
+const built = buildSites({ size: 1, heights: [0, 0, 0, 0], types: ['hardpan'] });
+const { root: sites, movers } = built;
 
 const FORTRESS_WALL_TILES = 4;
 const ALL = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
@@ -625,5 +627,70 @@ describe('deck models', () => {
     onMap.traverse((o) => {
       if (o instanceof Mesh && !bridgeModel(o)) expect(o.geometry.getAttribute('sightAt'), o.name).toBeUndefined();
     });
+  });
+});
+
+describe('site work lights (#402)', () => {
+  const S = PHYSICS.metersPerTile;
+  const FORTS = ALL.filter(isFortress);
+  const flat = built.lights;
+  const of = (id: string) => flat.filter((l) => l.siteId === id);
+  const tiles = (p: { x: number; z: number }) => ({ x: p.x / S, y: p.z / S });
+
+  it('gives each of the ten inhabited sites an interior light and one gate light per gate (IV1)', () => {
+    expect(FORTS).toHaveLength(10);
+    for (const site of FORTS) {
+      const lights = of(site.id);
+      expect(lights.filter((l) => l.kind === 'gate'), site.id).toHaveLength(fortressGates(site).length);
+      expect(lights.filter((l) => l.kind !== 'gate').length, site.id).toBeGreaterThan(0);
+    }
+  });
+
+  it('lights no abandoned site', () => {
+    for (const site of ABANDONED) expect(of(site.id), site.id).toHaveLength(0);
+  });
+
+  it('keeps each site within the pool and every light id unique (IV4)', () => {
+    for (const site of FORTS) expect(of(site.id).length, site.id).toBeLessThanOrEqual(SITE_LIGHT_POOL);
+    expect(new Set(flat.map((l) => l.id)).size).toBe(flat.length);
+  });
+
+  it('keeps every flood and fire cone on the ground inside its curtain (IV2)', () => {
+    const leaks: string[] = [];
+    for (const site of FORTS) {
+      for (const light of of(site.id).filter((l) => l.kind !== 'gate')) {
+        for (const hit of groundHits(light, light.aim.y, 16)) {
+          const p = tiles(hit);
+          if (!insideCurtain(site, p) && !onFortressRock(site, p)) leaks.push(`${light.id} hits ${(p.x - site.pos.x).toFixed(1)},${(p.y - site.pos.y).toFixed(1)}`);
+        }
+      }
+    }
+    expect(leaks).toEqual([]);
+  });
+
+  it('keeps every gate cone on the apron outside its gate face (IV3)', () => {
+    for (const site of FORTS) {
+      const gates = fortressGates(site);
+      for (const light of of(site.id).filter((l) => l.kind === 'gate')) {
+        const at = tiles(light.at);
+        const gate = gates.reduce((a, b) => (Math.hypot(a.face.x - at.x, a.face.y - at.y) < Math.hypot(b.face.x - at.x, b.face.y - at.y) ? a : b));
+        for (const hit of groundHits(light, light.aim.y, 16)) {
+          const p = tiles(hit);
+          const out = (p.x - gate.face.x) * gate.out.x + (p.y - gate.face.y) * gate.out.y;
+          expect(out, `${light.id} behind its gate`).toBeGreaterThanOrEqual(-0.01);
+          expect(Math.hypot(p.x - gate.face.x, p.y - gate.face.y), `${light.id} far from its gate`).toBeLessThanOrEqual(REGION.sites.pad.length + GATE_APRON_MARGIN);
+        }
+      }
+    }
+  });
+
+  it('puts every light head inside its curtain, a mast height over the ground', () => {
+    for (const site of FORTS) {
+      for (const light of of(site.id)) {
+        const p = tiles(light.at);
+        expect(insideCurtain(site, p) || light.kind === 'gate' || onFortressRock(site, p), light.id).toBe(true);
+        expect(light.at.y, light.id).toBeGreaterThan(light.aim.y);
+      }
+    }
   });
 });

@@ -27,6 +27,11 @@ const SHED_DOOR = {
 };
 const SHED_LAMP = { reach: 0.12, size: 0.14, lift: 0.66 };
 const PIPE = { size: 0.08, lift: 0.12, support: 0.6 };
+const MAST = 2.3;
+const DUSTWELL_LIGHTS = [
+  { x: 1.5, z: 1.5, aim: { x: -0.2, z: -0.2 } },
+  { x: 1.5, z: -1.3, aim: { x: 0.3, z: -0.8 } },
+];
 
 export function buildDustwell(b: SiteBuilder): void {
   addPumpjack(b);
@@ -34,6 +39,7 @@ export function buildDustwell(b: SiteBuilder): void {
   b.addModel('storage_tank', SQUAT.x, SQUAT.z, 0.6, new THREE.Vector3(1, SQUAT.height, 1)).name = 'dustwell-tank';
   addShed(b, 'dustwell', SHED);
   addPipes(b);
+  for (const l of DUSTWELL_LIGHTS) b.addWorkLight('flood', l.x, l.z, MAST, l.aim, PAL.siteLight.sodium);
 }
 
 function addPumpjack(b: SiteBuilder): void {
@@ -90,6 +96,11 @@ const BINS = { x: 1.6, z: 1.4, size: 0.72, apart: 0.8, wall: 0.2, plank: 0.05, f
 const STACK_SACK = { w: 0.24, h: 0.12, d: 0.16 };
 const STACK_ROWS = [4, 3, 2];
 
+const GRANARY_LIGHTS = [
+  { x: 1.5, z: 2.0, aim: { x: -0.2, z: -0.2 } },
+  { x: 2.4, z: -0.4, aim: { x: 0.6, z: -1.6 } },
+  { x: -1.0, z: 2.6, aim: { x: -1.8, z: 0.4 } },
+];
 const GRAIN = FACTION_COLORS.bowl.cab;
 const SACK_COLOR = PAL.wall.top;
 const UP = new THREE.Vector3(0, 1, 0);
@@ -102,6 +113,7 @@ export function buildGranary(b: SiteBuilder): void {
   for (const shelter of SHELTERS) addShelter(b, shelter.x, shelter.z);
   for (const c of YARD_CRATES) b.addModel('crates', c.x, c.z, c.yaw);
   for (const [i, j] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) addBin(b, BINS.x + (i * BINS.apart) / 2, BINS.z + (j * BINS.apart) / 2);
+  for (const l of GRANARY_LIGHTS) b.addWorkLight('flood', l.x, l.z, MAST, l.aim, PAL.siteLight.warm);
 }
 
 function addConveyor(b: SiteBuilder): void {
@@ -188,6 +200,11 @@ function addBin(b: SiteBuilder, x: number, z: number): void {
   b.addBox(x, z, BINS.size - 2 * BINS.plank, BINS.fill, BINS.size - 2 * BINS.plank, GRAIN, BINS.wall - BINS.fill - 0.03).name = 'granary-bin';
 }
 
+const SALVAGE_LIGHTS = [
+  { x: 1.8, z: 1.8, aim: { x: -0.3, z: -0.3 } },
+  { x: -0.2, z: 2.2, aim: { x: -1.6, z: 0.4 } },
+  { x: 2.2, z: 0.2, aim: { x: 0.8, z: -1.4 } },
+];
 const CRANE = { x: 0.1, z: 1.3, yaw: (160 * Math.PI) / 180 };
 const SLEW = { amplitude: (35 * Math.PI) / 180, period: 14 };
 const HOIST = { range: 2, period: 7 };
@@ -218,6 +235,7 @@ export function buildSalvageYard(b: SiteBuilder): void {
   b.addModel('wreck', JEEP.x, JEEP.z, JEEP.yaw).name = 'salvage-jeep';
   for (const w of WRECKS) b.addModel('wreck', w.x, w.z, w.yaw).name = 'salvage-wreck';
   for (const p of YARD_PROPS) b.addModel(p.name, p.x, p.z, p.yaw);
+  for (const l of SALVAGE_LIGHTS) b.addWorkLight('flood', l.x, l.z, MAST, l.aim, PAL.siteLight.sodium);
 }
 
 function addCrane(b: SiteBuilder): void {

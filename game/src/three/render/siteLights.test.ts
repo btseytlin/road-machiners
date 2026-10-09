@@ -102,15 +102,16 @@ describe('groundHits', () => {
   it('is a circle of radius h tan(angle) under a straight-down cone', () => {
     const l: SiteLight = { id: 'x', siteId: 'a', kind: 'flood', at: { x: 3, y: 6, z: -2 }, aim: { x: 3, y: 0, z: -2 } };
     const hits = groundHits(l, 0, 16);
-    expect(hits).toHaveLength(16);
+    expect(hits).toHaveLength(48);
     const r = 6 * Math.tan(LOOKS.flood.angle);
-    for (const h of hits) expect(Math.hypot(h.x - 3, h.z + 2)).toBeCloseTo(r);
+    for (const h of hits.slice(-16)) expect(Math.hypot(h.x - 3, h.z + 2)).toBeCloseTo(r);
+    for (const h of hits) expect(Math.hypot(h.x - 3, h.z + 2)).toBeLessThanOrEqual(r + 1e-9);
   });
 
   it('drops rays that miss the ground or fall beyond the range', () => {
     const l: SiteLight = { id: 'x', siteId: 'a', kind: 'flood', at: { x: 0, y: 6, z: 0 }, aim: { x: 40, y: 5, z: 0 } };
     const hits = groundHits(l, 0, 16);
-    expect(hits.length).toBeLessThan(16);
+    expect(hits.length).toBeLessThan(48);
     for (const h of hits) expect(Math.hypot(h.x, 6, h.z)).toBeLessThanOrEqual(LOOKS.flood.range + 1e-6);
   });
 });

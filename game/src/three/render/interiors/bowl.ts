@@ -36,6 +36,13 @@ const TREE_SPAN = 0.9;
 const STAIR = { at: 0.32, from: 1, to: 11.4, step: 0.3, width: 0.9, height: 0.3 };
 const SHEDS = [4, 2];
 const SHED_OUT = 1.2;
+const MAST = 2.5;
+const LIGHTS = [
+  { x: 7.4, z: 7.4, aim: { x: 2.5, z: 2.5 } },
+  { x: 0.5, z: 10.5, aim: { x: -3.5, z: 4.5 } },
+  { x: 10.5, z: 0.5, aim: { x: 5.5, z: -3.5 } },
+  { x: -8, z: 8, aim: { x: -9, z: 2 } },
+];
 const FENCE = { r: POND.r + 0.5, posts: 14, height: 0.28 };
 
 const CROP = mix(FACTION_COLORS.bowl.top, PAL.palm, 0.3);
@@ -51,6 +58,7 @@ export function buildBowl(b: SiteBuilder, site: Site): void {
   b.root.userData.homes = addHouses(b, site, taken);
   addTerraces(b, site, taken);
   addSheds(b, site);
+  for (const l of LIGHTS) b.addWorkLight('flood', l.x, l.z, MAST, l.aim, PAL.siteLight.warm);
 }
 
 function buildFloor(b: SiteBuilder, site: Site, taken: Disc[]): void {
