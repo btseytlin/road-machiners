@@ -218,6 +218,7 @@ export const REGION = {
     slopeCost: 1,
     straighten: 0.05,
     roadShyCost: 6,
+    roadShyBand: 10,
   },
   towns: [
     { id: "bowl", name: "Bowl", pos: scalePoint({ x: 16, y: 94 }), radius: 28 },

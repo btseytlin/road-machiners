@@ -275,7 +275,7 @@ describe('the watch', () => {
     const { w, raider, player } = watchingRaiderSeeing();
     const danger = judgeDanger(w, raider, player);
     const hunting = drawShare(w, raider, 'hostileSeen', player.id, danger, 'fight');
-    raider.brain!.goals = [{ ...raidGoal(raider.pos), kind: 'sell', destination: null, phase: 'go' }];
+    raider.brain!.goals = [{ ...raidGoal(raider.pos), kind: 'sell', destination: null, phase: 'travel' }];
     expect(drawShare(w, raider, 'hostileSeen', player.id, danger, 'fight')).toBeLessThan(hunting);
   });
 

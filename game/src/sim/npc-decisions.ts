@@ -719,7 +719,7 @@ function guardFactor(vehicle: Vehicle, subject: Vehicle, nearGuards: number): nu
 }
 
 export function huntCurve(vehicle: Vehicle): AppealCurve {
-  return huntsOffRoad(vehicle.brain) ? NPC_BEHAVIOR.lootAppeal.hunt : NPC_BEHAVIOR.lootAppeal.raid;
+  return huntsOffRoad(vehicle.brain ?? undefined) ? NPC_BEHAVIOR.lootAppeal.hunt : NPC_BEHAVIOR.lootAppeal.raid;
 }
 
 function fightFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
