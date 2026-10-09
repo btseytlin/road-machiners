@@ -404,5 +404,9 @@ describe('captions', () => {
     expect(timeoutOnly(TIMEOUT_FAILURE)).toBe(true);
     expect(timeoutOnly(`${TIMEOUT_FAILURE}\nError: expected 1 to be 2`)).toBe(false);
     expect(timeoutOnly('typecheck failed')).toBe(false);
+    const hung = '[checks] 10:00:00 tests and typecheck\n\nCheckTimeoutError: the checks ran past their 45 minute limit, and the factory removed their container.';
+    expect(timeoutOnly(hung)).toBe(true);
+    expect(timeoutOnly(hung.replace('45', '37.5'))).toBe(true);
+    expect(timeoutOnly(` FAIL  src/a.test.ts > adds\nAssertionError: expected 1 to be 2\n${hung}`)).toBe(false);
   });
 });

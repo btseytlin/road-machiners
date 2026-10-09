@@ -6,7 +6,7 @@ import { must } from '../exec';
 import { roundSession } from '../sessions';
 import { updateState } from '../state';
 import { BUG_LABEL, GAME_DIR, OUT_DIR, type AgentSession, type Ctx, type PlaytestState, type ReleaseState } from '../types';
-import { checkFailure, checkScript, checkUntilReal, testCacheMount } from './checks';
+import { checkScript, checkUntilReal, runChecks } from './checks';
 import { guardDiff } from '../diff-guard';
 import { agentHome, fillPrompt, playtestCommand, readOutput, resetOutputs } from './common';
 import { mergeResolving } from './merge-resolve';
@@ -183,14 +183,8 @@ async function checkFixes(ctx: Ctx, session: Session, sha: string): Promise<stri
   guardDiff(await ctx.repo.diff(session.start, sha));
   checkScope(sha);
   const log = releaseLog(ctx, 'playtest-checks');
-  const check = async (): Promise<string | null> => {
-    try {
-      await ctx.container.shell(session.dir, `${phaseLine('Checking the playtest fixes')}\n${checkScript(playtestCommand(ctx.cfg, false))}`, log, { BUILD_SCOPE: sha }, testCacheMount(ctx));
-      return null;
-    } catch (error) {
-      return checkFailure(log, error);
-    }
-  };
+  const script = `${phaseLine('Checking the playtest fixes')}\n${checkScript(playtestCommand(ctx.cfg, false))}`;
+  const check = (): Promise<string | null> => runChecks(ctx, { stage: 'playtest', issue: session.release.issue }, session.dir, script, log, { BUILD_SCOPE: sha });
   return checkUntilReal(check, (run) => ctx.log('playtest', session.release.issue, `the checks only timed out, run ${run}, running them again`));
 }
 

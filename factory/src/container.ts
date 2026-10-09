@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, renameSync } from 'node:fs';
+import { appendFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
@@ -11,6 +11,10 @@ import { closeRun, closeRunFromTranscript, openRun, recordPeak, runProjectsDir, 
 import { withLock } from './lock';
 import { pauseForUsageLimit, UsageLimitError } from './pause';
 import { AGENT_NETWORK, GAME_DIR, PROXY_NAME, PROXY_PORT, type AgentSession, type Container, type FactoryConfig, type Run, type RunResult } from './types';
+
+export const CHECKS_TIMEOUT_MARK = 'the checks ran past their';
+const CLIENT_GRACE_MINUTES = 2;
+const REMOVE_TIMEOUT_MS = 60_000;
 
 const FACTORY_LABEL = 'factory=1';
 
@@ -192,13 +196,41 @@ export function dockerContainer(run: Run, cfg: FactoryConfig, jobId: string | nu
       }
       return must(result, `agent in ${clone}`);
     },
-    async shell(clone, script, log, env = {}, mounts = {}) {
+    async shell(clone, script, log, env = {}, mounts = {}, limitMinutes) {
       await ensureProxy(run, cfg);
       const extraMounts = Object.entries(mounts).flatMap(([host, path]) => ['-v', `${host}:${path}`]);
-      const args = [...baseArgs(jobId, cpus, testWorkers, cfg.gpu), ...mountArgs(cfg, clone, GAME_DIR), ...extraMounts, ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', `${PEAK_TRAP}\n${script}`];
-      const result = await run('docker', args, { logPath: log });
+      const args = (named: string[]) => [...baseArgs(jobId, cpus, testWorkers, cfg.gpu), ...named, ...mountArgs(cfg, clone, GAME_DIR), ...extraMounts, ...networkArgs(false), ...envArgs(env), cfg.image, 'bash', '-lc', `${PEAK_TRAP}\n${script}`];
+      const result = await runLimited(run, log, limitMinutes, args);
       recordContainerPeak(cfg, jobId, result);
       must(result, `shell in ${clone}`);
     },
   };
+}
+
+async function runLimited(run: Run, log: string, limitMinutes: number | undefined, args: (named: string[]) => string[]): Promise<RunResult> {
+  if (limitMinutes === undefined) return run('docker', args([]), { logPath: log });
+  const name = `factory-checks-${randomUUID()}`;
+  const limit = removeAfter(run, name, limitMinutes);
+  let result: RunResult;
+  try {
+    result = await run('docker', args(['--name', name]), { logPath: log, timeoutMs: (limitMinutes + CLIENT_GRACE_MINUTES) * 60_000 });
+  } finally {
+    limit.cancel();
+  }
+  const removal = await limit.removal();
+  if (removal !== null) throw checksTimedOut(log, limitMinutes, removal);
+  return result;
+}
+
+function removeAfter(run: Run, name: string, minutes: number): { cancel: () => void; removal: () => Promise<RunResult | null> } {
+  let removal: Promise<RunResult> | null = null;
+  const timer = setTimeout(() => { removal = run('docker', ['rm', '-f', name], { timeoutMs: REMOVE_TIMEOUT_MS }); }, minutes * 60_000);
+  return { cancel: () => clearTimeout(timer), removal: async () => removal };
+}
+
+function checksTimedOut(log: string, minutes: number, removal: RunResult): Error {
+  const cleanup = removal.code === 0 ? 'the factory removed their container' : `removing their container failed: ${removal.stderr.trim().slice(-300)}`;
+  const message = `CheckTimeoutError: ${CHECKS_TIMEOUT_MARK} ${minutes} minute limit, and ${cleanup}.`;
+  appendFileSync(log, `\n${message}\n`);
+  return new Error(message);
 }

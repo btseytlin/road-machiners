@@ -1,4 +1,4 @@
-// Hardening and Merging columns. One hardening session reviews and fixes an approved card. The merge queue checks every waiting card merged together before the base takes them.
+// Hardening and Merging columns. One hardening session reviews and fixes an approved card. The merge queue checks up to three waiting cards of a base merged together before the base takes them, and the next job takes the rest.
 // Red: loops back. Grey: leaves the column or enters from outside.
 digraph hardening {
   rankdir=LR; nodesep=0.35; ranksep=0.55; bgcolor=white; pad=0.3;
@@ -10,7 +10,7 @@ digraph hardening {
     HM -> HH [weight=100];
   }
   subgraph cluster_merge {
-    label="Merge job: every Merging card of one base"; fontname="Helvetica"; fontsize=12; color="#c7d2fe"; style=rounded;
+    label="Merge job: up to three Merging cards of one base, oldest first"; fontname="Helvetica"; fontsize=12; color="#c7d2fe"; style=rounded;
     MM [label="Merge each card\ninto a clone of the base"]; MC [label="Merge checkpoint\nfull suite, typecheck,\nplaytest, build"]; MP [label="Push the base\nrebuild /dev/"];
     MM -> MC -> MP [weight=100];
   }
@@ -22,11 +22,13 @@ digraph hardening {
   edge [color="#dc2626", fontcolor="#dc2626", style=dashed, penwidth=1.3];
   MM -> MM [label="conflict: the merge\nsession resolves it"];
   MC -> MM [label="failure: back into\nthe merge session"];
+  MC -> MC [label="timed out or past\nFACTORY_CHECKS_TIMEOUT_MINUTES:\nrun again, at most 3 runs"];
   MP -> MM [label="base moved:\nmerge it in, check again"];
+  MP -> MM [label="cards left: the next\njob takes the next batch"];
   edge [color="#6b7280", fontcolor="#6b7280"];
   XA -> HM;
   HM -> MM [label="docs only:\nno session"];
   XO -> MM;
-  MC -> XS [label="budget spent"];
+  MC -> XS [label="budget spent or\n3 timed-out runs"];
   MP -> XN;
 }
