@@ -13,7 +13,6 @@ function turnWhere(night: boolean, from = 1): number {
 }
 const NIGHT = turnWhere(true);
 const DAY = turnWhere(false);
-// a light turn deep inside the night, so every per-id switch offset has passed
 function lateNight(): number {
   let t = NIGHT;
   while (!sunAt(t + 3)) t++;

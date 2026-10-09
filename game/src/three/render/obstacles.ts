@@ -251,7 +251,7 @@ function lightFortPiece(obj: THREE.Object3D): void {
   });
 }
 
-export type HulkPose =Extract<PropPose, { model: 'hulk' }>;
+export type HulkPose = Extract<PropPose, { model: 'hulk' }>;
 
 export function buildHulk(t: Terrain, o: Obstacle, pose: HulkPose): THREE.Group {
   const g = posed(propBase(t, o), pose);

@@ -132,7 +132,6 @@ export class SiteBuilder {
   addWash(reach: number, color: number): void {
     this.addWorkLight('wash', WASH.mast * reach, WASH.mast * reach, WORK_MAST, { x: -WASH.aim * reach, z: -WASH.aim * reach, lift: WASH.lift }, color);
   }
-  // Registers a work light at a lamp head. The aim is a ground point in site tiles, relative to the site centre.
   addLight(kind: SiteLightKind, head: THREE.Object3D, aim: { x: number; z: number; lift?: number }, color?: number, range?: number, intensity?: number): void {
     let root: THREE.Object3D | null = head;
     while (root && root !== this.root) root = root.parent;

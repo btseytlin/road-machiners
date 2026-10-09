@@ -1,7 +1,3 @@
-// Work lights of the inhabited sites. Every site registers its fixtures here as plain anchors; a fixed pool of spot lights
-// serves the ones nearest the camera at night. The pool joins the scene whole at sunset and leaves at dawn, in the same frame
-// as the truck beams, because any change in the count of lights recompiles every material.
-
 import * as THREE from 'three';
 import type { V3 } from '../../phys/frames';
 import { PAL } from '../../render/palette';
@@ -34,7 +30,6 @@ export function lookOf(light: SiteLight): Look {
   return LOOKS[light.kind];
 }
 
-// Where the cone meets flat ground, edge rays plus inner rings. The inner rings catch the range arc of a cone that rises over the ground.
 const CONE_RINGS = [0.4, 0.7, 1];
 
 export function groundHits(light: SiteLight, bearings: number): V3[] {
@@ -70,6 +65,7 @@ type Slot = { spot: THREE.SpotLight; anchor: string | null; look: Look | null };
 const frustum = new THREE.Frustum();
 const projected = new THREE.Matrix4();
 const sphere = new THREE.Sphere();
+const centre = new THREE.Vector3();
 
 export class SiteLights {
   private slots: Slot[] = [];
@@ -112,7 +108,7 @@ export class SiteLights {
     camera.updateMatrixWorld();
     projected.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     frustum.setFromProjectionMatrix(projected);
-    const inView = (l: SiteLight) => frustum.intersectsSphere(sphere.set(new THREE.Vector3(l.at.x, l.at.y, l.at.z), lookOf(l).range));
+    const inView = (l: SiteLight) => frustum.intersectsSphere(sphere.set(centre.set(l.at.x, l.at.y, l.at.z), lookOf(l).range));
     const order = siteLightOrder(this.lights, inView, reaches, focus);
     const shadowed = order.filter((l) => lookOf(l).shadow);
     const plain = order.filter((l) => !lookOf(l).shadow);

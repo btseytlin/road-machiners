@@ -941,7 +941,8 @@ export class Game {
     this.hud.showRecenter(!this.follow.isFollowing());
     lightScene(this.sun, this.sky, truck, daylightAt(this.lightTurn()));
     this.vehicleLights.sync(this.world, this.frames, this.lightTurn(), (pos) => this.sightLimit.reaches(pos), truck);
-    this.siteLights.sync(!sunAt(this.world.turn), this.lightTurn(), this.rig.camera, (pos) => this.sightLimit.reaches(pos), this.rig.focus(), now);    Object.assign(this.stormTint.style, stormTintStyle(stormShare(playerVehicle(this.world))));
+    this.siteLights.sync(!sunAt(this.world.turn), this.lightTurn(), this.rig.camera, (pos) => this.sightLimit.reaches(pos), this.rig.focus(), now);
+    Object.assign(this.stormTint.style, stormTintStyle(stormShare(playerVehicle(this.world))));
     this.fx.tick(dt * speed, this.world);
     this.playPanelSounds();
     this.updateLoops();
