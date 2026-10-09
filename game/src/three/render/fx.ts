@@ -4,7 +4,7 @@
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
-import { TERRAIN_TYPES } from '../../data/terrain';
+import { TERRAIN_TYPES, type TerrainType } from '../../data/terrain';
 import { ENGINE_HEAT } from '../../data/wear';
 import { wheelMounts } from '../../phys/body';
 import { headingOf, type V3, type VehicleFrame } from '../../phys/frames';
@@ -19,6 +19,9 @@ import type { CameraRig } from './camera';
 import { tirePoints, Ruts } from './ruts';
 import type { GroundAt } from './lines';
 import { Casings, Projectiles, type Muzzle, type ProjectileSpec, type RoundPlan, type ShotCues } from './projectiles';
+import { CardBatch, createCardShapes } from './particles/cards';
+import { ChunkBatch } from './particles/chunks';
+import { Particles, type ParticleLook } from './particles/particles';
 
 const MAX_PUFFS = 2048;
 const MAX_GLOWS = 256;
@@ -237,11 +240,26 @@ class MuzzleFlashes {
 
 const AMMO_BLAST_RADIUS = 0.8;
 const CLAYMORE_FX_RADIUS = 10;
-const DUST = { perMeter: 2.5, life: 1.1, color: 0xd8c098 };
+const DUST = { color: 0xd8c098 };
+
+const MAX_PARTICLES = 3000;
+const MAX_CHUNKS = 600;
+
+const SPRAY = {
+  dust: { perMeter: 6, groundShare: 0.45, life: 2.6, size: { from: 0.5, to: 3.8 }, alpha: { peak: 0.55, fadeIn: 0.1 }, drag: 1.8, gravity: -0.4 },
+  clods: { perMeter: 1.4, minMetersPerSecond: 2.5, back: { min: 0.15, spread: 0.3 }, up: { min: 1.2, spread: 2.6 }, aside: 1.4, lift: 0.15, size: { min: 0.1, spread: 0.2 }, life: 1.6, shade: 0.72 },
+} as const;
+
+export type CardLights = { sun: THREE.DirectionalLight; sky: THREE.HemisphereLight };
 
 export class Fx3D {
   private puffs = new ParticlePool(MAX_PUFFS, false);
   private glows = new ParticlePool(MAX_GLOWS, true);
+  private readonly cards = new CardBatch(MAX_PARTICLES, 'lit', createCardShapes(Math.random));
+  private readonly particles = new Particles(MAX_PARTICLES);
+  private readonly chunks = new ChunkBatch(MAX_CHUNKS, Math.random);
+  private readonly sprayLooks = new Map<TerrainType, { dust: ParticleLook; clod: THREE.Color }>();
+  private readonly cardLight = { sunDir: new THREE.Vector3(), sun: new THREE.Color(), sky: new THREE.Color(), ground: new THREE.Color() };
   private texts: FloatText[] = [];
   private projectiles: Projectiles;
   private pending: Pending[] = [];
@@ -250,7 +268,7 @@ export class Fx3D {
   readonly ruts: Ruts;
 
   constructor(private scene: THREE.Scene, private overlay: HTMLElement, private rig: CameraRig) {
-    scene.add(this.puffs.mesh, this.glows.mesh);
+    scene.add(this.puffs.mesh, this.glows.mesh, this.cards.mesh, ...this.chunks.meshes);
     this.flashes = new MuzzleFlashes(scene);
     this.casings = new Casings(scene);
     this.ruts = new Ruts(scene);
@@ -372,11 +390,44 @@ export class Fx3D {
     this.puff(p, 0x4a3f32, 1, { speed: 1.5, life: 1.6, scale: 0.8, grow: 2.4 });
   }
 
-  wheelDust(p: V3, back: V3, out: V3): void {
+  light({ sun, sky }: CardLights): void {
+    const l = this.cardLight;
+    l.sunDir.copy(sun.position).sub(sun.target.position).normalize();
+    l.sun.copy(sun.color).multiplyScalar(sun.intensity);
+    l.sky.copy(sky.color).multiplyScalar(sky.intensity);
+    l.ground.copy(sky.groundColor).multiplyScalar(sky.intensity);
+    this.cards.light(l);
+  }
+
+  wheelDust(p: V3, back: V3, out: V3, ground: TerrainType): void {
     const along = 1.5 + Math.random() * 1.5;
     const aside = 0.5 + Math.random() * 0.9;
     const vel = { x: back.x * along + out.x * aside, y: 0.2 + Math.random() * 0.5, z: back.z * along + out.z * aside };
-    this.puffs.spawn(p, { vel, life: DUST.life, fromScale: 0.2, toScale: 1.6 + Math.random() * 1.0, color: DUST.color, opacity: 0.45, drag: 2.2, gravity: -0.15 });
+    this.particles.spawn(p, vel, this.sprayOf(ground).dust, 0.8 + Math.random() * 0.4);
+  }
+
+  clod(p: V3, back: V3, out: V3, metersPerSecond: number, ground: TerrainType): void {
+    const c = SPRAY.clods;
+    const along = metersPerSecond * (c.back.min + Math.random() * c.back.spread);
+    const aside = c.aside * (Math.random() - 0.3);
+    const vel = { x: back.x * along + out.x * aside, y: c.up.min + Math.random() * c.up.spread, z: back.z * along + out.z * aside };
+    const size = c.size.min + Math.random() * Math.random() * c.size.spread;
+    this.chunks.spawn({ x: p.x, y: p.y + c.lift, z: p.z }, vel, size, c.life * (0.7 + Math.random() * 0.6), this.sprayOf(ground).clod);
+  }
+
+  private sprayOf(ground: TerrainType): { dust: ParticleLook; clod: THREE.Color } {
+    let look = this.sprayLooks.get(ground);
+    if (!look) {
+      const d = SPRAY.dust;
+      const tint = new THREE.Color(DUST.color).lerp(new THREE.Color(ground.color), d.groundShare);
+      const pale = tint.clone().lerp(new THREE.Color(0xffffff), 0.15);
+      look = {
+        dust: { life: d.life, size: d.size, colors: [tint.getHex(), pale.getHex()], alpha: d.alpha, drag: d.drag, gravity: d.gravity },
+        clod: new THREE.Color(ground.color).multiplyScalar(SPRAY.clods.shade),
+      };
+      this.sprayLooks.set(ground, look);
+    }
+    return look;
   }
 
   exhaust(p: V3, back: V3): void {
@@ -416,6 +467,11 @@ export class Fx3D {
     const dt = dtMs / 1000;
     this.puffs.tick(dt);
     this.glows.tick(dt);
+    this.particles.tick(dt);
+    this.chunks.tick(dt, world.terrain);
+    this.cards.begin();
+    this.particles.draw(this.cards);
+    this.cards.end(this.rig.camera);
     this.flashes.tick(dt);
     this.casings.tick(dt, world.terrain, world.turn);
     this.ruts.tick(world.turn);
@@ -523,12 +579,16 @@ export class TruckFx {
 
   private dust(world: World, v: Vehicle, pose: Pose, back: V3, tires: V3[], dt: number): void {
     const ground = TERRAIN_TYPES[world.terrain.types[tileAt(world.terrain, v.pos)]];
-    const rate = DUST.perMeter * v.speed * PHYSICS.metersPerTile * ground.dust;
+    const rate = SPRAY.dust.perMeter * v.speed * PHYSICS.metersPerTile * ground.dust;
+    const metersPerSecond = v.speed * PHYSICS.metersPerTile;
+    const clodRate = metersPerSecond > SPRAY.clods.minMetersPerSecond ? SPRAY.clods.perMeter * metersPerSecond * ground.dust : 0;
     const mounts = wheelMounts(bodyOf(v.chassisId));
     for (const [i, tire] of tires.entries()) {
       const side = Math.sign(mounts[i].z);
       const out = { x: -Math.sin(pose.h) * side, y: 0, z: Math.cos(pose.h) * side };
-      this.puffs(rate * (i < 2 ? FRONT_DUST : 1), dt, () => this.fx.wheelDust(tire, back, out));
+      const front = i < 2 ? FRONT_DUST : 1;
+      this.puffs(rate * front, dt, () => this.fx.wheelDust(tire, back, out, ground));
+      this.puffs(clodRate * front, dt, () => this.fx.clod(tire, back, out, metersPerSecond, ground));
     }
   }
 
