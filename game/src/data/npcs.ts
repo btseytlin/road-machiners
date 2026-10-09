@@ -184,7 +184,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [1.85, 2.85], armor: [0.2, 0.35] },
+    targets: { guns: [1.85, 2.85], armor: [0.2, 0.45] },
     spares: null,
   },
   gunwagon: {
@@ -338,7 +338,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 1 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [2, 3.1], armor: [0.2, 0.4] },
+    targets: { guns: [1.95, 3.1], armor: [0.2, 0.4] },
     spares: null,
   },
   bowlPatrol: {
@@ -413,7 +413,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 2 }, weight: 2 },
       { value: { good: "meds", count: 2 }, weight: 2 },
     ],
-    targets: { guns: [2.05, 3.1], armor: [0.15, 0.3] },
+    targets: { guns: [2.05, 3.1], armor: [0.15, 0.35] },
     spares: null,
   },
   roamer: {
@@ -458,7 +458,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "tools", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [2.05, 3.15], armor: [0.2, 0.35] },
+    targets: { guns: [2.05, 3.15], armor: [0.2, 0.42] },
     spares: null,
   },
   vulture: {
