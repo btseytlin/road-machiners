@@ -26,7 +26,7 @@ import { chooseSaveFate, showCarryReport } from '../ui/save-screen';
 import { mountPerfPanel } from '../ui/perf-panel';
 import { SoundSettings } from '../ui/sound';
 import { RadioPanel, RadioStation } from '../ui/radio';
-import { installCrashScreen, keepRunningOnErrors, onEveryError, onReport, reportError } from './crash';
+import { bootStep, installCrashScreen, keepRunningOnErrors, onEveryError, onReport, reportError } from './crash';
 import { ErrorReporter } from './error-report';
 import { Game } from './game';
 import { clearGame, loadWorld, SAVE_KEY, SaveError, savedRunId, storedSave, writeSave } from './save';
@@ -110,11 +110,13 @@ const reporter = ERROR_REPORT_URL ? new ErrorReporter(ERROR_REPORT_URL, ERROR_RE
 if (reporter) onReport((err) => void reporter.report(err));
 const mixer = new Mixer(MIX);
 mixer.unlockOn(window);
+bootStep('loading physics, models and sounds');
 const loading = Promise.all([
   boot.track('physics', initPhysics()),
   boot.track('models', loadModels(undefined, boot.count('models'))),
   boot.track('sounds', loadBank(mixer.ctx, SOUNDS, boot.count('sounds'))),
 ]);
+bootStep('loading the map');
 const map = await boot.track('map', fetchMap());
 const slots = await SaveSlots.open(await idbBackend(SAVE_KEY), window.localStorage, SAVE_KEY, allSlots(CONFIG.saveSlots));
 persistSaves().catch(reportError);
@@ -124,11 +126,15 @@ const newGameActions: NewGameActions = {
   confirm: (text) => window.confirm(text),
 };
 // The world and its ground build while physics, models and sounds load, since those wait mostly on the network and decoders.
+bootStep('loading the save');
 const { world, runId, loadedFrom, fresh } = await bootWorld();
 const log = new RunLog(slots.backend, runId, (err) => slots.onError(err));
 log.begin(world, loadedFrom);
+bootStep('building the ground');
 await boot.track('ground', () => groundTexture(world));
+bootStep('waiting for physics, models and sounds');
 const [, , bank] = await loading;
+bootStep('starting the game');
 const radio = new RadioPanel(new RadioStation(Math.random));
 const soundSettings = new SoundSettings(mixer, window.localStorage, radio.faceplate, radio.keys, () => game.loops.nextTrack());
 radio.hear(world);
@@ -140,6 +146,7 @@ if (fresh && opening) game.hud.note(world, opening.log, "");
 const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
 keepRunningOnErrors((text) => debugConsole.error(text));
 onEveryError(() => game.holdSaves());
+bootStep('running');
 reporter?.watch({ world: () => game.state, log: () => game.logTexts(), slots });
 performance.mark('roam:ready');
 void boot.finish();
