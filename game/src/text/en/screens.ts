@@ -69,7 +69,7 @@ export const SCREENS = {
   'character.title': 'Character',
   'character.health': 'Health',
   'character.knockoutsTitle': 'Knockouts',
-  'character.knockouts': m('{n} knockouts', { n: 'int' }),
+  'character.knockouts': m('{n} knockouts', { n: 'count' }),
   'character.xpTitle': 'XP earned by doing things, to spend on skill ranks',
   'character.xp': m('XP to spend: {n}', { n: 'int' }),
   'character.grows': m('Earns XP from {what}', { what: 'text' }),
