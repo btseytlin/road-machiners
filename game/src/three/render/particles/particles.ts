@@ -1,5 +1,7 @@
 import * as THREE from 'three';
-import type { V3 } from '../../../phys/frames';
+import { toMap, type V3 } from '../../../phys/frames';
+import { inLiveRange } from '../../../sim/fidelity';
+import type { World } from '../../../sim/types';
 import { count } from '../../../perf';
 import { CARD_SHAPES, type CardBatch } from './cards';
 
@@ -7,6 +9,10 @@ export const OVERWRITE_COUNTER = 'fx.particles.overwritten';
 export const FAR_COUNTER = 'fx.particles.far';
 
 export type Nearby = (p: V3) => boolean;
+
+export function liveNear(world: () => World): Nearby {
+  return (p) => inLiveRange(world(), toMap(p));
+}
 
 export type ParticleLook = {
   life: number;

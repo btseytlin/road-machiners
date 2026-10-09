@@ -17,7 +17,7 @@ import { dist, type Vec } from '../../sim/vec';
 import { playerSees } from '../../sim/vision';
 import { HarpoonLinesView } from './lines';
 import type { FxCards } from './particles/cards';
-import { Particles, type ParticleLook } from './particles/particles';
+import { liveNear, Particles, type ParticleLook } from './particles/particles';
 import type { VehicleView } from './vehicle';
 
 const S = PHYSICS.metersPerTile;
@@ -637,8 +637,13 @@ class FlaresView {
   private readonly views = new Map<string, FlareView>();
   private readonly flights = new FlightsView(FLARE_FLIGHT);
   private readonly lights: THREE.PointLight[] = [];
-  private readonly sparks = new Particles(FLARE_FX.sparks.pool);
-  private readonly smoke = new Particles(FLARE_FX.smoke.pool);
+  private seenIn: World | null = null;
+  private readonly nearby = liveNear(() => {
+    if (!this.seenIn) throw new Error('A flare spawned particles before its first update');
+    return this.seenIn;
+  });
+  private readonly sparks = new Particles(FLARE_FX.sparks.pool, this.nearby);
+  private readonly smoke = new Particles(FLARE_FX.smoke.pool, this.nearby);
   private readonly color = new THREE.Color();
   private lastMs: number | null = null;
 
@@ -667,6 +672,7 @@ class FlaresView {
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null): void {
     const dt = this.lastMs === null ? 0 : Math.min(FLARE_FX.maxStepMs, Math.max(0, nowMs - this.lastMs)) / 1000;
     this.lastMs = nowMs;
+    this.seenIn = world;
     this.sparks.tick(dt);
     this.smoke.tick(dt);
     const shown = new Map(world.flares.filter((f) => volleyShown(clock, 'flares', f.id) && flareShown(world, f)).map((f) => [f.id, f]));
