@@ -73,7 +73,7 @@ function showNoWebGL(err: WebGLUnavailable): void {
   const text = noWebGLText(err, navigator.userAgent);
   const box = document.createElement('div');
   box.style.cssText =
-    'position:fixed;inset:0;z-index:100000;background:rgba(38,28,20,0.97);color:#e8d8c0;padding:40px;overflow:auto;' +
+    'position:fixed;inset:0;z-index:100000;background:#261c14;color:#e8d8c0;padding:40px;overflow:auto;' +
     'font:16px/1.6 system-ui,sans-serif;';
   const title = document.createElement('div');
   title.style.cssText = 'font-size:28px;color:#f0b860;margin-bottom:20px;';
