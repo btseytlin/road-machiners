@@ -8,7 +8,6 @@
   width: min(var(--modal-width), calc(100vw - var(--space-10)));
   height: min(var(--modal-height), calc(100dvh - var(--modal-reserve)));
   overflow: auto;
-  padding: var(--space-9);
   scrollbar-width: thin;
 }
 #ui:has(.modal:not([style*="display: none"]))

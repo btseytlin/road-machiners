@@ -11,7 +11,7 @@
   font: var(--text-body) / 1.5 var(--font-mono);
   white-space: pre-wrap;
 }
-.crash-title { font-size: var(--text-display); color: var(--danger-bright); margin-bottom: var(--space-8); }
+.crash-title { font-size: var(--text-heading); color: var(--danger-bright); margin-bottom: var(--space-8); }
 .crash-hint { margin-top: var(--space-9); color: var(--crash-hint); }
 
 .perf-panel {
@@ -22,7 +22,7 @@
   border: 1px solid var(--line-strong);
   border-radius: var(--radius-m);
   padding: var(--space-3) var(--space-4);
-  font: var(--text-label) / 1.35 var(--font-mono);
+  font: var(--text-dense) / 1.35 var(--font-mono);
   color: var(--ink-overlay);
   white-space: pre;
 }
@@ -63,7 +63,7 @@
   position: absolute;
   right: calc(-1 * var(--space-3));
   bottom: calc(-1 * var(--space-3));
-  font: bold var(--text-label) var(--font-ui);
+  font: bold var(--text-dense) var(--font-ui);
   color: var(--ink-bright);
   background: color-mix(in srgb, var(--surface-overlay-shade) 90%, transparent);
   border-radius: var(--radius-s);

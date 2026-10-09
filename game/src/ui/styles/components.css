@@ -2,6 +2,7 @@
 
 /* The framed box of a modal, the save panel and the New game screen, with the scrim over the game behind it. */
 #ui .dialog {
+  padding: var(--space-9);
   background: var(--surface-panel);
   border: 2px solid var(--line-bright);
   box-shadow:
@@ -12,7 +13,6 @@
 /* A panel of the right dock: the log, the contracts and the radio. */
 #ui .dock-panel {
   box-sizing: border-box;
-  padding: var(--space-4) var(--space-5);
   background: var(--surface-dock);
   border: 0;
   border-left: 2px solid var(--line-strong);
@@ -90,7 +90,7 @@
 /* An outlined word that sorts a row, in the color of its text. */
 .tag {
   padding: 0 var(--space-3);
-  font-size: var(--text-label);
+  font-size: var(--text-dense);
   border: 1px solid;
 }
 
@@ -134,5 +134,5 @@
 
 /* A number read at a glance, in the mono face. */
 .num {
-  font: var(--text-data) var(--font-mono);
+  font: var(--text-dense) var(--font-mono);
 }

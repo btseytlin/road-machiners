@@ -1,5 +1,5 @@
 #overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-#overlay .vehicle-marker { position: absolute; transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center; gap: var(--space-1); pointer-events: none; font: var(--text-label) / 1.2 var(--font-mono); color: var(--ink-overlay); }
+#overlay .vehicle-marker { position: absolute; transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center; gap: var(--space-1); pointer-events: none; font: var(--text-dense) / 1.2 var(--font-mono); color: var(--ink-overlay); }
 #overlay .marker-weapons { display: flex; gap: var(--space-1); }
 #overlay .vehicle-marker.aims-hidden .marker-weapons, #overlay .vehicle-marker.aims-hidden .marker-radio { display: none; }
 #overlay .marker-weapon { position: relative; display: flex; flex-direction: column; align-items: center; padding: var(--space-1) var(--space-2); background: var(--surface-overlay); border: 2px solid var(--line-bright); border-radius: var(--radius-m); }

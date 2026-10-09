@@ -82,7 +82,7 @@
 .log-time {
   white-space: nowrap;
   margin-right: var(--space-3);
-  font: var(--text-label) var(--font-mono);
+  font: var(--text-dense) var(--font-mono);
   color: var(--ink-muted);
 }
 .log-lines {

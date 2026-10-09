@@ -28,7 +28,7 @@
   }
   /* Small enough that the four knob labels keep apart on the narrow radio. */
   #ui .knob-cell {
-    font-size: calc(var(--text-micro) - var(--space-1));
+    font-size: calc(var(--text-caption) - var(--space-1));
   }
   /* One gap above the narrow log, whose top is its bottom offset plus its height. */
   #ui .right-dock {

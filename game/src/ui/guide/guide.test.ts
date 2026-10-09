@@ -20,7 +20,7 @@ describe("the UI guide", () => {
   });
 
   it("names the first token of each scale in docs/ui.md", () => {
-    for (const name of ["--space-1", "--text-micro", "--surface-sunk", "--line-faint", "--panel-s", "--z-hud", "--icon-xs"]) {
+    for (const name of ["--space-1", "--text-caption", "--surface-sunk", "--line-faint", "--panel-s", "--z-hud", "--icon-xs"]) {
       expect(TOKENS.has(name)).toBe(true);
       expect(guide).toContain(name);
     }

@@ -38,7 +38,7 @@
   height: var(--icon-m);
 }
 .tabs.sub .count {
-  font: var(--text-label) var(--font-mono);
+  font: var(--text-dense) var(--font-mono);
   color: var(--ink-muted);
 }
 
@@ -160,7 +160,7 @@
   border: 0;
   background: transparent;
   text-align: left;
-  font-size: var(--text-data);
+  font-size: var(--text-dense);
 }
 .part-sum > .icon {
   grid-area: icon;
@@ -242,7 +242,7 @@
   flex-direction: column;
   align-items: flex-end;
   gap: var(--space-1);
-  font-size: var(--text-label);
+  font-size: var(--text-dense);
 }
 /* Character screen: one card per skill with its rank pips, buy button, today's XP bar and perks. */
 .skill-level {
@@ -317,18 +317,18 @@
 }
 .stat {
   display: contents;
-  font: var(--text-data) / 1.15 var(--font-mono);
+  font: var(--text-dense) / 1.15 var(--font-mono);
 }
 .stat .icon {
   width: var(--icon-m);
   height: var(--icon-m);
 }
 .stat-name {
-  font-size: var(--text-data);
+  font-size: var(--text-dense);
   color: var(--ink-muted);
 }
 .stat-val {
-  font: var(--text-data) var(--font-mono);
+  font: var(--text-dense) var(--font-mono);
   text-align: right;
 }
 .stat .delta {
@@ -345,7 +345,7 @@
   color: var(--ink-muted);
 }
 .delta {
-  font: var(--text-label) var(--font-mono);
+  font: var(--text-dense) var(--font-mono);
 }
 .delta.better {
   color: var(--good-bright);
@@ -404,7 +404,7 @@
   align-items: center;
   gap: var(--space-1);
   min-width: var(--icon-3xl);
-  font: var(--text-data) var(--font-mono);
+  font: var(--text-dense) var(--font-mono);
 }
 .tag.buy {
   color: var(--good-bright);
@@ -420,7 +420,7 @@
 .cap {
   display: none;
   margin-right: var(--space-2);
-  font-size: var(--text-label);
+  font-size: var(--text-dense);
   color: var(--ink-muted);
 }
 @container (max-width: 620px) {
@@ -479,7 +479,7 @@
   gap: var(--space-4);
   padding: var(--space-3) 0 var(--space-5);
   border-bottom: 1px solid var(--line-faint);
-  font: var(--text-data) var(--font-mono);
+  font: var(--text-dense) var(--font-mono);
 }
 .town-repair > button:first-of-type {
   margin-left: auto;
@@ -494,7 +494,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  font: var(--text-data) var(--font-mono);
+  font: var(--text-dense) var(--font-mono);
 }
 .service-meter .meter {
   height: var(--meter-l);

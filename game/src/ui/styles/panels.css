@@ -144,7 +144,7 @@
   height: var(--icon-m);
 }
 .info-hp {
-  font: var(--text-label) var(--font-mono);
+  font: var(--text-dense) var(--font-mono);
 }
 .info-part .meter {
   grid-column: 2 / 4;
@@ -160,7 +160,7 @@
 .hitcard .hc-head {
   margin: var(--space-3) 0 var(--space-1);
   color: var(--ink-label);
-  font-size: var(--text-label);
+  font-size: var(--text-dense);
 }
 .hitcard .hc-row {
   display: flex;
@@ -175,7 +175,7 @@
   align-items: baseline;
 }
 .hitcard .hc-cause {
-  font-size: var(--text-label);
+  font-size: var(--text-dense);
   margin-bottom: var(--space-1);
 }
 #ui .toast {

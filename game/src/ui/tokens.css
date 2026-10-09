@@ -5,15 +5,11 @@
   /* Type */
   --font-ui: "Barlow Semi Condensed", sans-serif;
   --font-mono: "IBM Plex Mono", monospace;
-  --text-micro: 9px;
   --text-caption: 10px;
-  --text-label: 11px;
   --text-dense: 12px;
-  --text-data: 13px;
   --text-body: 14px;
   --text-lead: 16px;
   --text-heading: 24px;
-  --text-display: 30px;
   --text-hero: 40px;
 
   /* Page and surfaces, dark to light */

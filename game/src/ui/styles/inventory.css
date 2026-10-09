@@ -29,7 +29,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4);
-  font: var(--text-data) var(--font-mono);
+  font: var(--text-dense) var(--font-mono);
   color: var(--ink);
 }
 .chip .icon,
@@ -168,7 +168,7 @@
   box-sizing: border-box;
   margin: 0;
   border: 2px solid var(--cell-none);
-  font-size: var(--text-label);
+  font-size: var(--text-dense);
   padding: var(--space-1);
   overflow: hidden;
   cursor: grab;
@@ -280,7 +280,7 @@
   margin-bottom: var(--space-5);
 }
 .inv-inspection p {
-  font-size: var(--text-data);
+  font-size: var(--text-dense);
   line-height: 1.5;
 }
 .inv-storage {
@@ -297,14 +297,14 @@
   padding: var(--space-2) var(--space-4) var(--space-3);
   cursor: grab;
   user-select: none;
-  font-size: var(--text-data);
+  font-size: var(--text-dense);
 }
 .inv-chip > span {
   flex: 1;
 }
 .inv-chip > .cond {
   flex: none;
-  font-size: var(--text-label);
+  font-size: var(--text-dense);
 }
 .inv-chip > .icon {
   flex: none;
@@ -355,7 +355,7 @@
   margin-bottom: var(--space-4);
   padding: var(--space-3) var(--space-4);
   border: 1px dashed var(--accent);
-  font-size: var(--text-data);
+  font-size: var(--text-dense);
 }
 .inv-ghost {
   position: fixed;
@@ -365,7 +365,7 @@
   border: 2px solid var(--ink-overlay);
   background: var(--accent-wash);
   color: var(--ink-overlay);
-  font: var(--text-label) var(--font-mono);
+  font: var(--text-dense) var(--font-mono);
   padding: var(--space-1);
 }
 .inv-ghost.ok {

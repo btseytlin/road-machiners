@@ -28,7 +28,7 @@ body {
   pointer-events: auto;
   background: var(--surface-panel);
   border: 1px solid var(--line-strong);
-  padding: var(--space-5) var(--space-6);
+  padding: var(--space-4) var(--space-5);
   box-shadow: var(--shadow-panel);
 }
 #ui h3 {

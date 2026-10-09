@@ -17,7 +17,7 @@ Open <http://localhost:5173/ui.html> with `npm run dev` to see every token and s
 
 Name a token by its role, like `--ink-muted` or `--panel-l`, never by its value. Use the nearest token. When a value falls halfway between two steps, take the smaller one. Add a token only when two or more places need a value no token gives.
 
-- Type: `--font-ui` for words and `--font-mono` for numbers, clocks and readouts. Sizes run `--text-micro` 9px, `--text-caption`, `--text-label`, `--text-dense` 12px, `--text-data`, `--text-body` 14px, `--text-lead`, `--text-heading`, `--text-display` and `--text-hero` 40px. HUD panels use `--text-dense`. Modals and dialogs use `--text-body`.
+- Type: `--font-ui` for words and `--font-mono` for numbers, clocks and readouts. Six sizes only: `--text-caption` 10px, `--text-dense` 12px, `--text-body` 14px, `--text-lead` 16px, `--text-heading` 24px and `--text-hero` 40px. HUD panels and data use `--text-dense`. Modals and dialogs use `--text-body`. A new size needs the user's approval.
 - Surfaces from dark to light: `--surface-sunk` for wells and tracks, `--surface-well` for inputs, chips and tiles, `--surface-dock` for the right dock, `--surface-panel` for panels and dialogs, `--surface-highlight` for a hovered row, `--surface-raised` for buttons and notices, `--surface-hover` for a hovered button. Overlays over the 3D view use `--surface-overlay`.
 - Lines from faint to bright: `--line-faint` between rows, `--line-soft` around chips and tiles, `--line` around small controls, `--line-strong` for the edge of a panel and a button, `--line-bright` for the frame of a dialog or notice. `--line-hover` edges a hovered control.
 - Text: `--ink` by default, `--ink-bright` above it, `--ink-title` for headings, `--ink-label` for table heads and small labels, `--ink-muted` for secondary text, `--ink-faint` for an option that is off. `--ink-overlay` is the text over the 3D view. `--ink-on-accent` is text on an accent fill.
@@ -39,8 +39,8 @@ Name a token by its role, like `--ink-muted` or `--panel-l`, never by its value.
 
 Use a shared piece before writing a new rule. A screen may add its own layout to a piece, but not its own colors, type or frame.
 
-- `.panel` is the base of every HUD box: panel surface, strong edge and shadow.
-- `.dialog` frames a modal, the save panel and the New game screen, with the scrim over the game.
+- `.panel` is the base of every HUD box: panel surface, strong edge, shadow and the standard padding of `--space-4` by `--space-5`. The radio, the instruments and the weapons are drawn hardware and use the compact padding of `--space-2` by `--space-4`. No other panel sets its own padding.
+- `.dialog` frames a modal, the save panel and the New game screen, with the scrim over the game and padding of `--space-9` on every side.
 - `.dock-panel` is a panel of the right dock: the log, the contracts and the radio.
 - `.notice` is a box at the top middle of the HUD that waits for a choice: rescue, stranded and dialogue.
 - `.panel-title` is the heading of a small HUD panel. A dialog uses a plain `h3`.

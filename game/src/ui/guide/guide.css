@@ -13,7 +13,7 @@
 }
 #ui.guide h1 {
   margin: 0 0 var(--space-4);
-  font-size: var(--text-display);
+  font-size: var(--text-heading);
   color: var(--ink-title);
 }
 #ui.guide h2 {
@@ -37,7 +37,7 @@
 }
 .guide-cell small {
   color: var(--ink-muted);
-  font: var(--text-label) var(--font-ui);
+  font: var(--text-dense) var(--font-ui);
 }
 .guide-swatch {
   height: var(--space-10);

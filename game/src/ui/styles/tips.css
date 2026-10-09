@@ -5,7 +5,6 @@
   display: flex;
   gap: var(--space-6);
   align-items: center;
-  padding: var(--space-4) var(--space-5) var(--space-4) var(--space-6);
   font-size: var(--text-body);
   z-index: var(--z-toast);
 }

@@ -17,7 +17,7 @@
   margin: 0;
   padding-bottom: var(--space-4);
   border-bottom: 2px solid var(--danger);
-  font: 700 var(--text-display) / 1.1 var(--font-ui);
+  font: 700 var(--text-heading) / 1.1 var(--font-ui);
   color: var(--ink-title);
 }
 #boot .boot-bar { display: flex; gap: var(--space-1); height: var(--space-4); }
