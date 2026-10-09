@@ -35,14 +35,14 @@ export const GAUNTLET = {
   },
   stockSize: [2, 3, 4, 5],
   groups: [
-    [{ from: 'ahead', templates: ['buggy', 'buggy'], level: 'poor' }],
+    [{ from: 'ahead', templates: ['buggy'], level: 'light' }],
     [
-      { from: 'ahead', templates: ['buggy', 'buggy'], level: 'light' },
-      { from: 'behind', templates: ['buggy', 'buggy'], level: 'light' },
+      { from: 'ahead', templates: ['buggy'], level: 'light' },
+      { from: 'behind', templates: ['buggy'], level: 'light' },
     ],
     [
-      { from: 'ahead', templates: ['buggy', 'gunwagon', 'buggy'], level: 'standard' },
-      { from: 'behind', templates: ['buggy', 'buggy', 'buggy'], level: 'standard' },
+      { from: 'ahead', templates: ['buggy', 'buggy'], level: 'standard' },
+      { from: 'behind', templates: ['buggy'], level: 'standard' },
     ],
     [
       { from: 'ahead', templates: ['gunwagon', 'buggy', 'buggy'], level: 'heavy' },

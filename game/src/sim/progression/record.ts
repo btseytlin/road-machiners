@@ -19,7 +19,8 @@ import { isStranded } from '../stats';
 import { buyCheapestRanks } from '../progress';
 import { clockOf } from '../sun';
 import { isTowed } from '../tow';
-import type { GameEvent, NpcActivity, Vehicle, World, WorldSetup, XpSource } from '../types';
+import type { GameEvent, GameModeId, NpcActivity, Vehicle, World, WorldSetup, XpSource } from '../types';
+import { OUTPOST_PAY } from '../gauntlet';
 import { dist, type Vec } from '../vec';
 import { canVehicleSee } from '../vision';
 import { maxHp, partValue, restorePart } from '../wear';
@@ -38,7 +39,7 @@ export type Recording = { lines: TraceLine[]; rows: DayRow[]; death: RunEnd | nu
 const STALL_TILES = 1;
 
 export function record(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Recording {
-  return recordFrom(startWorld(seed, kitOf(archetype, options), 0, options.settings), `seed ${seed} ${archetype}`, archetype, turns, options);
+  return recordFrom(startWorld(seed, kitOf(archetype, options), 0, options.settings, modeOf(archetype)), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
 export function recordFrom(start: World, label: string, archetype: Archetype, turns: number, options: BotOptions = {}): Recording {
@@ -52,7 +53,7 @@ export function recordFrom(start: World, label: string, archetype: Archetype, tu
 }
 
 export function recordTurns(seed: number, archetype: Archetype, turns: number, options: BotOptions = {}): Generator<RecordStep> {
-  return stepsFrom(startWorld(seed, kitOf(archetype, options), 0, options.settings), `seed ${seed} ${archetype}`, archetype, turns, options);
+  return stepsFrom(startWorld(seed, kitOf(archetype, options), 0, options.settings, modeOf(archetype)), `seed ${seed} ${archetype}`, archetype, turns, options);
 }
 
 export function* stepsFrom(start: World, label: string, archetype: Policy, turns: number, options: BotOptions = {}): Generator<RecordStep> {
@@ -81,7 +82,7 @@ export function* playTurns(start: World, label: string, policy: Policy, turns: n
       const before = world;
       const played = inContext(label, before, () => playTurn(before, policy, options));
       world = played.next;
-      if (world.player.state === 'dead') {
+      if (runOver(world)) {
         yield played;
         return;
       }
@@ -94,23 +95,33 @@ export function* playTurns(start: World, label: string, policy: Policy, turns: n
   }
 }
 
+function runOver(world: World): boolean {
+  return world.player.state === 'dead' || world.gauntlet?.complete === true;
+}
+
 function dayEnds(before: World, after: World, last: boolean): boolean {
   return last || clockOf(after.turn).day > clockOf(before.turn).day;
 }
 
-const ARCHETYPE_KITS: Partial<Record<Archetype, string>> = { hunter: 'snowball' };
+const ARCHETYPE_KITS: Partial<Record<Archetype, string>> = { hunter: 'snowball', runner: 'gauntlet' };
+const ARCHETYPE_MODES: Partial<Record<Archetype, GameModeId>> = { runner: 'gauntlet' };
+
+function modeOf(archetype: Archetype): GameModeId {
+  return ARCHETYPE_MODES[archetype] ?? 'roaming';
+}
 
 function kitOf(archetype: Archetype, options: BotOptions): string {
   return options.kit ?? ARCHETYPE_KITS[archetype] ?? 'standard';
 }
 
-function roamingSetup(settings: Record<string, number> = {}): WorldSetup {
-  return parseSetup({ mode: 'roaming', settings: { ...defaultSetup('roaming').settings, ...settings } });
+function modeSetup(picked: GameModeId | undefined, settings: Record<string, number> = {}): WorldSetup {
+  const mode = picked ?? 'roaming';
+  return parseSetup({ mode, settings: { ...defaultSetup(mode).settings, ...settings } });
 }
 
-export function startWorld(seed: number, kit = 'standard', rank = 0, settings?: Record<string, number>): World {
+export function startWorld(seed: number, kit = 'standard', rank = 0, settings?: Record<string, number>, mode?: GameModeId): World {
   if (!Number.isInteger(rank) || rank < 0 || rank > MAX_RANK) throw new Error(`No skill rank ${rank}; ranks run 0 to ${MAX_RANK}`);
-  return update(newWorld(seed, startKit(kit), TEST_MAP, roamingSetup(settings)), (w) => {
+  return update(newWorld(seed, startKit(kit), TEST_MAP, modeSetup(mode, settings)), (w) => {
     const p = w.player;
     p.xp = 0;
     for (const skill of Object.keys(p.ranks) as (keyof typeof p.ranks)[]) {
@@ -140,7 +151,7 @@ export function turnLedger(orders: BotTurn, next: World): Ledger {
   return ledger;
 }
 
-type Move = { key: 'contracts' | 'fees'; amount: number };
+type Move = { key: 'contracts' | 'fees' | 'payouts'; amount: number };
 
 function playerMove(e: GameEvent, me: string): Move | null {
   if (e.t === 'money') return { key: moneyEventKey(e.reason), amount: e.amount };
@@ -159,7 +170,8 @@ function paidBetween(payee: string, payer: string, me: string, fee: number): Mov
   return payer === me ? { key: 'fees', amount: -fee } : null;
 }
 
-function moneyEventKey(reason: string): 'contracts' | 'fees' {
+function moneyEventKey(reason: string): Move['key'] {
+  if (reason === OUTPOST_PAY) return 'payouts';
   if (reason === 'contract' || reason === 'failed haul contract') return 'contracts';
   if (reason.startsWith('towing ')) return 'fees';
   throw new Error(`Money event with an unknown reason "${reason}"`);
@@ -168,7 +180,7 @@ function moneyEventKey(reason: string): 'contracts' | 'fees' {
 function playTurn(world: World, archetype: Policy, options: BotOptions): PlayedTurn {
   const orders = botOrders(buyCheapestRanks(world), archetype, options);
   const goals = topGoals(orders.world);
-  const next = endTurn(orders.world, moveAllFar);
+  const next = orders.world.player.state === 'dead' ? orders.world : endTurn(orders.world, moveAllFar);
   failOnStall(next, goals, options.tolerateStalls === true);
   failOnDryMajority(next);
   const events = [...orders.events, ...next.events];

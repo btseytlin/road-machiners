@@ -86,9 +86,10 @@ describe('a Gauntlet course', () => {
     const run = runOf(gauntletWorld(3));
     const trucks = (k: number) => run.groups.filter((g) => g.stretch === k).reduce((n, g) => n + g.templates.length, 0);
 
-    expect(trucks(0)).toBe(2);
+    expect(trucks(0)).toBe(1);
     expect(trucks(3)).toBe(9);
-    expect(run.groups.filter((g) => g.stretch === 0).map((g) => g.level)).toEqual(['poor']);
+    for (let k = 1; k < 4; k++) expect(trucks(k)).toBeGreaterThanOrEqual(trucks(k - 1));
+    expect(run.groups.filter((g) => g.stretch === 0).map((g) => g.level)).toEqual(['light']);
     expect(run.groups.filter((g) => g.stretch === 3).every((g) => g.level === 'heavy')).toBe(true);
   });
 

@@ -57,7 +57,7 @@ export const START_KITS: Record<string, StartKit> = {
   gauntlet: {
     name: 'Your truck',
     chassis: 'hauler',
-    parts: ['cannon', 'mg', 'stockEngine', 'ram', 'plates', 'plates', 'rack'],
+    parts: ['cannon', 'heavyMg', 'mg', 'workhorseDiesel', 'ram', 'plates', 'plates', 'rack'],
     storage: [],
     money: 20000,
     fuel: CHASSIS.hauler.fuelCap,

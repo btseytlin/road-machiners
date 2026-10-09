@@ -9,7 +9,8 @@ import { generateNpcLoadout } from './npc-loadout';
 import { modeRules } from './settings';
 import { isFree, spawnAt } from './spawn';
 import { declareFeud } from './states';
-import { isStranded } from './stats';
+import { getResources } from './resources';
+import { fuelCap, isStranded } from './stats';
 import { refreshTrack } from './tracks';
 import { chassisDef } from '../data/chassis';
 import type { GauntletRun, Outpost, RunLossCause, Vehicle, WaveGroup, World } from './types';
@@ -87,6 +88,7 @@ export function spawnGroup(world: World, run: GauntletRun, line: CourseLine, gro
   const me = playerVehicle(world);
   loadouts.forEach(({ tpl, loadout }, i) => {
     const v = spawnAt(world, tpl, loadout, spots[i]);
+    getResources(world, v).fuel = fuelCap(v);
     v.heading = Math.atan2(me.pos.y - v.pos.y, me.pos.x - v.pos.x);
     group.vehicles.push(v.id);
     declareFeud(world, v, me.id);

@@ -17,7 +17,7 @@ import type { ThreatAnswer } from '../parley';
 import type { GameEvent, GridItem, PartInstance, Vehicle, World } from '../types';
 import { isJunk } from '../wear';
 
-export const LEDGER_KEYS = ['fuel', 'supplies', 'repairs', 'gear', 'goodsBought', 'goodsSold', 'lootSales', 'contracts', 'fees', 'other'] as const;
+export const LEDGER_KEYS = ['fuel', 'supplies', 'repairs', 'gear', 'goodsBought', 'goodsSold', 'lootSales', 'contracts', 'fees', 'payouts', 'other'] as const;
 export type LedgerKey = (typeof LEDGER_KEYS)[number];
 export type Ledger = Record<LedgerKey, number>;
 
