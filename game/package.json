@@ -16,6 +16,7 @@
     "sfx:board": "vite --open /sound.html",
     "sfx:reimport": "vite-node scripts/sfx-reimport.mjs",
     "sfx:report": "vite-node scripts/sfx-report.mjs",
+    "text:review": "vite-node scripts/text-review.mjs",
     "combat": "vite-node scripts/combat.mjs",
     "error:replay": "vite-node scripts/error-replay.mjs --",
     "loadouts": "vite-node scripts/loadouts.mjs",
