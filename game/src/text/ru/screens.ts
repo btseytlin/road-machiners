@@ -368,7 +368,7 @@ export const SCREENS: Translation<typeof EN> = {
   'icon.pen': 'Пробитие',
   'icon.range': 'Дальность',
   'icon.reload': 'Перезарядка',
-  'icon.cooldown': 'Между выстрелами',
+  'icon.cooldown': 'Пауза',
   'icon.magazine': 'Магазин',
   'icon.spread': 'Разброс',
   'icon.arc': 'Сектор обстрела',
