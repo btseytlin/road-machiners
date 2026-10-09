@@ -16,5 +16,5 @@ digraph release {
   edge [color="#6b7280", fontcolor="#6b7280", style=dashed, penwidth=1.3, dir=forward, weight=0];
   G -> BL [label="blocked or play limit"];
   G -> D [label="old bug"];
-  S -> SB [label="budget spent"];
+  S -> SB [label="fix budget spent"];
 }
