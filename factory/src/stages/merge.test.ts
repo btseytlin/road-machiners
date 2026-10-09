@@ -199,6 +199,16 @@ describe('merge queue', () => {
     expect(calls).toContain('push head1 dev');
   });
 
+  it('hands a test past its own limit to the merge session at once, naming the test, with no rerun as load', async () => {
+    shellFailures = [' FAIL  src/sim/npc-rearm.test.ts > NPC rearm > waits out the service delay\nError: Test timed out in 300000ms.'];
+    await merge(fakeCtx());
+    expect(runs).toHaveLength(1);
+    expect(runs[0]!.prompt).toContain('npc-rearm.test.ts > NPC rearm > waits out the service delay');
+    expect(logs.some((line) => line.includes('only timed out'))).toBe(false);
+    expect(calls.filter((call) => call === 'checks')).toHaveLength(2);
+    expect(calls).toContain('push head1 dev');
+  });
+
   it('judges each run by its own lines of the shared checks log, so a real failure after a hung run reaches the agent', async () => {
     const outputs = [HUNG, "src/a.ts(1,1): error TS2322: Type 'string' is not assignable to type 'number'."];
     const ctx = fakeCtx();

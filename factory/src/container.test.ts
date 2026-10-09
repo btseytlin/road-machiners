@@ -206,10 +206,16 @@ describe('dockerContainer', () => {
     expect(readPeakGb('no mark')).toBeUndefined();
   });
 
-  it('takes the time limits off the game tests in every container', async () => {
+  it('gives the game tests their finite shared-server limits in every container, never off', async () => {
     const { run, calls } = fakeRun();
     await dockerContainer(run, cfg, null).shell('/c', 'x', '/l');
-    expect(runCall(calls).args.join(' ')).toContain('-e TEST_TIMEOUTS=off');
+    await dockerContainer(run, cfg, 'checks-8-x').agent({ clone: '/c', dir: 'game', model: 'm', prompt: 'p', log: '/l' });
+    const runs = calls.filter((call) => call.args[0] === 'run' && call.args[1] === '--rm').map((call) => call.args.join(' '));
+    expect(runs).toHaveLength(2);
+    for (const args of runs) {
+      expect(args).toContain('-e TEST_TIMEOUTS=shared');
+      expect(args).not.toContain('TEST_TIMEOUTS=off');
+    }
   });
 
   it('gives agent and shell containers the GPU with its graphics drivers only when the GPU is on', async () => {

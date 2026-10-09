@@ -1,6 +1,13 @@
-import type { RunnerTestCase, RunnerTaskEventPack, RunnerTaskResultPack } from 'vitest';
+import type { RunnerTask, RunnerTestCase, RunnerTaskEventPack, RunnerTaskResultPack } from 'vitest';
 import { VitestTestRunner } from 'vitest/runners';
 import { getFn } from 'vitest/suite';
+import { withinLimit } from './test-limit';
+
+function nameOf(test: RunnerTestCase): string {
+  const names: string[] = [];
+  for (let task: RunnerTask | undefined = test; task !== undefined && task !== test.file; task = task.suite) names.unshift(task.name);
+  return [test.file.name, ...names].join(' > ');
+}
 
 type TaskUpdate = (packs: RunnerTaskResultPack[], events: RunnerTaskEventPack[]) => Promise<void>;
 
@@ -31,6 +38,7 @@ export default class SettledRunner extends VitestTestRunner {
 
   async runTask(test: RunnerTestCase): Promise<void> {
     while (this.pending.size > 0) await Promise.allSettled([...this.pending]);
-    await getFn(test)();
+    const limit = test.timeout > 0 && Number.isFinite(test.timeout) ? test.timeout : this.config.testTimeout;
+    await withinLimit(nameOf(test), limit, getFn(test));
   }
 }
