@@ -8,6 +8,7 @@ import { parseSetup } from '../sim/settings';
 import { clearTips } from '../ui/tips';
 import type { NewGameActions } from '../ui/new-game';
 import { settleAims } from '../sim/combat';
+import { stockOldSpots } from '../sim/salvage';
 import { clockOf } from '../sim/sun';
 import { allSlots, listSaves, manualSlots, requestBoot, slotLabel, type BootRequest, type SlotId } from './save-slots';
 import type { SaveSlots } from './save-db';
@@ -84,9 +85,18 @@ export function loadWorld(slots: SaveSlots, slot: SlotId, map: BakedMap): World 
     removed: [],
     terrain: map.terrain,
   };
+  stockedOldSpots(loaded, map);
   refreshVision(loaded);
   settleAims(loaded);
   return loaded;
+}
+
+function stockedOldSpots(world: World, map: BakedMap): void {
+  try {
+    stockOldSpots(world, map);
+  } catch (error) {
+    throw new SaveError(`Game save holds a broken set of old-world loot spots: ${(error as Error).message}`);
+  }
 }
 
 function brokenProps(baked: readonly Obstacle[], broken: readonly SavedBroken[]): BrokenProp[] {

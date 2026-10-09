@@ -1,15 +1,76 @@
 // Any uncaught error stops the game behind a fullscreen message, so a crash is never silent.
 // Outside dev, once boot is done, the game keeps running: an error goes to the browser log and the debug console.
 // A failed command changes nothing, since commands mutate a clone of the world. Boot errors still crash.
+// A hidden error from a script outside the game, like a browser extension's, never crashes and never holds saves.
+// The crash screen lists what a player can post in a public issue: the error, its source, the version, the boot step,
+// the browser and the page address. It holds no save, world or storage content.
+
+import { GAME_VERSION } from '../config';
 
 let shown = false;
 let report: ((text: string) => void) | null = null;
 const reported = new Set<string>();
+const warned = new Set<string>();
+let step = 'starting the page';
 const listeners: (() => void)[] = [];
+const FOREIGN_NOTE = 'Ignored an error from a script outside the game';
+const MUTED_MESSAGE = /^script error\.?$/i;
+
+// The fields of a window error event the crash screen reads.
+export interface ErrorFacts {
+  error: unknown;
+  message: string;
+  filename: string;
+  lineno: number;
+  colno: number;
+}
+
+// A browser hides the message, file and stack of an error thrown by a classic script from another origin, and reports
+// only "Script error." with no error object. The game's code is same-origin module scripts and module workers, which
+// browsers fetch in CORS mode and never mute, so such an event is never the game's. Only that sign counts as foreign.
+export function isForeignError(event: ErrorFacts, pageOrigin: string): boolean {
+  if (event.error != null || !MUTED_MESSAGE.test(event.message)) return false;
+  if (event.filename === '') return true;
+  try {
+    return new URL(event.filename).origin !== pageOrigin;
+  } catch {
+    return false;
+  }
+}
+
+// What the crash screen says around the error.
+export interface CrashContext {
+  version: string;
+  step: string;
+  userAgent: string;
+  page: string;
+}
+
+// Names the boot step under way, so a crash screen says where boot stopped. "running" once boot is done.
+export function bootStep(name: string): void {
+  step = name;
+}
+
+// The body of the crash screen: the message, the source and stack when known, then the details.
+export function crashText(err: unknown, facts: ErrorFacts | null, context: CrashContext): string {
+  const lines = [err instanceof Error ? err.message : String(err)];
+  if (facts && facts.filename !== '') lines.push(`Source: ${facts.filename}:${facts.lineno}:${facts.colno}`);
+  if (err instanceof Error && err.stack) lines.push('', err.stack);
+  lines.push(
+    '',
+    `Version: ${context.version}`,
+    `Boot step: ${context.step}`,
+    `Browser: ${context.userAgent}`,
+    `Page: ${context.page.split(/[?#]/)[0]}`,
+  );
+  return lines.join('\n');
+}
 const sinks: ((err: unknown) => void)[] = [];
 
 export function installCrashScreen(): void {
-  window.addEventListener('error', (e) => onError(e.error ?? e.message));
+  window.addEventListener('error', (e) =>
+    onWindowError({ error: e.error, message: e.message, filename: e.filename, lineno: e.lineno, colno: e.colno }),
+  );
   window.addEventListener('unhandledrejection', (e) => onError(e.reason));
 }
 
@@ -29,20 +90,35 @@ export function reportError(err: unknown): void {
   onError(err);
 }
 
-function onError(err: unknown): void {
+function onWindowError(facts: ErrorFacts): void {
+  if (isForeignError(facts, location.origin)) return ignoreForeign(facts);
+  onError(facts.error ?? facts.message, facts);
+}
+
+// The browser log and the debug console get each hidden foreign error once. No listener runs, so saves go on.
+function ignoreForeign(facts: ErrorFacts): void {
+  const key = `${facts.message} ${facts.filename}`;
+  if (!warned.has(key)) console.warn(FOREIGN_NOTE, facts.message, facts.filename);
+  warned.add(key);
+  if (!report || reported.has(FOREIGN_NOTE)) return;
+  reported.add(FOREIGN_NOTE);
+  report(FOREIGN_NOTE);
+}
+
+function onError(err: unknown, facts: ErrorFacts | null = null): void {
   for (const sink of sinks) sink(err);
   for (const listener of listeners) listener();
-  if (!report) return showCrash(err);
+  if (!report) return showCrash(err, facts);
   const text = err instanceof Error ? err.message : String(err);
   if (reported.has(text)) return;
   reported.add(text);
   report(`Error: ${text}`);
 }
 
-function showCrash(err: unknown): void {
+function showCrash(err: unknown, facts: ErrorFacts | null): void {
   if (shown) return;
   shown = true;
-  const text = err instanceof Error ? `${err.message}\n\n${err.stack ?? ''}` : String(err);
+  const text = crashText(err, facts, { version: GAME_VERSION, step, userAgent: navigator.userAgent, page: location.href });
   const box = document.createElement('div');
   box.className = 'crash-screen';
   const title = document.createElement('div');

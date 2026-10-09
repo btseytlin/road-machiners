@@ -75,6 +75,7 @@ const VAR_TEXT: VarText = {
   prices: pricesText,
   aid: aidText,
   tip: tipText,
+  line: (v) => v.text,
   answer: () => { throw new Error('A rolled answer is never shown in a line'); },
 };
 
@@ -101,12 +102,12 @@ export function canCall(w: World, id: string): boolean {
 
 export type DialogueHost = {
   world(): World;
-  talk(next: World): void; // apply a dialogue command and log its lines
-  inspected(): string | null; // the pinned vehicle, else the one under the cursor
-  busy(): boolean; // a turn plays
-  commit(next: World): void; // take a honked world without pausing travel
-  log(next: World): void; // log the events of a command
-  playHorn(vehicleId: string, delayMs: number): void; // sound one truck's horn where it is drawn
+  talk(next: World): void;
+  inspected(): string | null;
+  busy(): boolean;
+  commit(next: World): void;
+  log(next: World): void;
+  playHorn(vehicleId: string, delayMs: number): void;
 };
 
 const HONK_REPLY_MS = 500;

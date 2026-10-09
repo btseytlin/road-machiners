@@ -25,3 +25,9 @@ describe('currency in dialogue', () => {
     expect(fillLine('{fee} when we get there.', { fee: { kind: 'money', amount: 150000 } })).toBe("1,500 M's when we get there.");
   });
 });
+
+describe('fillLine', () => {
+  it("shows a driver's own line as it is", () => {
+    expect(fillLine('{warnLine}', { warnLine: { kind: 'line', text: "That's my pick. Roll on." } })).toBe("That's my pick. Roll on.");
+  });
+});

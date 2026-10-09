@@ -28,7 +28,7 @@ import { applyHazards } from './hazard';
 import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
 import { scrapPatch } from './economy';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
-import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
+import { clearPiles, initializeSalvage, renewSalvage, stockOldSpots } from './salvage';
 import { spillDeadRows } from './spill';
 import { fadeCraters } from './craters';
 import { timed } from '../perf';
@@ -163,13 +163,13 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
     );
   world.vehicles.push(truck);
   world.player.vehicleId = truck.id;
-  setUpWorldStock(world, truck, kit, populate);
+  setUpWorldStock(world, map, truck, kit, populate);
   refreshVision(world);
   world.events = [];
   return world;
 }
 
-function setUpWorldStock(world: World, truck: Vehicle, kit: StartKit, populate: boolean): void {
+function setUpWorldStock(world: World, map: BakedMap, truck: Vehicle, kit: StartKit, populate: boolean): void {
   const rules = modeRules(world);
   if (world.setup.mode === 'gauntlet') layGauntlet(world);
   if (rules.salvage) initializeSalvage(world);
@@ -177,6 +177,7 @@ function setUpWorldStock(world: World, truck: Vehicle, kit: StartKit, populate: 
   world.player.storage = kit.storage.map((defId) => makePart(world, defId, 0));
   if (populate && rules.traffic) spawnInitial(world);
   if (rules.traffic) initializeShops(world);
+  stockOldSpots(world, map);
 }
 
 export function startOf(seed: number, setup: WorldSetup): { pos: Vec; heading: number } {

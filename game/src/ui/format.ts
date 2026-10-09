@@ -20,7 +20,7 @@ import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
 import { hasPerk } from '../sim/progress';
-import { aidData, pleaData, statesHeld, strayData, towData } from '../sim/states';
+import { aidData, lootWarningData, pleaData, statesHeld, strayData, towData } from '../sim/states';
 import { RULES } from '../data/rules';
 import { isJunk, maxHp } from '../sim/wear';
 import { clockOf } from '../sim/sun';
@@ -177,6 +177,7 @@ const STATE_LABELS: Record<StateKindId, (s: NpcState) => string> = {
   escort: () => 'Escorting you',
   aid: (s) => (aidData(s).giver === 'npc' ? 'Bringing you fuel' : 'Waiting for your fuel'),
   combat: () => COMBAT_LABEL,
+  lootWarning: (s) => (lootWarningData(s).answer === 'comply' ? 'You agreed to leave its loot' : 'Warning you off its loot'),
   strayFire: (s) => `Hit by your stray fire, ${Math.round(strayData(s).damage)} of ${RULES.stray.feudDamage} damage forgiven`,
 };
 
@@ -491,6 +492,7 @@ const NOTICED: { [K in GameEvent['t']]?: (e: Extract<GameEvent, { t: K }>) => st
   aidStarted: (e) => [e.giver, e.receiver],
   escortHired: (e) => [e.by, e.client],
   escortRefused: (e) => [e.by, e.client],
+  lootArgument: (e) => [e.warner, e.looter],
   caltrops: (e) => [e.vehicle],
   lineTorn: (e) => [e.vehicle],
   claymore: (e) => [e.vehicle, e.other],
@@ -575,6 +577,14 @@ function infoText(world: World, e: Extract<GameEvent, { t: 'info' }>): LogLine |
   return e.debug && !world.player.fullLog ? null : { text: e.text, cls: 'dim' };
 }
 
+const ARGUMENT_ENDS = { yielded: (_: string, looter: string) => `${looter} rolls on.`, backedOff: (warner: string, looter: string) => `${looter} stays put, and ${warner} rolls on.`, fight: () => 'They fight over it.' };
+
+function lootArgumentText(world: World, e: Extract<GameEvent, { t: 'lootArgument' }>): LogLine {
+  const warner = vehicleName(world, e.warner);
+  const looter = vehicleName(world, e.looter);
+  return { text: `${warner} warns ${looter} off the ${e.place}. ${ARGUMENT_ENDS[e.end](warner, looter)}`, cls: e.end === 'fight' ? 'bad' : 'dim' };
+}
+
 function caltropsText(world: World, e: Extract<GameEvent, { t: 'caltrops' }>): LogLine | null {
   const me = world.player.vehicleId;
   const [text, cls] = e.vehicle === me ? ['You drive into caltrops', 'bad'] : [`${vehicleName(world, e.vehicle)} drives into caltrops`, e.source === me ? 'good' : 'dim'];
@@ -653,6 +663,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]?: (world: World, e: Extract<GameEvent
   outpostReached: outpostReachedText,
   runLost: (_, e) => ({ text: e.cause === 'wrecked' ? `Your truck is wrecked. The run ends on stretch ${e.stretch}.` : `You end the run on stretch ${e.stretch}.`, cls: 'bad' }),
   runComplete: () => ({ text: 'The last outpost. The run is complete.', cls: 'good' }),
+  lootArgument: lootArgumentText,
 };
 
 function outpostReachedText(world: World, e: Extract<GameEvent, { t: 'outpostReached' }>): LogLine {
