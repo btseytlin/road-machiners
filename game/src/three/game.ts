@@ -863,7 +863,8 @@ export class Game {
 
   private playBreak(b: PartBreak): void {
     if (this.eventPoint(b.vehicle) === null) return;
-    const p = playBreak(this.world, this.obstacles.parts, this.fx, this.views.get(b.vehicle), b);
+    if (!this.anim) throw new Error(`Part ${b.part} of ${b.vehicle} broke outside turn playback`);
+    const p = playBreak(this.world, this.anim.before, this.obstacles.parts, this.fx, this.views.get(b.vehicle), b);
     if (p) this.sound.at("part-broken", p, 0);
     playCookOff(this.combatHost(), b);
   }

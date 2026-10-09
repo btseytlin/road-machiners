@@ -4,11 +4,14 @@ import * as THREE from 'three';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { PHYSICS } from '../../data/physics';
 import { initPhysics } from '../../phys/drive';
-import { flatTerrain } from '../../sim/testkit';
+import { addVehicle, emptyWorld, flatTerrain } from '../../sim/testkit';
+import { cloneWorld } from '../../sim/world';
 import { DebrisSim, piecesOf } from './debris';
+import type { Fx3D } from './fx';
 import { loadModels } from './models';
-import { overCap, PART_DEBRIS_MAX, PartDebris } from './partDebris';
+import { overCap, PART_DEBRIS_MAX, PartDebris, playBreak } from './partDebris';
 import { RenderScope, SightLimit } from './scope';
+import type { VehicleView } from './vehicle';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
 await loadModels(async (name) => {
@@ -95,5 +98,23 @@ describe('prop debris', () => {
     expect(group.children.length).toBe(piecesOf('wreck').length);
     sim.settle();
     sim.free();
+  });
+});
+
+describe('playBreak', () => {
+  it('plays a part that the wreck lost in the same turn', () => {
+    const turnStart = emptyWorld();
+    const npc = addVehicle(turnStart, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 34, y: 30 });
+    const gun = npc.items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
+    const world = cloneWorld(turnStart);
+    const wreck = world.vehicles.find((v) => v.id === npc.id)!;
+    wreck.items = wreck.items.filter((it) => it.id !== gun.id);
+    const at = { x: 1, y: 2, z: 3 };
+    const view = { partPoint: () => at, center: () => at } as unknown as VehicleView;
+    const debris = { burst: vi.fn() } as unknown as PartDebris;
+    const fx = { ammoBlast: vi.fn() };
+    const part = gun.kind === 'part' ? gun.part.id : '';
+    expect(playBreak(world, turnStart, debris, fx as unknown as Fx3D, view, { vehicle: npc.id, part })).toEqual(at);
+    expect(fx.ammoBlast).toHaveBeenCalledWith(at);
   });
 });
