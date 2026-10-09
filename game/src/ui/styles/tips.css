@@ -2,6 +2,7 @@
   display: flex;
   gap: var(--space-6);
   align-items: center;
+  flex-wrap: wrap;
   font-size: var(--text-body);
   z-index: var(--z-toast);
 }
@@ -11,4 +12,8 @@
 }
 #ui:has(.dialog:not(.modal)) > .top-center > .tip {
   visibility: hidden;
+}
+#ui .tip .tip-actions {
+  flex-basis: 100%;
+  display: flex;
 }

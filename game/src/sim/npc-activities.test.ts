@@ -361,6 +361,7 @@ describe('NPC activities', () => {
     const npc = addVehicle(w, 'traders', 'hauler', ['trailerBox', 'stockEngine'], { x: 10, y: 10 });
     npc.brain = npcBrain('trader', npc.pos, ['trader']);
     npc.resources!.money = 166700;
+    npc.resources!.fuel = fuelCap(npc);
     forceOption('idle', 'trade');
     planNpcOrders(w);
     const source = [...REGION.towns, ...REGION.locations].find((s) => s.id === topGoal(npc)?.targetId)!;

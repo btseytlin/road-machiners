@@ -28,7 +28,7 @@ function ramp(build: Build, grade: number, type: TerrainTypeId): World {
   if (build === 'loadedHauler') {
     const hauler = makeVehicle(w, { name: 'hauler', faction: 'player', chassisId: 'hauler', parts: ['mg', 'stockEngine', 'plates', 'trailerBox'].map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {}, pos: { x: 26, y: 30 }, heading: 0, brain: null });
     w.vehicles[0] = { ...hauler, id: w.vehicles[0].id };
-    addGoods(w, w.vehicles[0], 'scrap', 999);
+    addGoods(w, w.vehicles[0], 'scrap', 61);
   }
   w.player.fuel = 999;
   return setMoveOrder(w, { kind: 'through', dest: { x: 120, y: 30 } });

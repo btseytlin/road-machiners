@@ -69,10 +69,11 @@ describe('game save', () => {
     const storage = makeStorage();
     writeSave(slots, 'auto', newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')), RUN, 1000);
     storage.setItem('roam.tips', JSON.stringify(['waypoint']));
+    storage.setItem('roam.tipsOff', '1');
     storage.setItem('roam-sound', '{}');
     clearGame(slots, storage);
     expect(slots.has('auto')).toBe(false);
-    expect([storage.getItem('roam.tips'), storage.getItem('roam-sound')]).toEqual([null, '{}']);
+    expect([storage.getItem('roam.tips'), storage.getItem('roam.tipsOff'), storage.getItem('roam-sound')]).toEqual([null, null, '{}']);
   });
 
   it('saves a command on a town pad at once, and not out in the open', () => {
