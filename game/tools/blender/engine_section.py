@@ -23,7 +23,8 @@ COLORS = {
     "plate": 0x8E887C,  # PAL.hull.grey
     "plate_dark": 0x6E6A62,  # PAL.hull.dark
     "streak": 0x7E5634,  # PAL.hull.rust
-    "steel": 0xA8A8A0,
+    "steel": 0xD0D0C8,
+    "warn": 0xD8A830,
     "soot": 0x1E1A18,
 }
 SEED = 283
@@ -45,11 +46,11 @@ def casing(kit: Kit) -> None:
 
 
 def guts(kit: Kit) -> None:
-    kit.box("bed", (3.0, 1.5, 0.2), (0, 0, 0.35), "plate_dark")
+    kit.box("bed", (3.0, 1.5, 0.2), (0, 0, 0.35), "rust_side")
     # Two pumps, a manifold and lines between them.
     kit.cylinder("pump0", 0.45, 1.2, (-1.0, 0.0, 0.95), "steel", rot=(math.radians(90), 0, 0), vertices=8)
-    kit.cylinder("pump1", 0.35, 1.0, (0.6, -0.1, 0.8), "rust_dark", rot=(0, math.radians(90), 0), vertices=8)
-    kit.box("manifold", (0.7, 0.6, 0.5), (0.0, 0.55, 0.65), "rust", dent_by=0.02)
+    kit.cylinder("pump1", 0.35, 1.0, (0.6, -0.1, 0.8), "warn", rot=(0, math.radians(90), 0), vertices=8)
+    kit.box("manifold", (0.7, 0.6, 0.5), (0.0, 0.55, 0.65), "warn", dent_by=0.02)
     strut(kit, "line0", (-1.0, 0.5, 1.0), (0.0, 0.5, 1.1), 0.1, "steel")
     strut(kit, "line1", (0.0, 0.5, 0.9), (1.4, -0.6, 0.6), 0.1, "rust_dark")
     strut(kit, "line2", (-1.0, -0.6, 1.3), (0.5, -0.3, 1.9), 0.09, "steel")

@@ -25,9 +25,10 @@ COLORS = {
     "rust": 0x7E5634,  # PAL.hull.rust
     "rust_dark": 0x3A2418,  # PAL.rust.dark
     "soot": 0x1E1A18,
-    "locker": 0x46606A,
-    "cargo_blue": 0x3F8AA0,
-    "cargo_orange": 0xC8742A,
+    "locker": 0x5E8E9E,
+    "cargo_blue": 0x58B0C8,
+    "cargo_orange": 0xE08A30,
+    "cargo_yellow": 0xE8C050,
     "ship_glow": 0x6FE4FF,  # PAL.shipGlow, painted emissive in the view
 }
 SEED = 281
@@ -39,14 +40,14 @@ HIGH = 1.9  # m, wall height
 
 
 def walls(kit: Kit) -> None:
-    kit.box("floor", (LEN, WID, 0.25), (0, 0, 0.12), "soot")
+    kit.box("floor", (LEN, WID, 0.25), (0, 0, 0.12), "hull_dark")
     # Back wall in three plates of different tone, the middle one torn lower.
-    for i, (y, w, h, mat) in enumerate(((-1.1, 1.2, HIGH, "hull_grey"), (0.0, 1.0, HIGH - 0.8, "hull_dark"), (1.1, 1.2, HIGH, "hull"))):
+    for i, (y, w, h, mat) in enumerate(((-1.1, 1.2, HIGH, "hull"), (0.0, 1.0, HIGH - 0.8, "hull_grey"), (1.1, 1.2, HIGH, "hull"))):
         kit.box(f"back{i}", (WALL, w, h), (-LEN / 2 + WALL / 2, y, h / 2), mat, dent_by=0.04)
     # Side walls, plated in two runs, each torn at a different height.
     for s, side in ((-1, "l"), (1, "r")):
         y = s * (WID / 2 - WALL / 2)
-        kit.box(f"side_{side}0", (2.4, WALL, HIGH), (-1.1, y, HIGH / 2), "hull_grey" if s < 0 else "hull", dent_by=0.04)
+        kit.box(f"side_{side}0", (2.4, WALL, HIGH), (-1.1, y, HIGH / 2), "hull", dent_by=0.04)
         kit.box(f"side_{side}1", (2.0, WALL, HIGH - 0.9), (1.2, y, (HIGH - 0.9) / 2), "hull_dark", dent_by=0.04)
         kit.box(f"side_{side}_tear", (0.9, WALL, 0.4), (-0.9 + s * 0.5, y, HIGH + 0.05), "rust", rot=(0, math.radians(14 * s), 0), dent_by=0.05)
     # +X wall: two stubs either side of the hatch, low so the load shows.
@@ -63,7 +64,7 @@ def load(kit: Kit) -> None:
     kit.box("cargo0", (1.0, 1.0, 0.9), (-0.2, -0.8, 0.7), "cargo_blue", dent_by=0.02)
     kit.box("cargo1", (0.9, 0.9, 0.8), (-0.2, -0.8, 1.55), "cargo_orange", rot=(0, 0, math.radians(20)), dent_by=0.02)
     kit.box("cargo2", (0.9, 0.9, 0.8), (0.9, 0.55, 0.65), "cargo_orange", rot=(0, 0, math.radians(-15)), dent_by=0.02)
-    kit.box("cargo3", (1.1, 0.7, 0.6), (1.5, -0.7, 0.55), "cargo_blue", rot=(math.radians(18), 0, math.radians(40)), dent_by=0.02)
+    kit.box("cargo3", (1.1, 0.7, 0.6), (1.5, -0.7, 0.55), "cargo_yellow", rot=(math.radians(18), 0, math.radians(40)), dent_by=0.02)
     kit.cylinder("cell", 0.28, 0.7, (0.1, 0.9, 0.6), "ship_glow", vertices=8)
 
 

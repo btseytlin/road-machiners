@@ -40,6 +40,10 @@ Size a building against the 8.1 m army truck, the one size cue a concept and the
 
 A prop that trucks drive under keeps every box below `PHYSICS.truckClearance` (2.8 m) inside its trunk's footprint. Boxes whose bottom is at or above it block neither driving nor nav, but they still block sight. `scripts/prop-shapes.mjs` merges the dead tree's boxes below and above that height apart, so the crown never reaches down to the ground.
 
+## Territory loot sections
+
+The loot spots of the Fallen Sun and Glass Flats are sections of their wreck, not crate heaps: `hull_bay` (hull caches), `cargo_pod` (field spots) and `engine_section` (Glass Flats caches). Each is built to a 2.8 m footprint radius like the heap it replaces, stays under the 2.4 m eye height so its load shows, and is open on top with its cargo in bright ship colors. A crate heap now means a dropped pile or an army depot.
+
 ## Trucks
 
 Each truck is one base model per chassis plus shared kit parts on its inventory grid. The grid is a logical layout for balance: slots, armor lanes and what shields what. It holds no meters, and the inventory draws it with square cells. The model owns everything physical: the collider, the wheel positions, the engine spot and the surfaces parts stand on. One projection in `src/sim/body.ts` links them, and nothing else converts between cells and meters.
