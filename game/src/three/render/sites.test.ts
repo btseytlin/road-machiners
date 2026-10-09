@@ -6,7 +6,7 @@ import { FORTRESS } from '../../data/fortress';
 import { PAL } from '../../render/palette';
 import { PHYSICS } from '../../data/physics';
 import { REGION } from '../../data/region';
-import { fortressGates, insideCurtain, onFortressRock, pitDepth } from '../../sim/fortress';
+import { fortressGates, fortressPieces, insideCurtain, onFortressRock, pitDepth } from '../../sim/fortress';
 import { GATE_CLEAR, riseFront } from './interiors/nose';
 import { boxDistance, propBoxes, propObstacle, propShape } from '../../sim/mapgen';
 import { noseRocks } from '../../sim/nose';
@@ -26,6 +26,7 @@ const built = buildSites({ size: 1, heights: [0, 0, 0, 0], types: ['hardpan'] })
 const { root: sites, movers } = built;
 
 const FORTRESS_WALL_TILES = 4;
+const LIT_LAMPS = new Set([PAL.lamp.on, PAL.lamp.amber]);
 const ALL = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
 const ABANDONED = ALL.filter((s) => !isFortress(s));
 
@@ -146,7 +147,7 @@ describe('landmark scale', () => {
     for (const site of ALL) {
       const lit: Vector3[] = [];
       sites.getObjectByName(`landmark-${site.id}`)!.traverse((o) => {
-        if (o instanceof Mesh && (o.material as MeshLambertMaterial).color.getHex() === PAL.lamp.on) lit.push(o.position.clone());
+        if (o instanceof Mesh && LIT_LAMPS.has((o.material as MeshLambertMaterial).color.getHex())) lit.push(o.position.clone());
       });
       const faces = isFortress(site) ? fortressGates(site).map((g) => ({ at: g.face, width: g.width })) : siteGates(site).map((g) => ({ at: g, width: REGION.settlement.gateWidth }));
       for (const face of faces) {
@@ -161,8 +162,8 @@ describe('landmark scale', () => {
     sites.traverse((o) => {
       if (!(o instanceof Mesh)) return;
       const material = o.material as MeshLambertMaterial;
-      if (material.color.getHex() !== PAL.lamp.on) return;
-      expect(material.emissive.getHex(), o.parent?.name).toBe(PAL.lamp.on);
+      if (!LIT_LAMPS.has(material.color.getHex())) return;
+      expect(material.emissive.getHex(), o.parent?.name).toBe(material.color.getHex());
       lamps++;
     });
     expect(lamps).toBeGreaterThan(0);
@@ -650,14 +651,14 @@ describe('site work lights (#402)', () => {
   });
 
   it('keeps each site within the pool and every light id unique (IV4)', () => {
-    for (const site of FORTS) expect(of(site.id).filter((l) => l.kind !== 'sconce' && l.kind !== 'wall').length, site.id).toBeLessThanOrEqual(SITE_LIGHT_POOL);
+    for (const site of FORTS) expect(of(site.id).length, site.id).toBeLessThanOrEqual(SITE_LIGHT_POOL);
     expect(new Set(flat.map((l) => l.id)).size).toBe(flat.length);
   });
 
   it('keeps every flood and fire cone on the ground inside its curtain (IV2)', () => {
     const leaks: string[] = [];
     for (const site of FORTS) {
-      for (const light of of(site.id).filter((l) => l.kind !== 'gate' && l.kind !== 'sconce' && l.kind !== 'wall')) {
+      for (const light of of(site.id).filter((l) => l.kind !== 'gate' && l.kind !== 'fill')) {
         for (const hit of groundHits(light, 16)) {
           const p = tiles(hit);
           if (!insideCurtain(site, p) && !onFortressRock(site, p)) leaks.push(`${light.id} hits ${(p.x - site.pos.x).toFixed(1)},${(p.y - site.pos.y).toFixed(1)}`);
@@ -683,32 +684,65 @@ describe('site work lights (#402)', () => {
     }
   });
 
-  it('aims every wall lamp at ground inside its curtain', () => {
-    for (const site of FORTS) {
-      for (const light of of(site.id).filter((l) => l.kind === 'wall')) {
-        expect(insideCurtain(site, tiles(light.aim)) || onFortressRock(site, tiles(light.aim)), light.id).toBe(true);
-      }
-    }
-  });
-
-  it('hangs sconces outside the curtain, aimed at the wall they hang on', () => {
-    for (const site of FORTS) {
-      const sconces = of(site.id).filter((l) => l.kind === 'sconce');
-      expect(sconces.length, site.id).toBeGreaterThan(0);
-      for (const light of sconces) {
-        expect(insideCurtain(site, tiles(light.at)), light.id).toBe(false);
-        expect(Math.hypot(light.aim.x - light.at.x, light.aim.z - light.at.z) / S, light.id).toBeLessThan(1);
-      }
-    }
-  });
-
   it('puts every light head inside its curtain, a mast height over the ground', () => {
     for (const site of FORTS) {
       for (const light of of(site.id)) {
         const p = tiles(light.at);
-        expect(insideCurtain(site, p) || light.kind === 'gate' || light.kind === 'sconce' || onFortressRock(site, p), light.id).toBe(true);
+        expect(insideCurtain(site, p) || light.kind === 'gate' || onFortressRock(site, p), light.id).toBe(true);
         expect(light.at.y, light.id).toBeGreaterThan(light.ground);
       }
+    }
+  });
+});
+
+describe('fortress lamps (#402)', () => {
+  const FORTS = ALL.filter(isFortress);
+  const TOWER_HANG = FORTRESS.towerSize / 2 + 0.7;
+  const lampsOf = (id: string) => built.lamps.filter((l) => l.site.id === id);
+  const near = (p: { x: number; y: number }, l: { x: number; z: number }, r: number) => Math.hypot(l.x - p.x, l.z - p.y) <= r;
+  const onTower = (t: { pos: { x: number; y: number } }, l: { x: number; z: number }) => Math.abs(Math.hypot(l.x - t.pos.x, l.z - t.pos.y) - TOWER_HANG) < 0.01;
+
+  it('hangs exactly one outside lamp on every tower (IV2)', () => {
+    for (const site of FORTS) {
+      const towers = fortressPieces(site).filter((p) => p.kind === 'tower');
+      const nearest = (l: { x: number; z: number }) => towers.reduce((a, b) => (Math.hypot(a.pos.x - l.x, a.pos.y - l.z) <= Math.hypot(b.pos.x - l.x, b.pos.y - l.z) ? a : b));
+      for (const tower of towers) {
+        const hung = lampsOf(site.id).filter((l) => !l.inside && onTower(tower, l) && nearest(l) === tower);
+        expect(hung.length, `${site.id} tower at ${tower.pos.x.toFixed(1)},${tower.pos.y.toFixed(1)}: ${hung.map((l) => `${l.x.toFixed(2)},${l.z.toFixed(2)}`).join(' ')}`).toBe(1);
+      }
+    }
+  });
+
+  it('hangs no lamp outside a curtain except at towers and gates (IV2)', () => {
+    for (const site of FORTS) {
+      const towers = fortressPieces(site).filter((p) => p.kind === 'tower');
+      const gates = fortressGates(site);
+      for (const lamp of lampsOf(site.id).filter((l) => !l.inside)) {
+        const placed = towers.some((t) => onTower(t, lamp)) || gates.some((g) => near(g.face, lamp, g.width));
+        expect(placed, `${site.id} lamp at ${lamp.x.toFixed(1)},${lamp.z.toFixed(1)}`).toBe(true);
+      }
+    }
+  });
+
+  it('gives every fortress lamp head one halo and one light pool (IV3)', () => {
+    for (const site of FORTS) {
+      const root = sites.getObjectByName(`landmark-${site.id}`);
+      if (!root) throw new Error(`Missing site ${site.id}`);
+      const halos: Object3D[] = [];
+      root.traverse((o) => {
+        if (o.name === 'halo') halos.push(o);
+      });
+      expect(halos.length, site.id).toBe(lampsOf(site.id).length);
+      for (const halo of halos) expect(((halo.parent as Mesh).material as MeshLambertMaterial).color.getHex(), site.id).toBe(PAL.lamp.amber);
+    }
+  });
+
+  it('bakes no pool and hangs no halo at an abandoned site', () => {
+    for (const site of ABANDONED) {
+      expect(lampsOf(site.id), site.id).toHaveLength(0);
+      const root = sites.getObjectByName(`landmark-${site.id}`);
+      if (!root) throw new Error(`Missing site ${site.id}`);
+      root.traverse((o) => expect(o.name, site.id).not.toBe('halo'));
     }
   });
 });

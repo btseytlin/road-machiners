@@ -4,20 +4,21 @@
 import * as THREE from 'three';
 import { REGION, type SiteLocationDef, type SiteEdge, type TownDef } from '../../data/region';
 import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES, type FortressKind } from '../../data/fortress';
-import { fortressGates, fortressPieces, insideCurtain, onFortressRock, type FortGate, type FortressPiece } from '../../sim/fortress';
+import { fortressGates, fortressOutline, fortressPieces, insideCurtain, onFortressRock, type FortGate, type FortressPiece } from '../../sim/fortress';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
 import { isFortress, siteGates } from '../../sim/sites';
 import { deckById, deckCenterAt, type Deck } from '../../sim/bridge';
 import { deckSegments, heightAt, type DeckSegment, type Terrain } from '../../sim/terrain';
-import { angleDiff, segmentDist } from '../../sim/vec';
+import { angleDiff, pointInPolygon, segmentDist } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
 import { SiteMotion, type Motion } from './site-motion';
 import { buildBowl } from './interiors/bowl';
 import { buildDustwell, buildGranary, buildSalvageYard } from './interiors/compounds';
 import { buildNose } from './interiors/nose';
+import { NIGHT_POOLS, type PoolLamp } from './lightPools';
 import { SITE_LIGHT_POOL, type SiteLight, type SiteLightKind } from './siteLights';
 
 const S = PHYSICS.metersPerTile;
@@ -28,13 +29,14 @@ const WING_DECK_LENGTH = 156;
 const WING_DECK_WIDTH = 24;
 
 export type Mover = { node: THREE.Object3D; motion: Motion };
-type Fixture = { kind: SiteLightKind; head: THREE.Object3D; home: THREE.Vector3; aim: { x: number; z: number; lift?: number }; color?: number };
+type Fixture = { kind: SiteLightKind; head: THREE.Object3D; home: THREE.Vector3; aim: { x: number; z: number; lift?: number }; color?: number; range?: number; intensity?: number };
 const MOTION_PHASE_SPAN = 60;
 
 export class SiteBuilder {
   readonly root = new THREE.Group();
   readonly movers: Mover[] = [];
   readonly fixtures: Fixture[] = [];
+  readonly lamps: THREE.Mesh[] = [];
   private readonly materials = new Map<number, THREE.MeshLambertMaterial>();
   constructor(private readonly terrain: Terrain, readonly site: Site) {
     this.root.name = `landmark-${site.id}`;
@@ -46,7 +48,7 @@ export class SiteBuilder {
     let material = this.materials.get(color);
     if (!material) {
       material = new THREE.MeshLambertMaterial({ color, flatShading: true });
-      if (color === PAL.lamp.on) material.emissive.setHex(color);
+      if (color === PAL.lamp.on || color === PAL.lamp.amber) material.emissive.setHex(color);
       this.materials.set(color, material);
     }
     return material;
@@ -85,30 +87,35 @@ export class SiteBuilder {
   }
   addLampHead(x: number, z: number, top: number, yaw: number): THREE.Mesh {
     this.addBox(x, z, 0.2 / LAMP_SHRINK, 0.35 / LAMP_SHRINK, 0.6 / LAMP_SHRINK, PAL.metal, top, yaw);
-    return this.addBox(x, z, 0.24 / LAMP_SHRINK, 0.22 / LAMP_SHRINK, 0.45 / LAMP_SHRINK, PAL.lamp.on, top + 0.06 / LAMP_SHRINK, yaw);
+    const head = this.addBox(x, z, 0.24 / LAMP_SHRINK, 0.22 / LAMP_SHRINK, 0.45 / LAMP_SHRINK, PAL.lamp.amber, top + 0.06 / LAMP_SHRINK, yaw);
+    this.lamps.push(head);
+    return head;
   }
   // A pole with a lamp head on top. Everything stands at x, z so that pullInside() moves pole and head together.
   addMast(x: number, z: number, height: number, yaw: number): THREE.Mesh {
     this.addBox(x, z, 0.18, height + SINK, 0.18, PAL.metal, -SINK, yaw);
     return this.addLampHead(x, z, height, yaw);
   }
-  addWorkLight(kind: SiteLightKind, x: number, z: number, height: number, aim: { x: number; z: number; lift?: number }, color: number): void {
+  addWorkLight(kind: SiteLightKind, x: number, z: number, height: number, aim: { x: number; z: number; lift?: number }, color: number, range?: number, intensity?: number): void {
     const anchor = new THREE.Group();
     const wx = this.site.pos.x + x;
     const wz = this.site.pos.y + z;
     anchor.position.set(wx * S, (heightAt(this.terrain, wx, wz) + height) * S, wz * S);
     this.root.add(anchor);
-    this.addLight(kind, anchor, aim, color);
+    this.addLight(kind, anchor, aim, color, range, intensity);
+  }
+  addFill(): void {
+    this.addWorkLight('fill', 0, 0, FILL.height, { x: 0, z: 0 }, PAL.siteLight.amber, this.site.radius * FILL.reach * S);
   }
   addWash(reach: number, color: number): void {
     this.addWorkLight('wash', WASH.mast * reach, WASH.mast * reach, WORK_MAST, { x: -WASH.aim * reach, z: -WASH.aim * reach, lift: WASH.lift }, color);
   }
   // Registers a work light at a lamp head. The aim is a ground point in site tiles, relative to the site centre.
-  addLight(kind: SiteLightKind, head: THREE.Object3D, aim: { x: number; z: number; lift?: number }, color?: number): void {
+  addLight(kind: SiteLightKind, head: THREE.Object3D, aim: { x: number; z: number; lift?: number }, color?: number, range?: number, intensity?: number): void {
     let root: THREE.Object3D | null = head;
     while (root && root !== this.root) root = root.parent;
     if (!root) throw new Error(`Light head of ${this.site.id} is not inside its site root`);
-    this.fixtures.push({ kind, head, home: head.position.clone(), aim, color });
+    this.fixtures.push({ kind, head, home: head.position.clone(), aim, color, range, intensity });
   }
   addMover(node: THREE.Object3D, motion: Motion): void {
     if (this.movers.some((m) => m.node === node)) throw new Error(`Moving part ${node.name || node.uuid} of ${this.site.id} was added twice`);
@@ -200,7 +207,8 @@ const DOOR_THICKNESS = 0.4;
 const GATE_APRON_AIM = 2.5;
 const WORK_MAST = 3.3;
 const FIRE_MAST = 0.7;
-const SCONCE = { every: { outer: 2, inner: 3 }, reach: 0.7, height: 2.3, aimLift: 1.3, throw: 2.5 };
+const FILL = { height: 6, reach: 1.6 };
+const SCONCE = { every: 3, reach: 0.7, height: 2.3, throw: 2.5, gap: 1.5 };
 const WASH = { mast: 2.4, aim: 3.8, lift: 3 };
 
 function edgeStyle(site: Site): WallStyle {
@@ -307,6 +315,7 @@ function dressGates(b: SiteBuilder, site: Site): void {
   const first = b.root.children.length;
   for (const fort of fortressGates(site)) dressGate(b, site, fort, guarded);
   addSconces(b, site);
+  b.addFill();
   for (const piece of b.root.children.slice(first)) piece.userData.gateFurniture = true;
 }
 
@@ -333,37 +342,52 @@ function insideAt(site: Site, p: Vec2): boolean {
 }
 
 function wantsSconce(site: Site, kind: FortressKind, m: Mount): boolean {
-  if (!m.inside) return m.n.x + m.n.z > 0;
-  return kind === 'wall' && insideAt(site, m.throwAt);
+  if (kind === 'tower') return m.inside;
+  return kind === 'wall' && m.inside && insideAt(site, m.throwAt);
+}
+
+function outermost(mounts: Mount[], centre: Vec2): Mount[] {
+  const outward = (m: Mount) => m.n.x * centre.x + m.n.z * centre.z;
+  const outside = mounts.filter((m) => !m.inside).sort((a, b) => outward(b) - outward(a));
+  return outside.slice(0, 1);
 }
 
 function hangSconce(b: SiteBuilder, m: Mount): void {
   const yaw = Math.atan2(-m.n.z, m.n.x);
   const bracket = { x: m.face.x + (m.n.x * SCONCE.reach) / 2, z: m.face.z + (m.n.z * SCONCE.reach) / 2 };
   b.addBox(bracket.x, bracket.z, SCONCE.reach, 0.12, 0.12, PAL.metal, SCONCE.height - 0.12, yaw);
-  const head = b.addLampHead(m.lamp.x, m.lamp.z, SCONCE.height, yaw);
-  const aim = m.inside ? { ...m.throwAt, lift: 0 } : { ...m.face, lift: SCONCE.aimLift };
-  b.addLight(m.inside ? 'wall' : 'sconce', head, aim, PAL.siteLight.warm);
+  b.addLampHead(m.lamp.x, m.lamp.z, SCONCE.height, yaw);
 }
 
-const PIECE_DEPTH: Partial<Record<FortressKind, number>> = { wall: FORTRESS.wallDepth, tower: FORTRESS.towerSize, bastion: FORTRESS.bastionSize };
+const PIECE_DEPTH: Partial<Record<FortressKind, number>> = { wall: FORTRESS.wallDepth, tower: FORTRESS.towerSize };
 
 function sconceMounts(site: Site, piece: FortressPiece): Mount[] {
   const depth = PIECE_DEPTH[piece.kind];
   if (depth === undefined) return [];
   const centre = { x: piece.pos.x - site.pos.x, z: piece.pos.y - site.pos.y };
-  return sconceNormals(piece).map((n) => sconceMount(site, centre, depth, n)).filter((m) => wantsSconce(site, piece.kind, m));
+  const mounts = sconceNormals(piece).map((n) => sconceMount(site, centre, depth, n));
+  const lit = mounts.filter((m) => wantsSconce(site, piece.kind, m));
+  return piece.kind === 'tower' ? [...lit, ...outermost(mounts, centre)] : lit;
 }
 
-function spaced(kind: FortressKind, m: Mount, seen: { outer: number; inner: number }): boolean {
-  const side = m.inside ? 'inner' : 'outer';
-  return kind !== 'wall' || seen[side]++ % SCONCE.every[side] === 0;
+function spaced(kind: FortressKind, seen: { walls: number }): boolean {
+  return kind !== 'wall' || seen.walls++ % SCONCE.every === 0;
+}
+
+function clearOf(hung: Vec2[], m: Mount): boolean {
+  return hung.every((p) => Math.hypot(p.x - m.lamp.x, p.z - m.lamp.z) >= SCONCE.gap);
 }
 
 function addSconces(b: SiteBuilder, site: Site): void {
-  const seen = { outer: 0, inner: 0 };
-  for (const piece of fortressPieces(site)) {
-    for (const m of sconceMounts(site, piece)) if (spaced(piece.kind, m, seen)) hangSconce(b, m);
+  const seen = { walls: 0 };
+  const hung: Vec2[] = [];
+  const pieces = fortressPieces(site).sort((p, q) => Number(q.kind === 'tower') - Number(p.kind === 'tower'));
+  for (const piece of pieces) {
+    for (const m of sconceMounts(site, piece)) {
+      if (!spaced(piece.kind, seen) || !clearOf(hung, m)) continue;
+      hangSconce(b, m);
+      hung.push(m.lamp);
+    }
   }
 }
 
@@ -572,7 +596,21 @@ const SITE_DECOR: Record<string, SiteDecor> = {
   kiln: camp,
 };
 
-type BuiltSite = { root: THREE.Group; movers: Mover[]; lights: SiteLight[] };
+type BuiltSite = { root: THREE.Group; movers: Mover[]; lights: SiteLight[]; lamps: PoolLamp[] };
+
+function lightNights(b: SiteBuilder, site: Site): PoolLamp[] {
+  if (!isFortress(site)) return [];
+  b.root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    for (const material of Array.isArray(o.material) ? o.material : [o.material]) NIGHT_POOLS.light(material);
+  });
+  const outline = fortressOutline(site);
+  return b.lamps.map((head) => {
+    head.add(NIGHT_POOLS.halo());
+    const at = { x: head.position.x / S, y: head.position.z / S };
+    return { site, x: at.x, z: at.y, inside: pointInPolygon(at, outline) };
+  });
+}
 
 function resolveLights(b: SiteBuilder, site: Site, t: Terrain): SiteLight[] {
   const lights = b.fixtures.map((f, i): SiteLight => {
@@ -581,7 +619,7 @@ function resolveLights(b: SiteBuilder, site: Site, t: Terrain): SiteLight[] {
     const z = site.pos.y + f.aim.z + shift.z / S;
     const at = f.head.position;
     const ground = heightAt(t, x, z) * S;
-    return { id: `${site.id}:${f.kind}:${i}`, siteId: site.id, kind: f.kind, at: { x: at.x, y: at.y, z: at.z }, aim: { x: x * S, y: ground + (f.aim.lift ?? 0) * S, z: z * S }, ground, color: f.color };
+    return { id: `${site.id}:${f.kind}:${i}`, siteId: site.id, kind: f.kind, at: { x: at.x, y: at.y, z: at.z }, aim: { x: x * S, y: ground + (f.aim.lift ?? 0) * S, z: z * S }, ground, color: f.color, range: f.range, intensity: f.intensity };
   });
   if (!isFortress(site)) {
     if (lights.length > 0) throw new Error(`Abandoned site ${site.id} has work lights`);
@@ -590,8 +628,7 @@ function resolveLights(b: SiteBuilder, site: Site, t: Terrain): SiteLight[] {
   const gates = lights.filter((l) => l.kind === 'gate').length;
   if (gates !== fortressGates(site).length) throw new Error(`Site ${site.id} has ${gates} gate lights for ${fortressGates(site).length} gates`);
   if (lights.length === gates) throw new Error(`Site ${site.id} has no interior work light`);
-  const fixed = lights.filter((l) => l.kind !== 'sconce' && l.kind !== 'wall').length;
-  if (fixed > SITE_LIGHT_POOL) throw new Error(`Site ${site.id} has ${fixed} work lights besides tower lights, more than the pool of ${SITE_LIGHT_POOL}`);
+  if (lights.length > SITE_LIGHT_POOL) throw new Error(`Site ${site.id} has ${lights.length} work lights, more than the pool of ${SITE_LIGHT_POOL}`);
   return lights;
 }
 
@@ -602,11 +639,12 @@ function buildSite(t: Terrain, site: Site): BuiltSite {
   decor(b, site, t);
   closeSite(b, site, t);
   const lights = resolveLights(b, site, t);
+  const lamps = lightNights(b, site);
   b.root.traverse((o) => {
     o.updateMatrix();
     o.matrixAutoUpdate = false;
   });
-  return { root: b.root, movers: b.movers, lights };
+  return { root: b.root, movers: b.movers, lights, lamps };
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -616,23 +654,27 @@ export function buildSites(t: Terrain): BuiltSite {
   const root = new THREE.Group();
   const movers: Mover[] = [];
   const lights: SiteLight[] = [];
+  const lamps: PoolLamp[] = [];
   for (const site of SITES) {
     const built = buildSite(t, site);
     root.add(built.root);
     movers.push(...built.movers);
     lights.push(...built.lights);
+    lamps.push(...built.lamps);
   }
   root.add(buildWingDeck(t));
-  return { root, movers, lights };
+  return { root, movers, lights, lamps };
 }
 
-export function addSites(t: Terrain, scope: RenderScope): SiteLight[] {
+export function addSites(t: Terrain, scope: RenderScope): { lights: SiteLight[]; lamps: PoolLamp[] } {
   const motion = new SiteMotion();
   const lights: SiteLight[] = [];
+  const lamps: PoolLamp[] = [];
   for (const site of SITES) {
     const built = buildSite(t, site);
     scope.add(built.root, site.pos, site.radius);
     lights.push(...built.lights);
+    lamps.push(...built.lamps);
     const phase = hash2(site.pos.x, site.pos.y) * MOTION_PHASE_SPAN;
     for (const mover of built.movers) motion.add(mover.node, (seconds, node, rest) => mover.motion(seconds + phase, node, rest));
   }
@@ -644,7 +686,7 @@ export function addSites(t: Terrain, scope: RenderScope): SiteLight[] {
   });
   const deck = deckById('broken-wing');
   scope.add(buildWingDeck(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
-  return lights;
+  return { lights, lamps };
 }
 
 export function poseOnDeck(obj: THREE.Object3D, deck: Deck, seg: DeckSegment, top: number): void {

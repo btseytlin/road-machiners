@@ -91,10 +91,10 @@ const KEYS: Key[] = [
   {
     h: -TWILIGHT,
     sun: 0x8090c0,
-    sunI: 0.6,
+    sunI: 0.7,
     sky: 0x5a6c9c,
     ground: 0x1c1e2a,
-    skyI: 0.78,
+    skyI: 0.88,
     glassI: 0.2,
     glassWhite: 0.8,
     beamI: 1,

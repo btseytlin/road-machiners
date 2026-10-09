@@ -9,6 +9,7 @@ import { deckAt, DECKS, railOffset, type Deck } from "../../sim/bridge";
 import { deckHeight, deckSegments, type DeckSegment, type Terrain } from "../../sim/terrain";
 import type { World } from "../../sim/types";
 import { drawRoads } from "./roads";
+import { NIGHT_POOLS } from "./lightPools";
 import type { RenderScope } from "./scope";
 
 const S = PHYSICS.metersPerTile;
@@ -99,6 +100,7 @@ export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
   const material = new THREE.MeshLambertMaterial({ map: groundTexture(w), flatShading: true });
   drawRoads(material, mapCanvas(w), w.terrain);
   facetGround(material);
+  NIGHT_POOLS.light(material);
   for (let y = 0; y < w.size; y += TERRAIN_CHUNK)
     for (let x = 0; x < w.size; x += TERRAIN_CHUNK) {
       const width = Math.min(TERRAIN_CHUNK, w.size - x);

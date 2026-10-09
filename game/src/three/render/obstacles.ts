@@ -20,6 +20,8 @@ import type { TurnResult } from '../../phys/drive';
 import { DebrisSim, disposeTree, FLY_REACH, truckBoxes } from './debris';
 import { jag } from './vehicle';
 import { instancedModel, model, socket } from './models';
+import { NIGHT_POOLS } from './lightPools';
+import { FORT_MODELS } from '../../sim/fortress';
 import { PartDebris } from './partDebris';
 import type { RenderScope } from './scope';
 import { TERRAIN_CHUNK } from './terrain';
@@ -233,6 +235,7 @@ function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   if (pose.model === 'hulk') return buildHulk(t, o, pose);
   const g = posed(propBase(t, o), pose);
   const obj = model(pose.model);
+  if (FORT_PIECE_MODELS.has(pose.model)) lightFortPiece(obj);
   if (pose.model === 'building') paintRoof(obj, o.id);
   g.add(obj);
   paintShipGlow(obj);
@@ -240,7 +243,15 @@ function buildProp(t: Terrain, o: Obstacle): THREE.Object3D {
   return g;
 }
 
-export type HulkPose = Extract<PropPose, { model: 'hulk' }>;
+const FORT_PIECE_MODELS: ReadonlySet<string> = new Set([...FORT_MODELS.values()].map((f) => f.model));
+
+function lightFortPiece(obj: THREE.Object3D): void {
+  obj.traverse((o) => {
+    if (o instanceof THREE.Mesh) for (const material of Array.isArray(o.material) ? o.material : [o.material]) NIGHT_POOLS.light(material);
+  });
+}
+
+export type HulkPose =Extract<PropPose, { model: 'hulk' }>;
 
 export function buildHulk(t: Terrain, o: Obstacle, pose: HulkPose): THREE.Group {
   const g = posed(propBase(t, o), pose);

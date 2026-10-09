@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { describe, expect, it } from 'vitest';
 import { sunAt } from '../../sim/sun';
-import { groundHits, SITE_LIGHT_FADE_S, SITE_LIGHT_POOL, siteLightOrder, SiteLights, LOOKS, type SiteLight } from './siteLights';
+import { groundHits, SITE_LIGHT_FADE_S, SITE_LIGHT_POOL, SITE_SHADOW_SLOTS, siteLightOrder, SiteLights, LOOKS, type SiteLight } from './siteLights';
 
 const light = (id: string, x: number, siteId = 'a'): SiteLight => ({ id, siteId, kind: 'flood', at: { x, y: 8, z: 0 }, aim: { x, y: 0, z: -5 }, ground: 0 });
 const all = () => true;
@@ -25,7 +25,7 @@ function setup(lights: SiteLight[]) {
   const camera = new THREE.PerspectiveCamera(50, 1, 1, 1000);
   camera.position.set(0, 50, 50);
   camera.lookAt(0, 0, 0);
-  return { scene, camera, pool: new SiteLights(scene, lights) };
+  return { scene, camera, pool: new SiteLights(scene, { lights, lamps: [] }, { worldSize: 8, maxTextureSize: 64 }) };
 }
 const spotsIn = (scene: THREE.Scene) => scene.children.filter((c) => c instanceof THREE.SpotLight);
 
@@ -45,13 +45,22 @@ describe('siteLightOrder', () => {
 describe('SiteLights', () => {
   const many = Array.from({ length: SITE_LIGHT_POOL + 5 }, (_, i) => light(`l${i}`, i));
 
-  it('holds no light by day and never casts a shadow at night', () => {
+  it('holds no light by day and casts shadows only from its shadow slots at night', () => {
     const { scene, camera, pool } = setup(many);
     pool.sync(false, DAY, camera, all, FOCUS, 0);
     expect(spotsIn(scene)).toHaveLength(0);
     pool.sync(true, NIGHT, camera, all, FOCUS, 100);
     expect(spotsIn(scene)).toHaveLength(SITE_LIGHT_POOL);
-    expect(spots(pool).every((s) => !s.castShadow)).toBe(true);
+    expect(spots(pool).map((s) => s.castShadow)).toEqual(Array.from({ length: SITE_LIGHT_POOL }, (_, i) => i < SITE_SHADOW_SLOTS));
+  });
+
+  it('ramps its night level up over the fade time at night and back down by day', () => {
+    const { camera, pool } = setup(many);
+    let now = 0;
+    for (; now <= SITE_LIGHT_FADE_S * 1000; now += 100) pool.sync(true, NIGHT, camera, all, FOCUS, now);
+    expect(pool.nightLevel).toBeCloseTo(1);
+    for (let i = 1; i <= SITE_LIGHT_FADE_S * 10; i++) pool.sync(false, DAY, camera, all, FOCUS, now + i * 100);
+    expect(pool.nightLevel).toBeCloseTo(0);
   });
 
   it('adds the pool at the night flip, removes it at dawn and changes nothing in between', () => {
@@ -78,10 +87,10 @@ describe('SiteLights', () => {
     let now = 0;
     pool.sync(true, t, camera, all, FOCUS, now);
     for (; now <= SITE_LIGHT_FADE_S * 1000 + 100; now += 100) pool.sync(true, t, camera, all, FOCUS, now);
-    expect(spots(pool)[0].intensity).toBeCloseTo(LOOKS.flood.intensity);
+    expect(plain(pool).intensity).toBeCloseTo(LOOKS.flood.intensity);
     const dayTurn = DAY;
     for (let i = 0; i <= SITE_LIGHT_FADE_S * 10 + 2; i++) pool.sync(true, dayTurn, camera, all, FOCUS, now + i * 100);
-    expect(spots(pool)[0].intensity).toBe(0);
+    expect(plain(pool).intensity).toBe(0);
   });
 
   it('restarts a light handed to a new anchor from zero', () => {
@@ -90,13 +99,14 @@ describe('SiteLights', () => {
     let now = 0;
     pool.sync(true, t, camera, all, FOCUS, now);
     for (; now <= 2000; now += 100) pool.sync(true, t, camera, all, FOCUS, now);
-    expect(spots(pool)[0].intensity).toBeGreaterThan(0);
+    expect(plain(pool).intensity).toBeGreaterThan(0);
     pool.sync(true, t, camera, (p) => p.x > 20, FOCUS, now + 100);
-    expect(spots(pool)[0].intensity).toBeLessThan(LOOKS.flood.intensity / 4);
+    expect(plain(pool).intensity).toBeLessThan(LOOKS.flood.intensity / 4);
   });
 });
 
 const spots = (pool: SiteLights) => pool.spots();
+const plain = (pool: SiteLights) => pool.spots()[SITE_SHADOW_SLOTS];
 
 describe('groundHits', () => {
   it('is a circle of radius h tan(angle) under a straight-down cone', () => {
