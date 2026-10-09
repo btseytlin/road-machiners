@@ -354,6 +354,7 @@ export function instancedModel(name: ModelName, placements: THREE.Matrix4[], tin
 }
 
 const GLOW_MATERIAL = 'glow';
+const GLOW = { color: new THREE.Color(PAL.lamp.amber), strength: 0.4 };
 
 function toLambert(root: THREE.Object3D): THREE.Object3D {
   root.traverse((o) => {
@@ -362,7 +363,10 @@ function toLambert(root: THREE.Object3D): THREE.Object3D {
     const lambert = mats.map((m) => {
       if (!(m instanceof THREE.MeshStandardMaterial)) throw new Error(`Model mesh ${o.name} has unexpected material ${m.type}`);
       const l = new THREE.MeshLambertMaterial({ color: m.color, flatShading: true, name: m.name });
-      if (m.name === GLOW_MATERIAL) l.emissive.copy(m.color);
+      if (m.name === GLOW_MATERIAL) {
+        l.color.copy(GLOW.color);
+        l.emissive.copy(GLOW.color).multiplyScalar(GLOW.strength);
+      }
       m.dispose();
       return l;
     });
