@@ -6,7 +6,7 @@ import { readState, updateState } from '../state';
 import { BRANCH, GAME_DIR, RELEASE_CANDIDATE_LABEL, RELEASE_TASK_LABEL, STUCK_LABEL, type AgentSession, type Card, type Ctx, type FactoryState } from '../types';
 import { withWorkFolder } from '../work-lock';
 import { closeMerged } from './approval';
-import { runCost, untilPasses } from './checkpoint';
+import { BudgetError, runCost, untilPasses } from './checkpoint';
 import { checkScript, checkUntilReal, runChecks } from './checks';
 import { guardAgainstAll } from '../diff-guard';
 import { BASE_BRANCH, baseBranchFor, fillPrompt, playtestCommand, resetOutputs } from './common';
@@ -32,13 +32,13 @@ async function mergeBatch(ctx: Ctx, base: string, cards: Card[]): Promise<void> 
   const clock = newClock();
   const land: Landing = { stage: 'merge', dir, into: base, guardAgainst: [base], agent: landingAgent(ctx, 'merge', dir, base), clock };
   try {
-    let spent = 0;
+    let conflicts = 0;
     for (const card of cards) {
       const message = `Merge issue #${card.issue}: ${(await ctx.github.issue(card.issue)).title}`;
-      spent += await timed(clock, 'merges', () => mergeIn(ctx, land, { branch: BRANCH(card.issue), message, reason: `issue #${card.issue} was approved` }));
+      conflicts += await timed(clock, 'merges', () => mergeIn(ctx, land, { branch: BRANCH(card.issue), message, reason: `issue #${card.issue} was approved` }));
     }
     const fixList = cards.map((card) => `- #${card.issue} on ${BRANCH(card.issue)}`).join('\n');
-    await checkAndPush(ctx, land, spent, (failure) => fillPrompt('merge-fix', { into: base, cards: fixList, failure }));
+    await checkAndPush(ctx, land, conflicts, (failure) => fillPrompt('merge-fix', { into: base, cards: fixList, failure }));
   } finally {
     ctx.log('merge', null, `batch ${cards.map((card) => `#${card.issue}`).join(' ')} took ${clockLine(clock)}`);
   }
@@ -68,12 +68,22 @@ function clockLine(clock: Clock): string {
   return PHASES.map((phase) => `${phase} ${Math.round(clock[phase].ms / 60_000)} min in ${clock[phase].count}`).join(', ');
 }
 
-export async function checkAndPush(ctx: Ctx, land: Landing, spent: number, fixPrompt: (failure: string) => string): Promise<void> {
-  let total = spent;
+export async function checkAndPush(ctx: Ctx, land: Landing, conflictUsd: number, fixPrompt: (failure: string) => string): Promise<void> {
+  let conflicts = conflictUsd;
+  let fixes = 0;
   for (;;) {
-    total = await untilPasses(ctx.cfg.mergingBudgetUsd, total, () => timed(land.clock, 'checks', () => mergedChecks(ctx, land)), (failure) => timed(land.clock, 'fixes', () => land.agent(fixPrompt(failure))));
+    fixes = await fixUntilPasses(ctx, land, fixes, conflicts, fixPrompt);
     if (await timed(land.clock, 'pushes', () => pushed(ctx, land))) return;
-    total += await timed(land.clock, 'remerges', () => mergeIn(ctx, land, { branch: land.into, message: undefined, reason: `${land.into} moved on GitHub while the checks ran` }));
+    conflicts += await timed(land.clock, 'remerges', () => mergeIn(ctx, land, { branch: land.into, message: undefined, reason: `${land.into} moved on GitHub while the checks ran` }));
+  }
+}
+
+async function fixUntilPasses(ctx: Ctx, land: Landing, fixes: number, conflicts: number, fixPrompt: (failure: string) => string): Promise<number> {
+  try {
+    return await untilPasses(ctx.cfg.mergingBudgetUsd, fixes, () => timed(land.clock, 'checks', () => mergedChecks(ctx, land)), (failure) => timed(land.clock, 'fixes', () => land.agent(fixPrompt(failure))));
+  } catch (error) {
+    if (error instanceof BudgetError) throw new BudgetError(`${error.message}\nThe budget counts only fix rounds. Resolving conflicts spent another $${conflicts.toFixed(2)} on conflicts.`);
+    throw error;
   }
 }
 
