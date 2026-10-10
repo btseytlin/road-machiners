@@ -4,7 +4,7 @@ import type { CallVar, CallVars } from '../sim/types';
 import { LOCALES, type Msg } from '../text/msg';
 import { lineKey } from '../text/names';
 import { resolve, schemaOf } from '../text/resolve';
-import { aidWords, lineText, tipText } from './dialogue';
+import { aidWords, haulText, lineText, tipText } from './dialogue';
 
 const en = (msg: Msg): string => resolve(msg, 'en');
 
@@ -45,8 +45,8 @@ const PREPARE_VARS: Record<PrepareId, string[]> = {
   nearestTown: ['town', 'bearing', 'distance'],
   towOffer: ['town', 'fee'],
   patchTerms: ['deal'],
-  truceAnswer: ['answer'],
-  mercyAnswer: ['answer'],
+  truceAnswer: ['answer', 'haul'],
+  mercyAnswer: ['answer', 'haul'],
   threatAnswer: ['answer'],
   warnAnswer: ['answer'],
   npcTowTerms: ['site', 'fee'],
@@ -59,6 +59,8 @@ const PREPARE_VARS: Record<PrepareId, string[]> = {
   aidOffered: ['aid'],
   yieldAnswer: ['answer'],
   lootWarningTerms: ['warnLine', 'answer'],
+  demandHaul: ['haul'],
+  surrenderHaul: ['haul'],
 };
 
 // One sample value of each call value a line can name.
@@ -74,6 +76,7 @@ const SAMPLE: Record<string, CallVar> = {
   tip: { kind: 'tip', tip: { shop: 'nose', good: 'meds', dear: false } },
   aid: { kind: 'aid', fuel: 2, supplies: 3 },
   warnLine: { kind: 'line', line: 'thatsMyPick' },
+  haul: { kind: 'haul', goods: { scrap: 2 }, parts: ['mg'] },
 };
 
 const named = (line: LineId): string[] => Object.keys(schemaOf(lineKey(line)));
@@ -108,6 +111,17 @@ describe('every radio line', () => {
 
   it('throws for a line missing a value it names', () => {
     expect(() => lineText('townBearing', {})).toThrow(/town/);
+  });
+});
+
+describe('haul text', () => {
+  it('names goods by count and parts by name, joined in one list', () => {
+    expect(en(haulText({ kind: 'haul', goods: { scrap: 2 }, parts: [] }))).toBe('2 scrap metal');
+    expect(en(haulText({ kind: 'haul', goods: { scrap: 2, salt: 1 }, parts: ['mg'] }))).toBe('2 scrap metal, 1 salt, MG turret');
+  });
+
+  it('never names an empty haul', () => {
+    expect(() => haulText({ kind: 'haul', goods: {}, parts: [] })).toThrow(/empty haul/);
   });
 });
 

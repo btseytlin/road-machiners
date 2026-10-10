@@ -488,3 +488,32 @@ describe('NPC utility parts', () => {
     expect(rams).toBeGreaterThan(0);
   }, budget(120_000));
 });
+
+describe('raider haul room', () => {
+  const RAIDERS = ['buggy', 'gunwagon'];
+  const rolled = (id: string, level: GearLevel, seed: number) => {
+    const world = { ...structuredClone(fixture), vehicles: [], rngState: seed * 7919 + 1, marketRng: { rngState: seed * 104729 + 1 } };
+    const template = NPCS[id];
+    return { template, v: spawnAt(world, template, generateNpcLoadout(world, template, null, level), { x: 40, y: 30 }) };
+  };
+
+  it.each(RAIDERS)('keeps room for the reserve after its own load on at least 95%% of %s rolls, armed', (id) => {
+    let kept = 0;
+    let rolls = 0;
+    for (const level of ['standard', 'heavy', 'loaded'] as const) {
+      for (let seed = 1; seed <= 40; seed++, rolls++) {
+        const { template, v } = rolled(id, level, seed);
+        if (freeCells(v) >= template.loadout.haul.cells && npcMassRoom(v) >= template.loadout.haul.kg) kept++;
+        expect(mountedItems(v, 'weapon').length).toBeGreaterThan(0);
+      }
+    }
+    expect(kept / rolls).toBeGreaterThanOrEqual(0.95);
+  }, budget(240_000));
+
+  it('rejects a negative or fractional reserve', () => {
+    const template = { ...NPCS.buggy, loadout: { ...NPCS.buggy.loadout, haul: { kg: -1, cells: 0 } } };
+    expect(() => generateNpcLoadout({ ...fixture }, template)).toThrow(/haul reserves/);
+    const fractional = { ...NPCS.buggy, loadout: { ...NPCS.buggy.loadout, haul: { kg: 0, cells: 1.5 } } };
+    expect(() => generateNpcLoadout({ ...fixture }, fractional)).toThrow(/haul reserves/);
+  });
+});

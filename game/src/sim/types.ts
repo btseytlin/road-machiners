@@ -368,6 +368,7 @@ export type CallVar =
   | { kind: "bearing"; rad: number }
   | { kind: "count"; n: number; unit: UnitId } // shown as "1 part" or "2 parts"
   | { kind: "deal"; deal: PatchDeal; patcher: "player" | "npc"; price: number; parts: number; turns: number }
+  | { kind: "haul"; goods: Record<string, number>; parts: string[] }
   | { kind: "aid"; fuel: number; supplies: number }
   | { kind: "prices"; town: string; goods: { good: string; buy: number; sell: number }[] }
   | { kind: "tip"; tip: { shop: string; good: string; dear: boolean } | null }

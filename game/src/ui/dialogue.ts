@@ -12,7 +12,7 @@ import { playerSees } from '../sim/vision';
 import { playerCanAct } from '../sim/world';
 import { language, say } from '../text/language';
 import { byId, list, t, type Msg } from '../text/msg';
-import { goodLower, lineKey, siteName, unitCount, vehicleTitle } from '../text/names';
+import { goodLower, lineKey, partName, siteName, unitCount, vehicleTitle } from '../text/names';
 import { schemaOf } from '../text/resolve';
 import { el, isBrowserChord, panel, topCenter } from './dom';
 import { renderLine } from './quest-text';
@@ -64,6 +64,15 @@ export function tipText(v: Extract<CallVar, { kind: 'tip' }>): Msg {
   return v.tip.dear ? t('tip.dear', words) : t('tip.cheap', words);
 }
 
+export function haulText(v: Extract<CallVar, { kind: 'haul' }>): Msg {
+  const names = [
+    ...Object.entries(v.goods).map(([good, n]) => t('call.haulGood', { n, good: goodLower(good) })),
+    ...v.parts.map((id) => t('call.haulPart', { part: partName(id) })),
+  ];
+  if (names.length === 0) throw new Error('An empty haul is never named in a line');
+  return list(names);
+}
+
 type VarText = { [K in CallVar['kind']]: (v: Extract<CallVar, { kind: K }>) => Msg };
 
 const VAR_TEXT: VarText = {
@@ -76,6 +85,7 @@ const VAR_TEXT: VarText = {
   deal: dealText,
   prices: pricesText,
   aid: (v) => aidWords(v.fuel, v.supplies),
+  haul: haulText,
   tip: tipText,
   line: (v) => lineText(v.line, {}),
   answer: () => { throw new Error('A rolled answer is never shown in a line'); },

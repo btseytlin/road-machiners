@@ -16,7 +16,8 @@ import { MEMORY, NPC_UPKEEP, NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { aidPrice, offerAid, playerAid, spareAid, wantedAid } from './aid';
 import { corePart, isMounted } from './grid';
-import { addGoods } from './inventory';
+import { addGoods, cargoRoom } from './inventory';
+import { cargoHaul, showsHaul } from './haul';
 import { hasCargo, emptyHidden } from './salvage';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
@@ -390,6 +391,28 @@ describe('demand', () => {
     const w = endTurn(start, testDrive);
     expect(w.player.call).toMatchObject({ with: raider.id, topic: 'demand' });
     expect(shotsBetween(w, raider.id, w.player.vehicleId)).toEqual([]);
+  });
+
+  it('the demand names the haul the raider can load and handing over drops exactly it', () => {
+    const { w: start, raider } = ambush();
+    const w = endTurn(start, testDrive);
+    const me = playerVehicle(w);
+    const haul = cargoHaul(w.vehicles.find((v) => v.id === raider.id)!, me);
+    expect(haul.length).toBeGreaterThan(0);
+    expect(showsHaul(w.player.call!.vars.haul, haul)).toBe(true);
+    const next = chooseOption(w, optionIndex(w, 'Fine. Take it.'));
+    const stock = next.salvage.find((s) => s.id.startsWith(`cargo-${me.id}`))!;
+    expect(Object.values(stock.goods).reduce((a, b) => a + b, 0) + stock.parts.length).toBe(haul.length);
+  });
+
+  it('a raider with no room raises no demand', () => {
+    const { w: start, raider } = ambush();
+    const full = start.vehicles.find((v) => v.id === raider.id)!;
+    while (cargoRoom(full, 'scrap') > 0 || cargoRoom(full, 'electronics') > 0) {
+      if (addGoods(start, full, 'scrap', 1) + addGoods(start, full, 'electronics', 1) === 0) break;
+    }
+    const w = endTurn(start, testDrive);
+    expect(w.player.call?.topic).not.toBe('demand');
   });
 
   it('a knocked-out raider does not raise its demand', () => {

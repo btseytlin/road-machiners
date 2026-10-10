@@ -12,13 +12,13 @@ export type ConditionId =
   | 'accepts' | 'refuses' | 'complies' | 'resists' | 'runs' | 'claimsPlayerLoot' | 'holdsOn' | 'canTowNpc' | 'towedByPlayer' | 'noTrade' | 'npcCalm'
   | 'knowsLastTown' | 'hearsRumor' | 'rumorOfSite' | 'rumorOfWreck' | 'canPayTruce'
   | 'npcLow' | 'playerLow' | 'noAid' | 'aidGiven' | 'aidRefused' | 'offersAid' | 'npcBeaten' | 'notOfferedYield' | 'claimsSpill' | 'heardWagonNearby'
-  | 'warnsPlayerOff' | 'yieldsLoot' | 'fightsForLoot';
+  | 'warnsPlayerOff' | 'yieldsLoot' | 'fightsForLoot' | 'hasHaul' | 'noHaul';
 export type EffectId =
   | 'revealTown' | 'settleDone' | 'settleRefused' | 'acceptTow' | 'refuseTow' | 'askTow' | 'agreePatch' | 'handOver' | 'surrender' | 'giveUp' | 'backOffClaim' | 'defyClaim'
   | 'acceptPlea' | 'refusePlea' | 'settlePlea' | 'payToll' | 'refuseToll' | 'withdrawPlea' | 'settleThreat' | 'settleWarning' | 'hitchNpc' | 'hitchNpcFree' | 'releaseNpc' | 'startTrade'
   | 'revealRumor' | 'payTruce' | 'giveAidPaid' | 'giveAidFree' | 'takeAid' | 'acceptAidOffer' | 'refuseAidOffer' | 'yieldToPlayer' | 'askStandDown' | 'standDownPlea' | 'abandonSpill' | 'noteWagonRoad'
   | 'leaveLootWarning' | 'refuseLootWarning' | 'fightLootWarning' | 'hangUpLootWarning';
-export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'warnAnswer' | 'npcTowTerms' | 'lastTownPrices' | 'nearestRumor' | 'tradeTip' | 'trucePrice' | 'aidWanted' | 'aidAnswer' | 'aidOffered' | 'yieldAnswer' | 'lootWarningTerms';
+export type PrepareId = 'nearestTown' | 'towOffer' | 'patchTerms' | 'truceAnswer' | 'mercyAnswer' | 'threatAnswer' | 'warnAnswer' | 'npcTowTerms' | 'lastTownPrices' | 'nearestRumor' | 'tradeTip' | 'trucePrice' | 'aidWanted' | 'aidAnswer' | 'aidOffered' | 'yieldAnswer' | 'lootWarningTerms' | 'demandHaul' | 'surrenderHaul';
 
 // `go` is a node of the same topic, the hub of topics, or the end of the call.
 export type DialogueOption = { say: LineId; when: ConditionId[]; effects: EffectId[]; go: string };
@@ -65,7 +65,7 @@ export const LINE_IDS = [
   'whatWouldItTake', 'whateverYouCanSpare', 'where', 'whereIsTheNearest', 'yeahMakeItQuick', 'youHeardMeCargo',
   'youHeardMeLeave', 'youKnowHowThen', 'youLookDryI', 'youSaidThat', 'youWantToPick', 'yourCallLastChance',
   'yourEngineSoundsRough', 'yourFuneral', 'yourLoadIsInThe', 'yourTruckIsFinished', 'yourTruckLooksDead',
-  'warnTerms', 'thisOneIsSpokenFor', 'thatsMyPick', 'offMyLootNow', 'leaveThatSalvageBe', 'imTakingThatOne', 'sawThisOneFirst', 'mineGoPickAnother', 'weAreTakingThisOne', 'backAwayFromThat', 'thatsMineWalkAway', 'findYourOwn', 'makeMe', 'keepYourScrapsThen', 'thoughtSo', 'thenWeSettleIt', 'bringIt',
+  'warnTerms', 'thisOneIsSpokenFor', 'thatsMyPick', 'offMyLootNow', 'leaveThatSalvageBe', 'imTakingThatOne', 'sawThisOneFirst', 'mineGoPickAnother', 'weAreTakingThisOne', 'backAwayFromThat', 'thatsMineWalkAway', 'findYourOwn', 'makeMe', 'keepYourScrapsThen', 'thoughtSo', 'thenWeSettleIt', 'bringIt', 'nothingHereICanCarry',
 ] as const;
 export type LineId = (typeof LINE_IDS)[number];
 
@@ -217,7 +217,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     once: true,
     ask: null,
     raise: { when: ['demandsCargo'], priority: 3, duringFeud: true, duringCombat: true },
-    prepare: null,
+    prepare: 'demandHaul',
     hangUp: ['settleRefused'],
     start: 'demand',
     nodes: {
@@ -253,7 +253,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     once: true,
     ask: null,
     raise: { when: ['demandsSurrender'], priority: 5, duringFeud: true, duringCombat: true },
-    prepare: null,
+    prepare: 'surrenderHaul',
     hangUp: ['settleRefused'],
     start: 'offer',
     nodes: {
@@ -271,7 +271,7 @@ export const TOPICS: Record<TopicId, Topic> = {
     once: true,
     ask: null,
     raise: { when: ['demandsGiveUp'], priority: 5, duringFeud: true, duringCombat: true },
-    prepare: null,
+    prepare: 'surrenderHaul',
     hangUp: ['settleRefused'],
     start: 'offer',
     nodes: {
@@ -360,11 +360,13 @@ export const TOPICS: Record<TopicId, Topic> = {
       listen: {
         line: 'talkFast',
         options: [
-          { say: 'takeWhatICarry', when: ['accepts'], effects: ['settlePlea'], go: 'spared' },
+          { say: 'takeWhatICarry', when: ['accepts', 'hasHaul'], effects: ['settlePlea'], go: 'spared' },
+          { say: 'takeWhatICarry', when: ['accepts', 'noHaul'], effects: ['settlePlea'], go: 'sparedFree' },
           { say: 'takeWhatICarry', when: ['refuses'], effects: ['settlePlea'], go: 'refused' },
         ],
       },
       spared: { line: 'leaveItOnThe', options: [{ say: 'going', when: [], effects: [], go: END }] },
+      sparedFree: { line: 'nothingHereICanCarry', options: [{ say: 'going', when: [], effects: [], go: END }] },
       refused: { line: 'noDeals', options: [{ say: 'thenComeAndGet', when: [], effects: [], go: END }] },
     },
   },

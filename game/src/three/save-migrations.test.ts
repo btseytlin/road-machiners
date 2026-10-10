@@ -48,6 +48,7 @@ import FORMAT_2_35 from './save-fixtures/format-2-35.json';
 import FORMAT_2_36 from './save-fixtures/format-2-36.json';
 import { STORY_WRECKS } from '../data/salvage';
 import FORMAT_2_43 from './save-fixtures/format-2-43.json';
+import FORMAT_2_44 from './save-fixtures/format-2-44.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -1025,5 +1026,11 @@ describe('save migration 43 to 44', () => {
 
   it('does not mutate its input', () => {
     expect(FORMAT_2_43).toEqual(before);
+  });
+});
+
+describe('save migration 44 to 45', () => {
+  it('keeps a save holding a call that names a haul as it is', () => {
+    expect(MIGRATIONS[44](structuredClone(FORMAT_2_44))).toEqual(FORMAT_2_44);
   });
 });

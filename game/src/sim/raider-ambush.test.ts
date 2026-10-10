@@ -171,6 +171,7 @@ describe('the watch', () => {
     start.w.rngState += 3;
     const raiderId = start.raiderId;
     let w = start.w;
+    for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;
     const stalls: unknown[] = [];
     let started: number | null = null;
     let ended: number | null = null;

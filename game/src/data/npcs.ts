@@ -13,6 +13,7 @@ export const NPC_RESOURCES = {
 export type TraitId = 'trader' | 'scavenger' | 'raider' | 'scumbag' | 'coward' | 'lawman' | 'courier' | 'roamer' | 'vulture' | 'supplier' | 'guard' | 'merc' | 'brave';
 
 export type Weighted<T> = { value: T; weight: number };
+export type Load = { kg: number; cells: number };
 export type CargoRoll = { good: string; count: number };
 export type SpareTable = { pool: Weighted<string | null>[]; count: Weighted<number>[] };
 export type GearLevel = 'poor' | 'light' | 'standard' | 'heavy' | 'loaded';
@@ -24,6 +25,7 @@ export type NpcLoadoutTable = {
   cargoPart: Weighted<string | null>[];
   goods: Weighted<CargoRoll | null>[];
   spares: SpareTable | null;
+  haul: Load;
 };
 
 export type LoadoutPriorities = { speed: number; firepower: number; armor: number; cargo: number };
@@ -109,6 +111,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
+    haul: { kg: 200, cells: 3 },
     spares: null,
   },
   gunwagon: {
@@ -132,6 +135,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 2 }, weight: 1 },
     ],
+    haul: { kg: 400, cells: 5 },
     spares: null,
   },
   trader: {
@@ -163,6 +167,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "meds", count: 4 }, weight: 2 },
       { value: { good: "electronics", count: 4 }, weight: 1 },
     ],
+    haul: { kg: 0, cells: 0 },
     spares: TRADER_SPARES,
   },
   scavenger: {
@@ -190,6 +195,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 1 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   bowlPatrol: {
@@ -202,6 +208,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     priorities: { speed: 0.1, firepower: 3, armor: 3, cargo: 0 },
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   nosePatrol: {
@@ -213,6 +220,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     priorities: { speed: 0.1, firepower: 3, armor: 3, cargo: 0 },
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   courier: {
@@ -234,6 +242,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 2 }, weight: 2 },
       { value: { good: "meds", count: 2 }, weight: 2 },
     ],
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   roamer: {
@@ -259,6 +268,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "tools", count: 1 }, weight: 1 },
     ],
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   vulture: {
@@ -285,6 +295,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "tools", count: 1 }, weight: 2 },
       { value: { good: "batteries", count: 1 }, weight: 2 },
     ],
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   convoy: {
@@ -306,6 +317,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "fuelDrums", count: 6 }, weight: 1 },
       { value: { good: "water", count: 6 }, weight: 1 },
     ],
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   convoyGuard: {
@@ -319,6 +331,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     priorities: { speed: 1, firepower: 3, armor: 2, cargo: 0 },
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
   merc: {
@@ -332,6 +345,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
     priorities: { speed: 1, firepower: 3, armor: 2, cargo: 0 },
     cargoPart: MOSTLY_NO_CARGO_PART,
     goods: NO_GOODS,
+    haul: { kg: 0, cells: 0 },
     spares: null,
   },
 };

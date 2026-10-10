@@ -304,8 +304,12 @@ function coreWreckScrap(vehicle: Vehicle, core: PartInstance[]): number {
   return Math.round(value / GOODS.parts.value);
 }
 
-export function createCargoSalvage(world: World, vehicle: Vehicle, goodsShare: number): SalvageStock {
-  return dropOnPile(world, vehicle, cargoItems(vehicle, goodsShare), `cargo-${vehicle.id}-${world.turn}`);
+export function dropHaul(world: World, vehicle: Vehicle, items: GridItem[]): SalvageStock {
+  const id = `cargo-${vehicle.id}-${world.turn}`;
+  for (const item of items) if (!vehicle.items.includes(item)) throw new Error(`${vehicle.id} does not hold haul item ${item.id}`);
+  const pile = addVehicleStock(world, vehicle, id, {}, []);
+  fillPile(world, vehicle, pile, items);
+  return pile;
 }
 
 export function dumpOnPile(world: World, vehicle: Vehicle, item: GridItem): SalvageStock {
@@ -316,16 +320,8 @@ export function spillOnPile(world: World, vehicle: Vehicle, items: GridItem[]): 
   return dropOnPile(world, vehicle, items, `spill-${vehicle.id}-${world.turn}`);
 }
 
-function cargoItems(vehicle: Vehicle, goodsShare: number): GridItem[] {
-  if (!(goodsShare >= 0 && goodsShare <= 1)) throw new Error(`Cargo share ${goodsShare} is not in [0, 1]`);
-  const quota: Record<string, number> = {};
-  for (const [good, count] of Object.entries(goodsCount(vehicle))) quota[good] = Math.ceil(count * goodsShare);
-  return vehicle.items.filter((item) => {
-    if (item.kind === 'part') return !isMounted(vehicle.chassisId, item);
-    if (quota[item.good] <= 0) return false;
-    quota[item.good]--;
-    return true;
-  });
+export function looseCargo(vehicle: Vehicle): GridItem[] {
+  return vehicle.items.filter((item) => item.kind === 'good' || !isMounted(vehicle.chassisId, item));
 }
 
 export function hasCargo(vehicle: Vehicle): boolean {
@@ -343,13 +339,17 @@ function dropOnPile(world: World, vehicle: Vehicle, items: GridItem[], id: strin
   const byPlayer = vehicle.id === world.player.vehicleId;
   const pile = world.salvage.find((stock) => stock.pile?.fromPlayer === byPlayer && salvageInRange(vehicle, stock))
     ?? addVehicleStock(world, vehicle, id, {}, []);
-  const held = stampPile(world, byPlayer, pile);
+  fillPile(world, vehicle, pile, items);
+  return pile;
+}
+
+function fillPile(world: World, vehicle: Vehicle, pile: SalvageStock, items: GridItem[]): void {
+  const held = stampPile(world, vehicle.id === world.player.vehicleId, pile);
   for (const item of items) {
     if (item.kind === 'good') dropGood(world, held, item.good);
     else pile.parts.push(item.part);
   }
   vehicle.items = vehicle.items.filter((item) => !items.includes(item));
-  return pile;
 }
 
 function stampPile(world: World, byPlayer: boolean, stock: SalvageStock): { stock: SalvageStock; pile: Pile } {
