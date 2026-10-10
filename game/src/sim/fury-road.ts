@@ -51,7 +51,8 @@ export function waveOf(j: number): (typeof FURY_ROAD.waves)[number] {
 
 export function planStretch(seed: number, j: number): WaveGroup[] {
   const rng = stretchStream(seed, j, 'groups');
-  const arenas = stretchLayout(seed, j).arenas.slice(1);
+  const all = stretchLayout(seed, j).arenas;
+  const arenas = all.length > 1 ? all.slice(1) : all;
   const wave = waveOf(j);
   const anchors = wave.map(() => arenas[randInt(rng, 0, arenas.length - 1)]).map((a) => (a.from + a.to) / 2).sort((a, b) => a - b);
   return wave.map((plan, i) => ({
