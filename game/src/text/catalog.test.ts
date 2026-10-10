@@ -32,6 +32,13 @@ function bannedIn(locale: Locale, text: string): string[] {
 }
 
 describe('the catalog', () => {
+  it('describes Fury Road without the wreck tagline', () => {
+    for (const locale of LOCALES) {
+      const text = entryText(locale, 'mode.furyRoad.description');
+      expect(text, locale).not.toMatch(/to the wreck|до обломков/i);
+    }
+  });
+
   it('parses every entry in every language', () => {
     for (const locale of LOCALES) {
       for (const key of KEYS) expect(() => parse(entryText(locale, key)), `${locale} ${key}`).not.toThrow();

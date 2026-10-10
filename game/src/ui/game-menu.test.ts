@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { resolve } from "../text/resolve";
-import { entryEnabled, entryReason, type MenuEntry } from "./game-menu";
+import { controlsFor, entryEnabled, entryReason, type MenuEntry } from "./game-menu";
+import { modeRulesOf } from "../sim/settings";
 
 describe("entryEnabled", () => {
   const states = [
@@ -26,5 +27,18 @@ describe("entryReason", () => {
   it("names the turn when it blocks an entry", () => {
     expect(resolve(entryReason("save", true, true)!, "en")).toBe("Wait for the turn");
     expect(entryReason("help", true, false)).toBeNull();
+  });
+});
+
+describe("the help rows of a mode", () => {
+  const radioRows = (mode: "roaming" | "furyRoad") =>
+    controlsFor(modeRulesOf(mode)).flatMap((g) => g.controls).filter((c) => c.keys.some((k) => k === "T" || k === "H" || k === "9"));
+
+  it("leave out the radio, reply and honk keys where there is no radio", () => {
+    expect(radioRows("furyRoad")).toEqual([]);
+  });
+
+  it("keep them in Roaming", () => {
+    expect(radioRows("roaming")).toHaveLength(3);
   });
 });

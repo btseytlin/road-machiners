@@ -36,7 +36,7 @@ import { concat, list, t, verbatim, type Msg } from '../text/msg';
 import { goalText, goodName, moneyReasonText, noteText, noteTitle, partName as partNameOf, refusalText, siteName, skillName, templateName, traitName, vehicleTitle } from '../text/names';
 import { Refused } from '../sim/world';
 import { aidWords, lineText } from './dialogue';
-import { outpostId } from '../sim/highway';
+import { isOutpostSite, outpostId } from '../sim/highway';
 import { damage, fuelLiters, hp, kg, kph, moneyM, moneyMsg } from './units';
 
 // What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
@@ -661,7 +661,8 @@ function moneyText(world: World, e: Extract<GameEvent, { t: 'money' }>): LogLine
   return e.amount > 0 ? line(t('log.moneyGain', { n: moneyMsg(e.amount), reason }), 'good') : line(t('log.moneyLoss', { n: moneyMsg(-e.amount), reason }), 'bad');
 }
 
-function discoverText(e: Extract<GameEvent, { t: 'discover' }>): LogLine {
+function discoverText(e: Extract<GameEvent, { t: 'discover' }>): LogLine | null {
+  if (isOutpostSite(e.location)) return null;
   return line(t('log.discovered', { site: siteName(e.location) }), 'good');
 }
 

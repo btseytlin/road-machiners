@@ -204,7 +204,7 @@ export const UI = {
   'hud.douseBlock.noSupplies': m('Need {n} supplies', { n: 'int' }),
   'hud.douseBlock.engineCool': 'Engine is cool',
   'mode.furyRoad': 'Fury Road',
-  'mode.furyRoad.description': 'An endless highway north between forts. Every fight is to the wreck.',
+  'mode.furyRoad.description': 'An endless highway north between forts.',
   'boot.nextWindow': 'Opening the road north',
   'death.wrecked': 'Wrecked',
   'death.stranded': 'Stranded',

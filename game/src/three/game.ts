@@ -21,8 +21,6 @@ import {
 } from "../phys/frames";
 import { type PreparedTurn } from "../phys/turn";
 import { playerVehicle, vehicleById } from "../sim/damage";
-import { setupText } from "../text/names";
-import { say } from "../text/language";
 
 import { inOverdrive, isStranded, maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder } from "../sim/steering";
@@ -311,7 +309,7 @@ export class Game {
     this.hitCard = new HitCard(this.hud.getExchangeRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
     const saves = this.saves.menuActions(() => this.world);
-    this.menu = new GameMenu(saves, () => this.anim !== null, () => say(setupText(this.world.setup)), this.hud.tipSwitch());
+    this.menu = new GameMenu(saves, () => this.anim !== null, () => this.world.setup, this.hud.tipSwitch());
     this.death = new DeathScreen(saves);
 
     this.bindInput();

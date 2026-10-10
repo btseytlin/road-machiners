@@ -686,3 +686,17 @@ describe("loot argument log", () => {
     expect(eventText(w, { t: "lootArgument", warner: warner.id, looter: looter.id, place: "pile", end: "yielded" })).toBeNull();
   });
 });
+
+describe("the discovery line", () => {
+  it("is cut for a Fury Road outpost, whose label and pay line already name it", () => {
+    expect(eventText(emptyWorld(), { t: "discover", location: "outpost-1" })).toBeNull();
+    expect(eventText(emptyWorld(), { t: "discover", location: "outpost-12" })).toBeNull();
+  });
+
+  it("still names a Roaming site", () => {
+    const site = REGION.towns[0].id;
+    const line = eventText(emptyWorld(), { t: "discover", location: site })!;
+
+    expect(resolve(line.text, "en")).toBe(`Discovered ${resolve(siteName(site), "en")}`);
+  });
+});

@@ -184,6 +184,10 @@ export function outpostId(milestone: number): string {
   return `outpost-${milestone}`;
 }
 
+export function isOutpostSite(id: string): boolean {
+  return /^outpost-[1-9]\d*$/.test(id);
+}
+
 export function outpostSite(seed: number, j: number): OutpostSite {
   if (!Number.isInteger(j) || j < 1) throw new Error(`Milestone ${j} has no outpost`);
   const key = `${seed}:${j}`;

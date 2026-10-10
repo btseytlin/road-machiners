@@ -204,7 +204,7 @@ export const UI: Translation<typeof EN> = {
   'hud.douseBlock.noSupplies': 'Нужно припасов: {n}',
   'hud.douseBlock.engineCool': 'Двигатель холодный',
   'mode.furyRoad': 'Дорога ярости',
-  'mode.furyRoad.description': 'Бесконечное шоссе на север от форпоста к форпосту. Каждый бой идёт до обломков.',
+  'mode.furyRoad.description': 'Бесконечное шоссе на север от форпоста к форпосту.',
   'boot.nextWindow': 'Открываем дорогу на север',
   'death.wrecked': 'Грузовик разбит',
   'death.stranded': 'Вы застряли',
