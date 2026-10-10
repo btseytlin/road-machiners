@@ -4,7 +4,8 @@ import { PHYSICS } from '../data/physics';
 import { TIME } from '../data/time';
 import { DECKS } from './bridge';
 import { craterRimPoints, digCrater, fadeCraters } from './craters';
-import { fireWeapons } from './combat';
+import { fireBlock, fireWeapons } from './combat';
+import { vehicleStats } from './stats';
 import { cloneWorld } from './world';
 import { gunFor } from './factory';
 import { mountedParts } from './grid';
@@ -26,6 +27,7 @@ function gunnery(gun: string, range: number): { w: World; me: Vehicle; target: V
   target.brain = npcBrain('buggy', target.pos, ['raider']);
   const part = mountedParts(me, 'weapon')[0];
   me.weaponOrders[part.id] = { targetId: target.id, aim: 'body' };
+  for (let quarter = 0; quarter < 4 && fireBlock(w, me, vehicleStats(w, me).weapons[0], target) !== null; quarter++) me.heading = (quarter * Math.PI) / 2;
   return { w, me, target };
 }
 

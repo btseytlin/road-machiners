@@ -1,5 +1,5 @@
 {
- "format": "2.37",
+ "format": "2.43",
  "shape": {
   "broken": [],
   "craters": [],
@@ -16,6 +16,19 @@
   },
   "nextId": "number",
   "obstacles": [
+   {
+    "hulk": {
+     "chassisId": "string",
+     "yaw": "number"
+    },
+    "id": "string",
+    "kind": "string",
+    "pos": {
+     "x": "number",
+     "y": "number"
+    },
+    "r": "number"
+   },
    {
     "id": "string",
     "kind": "string",
@@ -49,8 +62,18 @@
    "knockouts": "number",
    "marked": [],
    "money": "number",
+   "notes": [],
    "overdrive": "boolean",
    "perks": [],
+   "quests": {
+    "local": {},
+    "session": {
+     "checkpoint": "string",
+     "quest": "string",
+     "seed": "number"
+    },
+    "world": {}
+   },
    "ranks": {
     "driving": "number",
     "machining": "number",
@@ -1723,5 +1746,72 @@
    }
   ],
   "weather": []
+ },
+ "quests": {
+  "world": {
+   "depot_thief": "string"
+  },
+  "local": {
+   "bowl_dag": {},
+   "bowl_hattie": {},
+   "bowl_ruben": {},
+   "nose_depot_leak": {
+    "alarm": "number",
+    "bunk_searched": "boolean",
+    "envelope": "number",
+    "found_seals": "boolean",
+    "gate_checked": "boolean",
+    "knows_scar": "boolean",
+    "ledger_read": "boolean",
+    "pell_talked": "boolean",
+    "reward": "number",
+    "sabine_price": "number",
+    "sabine_talked": "boolean",
+    "saw_handoff": "boolean",
+    "saw_swap": "boolean",
+    "stakeout_done": "boolean",
+    "watches": "number"
+   },
+   "nose_ibo": {},
+   "nose_kovac": {},
+   "nose_lena": {},
+   "radio_wagon_driver": {}
+  },
+  "checkpoints": {
+   "bowl_dag": [
+    "start",
+    "start.hub"
+   ],
+   "bowl_hattie": [
+    "start",
+    "start.hub"
+   ],
+   "bowl_ruben": [
+    "start",
+    "start.hub"
+   ],
+   "nose_depot_leak": [
+    "start",
+    "desk",
+    "sabine.haggle",
+    "last_call"
+   ],
+   "nose_ibo": [
+    "start",
+    "start.hub"
+   ],
+   "nose_kovac": [
+    "start",
+    "start.hub"
+   ],
+   "nose_lena": [
+    "start",
+    "start.hub"
+   ],
+   "radio_wagon_driver": [
+    "start",
+    "start.ask"
+   ]
+  }
  }
 }

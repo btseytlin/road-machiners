@@ -2,20 +2,23 @@
 // refers to. The records are typed complete, so a name in the data without a function fails typecheck.
 
 import type { ConditionId, EffectId, PrepareId } from '../data/dialogue';
+import { CONTRACTS } from '../data/market';
+import { LOCALS, NOTE_IDS, type LocalDef, type NoteId } from '../data/locals';
 import { TRADE_TIP } from '../data/npcs';
 import { PERK_NUMBERS } from '../data/skills';
+import { WAGON_SEVEN } from '../data/salvage';
 import { REGION, type TownDef } from '../data/region';
 import { playerVehicle } from './damage';
 import { discoverSite } from './locations';
 import { inCombat, isHostile } from './combat';
 import { patchGoal, startTow, topGoal } from './npc-activities';
-import { goodValue, priceAtPressure, standingPrice, vehicleValue } from './market';
+import { haulBlocked, isExpired, shopAt, shopState, takeContract, type Contract, goodValue, priceAtPressure, standingPrice, vehicleValue } from './market';
 import { recall } from './memory';
 import { hasPerk, practice } from './progress';
 import { abandonSpill, answerPlea, standDownBeggar, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, spillClaimOn, standDownTo, surrenderTo, yieldTo, type ThreatAnswer } from './parley';
 import { answerLootWarning, answerWarning, lootsBesidePlayer, pendingWarningTo, playerWarns, warnRefusalOf, type WarnAnswer } from './loot-warning';
 import { talkOf } from './dialogue';
-import { hasCargo, hasSalvage } from './salvage';
+import { hasCargo, hasSalvage, isStoryWreck, storyStock } from './salvage';
 import { agreePatch, canFixItself, canTakeWornPatch, needsPatch, patchTerms } from './patch';
 import { decide, isWeak, npcProfile, wantsLoot } from './npc-decisions';
 import { isStranded } from './stats';
@@ -105,7 +108,7 @@ type Rumor = { id: string; pos: Vec; site: { id: string } | null };
 
 function isRumorWreck(world: World, stock: SalvageStock): boolean {
   const { scavenged, rumored } = world.player;
-  return stock.id.startsWith('wreck') && !scavenged.includes(stock.id) && !rumored.includes(stock.id) && hasSalvage(stock);
+  return (stock.id.startsWith('wreck') || isStoryWreck(stock)) && !scavenged.includes(stock.id) && !rumored.includes(stock.id) && hasSalvage(stock);
 }
 
 function heardRumor(world: World, npc: Vehicle): Rumor | null {
@@ -239,6 +242,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   aidGiven: (_world, _npc, vars) => answerOf(vars) === 'give',
   aidRefused: (_world, _npc, vars) => answerOf(vars) === 'refuse',
   offersAid: (world, npc) => pendingAid(world, npc) !== null,
+  heardWagonNearby: (world, npc) => holdsNote(world, 'wagonBowl') && dist(npc.pos, storyStock(world, WAGON_SEVEN).pos) <= PERK_NUMBERS.rumorMill.radius,
 };
 
 export const EFFECTS: Record<EffectId, Effect> = {
@@ -364,6 +368,7 @@ export const EFFECTS: Record<EffectId, Effect> = {
     agreeAid(world, npc, { giver, fuel, supplies, price, free });
   },
   refuseAidOffer: (world, npc) => refuseAid(world, npc),
+  noteWagonRoad: (world) => learnNote(world, 'wagonRoad'),
   settleDone: (world, npc, call) => settle(world, npc, call, 'done'),
   settleRefused: (world, npc, call) => settle(world, npc, call, 'refused'),
 };
@@ -423,3 +428,48 @@ export const PREPARES: Record<PrepareId, Prepare> = {
     };
   },
 };
+
+export function localsAt(town: string): LocalDef[] {
+  return Object.values(LOCALS).filter((l) => l.town === town);
+}
+
+export function localOfQuest(questId: string): LocalDef | null {
+  return Object.values(LOCALS).find((l) => l.quest === questId) ?? null;
+}
+
+export function boardFull(world: World): boolean {
+  return world.player.contracts.length >= CONTRACTS.maxActive;
+}
+
+export function townOffers(world: World): Contract[] {
+  const town = shopAt(world);
+  if (!town) throw new Error('Not parked at a town, so no board is in reach');
+  return shopState(world, town).contracts.filter((c) => !isExpired(world, c));
+}
+
+export function townWork(world: World): Contract | null {
+  const open = townOffers(world).filter((c) => !haulBlocked(world, c));
+  if (boardFull(world)) return null;
+  return open.reduce<Contract | null>((best, c) => (best === null || c.reward > best.reward ? c : best), null);
+}
+
+export function takeTownWork(world: World): void {
+  const offer = townWork(world);
+  if (!offer) throw new Error('The board offers no work to take');
+  takeContract(world, offer.id);
+}
+
+export function isNoteId(id: string): id is NoteId {
+  return (NOTE_IDS as readonly string[]).includes(id);
+}
+
+export function learnNote(world: World, id: NoteId): void {
+  if (!isNoteId(id)) throw new Error(`No note ${id}`);
+  if (holdsNote(world, id)) return;
+  world.player.notes.push({ id, turn: world.turn });
+  world.events.push({ t: 'note', id });
+}
+
+export function holdsNote(world: World, id: NoteId): boolean {
+  return world.player.notes.some((n) => n.id === id);
+}

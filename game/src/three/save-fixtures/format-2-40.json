@@ -1,0 +1,12 @@
+{
+  "turn": 2900,
+  "player": {
+    "vehicleId": "v1",
+    "money": 5120,
+    "quests": {
+      "world": { "depot_thief": "open" },
+      "local": { "nose_depot_leak": { "watches": 3, "evidence": 2, "misled": true, "ledger_read": true } },
+      "session": { "quest": "nose_depot_leak", "checkpoint": "desk", "seed": 7 }
+    }
+  }
+}

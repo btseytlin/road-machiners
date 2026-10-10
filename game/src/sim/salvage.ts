@@ -1,4 +1,4 @@
-import { FIELD_SPARE_WEAR, OLD_PLACES, OLD_PLACE_TYPES, OLD_TABLES, SALVAGE, type LootRange, type LootTable, type OldPlaceType } from '../data/salvage';
+import { FIELD_SPARE_WEAR, OLD_PLACES, OLD_PLACE_TYPES, OLD_TABLES, SALVAGE, STORY_WRECKS, type LootRange, type LootTable, type OldPlaceType, type StoryWreck } from '../data/salvage';
 import OLD_SPOTS_FILE from '../data/old-spots.json';
 import { SHOPS } from '../data/market';
 import { ECONOMY, GOODS } from '../data/goods';
@@ -8,7 +8,7 @@ import { WRECK_LOOKS } from '../data/territory';
 import { TIME } from '../data/time';
 import { CHASSIS, chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
-import { makePart, newId } from './factory';
+import { makePart, newId, partWithId } from './factory';
 import { clearOfSites, findRoadWreckSpot, isBreakable, mapObstacles, propReach } from './mapgen';
 import { startComponent } from './nav/astar';
 import { CELL, CLEARANCE, componentOf, navLayer, type NavLayer } from './nav/layer';
@@ -46,7 +46,25 @@ export function initializeSalvage(world: World): void {
   });
   const spots = world.obstacles.filter(isLootSpot).map((o) => rollStock(world, spotTable(o), o.id, o.pos, propReach(o)));
   const wrecks = world.obstacles.filter(isRoadWreck).map((o) => rollStock(world, SALVAGE.roadWreck, o.id, o.pos, o.r * RULES.wreckRadiusScale));
-  world.salvage = [...sites, ...spots, ...wrecks];
+  world.salvage = [...sites, ...spots, ...wrecks, ...STORY_WRECKS.map(storyWreckStock)];
+}
+
+// A story wreck's fixed stock. It rolls nothing, so world creation draws the same numbers with it as without.
+function storyWreckStock(w: StoryWreck): SalvageStock {
+  const part = partWithId(w.part.id, w.part.defId, w.part.wear);
+  return { id: w.id, pos: { ...w.pos }, radius: w.r * RULES.wreckRadiusScale, goods: { ...w.goods }, parts: [part], fuel: w.fuel, supplies: w.supplies, hidden: emptyHidden() };
+}
+
+// A story wreck's stock, which every world holds from creation. Throws when it is missing.
+export function storyStock(world: World, id: string): SalvageStock {
+  const stock = world.salvage.find((s) => s.id === id);
+  if (!stock || !isStoryWreck(stock)) throw new Error(`No story wreck stock ${id}`);
+  return stock;
+}
+
+// A wreck placed by hand for a story, see STORY_WRECKS. It never refills and is never cleared.
+export function isStoryWreck(o: { id: string }): boolean {
+  return o.id.startsWith('story-');
 }
 
 export function siteLootTable(site: LocationDef): LootTable | null {
@@ -65,10 +83,16 @@ export function isRoadWreck(o: { id: string }): boolean {
 
 export type SalvagePlace = 'pile' | 'site' | 'wreck' | 'spot';
 
+function isWreckStock(stock: SalvageStock): boolean {
+  return isRoadWreck(stock) || isTruckWreck(stock) || isStoryWreck(stock) || stock.id === OPENING_WRECK_ID;
+}
+
+// What kind of place holds the stock: a dropped pile, a site's own stock, a wreck (a road wreck, a destroyed truck's
+// wreck, a story wreck or a loot spot with a wreck look), or any other loot spot of a territory.
 export function salvagePlace(stock: SalvageStock): SalvagePlace {
   if (stock.pile) return 'pile';
   if (isSiteStock(stock)) return 'site';
-  return isRoadWreck(stock) || isTruckWreck(stock) || stock.id === OPENING_WRECK_ID ? 'wreck' : spotPlace(stock);
+  return isWreckStock(stock) ? 'wreck' : spotPlace(stock);
 }
 
 function spotPlace(stock: SalvageStock): 'wreck' | 'spot' {

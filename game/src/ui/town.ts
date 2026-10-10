@@ -47,6 +47,8 @@ import { PartRows, type PartRow } from "./part-rows";
 import { el, panel, type Child } from "./dom";
 import { contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, heldContractDue, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
 import { InventoryView, truckChips } from "./inventory";
+import { peopleList } from "./talk";
+import { localsAt } from "../sim/dialogue-rules";
 import type { UiHost } from "./host";
 import { coinEl, fuelLiters, moneyEl, moneyMsg, moneyNum } from "./units";
 import { fuelCap, suppliesCap } from "../sim/stats";
@@ -55,7 +57,7 @@ import { chassisName, goodName, siteName, vehicleTitle } from "../text/names";
 import { commandFailure } from "./format";
 import { vehicleHasPerk } from "../sim/progress";
 
-type Tab = "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
+type Tab = "people" | "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
 
 export type StockFilter = "all" | Exclude<PartKind, "core">;
 
@@ -109,8 +111,8 @@ export class TownScreen {
     const shopId = shopAt(w);
     if (!shopId) return this.close();
     const def = shopDef(shopId);
-    this.normalizeTab(def);
-    const shop = [el("div", { class: "tabs" }, ...this.tabButtons(def))];
+    this.normalizeTab(shopId, def);
+    const shop = [el("div", { class: "tabs" }, ...this.tabButtons(shopId, def))];
     if (this.error) shop.push(el("div", { class: "bad" }, this.error));
     shop.push(this.tabBody(w, shopId, def));
     const truck = el(
@@ -127,12 +129,14 @@ export class TownScreen {
     this.inventory.fitTo(truck);
   }
 
-  private normalizeTab(def: ShopDef): void {
+  private normalizeTab(shopId: string, def: ShopDef): void {
     if (def.kind !== "garage" && GARAGE_ONLY.includes(this.tab)) this.tab = "market";
+    if (this.tab === "people" && localsAt(shopId).length === 0) this.tab = "market";
   }
 
-  private tabButtons(def: ShopDef): HTMLElement[] {
-    const tabs: Tab[] = ["market", "buyParts", "sellParts", ...(def.kind === "garage" ? GARAGE_ONLY : []), "contracts"];
+  private tabButtons(shopId: string, def: ShopDef): HTMLElement[] {
+    const people: Tab[] = localsAt(shopId).length > 0 ? ["people"] : [];
+    const tabs: Tab[] = [...people, "market", "buyParts", "sellParts", ...(def.kind === "garage" ? GARAGE_ONLY : []), "contracts"];
     return tabs.map((tab) =>
       el(
         "button",
@@ -152,6 +156,7 @@ export class TownScreen {
 
   private tabBody(w: World, shopId: string, def: ShopDef): HTMLElement {
     const body: Record<Tab, () => HTMLElement> = {
+      people: () => peopleList(shopId, (cmd) => this.run(cmd, true)),
       market: () => this.market(w, shopId, def),
       buyParts: () => this.buyParts(w, shopId),
       sellParts: () => this.sellParts(w),
@@ -168,10 +173,12 @@ export class TownScreen {
   }
 
   // Runs a command; a refusal shows in the screen instead of changing the world.
-  private run(cmd: (w: World) => World): void {
+  private run(cmd: (w: World) => World, announce = false): void {
     keepFocus(this.root, () => {
       try {
-        this.host.apply(cmd(this.host.world()));
+        const next = cmd(this.host.world());
+        if (announce) this.host.announce(next);
+        else this.host.apply(next);
         this.error = null;
         this.rows.collapse();
       } catch (e) {
@@ -430,6 +437,7 @@ export const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
 };
 
 const TAB_ICON: Record<Tab, IconName> = {
+  people: "driver",
   market: "salt",
   buyParts: "parts",
   sellParts: "trade",

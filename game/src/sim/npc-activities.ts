@@ -7,7 +7,7 @@ import { SHOPS } from '../data/market';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
-import { callLawmen, inCombat, isHostile, startFeuds, turnPartHits } from './combat';
+import { callLawmen, inCombat, inCombatWith, isHostile, startFeuds, turnPartHits } from './combat';
 import { affordableBuyCount, buyFuel, cargoSaleValue, sellAtCamp, sellVehicleCargo, tradeGoods } from './economy';
 import { corePart } from './grid';
 import { addGoods, cargoRoom } from './inventory';
@@ -18,7 +18,7 @@ import { huntsOffRoad } from './hunt-style';
 import {
   tradeOffers, tradeSpend, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolStopsOf, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, npcSenses, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  passReason, lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, noteStripped, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition, firepower,
+  passReason, canStartFight, lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, noteStripped, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition, firepower,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -45,7 +45,7 @@ import { isWatching, startWatch, watchOver } from './watch-posts';
 import { chooseOn, comesInSight, sensedAt, senseTracks, trackOf } from './tracks';
 import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, ropeClientOf, runTow, steerFollow, steerToStranded, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut } from './defeat';
-import { beginRearm, holdsRearm, rearmInvalid, resolveRearm, resolveResupply, serveStranded, servingSiteIds } from './npc-service';
+import { beginRearm, holdsRearm, liesUp, rearmInvalid, resolveRearm, resolveResupply, serveStranded, servingSiteIds } from './npc-service';
 
 export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot', 'repair', 'patch', 'meet', 'retreat', 'rearm', 'follow'];
 
@@ -578,6 +578,14 @@ export function fightCornered(world: World, vehicle: Vehicle, foe: Vehicle): voi
   interrupt(world, vehicle, fightGoal(world, vehicle, foe, 'cornered'));
 }
 
+export function turnCornered(world: World, vehicle: Vehicle): boolean {
+  if (topGoal(vehicle)?.kind === 'fight') return false;
+  const foe = visibleHostiles(world, vehicle).find((other) => (inCombatWith(world, vehicle, other) || vehicle.brain!.goals.some((goal) => goal.kind === 'fight' && goal.targetId === other.id)) && canStartFight(world, vehicle, other));
+  if (!foe) return false;
+  fightCornered(world, vehicle, foe);
+  return true;
+}
+
 type HostileDecision = 'hostileSeen' | 'contactHeard';
 
 function rollOnHostile<D extends HostileDecision>(world: World, vehicle: Vehicle, decision: D, id: string, at: Vec): DecisionOptions[D] {
@@ -1008,9 +1016,13 @@ export function noteHurt(world: World): void {
 
 export function getActivityDestination(world: World, vehicle: Vehicle, activity: NpcActivity): Vec | null {
   if (!activity.destination) return null;
-  if (activity.kind === 'repair') return repairsHere(vehicle, activity) ? null : activity.destination;
+  if (activity.kind === 'repair' || activity.kind === 'rearm') return parksHere(vehicle, activity) ? null : activity.destination;
   if (['fight', 'flee', 'raid', 'prowl', 'investigate', 'patrol', 'explore', 'follow'].includes(activity.kind)) return activity.destination;
   return siteStop(world, vehicle, activity, activity.destination);
+}
+
+function parksHere(vehicle: Vehicle, activity: NpcActivity): boolean {
+  return activity.kind === 'repair' ? repairsHere(vehicle, activity) : liesUp(vehicle);
 }
 
 function siteStop(world: World, vehicle: Vehicle, activity: NpcActivity, destination: Vec): Vec {
@@ -1104,7 +1116,7 @@ function resolveRaid(world: World, vehicle: Vehicle, activity: NpcActivity): voi
 }
 
 function resolveFlee(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  if (reachedDestination(world, vehicle, activity)) finishGoal(world, vehicle, 'nowhereToRun');
+  if (reachedDestination(world, vehicle, activity) && !turnCornered(world, vehicle)) finishGoal(world, vehicle, 'nowhereToRun');
 }
 
 function resolveInvestigate(world: World, vehicle: Vehicle, activity: NpcActivity): void {

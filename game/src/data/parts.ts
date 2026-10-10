@@ -650,7 +650,7 @@ const UNPRICED_PARTS: Record<string, Unpriced<PartDef>> = {
     amount: 10,
   },
   cab: {
-    id: "cab", kind: "core", hp: 120, base: 2667, tier: 1, w: 1, h: 2, mass: 80, armor: 3, tall: false, role: "cab",
+    id: "cab", kind: "core", hp: 120, base: 2667, tier: 1, w: 1, h: 2, mass: 80, armor: 3, tall: true, role: "cab",
   },
   cabPickup: {
     id: "cabPickup", kind: "core", hp: 120, base: 2667, tier: 1, w: 3, h: 2, mass: 80, armor: 3, tall: true, role: "cab",

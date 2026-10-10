@@ -27,6 +27,7 @@ describe("truck condition", () => {
   it("flashes only on a new health loss, not initial damage, repair or redraw", () => {
     const vehicle = emptyWorld().vehicles[0];
     const engine = mountedParts(vehicle, "engine")[0];
+    engine.wear = 0;
     engine.hp = 20;
     const readout = new TruckConditionReadout();
     expect(readout.update(vehicle).find((part) => part.id === engine.id)).toMatchObject({ percent: 40, hit: false });

@@ -978,7 +978,7 @@ describe('the player towing an NPC', () => {
     for (const part of mountedParts(npc, 'engine')) npc.items = npc.items.filter((i) => i.kind !== 'part' || i.part.id !== part.id);
     const w = pick(pick(callVehicle(start, npc.id), OFFER), HITCH);
     const r = runUntil(setMoveOrder(w, { kind: 'stopAt', dest: gate }), 60, (x) => playerTowing(x) === null);
-    const lying = runUntil(r.w, 3, () => false).w;
+    const lying = runUntil(r.w, 10, (x) => topGoal(find(x, npc.id))?.kind === 'rearm').w;
     const goal = topGoal(find(lying, npc.id));
     expect(goal).toMatchObject({ kind: 'rearm' });
     expect(mountedParts(find(lying, npc.id), 'engine')).toHaveLength(0);

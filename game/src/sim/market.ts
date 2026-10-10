@@ -396,20 +396,26 @@ function requireParkedAt(world: World, shopId: string): void {
 }
 
 export function acceptContract(world: World, contractId: string): World {
-  return playerCommand(world, (w) => {
-    const shopId = shopAt(w);
-    if (!shopId) throw new Error('Not parked at a shop');
-    const board = shopState(w, shopId).contracts;
-    const contract = board.find((c) => c.id === contractId);
-    if (!contract) throw new Error(`No contract ${contractId} at ${shopId}`);
-    if (isExpired(w, contract)) throw new Error(`Offer ${contractId} has expired`);
-    if (w.player.contracts.length >= CONTRACTS.maxActive) throw new Error(`You already hold ${CONTRACTS.maxActive} contracts`);
-    if (contract.kind === 'haul') loadHaul(w, contract);
-    contract.deadline = w.turn + contract.window;
-    board.splice(board.indexOf(contract), 1);
-    w.player.contracts.push(contract);
-    w.events.push({ t: 'contract', contract: { ...contract }, outcome: 'accepted' });
-  });
+  return playerCommand(world, (w) => takeContract(w, contractId));
+}
+
+export function takeContract(w: World, contractId: string): void {
+  const shopId = shopAt(w);
+  if (!shopId) throw new Error('Not parked at a shop');
+  const board = shopState(w, shopId).contracts;
+  const contract = board.find((c) => c.id === contractId);
+  if (!contract) throw new Error(`No contract ${contractId} at ${shopId}`);
+  if (isExpired(w, contract)) throw new Error(`Offer ${contractId} has expired`);
+  if (w.player.contracts.length >= CONTRACTS.maxActive) throw new Error(`You already hold ${CONTRACTS.maxActive} contracts`);
+  if (contract.kind === 'haul') loadHaul(w, contract);
+  contract.deadline = w.turn + contract.window;
+  board.splice(board.indexOf(contract), 1);
+  w.player.contracts.push(contract);
+  w.events.push({ t: 'contract', contract: { ...contract }, outcome: 'accepted' });
+}
+
+export function haulBlocked(world: World, c: Contract): boolean {
+  return c.kind === 'haul' && (world.player.money < 0 || freeCells(playerVehicle(world)) < c.units);
 }
 
 function loadHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void {

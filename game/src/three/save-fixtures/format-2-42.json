@@ -1,0 +1,133 @@
+{
+  "turn": 900,
+  "player": {
+    "vehicleId": "player",
+    "storage": [
+      {
+        "id": "s1",
+        "defId": "shotgun",
+        "hp": 10,
+        "wear": 0
+      }
+    ]
+  },
+  "vehicles": [
+    {
+      "id": "player",
+      "items": [
+        {
+          "id": "i1",
+          "x": 4,
+          "y": 1,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p1",
+            "defId": "mg",
+            "hp": 20,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i2",
+          "x": 2,
+          "y": 6,
+          "rot": 1,
+          "kind": "part",
+          "part": {
+            "id": "p2",
+            "defId": "mg",
+            "hp": 20,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i3",
+          "x": 3,
+          "y": 3,
+          "rot": 0,
+          "kind": "good",
+          "good": "scrap"
+        },
+        {
+          "id": "i4",
+          "x": 5,
+          "y": 3,
+          "rot": 1,
+          "kind": "part",
+          "part": {
+            "id": "p4",
+            "defId": "mg",
+            "hp": 20,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i5",
+          "x": 1,
+          "y": 3,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p5",
+            "defId": "mg",
+            "hp": 20,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i6",
+          "x": 1,
+          "y": 4,
+          "rot": 0,
+          "kind": "good",
+          "good": "scrap"
+        },
+        {
+          "id": "i7",
+          "x": 3,
+          "y": 4,
+          "rot": 0,
+          "kind": "good",
+          "good": "scrap"
+        }
+      ],
+      "chassisId": "scout"
+    },
+    {
+      "id": "npc-3",
+      "items": [
+        {
+          "id": "i8",
+          "x": 1,
+          "y": 3,
+          "rot": 0,
+          "kind": "part",
+          "part": {
+            "id": "p8",
+            "defId": "mg",
+            "hp": 20,
+            "wear": 0
+          }
+        },
+        {
+          "id": "i9",
+          "x": 1,
+          "y": 4,
+          "rot": 0,
+          "kind": "good",
+          "good": "scrap"
+        },
+        {
+          "id": "i10",
+          "x": 2,
+          "y": 2,
+          "rot": 0,
+          "kind": "good",
+          "good": "scrap"
+        }
+      ],
+      "chassisId": "scout"
+    }
+  ]
+}

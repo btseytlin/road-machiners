@@ -1,4 +1,4 @@
-// Gun reach on the ground: the selected gun's, and the firing arcs of the hovered truck. A turret with every side open covers a circle. A forward arc or tall parts on the truck cut it to sectors. Draped over the terrain, level with a deck beside it where the truck is nearer the deck than the ground and both lie within sight of its sides (markHeightAt).
+// Gun reach on the ground: the selected gun's, and the firing arcs of the hovered truck. A turret with every side open covers a circle. A forward arc or the shadows of tall parts on the truck cut it to sectors. Draped over the terrain, level with a deck beside it where the truck is nearer the deck than the ground and both lie within sight of its sides (markHeightAt).
 
 import * as THREE from 'three';
 import { Line2 } from 'three/examples/jsm/lines/Line2.js';
@@ -7,7 +7,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 import { PHYSICS } from '../../data/physics';
 import { headingOf, toMap, type VehicleFrame } from '../../phys/frames';
 import { PAL } from '../../render/palette';
-import { fireSpans, type FireSpan, type Side } from '../../sim/armor';
+import type { FireSpan } from '../../sim/armor';
 import { fireBlock } from '../../sim/combat';
 import { vehicleStats, type MountedWeapon } from '../../sim/stats';
 import { markHeightAt, type Terrain } from '../../sim/terrain';
@@ -28,8 +28,6 @@ const FILL_ALPHA = 0.075;
 const LINE_ALPHA = 0.075;
 const ICON_ALPHA = 0.5;
 
-export type MountPose = { pos: Vec; heading: number; sides: readonly Side[] };
-
 export class WeaponRangeView {
   readonly root = new THREE.Group();
   private fill: THREE.Mesh<THREE.BufferGeometry, THREE.MeshBasicMaterial>;
@@ -47,7 +45,7 @@ export class WeaponRangeView {
   }
 
   set(terrain: Terrain, pos: Vec, heading: number, weapons: MountedWeapon[]): void {
-    this.draw(terrain, pos, heading, weapons.map((w) => ({ range: w.def.range, spans: fireSpans(w.def.arc, w.sides) })));
+    this.draw(terrain, pos, heading, weapons.map((w) => ({ range: w.def.range, spans: w.spans })));
   }
 
   hide(): void {
@@ -121,7 +119,7 @@ export function hoverArcs(world: World, vehicle: Vehicle, weapons: readonly Moun
   const arcs: HoverArc[] = [];
   for (const [i, weapon] of weapons.entries()) {
     const block = fireBlock(world, vehicle, weapon, null);
-    const spans = fireSpans(weapon.def.arc, weapon.sides);
+    const { spans } = weapon;
     if (block === 'disabled' || spans.length === 0) continue;
     const spot = iconSpot(spans, weapon.def.range, arcs.map((arc) => arc.spot));
     arcs.push({ weapon, slot: i + 1, spans, spent: block === 'empty' || block === 'cooldown', spot });

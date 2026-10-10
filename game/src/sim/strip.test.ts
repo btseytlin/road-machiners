@@ -209,6 +209,7 @@ function npcAmbush(answer: 'accept' | 'refuse'): { w: World; raider: Vehicle; tr
   addState(w, 'feud', raider.id, trader.id, { kind: 'feud', robbery: true });
   forceOption('hostileSeen', 'fight');
   forceOption('surrenderOffered', answer);
+  forceOption('threatened', 'fightBack');
   return { w, raider, trader };
 }
 

@@ -7,6 +7,7 @@ import { STATE_TURNS } from "../data/npcs";
 import { addVehicle, emptyWorld, npcBrain, startCombat } from "../sim/testkit";
 import { maxHealthOf } from "../sim/health";
 import { suppliesCap } from "../sim/stats";
+import { maxHp } from "../sim/wear";
 import { addState, towData } from "../sim/states";
 import { playerAid } from "../sim/aid";
 import { aidGoods, clock } from "./format";
@@ -605,16 +606,16 @@ describe('context picker', () => {
 });
 
 describe('overdrive switch', () => {
-  function wornTo(hp: number) {
+  function wornTo(extra: number) {
     const w = emptyWorld();
     const engine = mountedParts(playerVehicle(w), 'engine')[0];
     engine.wear = 2;
-    engine.hp = hp;
+    engine.hp = Math.floor(RULES.overdriveMinEngineShare * maxHp(engine)) + extra;
     return w;
   }
 
   it('is blocked at 15% engine HP and says why, with the share from the rule', () => {
-    const w = wornTo(6);
+    const w = wornTo(0);
     w.player.overdrive = true;
     const s = overdriveSwitch(w);
     const reason = `Engine too worn for overdrive: repair it above ${RULES.overdriveMinEngineShare * 100}% [O]`;
@@ -622,7 +623,7 @@ describe('overdrive switch', () => {
   });
 
   it('is open one HP above 15% and shows the flag', () => {
-    const w = wornTo(7);
+    const w = wornTo(1);
     const s = overdriveSwitch(w);
     expect({ checked: s.checked, reason: s.reason, title: en(s.title) }).toEqual({ checked: false, reason: null, title: 'Faster, but the engine heats fast [O]' });
     w.player.overdrive = true;

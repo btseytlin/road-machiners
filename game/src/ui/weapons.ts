@@ -6,7 +6,7 @@ import { vehicleStats, type MountedWeapon } from "../sim/stats";
 import type { Aim, PartInstance, UtilityOrder, Vehicle, World } from "../sim/types";
 import { playerSees } from "../sim/vision";
 import { workOf } from "../sim/states";
-import { actBlock, reloadWeapon, setAutoFire, setUtilityOrder, setWeaponOrder } from "../sim/world";
+import { actBlock, cutPlayerLine, reloadWeapon, setAutoFire, setUtilityOrder, setWeaponOrder } from "../sim/world";
 import { chargeOf, chargedParts, orderKindOf, utilityBlock, utilityOrderError, wornReload } from "../sim/utility";
 import { oilShort } from "../sim/hazards";
 import { bottomLeft, el, panel } from "./dom";
@@ -216,6 +216,7 @@ export const NOTHING_TO_HOLD: Msg = t("weapon.noHoldTarget");
 function disabledAttrs(reason: Msg | null, title: Msg): Record<string, Msg | string> {
   return reason === null ? { title } : { title: reason, "aria-disabled": "true" };
 }
+
 
 export function getWeaponReadout(w: World, mw: MountedWeapon) {
   const me = playerVehicle(w);
@@ -493,7 +494,7 @@ export class WeaponPanel {
           class: `weapon-pick ${selected ? "on" : ""}`,
           "aria-pressed": String(selected),
           'aria-label': t("weapon.slotLabel", status),
-          ...disabledAttrs(locked, t("weapon.slotTitle", { ...status, rounds: mw.def.rounds, damage: roundDamage(w, mw.def), pen: mw.def.round.pen, range: meters(mw.def.range), arc: mw.def.arc, cooldown: mw.def.cooldown, magazine: mw.def.magazine, reload: mw.def.reload })),
+          ...disabledAttrs(locked, t("weapon.slotTitle", { ...status, rounds: mw.def.rounds, damage: roundDamage(w, mw.def), pen: mw.def.round.pen, range: meters(mw.def.range), cooldown: mw.def.cooldown, magazine: mw.def.magazine, reload: mw.def.reload })),
           onclick: () => locked === null && this.selectWeapon(selected ? null : mw.part.id),
         },
         el('span', { class: 'weapon-number' }, num(i + 1, 'int')),
@@ -501,7 +502,7 @@ export class WeaponPanel {
         createItemIcon(mw.part.defId),
         this.renderAmmo(mw),
       ),
-      this.renderActions(mw, locked, canHold(w, mw)),
+      this.renderActions(w, mw, locked, canHold(w, mw)),
     );
   }
 
@@ -517,7 +518,7 @@ export class WeaponPanel {
     );
   }
 
-  private renderActions(mw: MountedWeapon, locked: Msg | null, canHold: boolean): HTMLElement {
+  private renderActions(w: World, mw: MountedWeapon, locked: Msg | null, canHold: boolean): HTMLElement {
     const holdReason = locked ?? (canHold ? null : NOTHING_TO_HOLD);
     const reloadReason = locked ?? reloadBlock(mw);
     return el(
@@ -532,7 +533,7 @@ export class WeaponPanel {
         },
         t("weapon.hold"),
       ),
-      el(
+      mw.def.line ? this.renderCut(w, mw, locked) : el(
         "button",
         {
           class: "weapon-reload",
@@ -543,6 +544,26 @@ export class WeaponPanel {
         createIcon("reload"),
       ),
     );
+  }
+
+  private renderCut(w: World, mw: MountedWeapon, locked: Msg | null): HTMLElement {
+    const out = w.lines.some((l) => l.from === w.player.vehicleId && l.fromPart === mw.part.id);
+    const reason = locked ?? (out ? null : t("weapon.noLine"));
+    return el(
+      "button",
+      {
+        class: "weapon-cut",
+        ...disabledAttrs(reason, t("weapon.cutHint")),
+        "aria-label": t("weapon.cutLabel", { name: partName(mw.def.id) }),
+        onclick: () => reason === null && this.cut(mw.part.id),
+      },
+      createIcon("cut"),
+    );
+  }
+
+  private cut(weaponId: string): void {
+    if (this.host.getTurnPhase() !== null) return;
+    this.host.apply(cutPlayerLine(this.host.world(), weaponId));
   }
 
   private forceReload(weaponId: string): void {

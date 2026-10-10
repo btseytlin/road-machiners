@@ -33,7 +33,7 @@
 
 /* Text buttons have three fixed heights: small, medium and large. A plain button is medium. The listed tiles and drawn
    hardware size themselves, and only they may be left out of this rule. Screen files place a button and set its width. */
-#ui button:where(:not(.switch, .instrument-button, .truck-instrument, .end-turn, .radio-next, .inv-item, .part-sum, .mode-card, .perk, .dialogue-option, .weapon-pick, .weapon-hold, .weapon-reload)) {
+#ui button:where(:not(.switch, .instrument-button, .truck-instrument, .end-turn, .radio-next, .inv-item, .part-sum, .mode-card, .perk, .dialogue-option, .weapon-pick, .weapon-hold, .weapon-reload, .weapon-cut)) {
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
