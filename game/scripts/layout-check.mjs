@@ -53,16 +53,16 @@ async function openInventory(page) {
 async function openTown(page, tab) {
   await page.evaluate(async () => {
     const g = window.__ROAM__;
-    if (g.town.isOpen()) return;
+    if (g.screens.town.isOpen()) return;
     const c = await import('/src/sim/cheats.ts');
     g.apply(c.teleport(g.state, c.placeSpot(g.state, 'bowl')));
-    g.town.open();
+    g.screens.town.open();
   });
   // A click from the page, so a covered tab still opens and the checker reports what covers it.
   await page.evaluate((tab) => document.querySelector(`.town-screen [data-tab="${tab}"]`).click(), tab);
 }
 
-const closeTown = (page) => page.evaluate(() => window.__ROAM__.town.close());
+const closeTown = (page) => page.evaluate(() => window.__ROAM__.screens.town.close());
 
 // A radio call on the hub of topics, or on a patch deal, with the nearest driver the console can spawn.
 async function openCall(page, node) {
