@@ -17,8 +17,9 @@ import { deckAt, deckById, type Deck } from '../sim/bridge';
 import { groundAt, heightAt } from '../sim/terrain';
 import { dist, segmentDist, type Vec } from '../sim/vec';
 import { propPose, propShape } from '../sim/mapgen';
-import { emptyWorld, furyRoadWorld } from '../sim/testkit';
+import { emptyWorld } from '../sim/testkit';
 import { atlasOf } from '../sim/atlas';
+import { highwayMap } from '../sim/highway';
 import { stretchLayout } from '../sim/road-hazards';
 import type { LandmarkLook, Obstacle, World } from '../sim/types';
 import { endTurn, newWorld, setMoveOrder } from '../sim/world';
@@ -402,7 +403,7 @@ describe('a Fury Road hull-plate ramp', () => {
     for (let seed = 1; seed <= 40; seed++) {
       const plain = stretchLayout(seed, 1).scenes.filter((s) => s.kind === 'ramp' && s.craters.length === 0).flatMap((s) => s.ramps.map((r) => r.id));
       if (plain.length === 0) continue;
-      const w = furyRoadWorld(seed);
+      const w = newWorld(seed, START_KITS.combat, highwayMap(seed, 0), defaultSetup('furyRoad'));
       const ramp = atlasOf(w.terrain).decks.decks.find((d) => plain.includes(d.id));
       if (ramp) return { w, ramp };
     }
