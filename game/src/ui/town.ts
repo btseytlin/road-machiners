@@ -1,7 +1,7 @@
 // Shop screens: every shop the player can park at, town garage or roadside stall, and an NPC truck parked beside
 // the player to trade.
 
-import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
+import { PLAYER_CHASSIS } from "../data/chassis";
 import { ECONOMY, GOOD_IDS } from "../data/goods";
 import { CONTRACTS, shopDef, type ShopDef } from "../data/market";
 import { partDef, type PartKind } from "../data/parts";
@@ -15,7 +15,7 @@ import {
   buyTruckGood,
   buyTruckPart,
   buyTruckSupply,
-  chassisTradeIn,
+  chassisPrice,
   endTrade,
   enterTown,
   getLotTradePrice,
@@ -42,9 +42,9 @@ import { freeCells, goodsCount, MOUNT_CELLS, mountedParts } from "../sim/grid";
 import { canStowPart, cargoRoom, spareParts } from "../sim/inventory";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import type { PartInstance, Vehicle, World } from "../sim/types";
-import { chassisMap, chassisPortrait, chassisStats, compareBase, createIcon, createItemIcon, diffStats, statGrid, type IconName } from "./cards";
+import { compareBase, createIcon, createItemIcon, type IconName } from "./cards";
 import { PartRows, type PartRow } from "./part-rows";
-import { caption, keepFocus, priceEl, priceHead, priceSpan, reasonButton, repairBar, shortBy, supplyAmount, supplyCap, supplyLine, supplyRow, type PriceHint } from "./shop-rows";
+import { caption, keepFocus, priceEl, priceHead, priceSpan, reasonButton, repairBar, shortBy, supplyAmount, supplyCap, supplyLine, supplyRow, truckCards, type PriceHint } from "./shop-rows";
 import { el, panel, type Child } from "./dom";
 import { contractSummary, contractWindow, CRATE_NOTE, estimateText, estimateTitle, GOODS_COLUMNS, heldContractDue, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
 import { InventoryView, truckChips } from "./inventory";
@@ -54,11 +54,11 @@ import type { UiHost } from "./host";
 import { coinEl, fuelLiters, moneyEl, moneyMsg, moneyNum } from "./units";
 import { fuelCap, suppliesCap } from "../sim/stats";
 import { num, PLUS, SPACE, t, type Msg } from "../text/msg";
-import { chassisName, goodName, localName, localRole, siteName, vehicleTitle } from "../text/names";
+import { goodName, localName, localRole, siteName, vehicleTitle } from "../text/names";
 import { commandFailure } from "./format";
 import { vehicleHasPerk } from "../sim/progress";
 
-type Tab = "people" | "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
+export type Tab = "people" | "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
 
 export type StockFilter = "all" | Exclude<PartKind, "core">;
 
@@ -328,38 +328,10 @@ export class TownScreen {
   }
 
   private trucks(w: World): HTMLElement {
-    const me = playerVehicle(w);
-    const tradeIn = chassisTradeIn(w);
-    const mine = chassisStats(me.chassisId);
-    const cards = PLAYER_CHASSIS.map((id) => {
-      const cost = chassisDef(id).value - tradeIn;
-      const own = me.chassisId === id;
-      return el(
-        "div",
-        { class: `card tile truck-card${own ? " own" : ""}` },
-        el("div", { class: "truck-pics" }, chassisPortrait(id), chassisMap(id)),
-        el(
-          "div",
-          { class: "truck-body" },
-          el(
-            "div",
-            { class: "truck-head" },
-            el("div", { class: "card-name" }, el("b", {}, chassisName(id))),
-            own ? el("span", { class: "dim" }, t("vehicle.yours")) : this.swapButton(w, id, cost, tradeIn),
-          ),
-          statGrid(diffStats(chassisStats(id), own ? null : mine)),
-        ),
-      );
-    });
-    return el("div", { class: "cards trucks" }, ...cards);
-  }
-
-  private swapButton(w: World, id: string, cost: number, tradeIn: number): HTMLElement {
-    const gain = cost < 0;
-    const short = gain ? null : shortBy(w.player.money, cost);
-    const price = gain ? el("span", { class: "good" }, PLUS, moneyEl(-cost)) : priceSpan(cost, short === null);
-    const title = short ? null : t("trade.includesTradeIn", { price: moneyMsg(tradeIn) });
-    return reasonButton([t("trade.swapVerb"), SPACE, price], () => this.run((x) => buyChassis(x, id)), short, "", title);
+    return truckCards(w, PLAYER_CHASSIS, (id) => ({
+      reason: chassisPrice(w, id) < 0 ? null : shortBy(w.player.money, chassisPrice(w, id)),
+      swap: () => this.run((x) => buyChassis(x, id)),
+    }));
   }
 
   private contracts(w: World, shopId: string): HTMLElement {
@@ -410,7 +382,7 @@ export const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
   utility: "utility",
 };
 
-const TAB_ICON: Record<Tab, IconName> = {
+export const TAB_ICON: Record<Tab, IconName> = {
   people: "driver",
   market: "salt",
   buyParts: "parts",

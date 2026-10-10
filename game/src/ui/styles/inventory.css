@@ -69,12 +69,18 @@
 .outpost-screen .town-shop {
   display: flex;
   flex-direction: column;
+  overflow: hidden;
+}
+.outpost-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
 }
 .outpost-road {
   display: flex;
   justify-content: flex-end;
-  margin-top: auto;
-  padding-top: var(--space-9);
+  padding-top: var(--space-5);
 }
 .town-truck {
   padding-right: var(--space-9);

@@ -148,7 +148,7 @@ export class PartRows {
 }
 
 function scrollBoxes(root: HTMLElement): HTMLElement[] {
-  return [...root.querySelectorAll<HTMLElement>(".town-shop, .town-split")];
+  return [...root.querySelectorAll<HTMLElement>(".town-shop, .town-split, .outpost-body")];
 }
 
 function rowIds(root: HTMLElement): string[] {

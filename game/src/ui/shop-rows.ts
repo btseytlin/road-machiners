@@ -1,11 +1,12 @@
 import { ECONOMY } from "../data/goods";
 import { playerVehicle } from "../sim/damage";
-import { basicsRepairCost, repairCost, supplyRoom, type Supply } from "../sim/economy";
+import { basicsRepairCost, chassisPrice, chassisTradeIn, repairCost, supplyRoom, type Supply } from "../sim/economy";
 import { mountedParts } from "../sim/grid";
 import { fuelCap, suppliesCap } from "../sim/stats";
 import type { World } from "../sim/types";
-import { num, SPACE, t, type Msg } from "../text/msg";
-import { createIcon } from "./cards";
+import { num, PLUS, SPACE, t, type Msg } from "../text/msg";
+import { chassisName } from "../text/names";
+import { chassisMap, chassisPortrait, chassisStats, createIcon, diffStats, statGrid } from "./cards";
 import { el, type Child } from "./dom";
 import { GOODS_COLUMNS } from "./format";
 import { coinEl, fuelLiters, moneyEl, moneyMsg, moneyNum } from "./units";
@@ -114,4 +115,37 @@ export function keepFocus(root: HTMLElement, render: () => void): void {
 
 export function bar(share: number): HTMLElement {
   return el("div", { class: "meter" }, el("div", { style: `width:${Math.max(0, Math.min(1, share)) * 100}%` }));
+}
+
+export type SwapOffer = { reason: Msg | null; swap: () => void };
+
+export function truckCards(w: World, ids: string[], offer: (id: string) => SwapOffer): HTMLElement {
+  const mine = playerVehicle(w).chassisId;
+  const cards = ids.map((id) => {
+    const own = mine === id;
+    return el(
+      "div",
+      { class: `card tile truck-card${own ? " own" : ""}` },
+      el("div", { class: "truck-pics" }, chassisPortrait(id), chassisMap(id)),
+      el(
+        "div",
+        { class: "truck-body" },
+        el(
+          "div",
+          { class: "truck-head" },
+          el("div", { class: "card-name" }, el("b", {}, chassisName(id))),
+          own ? el("span", { class: "dim" }, t("vehicle.yours")) : swapButton(w, id, offer(id)),
+        ),
+        statGrid(diffStats(chassisStats(id), own ? null : chassisStats(mine))),
+      ),
+    );
+  });
+  return el("div", { class: "cards trucks" }, ...cards);
+}
+
+function swapButton(w: World, id: string, offer: SwapOffer): HTMLElement {
+  const cost = chassisPrice(w, id);
+  const price = cost < 0 ? el("span", { class: "good" }, PLUS, moneyEl(-cost)) : priceSpan(cost, offer.reason === null);
+  const title = offer.reason ? null : t("trade.includesTradeIn", { price: moneyMsg(chassisTradeIn(w)) });
+  return reasonButton([t("trade.swapVerb"), SPACE, price], offer.swap, offer.reason, "", title);
 }

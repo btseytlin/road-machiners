@@ -1,20 +1,24 @@
 import { partDef, type PartKind } from "../data/parts";
 import { playerVehicle } from "../sim/damage";
-import { canWaitForRoad, reachedOutpostAt, waitForRoad, type Outpost } from "../sim/fury-road";
+import { chassisPrice, chassisSwapRefusal } from "../sim/economy";
+import { canWaitForRoad, outpostTrucks, reachedOutpostAt, waitForRoad, type Outpost } from "../sim/fury-road";
 import { goodsCount, MOUNT_CELLS } from "../sim/grid";
-import { outpostBuyGood, outpostBuyPart, outpostBuySupply, outpostGoodPrice, outpostGoodRoom, outpostPartPrice, outpostRepairAll, outpostRepairBasics } from "../sim/outposts";
+import { outpostBuyChassis, outpostBuyGood, outpostBuyPart, outpostBuySupply, outpostGoodPrice, outpostGoodRoom, outpostPartPrice, outpostRepairAll, outpostRepairBasics } from "../sim/outposts";
 import type { PartInstance, World } from "../sim/types";
 import { num, SPACE, t, type Msg } from "../text/msg";
-import { goodName, siteName } from "../text/names";
-import { compareBase, createItemIcon } from "./cards";
+import { goodName, refusalText, siteName } from "../text/names";
+import { compareBase, createIcon, createItemIcon } from "./cards";
 import { el, panel } from "./dom";
 import { commandFailure, GOODS_COLUMNS } from "./format";
 import type { UiHost } from "./host";
 import { InventoryView, truckChips } from "./inventory";
 import { PartRows, type PartRow } from "./part-rows";
-import { caption, keepFocus, priceEl, priceHead, priceSpan, reasonButton, repairBar, shortBy, supplyRow, type ShopCommand } from "./shop-rows";
+import { TAB_ICON, type Tab } from "./town";
+import { caption, keepFocus, priceEl, priceHead, priceSpan, reasonButton, repairBar, shortBy, supplyRow, truckCards, type ShopCommand } from "./shop-rows";
 
 const REPAIR_GOOD = "parts";
+const OUTPOST_TABS = ["market", "buyParts", "trucks"] as const satisfies readonly Tab[];
+type OutpostTab = (typeof OUTPOST_TABS)[number];
 const GOOD_LOT = 4;
 
 function goodsHead(): HTMLElement {
@@ -25,6 +29,7 @@ function goodsHead(): HTMLElement {
 export class OutpostScreen {
   private root = panel("modal dialog");
   private error: Msg | null = null;
+  private tab: OutpostTab = "market";
   private rows = new PartRows(() => this.render());
   private inventory: InventoryView;
 
@@ -74,9 +79,9 @@ export class OutpostScreen {
     const shop = el(
       "div",
       { class: "town-shop" },
+      el("div", { class: "tabs" }, ...this.tabButtons()),
       this.error ? el("div", { class: "bad" }, this.error) : null,
-      el("div", { class: "goods" }, goodsHead(), supplyRow(w, "fuel", this, outpostBuySupply), supplyRow(w, "supplies", this, outpostBuySupply), this.goodRow(w)),
-      this.stock(w, post),
+      el("div", { class: "outpost-body" }, this.tabBody(w, post)),
       this.roadButton(w),
     );
     this.root.replaceChildren(
@@ -85,6 +90,44 @@ export class OutpostScreen {
       el("div", { class: "town-split" }, truck, shop),
     );
     this.inventory.fitTo(truck);
+  }
+
+  private tabButtons(): HTMLElement[] {
+    return OUTPOST_TABS.map((tab) =>
+      el(
+        "button",
+        {
+          class: this.tab === tab ? "on" : "",
+          "data-tab": tab,
+          onclick: () => {
+            this.tab = tab;
+            this.rows.collapse();
+            this.render();
+            this.rows.toTop(this.root);
+          },
+        },
+        createIcon(TAB_ICON[tab]),
+        t(`trade.tab.${tab}`),
+      ),
+    );
+  }
+
+  private tabBody(w: World, post: Outpost): HTMLElement {
+    if (this.tab === "trucks") return this.trucks(w, post);
+    if (this.tab === "buyParts") return this.stock(w, post);
+    return el("div", { class: "goods" }, goodsHead(), supplyRow(w, "fuel", this, outpostBuySupply), supplyRow(w, "supplies", this, outpostBuySupply), this.goodRow(w));
+  }
+
+  private trucks(w: World, post: Outpost): HTMLElement {
+    const offer = outpostTrucks(w, post);
+    if (offer.length === 0) return el("div", { class: "dim" }, t("outpost.soldOut"));
+    return truckCards(w, offer, (id) => ({ reason: this.swapReason(w, id), swap: () => this.run((x) => outpostBuyChassis(x, id)) }));
+  }
+
+  private swapReason(w: World, id: string): Msg | null {
+    const refusal = chassisSwapRefusal(w, id);
+    if (refusal?.id === "noMoney") return shortBy(w.player.money, chassisPrice(w, id));
+    return refusal ? refusalText(w, refusal) : null;
   }
 
   private roadButton(w: World): HTMLElement | null {
