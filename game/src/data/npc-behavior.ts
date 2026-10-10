@@ -75,6 +75,7 @@ export const NPC_BEHAVIOR = {
 };
 
 export const NPC_UPKEEP = {
+  businessTurns: 3, // the turns an NPC stays parked on a pad for one resupply, sale, purchase or load
   repairParts: 2,
   shadeSearchRadius: 6,
   fuelReserve: 1.5,

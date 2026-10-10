@@ -120,7 +120,11 @@ export type Job =
   | { kind: "search"; stockId: string; turnsLeft: number; total: number }
   | { kind: "strip"; partId: string; turnsLeft: number; total: number }
   | { kind: "weld"; turnsLeft: number; total: number }
+  | { kind: "business"; siteId: string; deal: BusinessDeal; turnsLeft: number; total: number } // an NPC's time at a site deal
   | RefitJob;
+
+// The NPC goal kind a business job serves. The deal runs when the job is done.
+export type BusinessDeal = "resupply" | "sell" | "trade" | "haul";
 
 export type Contact = {
   vehicleId: string;

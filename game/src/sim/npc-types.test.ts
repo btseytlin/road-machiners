@@ -12,7 +12,7 @@ import { huntingGrounds, optionChances, optionWeights, raiderGrounds, raiderPatr
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { siteGates, sitePads } from './sites';
 import { spawnInitial, spawnNpcs } from './spawn';
-import { addVehicle, emptyWorld, forceOption, npcBrain } from './testkit';
+import { addVehicle, emptyWorld, finishBusiness, forceOption, npcBrain } from './testkit';
 import { TEST_MAP } from '../test/map';
 import { tileAt } from './terrain';
 import type { NpcActivity, Vehicle, World } from './types';
@@ -199,7 +199,7 @@ describe('supply convoys', () => {
     const money = npc.resources!.money;
     npc.brain!.goals = [{ kind: 'haul', targetId: pump.id, destination: { ...pump.pos }, phase: 'travel', reason: 'loadCargo', load: { good: 'fuelDrums' } }];
     npc.speed = 0;
-    resolveNpcActivities(w);
+    finishBusiness(w, npc);
     const loaded = goodsCount(npc).fuelDrums ?? 0;
     expect(loaded).toBeGreaterThan(0);
     expect(npc.resources!.money).toBe(money);
@@ -207,7 +207,7 @@ describe('supply convoys', () => {
     expect(sale.kind).toBe('sell');
     expect(REGION.towns.map((t) => t.id)).toContain(sale.targetId);
     npc.pos = { ...sitePads(siteById(sale.targetId!))[0] };
-    resolveNpcActivities(w);
+    finishBusiness(w, npc);
     expect(goodsCount(npc).fuelDrums ?? 0).toBe(0);
     expect(npc.resources!.money).toBeGreaterThan(money);
   });

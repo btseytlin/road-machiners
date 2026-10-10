@@ -23,6 +23,8 @@ A driver with no room for any good, by cells or by mass, takes no detour to salv
 
 A started refit on a knocked-out truck finishes before a repair or service trip takes the driver off the loot goal. Only urgent supplies interrupt it.
 
+An NPC stays parked on the pad of a town, stall, camp or oasis for a few turns for each resupply, sale, purchase or load, with a progress bar over its truck, and the deal happens when the bar fills. Driving off or combat cancels it, and it starts over.
+
 NPCs carry and use utilities by the player's rules. At spawn each truck may roll one utility for its type. Scavengers, roamers and convoys favor the patcher crane, and scavengers and vultures the scraper's knife. Lawmen carry flare cannons and harpoons, and convoy guards flare cannons and smoke mortars. Only a heavy or loaded merc rolls an emitter. Each turn a driver picks its utility orders:
 
 - Sprout: an attacker is in sight, and the driver flees a fight or its cab is below half.

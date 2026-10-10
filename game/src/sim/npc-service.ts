@@ -9,6 +9,7 @@ import { RULES } from '../data/rules';
 import { isDefeated, refitAtHome } from './defeat';
 import { scrapFuel, serviceAtCamp, serviceAtStall, serviceVehicle } from './economy';
 import { dropGoal, finishGoal, isBroke, noteShop, popGoal, pushGoal, reachSite, topGoal } from './npc-activities';
+import { dealDue } from './npc-business';
 import { fitToHunt, getKnownSite, huntsPrey, npcProfile, type NpcProfile } from './npc-decisions';
 import { route } from './path';
 import { randRange } from './rng';
@@ -42,7 +43,7 @@ function scrapFuelIfBroke(world: World, vehicle: Vehicle, profile: NpcProfile, s
 
 export function resolveResupply(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
-  if (!site) return;
+  if (!dealDue(world, vehicle, activity, site)) return;
   noteShop(world, vehicle, site.id);
   const profile = npcProfile(vehicle);
   serviceAt(world, vehicle, site);

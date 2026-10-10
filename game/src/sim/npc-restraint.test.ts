@@ -15,7 +15,7 @@ import { inShade, sunAt } from './sun';
 import { straightClear } from './path';
 import { vehicleStats } from './stats';
 import { cloneWorld, endTurn } from './world';
-import { addVehicle, emptyWorld, npcBrain, testDrive  } from './testkit';
+import { addVehicle, emptyWorld, finishBusiness, npcBrain, testDrive  } from './testkit';
 import { siteGates, sitePads } from './sites';
 import { budget } from '../test/budget';
 import type { NpcActivity, Vehicle, World } from './types';
@@ -341,7 +341,7 @@ describe('NPC field repairs', () => {
     addGoods(world, npc, 'scrap', 1);
     npc.pos = { ...sitePads(REGION.towns[0])[0] };
     npc.brain!.goals = [{ kind: 'sell', targetId: REGION.towns[0].id, destination: REGION.towns[0].pos, phase: 'act', reason: 'sellCargo' }];
-    resolveNpcActivities(world);
+    finishBusiness(world, npc);
     expect(goodsCount(npc).scrap ?? 0).toBe(0);
     expect(goodsCount(npc).parts).toBe(2);
   });

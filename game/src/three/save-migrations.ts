@@ -817,6 +817,7 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withWideMg_42_43,
   withoutRetiredSites_43_44,
   (world) => world,
+  (world) => world,
 ];
 
 type SavedQuests = { world: SavedJson; local: Record<string, SavedJson>; session: { quest: string; checkpoint: string; seed: number } | null };

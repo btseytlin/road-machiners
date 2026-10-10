@@ -40,12 +40,27 @@ import { damage, fuelLiters, hp, kg, kph, moneyM, moneyMsg } from './units';
 
 // What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
 export function jobLabel(world: World, v: Vehicle, job: Job): Msg {
+  if (job.kind === 'refit') return refitLabel(world, v, job);
+  if (job.kind === 'business') return businessLabel(job);
   if (job.kind === 'search') return t('job.search');
   if (job.kind === 'weld') return t('job.weld');
-  if (job.kind === 'refit') return refitLabel(world, v, job);
+  return partJobLabel(v, job);
+}
+
+function partJobLabel(v: Vehicle, job: Extract<Job, { kind: 'repair' | 'strip' }>): Msg {
   const part = v.items.find((it) => it.kind === 'part' && it.part.id === job.partId);
   const what = part ? itemName(part) : t('job.somePart');
   return job.kind === 'repair' ? t('job.repair', { part: what }) : t('job.strip', { part: what });
+}
+
+const BUSINESS_LABELS = { resupply: 'job.business.resupply', sell: 'job.business.sell', trade: 'job.business.trade', haul: 'job.business.haul' } as const;
+
+// A business job names its deal and site: "Sell cargo at Dustwell". An oasis only fills water.
+function businessLabel(job: Extract<Job, { kind: 'business' }>): Msg {
+  const key: (typeof BUSINESS_LABELS)[keyof typeof BUSINESS_LABELS] | undefined = BUSINESS_LABELS[job.deal];
+  if (!key) throw new Error(`No business label for ${job.deal}`);
+  const oasis = job.deal === 'resupply' && REGION.locations.some((l) => l.id === job.siteId && l.kind === 'oasis');
+  return t(oasis ? 'job.business.fillWater' : key, { site: siteName(job.siteId) });
 }
 
 // A refit names its part while it runs and after it is done, so the part is looked up where it lies now.

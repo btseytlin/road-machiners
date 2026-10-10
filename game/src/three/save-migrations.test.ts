@@ -1034,3 +1034,9 @@ describe('save migration 44 to 45', () => {
     expect(MIGRATIONS[44](structuredClone(FORMAT_2_44))).toEqual(FORMAT_2_44);
   });
 });
+
+describe('save migration 45 to 46', () => {
+  it('returns the world unchanged, since no old save holds a business job', () => {
+    expect(MIGRATIONS[45](structuredClone(FORMAT_2_44))).toEqual(FORMAT_2_44);
+  });
+});

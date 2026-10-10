@@ -4,6 +4,11 @@ import { noun, type Translation } from '../msg';
 export const LOG: Translation<typeof EN> = {
   'job.search': 'Поиски',
   'job.weld': 'Сварить броню из лома',
+  'job.business.resupply': 'Заправка и ремонт: {site, case, nom}',
+  'job.business.sell': 'Продажа груза: {site, case, nom}',
+  'job.business.trade': 'Покупка груза: {site, case, nom}',
+  'job.business.haul': 'Погрузка груза: {site, case, nom}',
+  'job.business.fillWater': 'Набор воды: {site, case, nom}',
   'job.somePart': noun('f', 'деталь', 'детали', 'детали', 'деталь', 'деталью', 'детали'),
   'job.repair': 'Ремонт {part, case, gen}',
   'job.strip': 'Снятие {part, case, gen}',

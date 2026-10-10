@@ -5,6 +5,11 @@ export const LOG = {
   // Job and work labels.
   'job.search': 'Search',
   'job.weld': 'Weld scrap armor',
+  'job.business.resupply': m('Refuel and repair at {site}', { site: 'text' }),
+  'job.business.sell': m('Sell cargo at {site}', { site: 'text' }),
+  'job.business.trade': m('Buy cargo at {site}', { site: 'text' }),
+  'job.business.haul': m('Load cargo at {site}', { site: 'text' }),
+  'job.business.fillWater': m('Fill water at {site}', { site: 'text' }),
   'job.somePart': 'part',
   'job.repair': m('Repair {part}', { part: 'text' }),
   'job.strip': m('Strip {part}', { part: 'text' }),

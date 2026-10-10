@@ -1,6 +1,6 @@
 // Parked jobs: work that needs the truck to stay parked for several turns. One rule for every driver.
 // A job is cancelled on any turn its truck ends above parked speed, and its finished turns are lost.
-// A player truck with a drive order counts as moving too, since it still rolls slowly as it starts.
+// Business is an NPC's time at a site deal. A player truck with a drive order counts as moving too, since it still rolls slowly as it starts.
 
 import { GOODS } from "../data/goods";
 import { partDef } from "../data/parts";
@@ -22,6 +22,8 @@ import { finishTruckPickup } from "./salvage";
 import { isSearchStalled, searchTurn } from "./search";
 import { hasWorkingUtility } from "./utility";
 import type { GridItem, Job, PartInstance, RefitJob, RefitPickup, Vehicle, World } from "./types";
+import { getKnownSite } from "./npc-decisions";
+import { canUseSite } from "./sites";
 import { playerCommand, Refused } from "./world";
 
 export { repairPlan };
@@ -197,9 +199,15 @@ function advanceJob(world: World, v: Vehicle, job: Job): void {
 
 function isStalled(world: World, v: Vehicle, job: Job): boolean {
   if (job.kind === "repair") return isRepairStalled(world, v, job);
-  if (job.kind === "weld") return !hasWeldScrap(v) || !weldFits(v);
+  if (job.kind === "strip") return isStripStalled(v, job.partId);
   if (job.kind === "search") return isSearchStalled(world, v, job);
-  return job.kind === "strip" && isStripStalled(v, job.partId);
+  return isSiteWorkStalled(v, job);
+}
+
+// A weld needs its scrap and room, and business needs the truck on its site's pad.
+function isSiteWorkStalled(v: Vehicle, job: Job): boolean {
+  if (job.kind === "business") return !canUseSite(v.pos, getKnownSite(job.siteId));
+  return job.kind === "weld" && (!hasWeldScrap(v) || !weldFits(v));
 }
 
 function jobTurn(world: World, v: Vehicle, job: Job): boolean {
@@ -207,7 +215,14 @@ function jobTurn(world: World, v: Vehicle, job: Job): boolean {
   if (job.kind === "search") return searchTurn(world, v, job);
   if (job.kind === "strip") return stripTurn(world, v, job);
   if (job.kind === "weld") return weldTurn(world, v, job);
+  if (job.kind === "business") return businessTurn(job);
   throw new Error(`Unhandled job kind ${job.kind}`);
+}
+
+// The job carries no deal. The NPC's goal resolver runs the deal on the turn this returns true.
+function businessTurn(job: Extract<Job, { kind: "business" }>): boolean {
+  job.turnsLeft = Math.max(0, job.turnsLeft - 1);
+  return job.turnsLeft === 0;
 }
 
 function stripTurn(world: World, v: Vehicle, job: Extract<Job, { kind: "strip" }>): boolean {

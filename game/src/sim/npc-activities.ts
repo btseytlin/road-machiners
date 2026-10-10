@@ -12,6 +12,7 @@ import { affordableBuyCount, buyFuel, cargoSaleValue, sellAtCamp, sellVehicleCar
 import { corePart } from './grid';
 import { addGoods, cargoRoom } from './inventory';
 import { cancelJob } from './jobs';
+import { businessBelongs, dealDue } from './npc-business';
 import { isFree } from './spawn';
 import { bodyStop } from './meeting-stop';
 import { huntsOffRoad } from './hunt-style';
@@ -63,6 +64,7 @@ export function topGoal(v: Vehicle): NpcActivity | null {
 function jobBelongs(job: Job, v: Vehicle): boolean {
   if (job.kind === 'repair') return goalsOf(v).some((g) => g.kind === 'repair');
   if (job.kind === 'refit') return refitBelongs(job, topGoal(v));
+  if (job.kind === 'business') return businessBelongs(job, topGoal(v));
   return searchBelongs(job, topGoal(v));
 }
 
@@ -1136,7 +1138,7 @@ function topUpAtPump(world: World, vehicle: Vehicle, siteId: string): void {
 
 function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
-  if (!site) return;
+  if (!dealDue(world, vehicle, activity, site)) return;
   if ('kind' in site && site.kind === 'camp') sellAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else sellVehicleCargo(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   topUpAtPump(world, vehicle, site.id);
@@ -1145,7 +1147,7 @@ function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): voi
 
 function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
-  if (!site) return;
+  if (!dealDue(world, vehicle, activity, site)) return;
   if (!activity.purchase) throw new Error('Trade activity missing purchase');
   noteShop(world, vehicle, site.id);
   const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, cargoRoom(vehicle), tradeSpend(world, vehicle));
@@ -1162,7 +1164,7 @@ function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): vo
 
 function resolveHaul(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
-  if (!site) return;
+  if (!dealDue(world, vehicle, activity, site)) return;
   if (!activity.load) throw new Error('Haul activity missing load');
   if (addGoods(world, vehicle, activity.load.good, cargoRoom(vehicle)) === 0) {
     finishGoal(world, vehicle, 'cargoFullLoad');

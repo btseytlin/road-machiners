@@ -1,7 +1,7 @@
 import { TERRAIN } from '../data/terrain';
 import { describe, expect, it } from 'vitest';
 import { contactsOf } from './detect';
-import { emptyWorld, addLootSpot, addVehicle, editableTerrain, forceOption, npcBrain, rngStateForForcedRolls, testDrive , startCombat } from './testkit';
+import { emptyWorld, addLootSpot, addVehicle, editableTerrain, finishBusiness, forceOption, npcBrain, rngStateForForcedRolls, testDrive , startCombat } from './testkit';
 import { propReach } from './mapgen';
 import { planNpcOrders } from './ai';
 import { getResources } from './resources';
@@ -19,7 +19,7 @@ import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods, hasCargoRoom } from './inventory';
-import { finishGoal, getActivityDestination, patchGoal, resolveNpcActivities, thinkNpc, topGoal, turnCornered } from './npc-activities';
+import { finishGoal, getActivityDestination, patchGoal, pushGoal, resolveNpcActivities, thinkNpc, topGoal, turnCornered } from './npc-activities';
 import { leaveLoot } from './loot-warning';
 import { chooseOn, trackOf } from './tracks';
 import { watchStalls } from './npc-watchdog';
@@ -38,7 +38,8 @@ import { heatAt } from './sun';
 import { dist, polylineDist, type Vec } from './vec';
 import { advanceFar } from './far';
 import type { NpcActivity, SalvageStock, Vehicle, World } from './types';
-import { addState } from './states';
+import { addState, workOf } from './states';
+import { advanceJobs } from './jobs';
 import { inCombat } from './combat';
 import { refreshVision } from './vision';
 import { emptyHidden } from './salvage';
@@ -135,7 +136,7 @@ describe('NPC activities', () => {
     npc.pos = { ...sitePads(REGION.towns[0])[0] };
     npc.brain!.goals = [{ kind, targetId: REGION.towns[0].id, destination: { ...npc.pos }, phase: 'travel', reason: 'tripToSite' }];
     w.events = [];
-    resolveNpcActivities(w);
+    finishBusiness(w, npc);
     resolveNpcActivities(w);
     expect(w.events.filter((event) => event.t === 'activity')).toEqual([
       expect.objectContaining({ previous: kind, activity: null }),
@@ -147,7 +148,7 @@ describe('NPC activities', () => {
     const town = REGION.towns[1].id;
     npc.pos = { ...sitePads(REGION.towns[1])[0] };
     npc.brain!.goals = [{ kind, targetId: town, destination: { ...npc.pos }, phase: 'travel', reason: 'tripToSite' }];
-    resolveNpcActivities(w);
+    finishBusiness(w, npc);
     expect(recall(npc, 'prices')).toEqual([{ turn: w.turn, fact: { kind: 'prices', shop: town, pressure: w.shops[town].pressure } }]);
   });
 
@@ -156,7 +157,7 @@ describe('NPC activities', () => {
     const granary = REGION.locations.find((l) => l.id === 'granary')!;
     npc.pos = { ...sitePads(granary)[0] };
     npc.brain!.goals = [{ kind: 'resupply', targetId: granary.id, destination: { ...npc.pos }, phase: 'travel', reason: 'tripToSite' }];
-    resolveNpcActivities(w);
+    finishBusiness(w, npc);
     expect(recall(npc, 'prices').map((m) => m.fact.shop)).toEqual(['granary']);
   });
 
@@ -166,7 +167,7 @@ describe('NPC activities', () => {
     const visit = () => {
       npc.pos = { ...sitePads(REGION.towns[1])[0] };
       npc.brain!.goals = [{ kind: 'resupply', targetId: town, destination: { ...npc.pos }, phase: 'travel', reason: 'tripToSite' }];
-      resolveNpcActivities(w);
+      finishBusiness(w, npc);
     };
     visit();
     const first = recall(npc, 'prices')[0].fact.pressure;
@@ -183,7 +184,7 @@ describe('NPC activities', () => {
     npc.pos = { ...sitePads(REGION.towns[0])[0] };
     npc.brain!.goals = [{ kind: 'sell', targetId: REGION.towns[0].id, destination: { ...npc.pos }, phase: 'travel', reason: 'tripToSite' }];
     npc.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: false };
-    resolveNpcActivities(w);
+    finishBusiness(w, npc);
     expect(npc.brain!.goals).toHaveLength(1);
   });
 
@@ -195,7 +196,7 @@ describe('NPC activities', () => {
     npc.pos = { ...sitePads(camp)[0] };
     npc.brain!.goals = [{ kind: 'resupply', targetId: camp.id, destination: { ...npc.pos }, phase: 'travel', reason: 'tripToSite' }];
     w.events = [];
-    resolveNpcActivities(w);
+    finishBusiness(w, npc);
     expect(w.events).toContainEqual(expect.objectContaining({ previous: 'resupply', activity: null }));
     expect(npc.brain!.memories).toEqual([]);
   });
@@ -353,7 +354,7 @@ describe('NPC activities', () => {
     planNpcOrders(w);
     const source = [...REGION.towns, ...REGION.locations].find((s) => s.id === topGoal(npc)?.targetId)!;
     npc.pos = { ...sitePads(source)[0] };
-    resolveNpcActivities(w);
+    finishBusiness(w, npc);
     expect(npc.resources!.money).toBeGreaterThan(0);
     expect(Object.values(goodsCount(npc)).reduce((sum, n) => sum + n, 0)).toBeGreaterThan(0);
     expect(topGoal(npc)?.kind).toBe('sell');
@@ -369,7 +370,7 @@ describe('NPC activities', () => {
     planNpcOrders(w);
     const source = [...REGION.towns, ...REGION.locations].find((s) => s.id === topGoal(npc)?.targetId)!;
     npc.pos = { ...sitePads(source)[0] };
-    resolveNpcActivities(w);
+    finishBusiness(w, npc);
     expect(topGoal(npc)?.kind).toBe('sell');
     expect(166700 - npc.resources!.money).toBeLessThanOrEqual(TRAITS.trader.tradeStake);
   });
@@ -780,7 +781,7 @@ describe('NPC activities', () => {
       npc.brain!.goals = [goal('sell', 'bowl')];
       const fuel = getResources(w, npc).fuel;
       const salt = getLotTradePrice(w, npc, 'bowl', 'salt', 2, 'sell');
-      resolveNpcActivities(w);
+      finishBusiness(w, npc);
       expect(goodsCount(npc).salt ?? 0).toBe(0);
       expect(getResources(w, npc).fuel).toBe(Math.floor(fuelCap(npc)));
       expect(getResources(w, npc).money).toBe(16700 + salt - (getResources(w, npc).fuel - fuel) * ECONOMY.supplyPrice.fuel);
@@ -792,7 +793,7 @@ describe('NPC activities', () => {
       const unit = getTradePrice(w, npc, 'bowl', 'grain', 'buy');
       tankAt(w, npc, 0.1, getUpkeepReserve(npc) + unit);
       npc.brain!.goals = [goal('trade', 'bowl', { purchase: { good: 'grain', sellShop: 'nose' } })];
-      resolveNpcActivities(w);
+      finishBusiness(w, npc);
       expect(goodsCount(npc).grain ?? 0).toBeGreaterThan(0);
       expect(getResources(w, npc).money).toBeGreaterThanOrEqual(0);
     });
@@ -802,7 +803,7 @@ describe('NPC activities', () => {
       at(npc, 'bowl');
       tankAt(w, npc, 0.1, getUpkeepReserve(npc) + 166700);
       npc.brain!.goals = [goal('trade', 'bowl', { purchase: { good: 'grain', sellShop: 'nose' } })];
-      resolveNpcActivities(w);
+      finishBusiness(w, npc);
       expect(goodsCount(npc).grain ?? 0).toBeGreaterThan(0);
       expect(getResources(w, npc).fuel).toBe(Math.floor(fuelCap(npc)));
     });
@@ -821,7 +822,7 @@ describe('NPC activities', () => {
         at(npc, site);
         const fuel = getResources(w, npc).fuel;
         npc.brain!.goals = [goal('sell', site)];
-        resolveNpcActivities(w);
+        finishBusiness(w, npc);
         expect(goodsCount(npc).scrap ?? 0).toBe(0);
         expect(getResources(w, npc).fuel).toBe(full ? Math.floor(fuelCap(npc)) : fuel);
       }
@@ -834,7 +835,7 @@ describe('NPC activities', () => {
       tankAt(w, npc, 0.1, -10_000);
       const fuel = getResources(w, npc).fuel;
       npc.brain!.goals = [goal('sell', 'bowl')];
-      resolveNpcActivities(w);
+      finishBusiness(w, npc);
       expect(goodsCount(npc).salt ?? 0).toBe(0);
       expect(getResources(w, npc).fuel).toBe(fuel);
     });
@@ -1809,6 +1810,104 @@ describe('parking beside a truck', () => {
     const spot = stop();
     expect(dist(spot, blocker.pos)).toBeGreaterThanOrEqual(chassisDef(blocker.chassisId).radius + vehicleStats(w, tower).radius);
     expect(dist(spot, client.pos)).toBeCloseTo(dist(taken, client.pos));
+  });
+});
+
+describe('NPC site business', () => {
+  function atTown(kind: 'resupply' | 'sell') {
+    const { w, npc } = createScavenger();
+    const town = REGION.towns[0];
+    npc.pos = { ...sitePads(town)[0] };
+    npc.speed = 0;
+    addGoods(w, npc, 'scrap', 1);
+    corePart(npc, 'cab').hp = 1;
+    npc.brain!.goals = [{ kind, targetId: town.id, destination: { ...npc.pos }, phase: 'travel', reason: 'tripToSite' }];
+    return { w, npc, town };
+  }
+
+  // One turn as endTurn plays it: jobs advance, then goals resolve.
+  function turn(w: World): void {
+    w.events = [];
+    advanceJobs(w);
+    resolveNpcActivities(w);
+  }
+
+  it('starts a business job and changes nothing until it is done', () => {
+    const { w, npc, town } = atTown('resupply');
+    const money = npc.resources!.money;
+    resolveNpcActivities(w);
+    expect(npc.job).toMatchObject({ kind: 'business', siteId: town.id, deal: 'resupply', turnsLeft: NPC_UPKEEP.businessTurns });
+    for (let i = 1; i < NPC_UPKEEP.businessTurns; i++) {
+      turn(w);
+      expect(corePart(npc, 'cab').hp).toBe(1);
+      expect(npc.resources!.money).toBe(money);
+      expect(topGoal(npc)?.kind).toBe('resupply');
+    }
+    turn(w);
+    expect(npc.job).toBeNull();
+    expect(corePart(npc, 'cab').hp).toBeGreaterThan(1);
+    expect(topGoal(npc)).toBeNull();
+  });
+
+  it('sells cargo only on the done turn', () => {
+    const { w, npc } = atTown('sell');
+    resolveNpcActivities(w);
+    for (let i = 1; i < NPC_UPKEEP.businessTurns; i++) {
+      turn(w);
+      expect(goodsCount(npc).scrap).toBe(1);
+    }
+    turn(w);
+    expect(goodsCount(npc).scrap).toBeUndefined();
+  });
+
+  it('shows the business job as timed work', () => {
+    const { w, npc } = atTown('sell');
+    resolveNpcActivities(w);
+    expect(workOf(w, npc)).toMatchObject({ from: 'job', total: NPC_UPKEEP.businessTurns });
+  });
+
+  it('runs no deal for a cancelled job and redoes the full job', () => {
+    const { w, npc } = atTown('sell');
+    resolveNpcActivities(w);
+    turn(w);
+    npc.speed = RULES.parkedSpeed + 1;
+    turn(w);
+    expect(npc.job).toBeNull();
+    expect(goodsCount(npc).scrap).toBe(1);
+    expect(topGoal(npc)?.kind).toBe('sell');
+    npc.speed = 0;
+    turn(w);
+    expect(npc.job).toMatchObject({ kind: 'business', turnsLeft: NPC_UPKEEP.businessTurns });
+    for (let i = 0; i < NPC_UPKEEP.businessTurns; i++) turn(w);
+    expect(goodsCount(npc).scrap).toBeUndefined();
+  });
+
+  it('cancels the job when a danger goal goes on top', () => {
+    const { w, npc } = atTown('sell');
+    resolveNpcActivities(w);
+    pushGoal(w, npc, { kind: 'flee', targetId: null, destination: { x: 40, y: 40 }, phase: 'travel', reason: 'lowFuel' });
+    expect(npc.job).toBeNull();
+    expect(goodsCount(npc).scrap).toBe(1);
+  });
+
+  it('waits for a rolling truck to stop before it starts the job', () => {
+    const { w, npc } = atTown('sell');
+    npc.speed = RULES.parkedSpeed + 1;
+    expect(() => resolveNpcActivities(w)).not.toThrow();
+    expect(npc.job).toBeNull();
+    npc.speed = 0;
+    resolveNpcActivities(w);
+    expect(npc.job).toMatchObject({ kind: 'business' });
+  });
+
+  it('starts no job in combat and keeps the goal', () => {
+    const { w, npc } = atTown('sell');
+    const foe = addVehicle(w, 'raiders', 'scout', ['mg', 'stockEngine'], { x: 40, y: 40 });
+    startCombat(w, foe, npc);
+    resolveNpcActivities(w);
+    expect(npc.job).toBeNull();
+    expect(topGoal(npc)?.kind).toBe('sell');
+    expect(goodsCount(npc).scrap).toBe(1);
   });
 });
 
