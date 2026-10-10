@@ -39,12 +39,14 @@ export type GunState = { cooldown: number; ammo: number; reloadWork: number };
 
 export type ChargeState = { reload: number; armed?: true };
 
+export type Rot = 0 | 1 | 2 | 3;
+
 export type GridItem =
   | {
       id: string;
       x: number;
       y: number;
-      rot: 0 | 1;
+      rot: Rot;
       kind: "part";
       part: PartInstance;
     }
@@ -52,7 +54,7 @@ export type GridItem =
       id: string;
       x: number;
       y: number;
-      rot: 0 | 1;
+      rot: Rot;
       kind: "good";
       good: string;
     };
@@ -90,8 +92,8 @@ export type Pile = { until: number; fromPlayer: boolean; basis: Record<string, n
 
 export type RefitMove = {
   itemId: string;
-  from: { x: number; y: number; rot: 0 | 1 };
-  to: { x: number; y: number; rot: 0 | 1 };
+  from: { x: number; y: number; rot: Rot };
+  to: { x: number; y: number; rot: Rot };
 };
 
 export type RefitPickup =
@@ -175,7 +177,7 @@ export type GoalReason =
   | 'towUnanswered' | 'towedPlayer' | 'towedStranded' | 'tripToSite' | 'truckGotAway' | 'unfitToHunt' | 'waitPatch'
   | 'waitTow' | 'waitTowAnswer' | 'warnedOff'
   | 'avoidRanFrom' | 'breakOffFight' | 'cannotWearDown' | 'holdFull' | 'leftPost' | 'lootWontFit' | 'ranFromIt' | 'salvageOutOfReach'
-  | 'takeSpilledCargo' | 'watchedRoad' | 'cornered'
+  | 'takeSpilledCargo' | 'watchedRoad' | 'cornered' | 'defeated'
   | 'fightOverLoot' | 'looterWontLeave' | 'warningUnanswered' | 'defendPromisedLoot' | 'keepLoot' | 'searchOldHulks' | 'searchOldRuin';
 
 // A note the sim adds to the player's log. Numbers are raw sim units.

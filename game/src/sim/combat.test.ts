@@ -597,6 +597,7 @@ describe('NPC attack records and defensive fire', () => {
       w.events = [];
       raider.weaponOrders = { [mountedParts(raider, 'weapon')[0].id]: { targetId: target.id, aim: 'body' } };
       raider.pos = { x: target.pos.x + 4, y: target.pos.y };
+      raider.heading = Math.PI;
       fireWeapons(w);
       expect(w.events.some((e) => e.t === 'shot' && e.target === target.id)).toBe(true);
       getResources(w, target).health = RULES.maxHealth;

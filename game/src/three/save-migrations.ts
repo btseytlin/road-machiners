@@ -3,6 +3,7 @@
 
 import { CORES_2_1, CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { GOAL_REASONS_2_19, LINES_2_19, WARN_LINES_2_19 } from './save-text-2-19';
+import { LAYOUTS_2_34 } from './save-layouts-2-34';
 
 export type SavedJson = Record<string, unknown>;
 
@@ -291,6 +292,69 @@ function withFleePerceived_20_21(world: SavedJson): SavedJson {
   const goal = (g: SavedJson): SavedJson => (g.kind === 'flee' ? { ...g, perceived: turn } : g);
   const truck = (v: SavedJson): SavedJson => (v.brain ? { ...v, brain: { ...(v.brain as SavedJson), goals: ((v.brain as SavedJson).goals as SavedJson[]).map(goal) } } : v);
   return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck), removed: (world.removed as SavedJson[]).map(truck) };
+}
+
+function withLieUpSpot_41_42(world: SavedJson): SavedJson {
+  const truck = (v: SavedJson): SavedJson => {
+    if (!v.brain) return v;
+    const pos = v.pos as SavedJson;
+    const goal = (g: SavedJson): SavedJson => (g.kind === 'rearm' ? { ...g, destination: { x: pos.x, y: pos.y } } : g);
+    return { ...v, brain: { ...(v.brain as SavedJson), goals: ((v.brain as SavedJson).goals as SavedJson[]).map(goal) } };
+  };
+  return { ...world, vehicles: (world.vehicles as SavedJson[]).map(truck) };
+}
+
+const FOOTPRINTS_2_34: Record<string, readonly [number, number]> = {
+  shotgun: [1, 2], longRifle: [1, 2], flamer: [1, 2], pneumobolter: [2, 2], slugCannon: [1, 2], heavyMg: [1, 2], cannon: [2, 2], amRifle: [1, 3], autocannon: [2, 2],
+  recoilless: [1, 3], battleRifle: [1, 3], gatling: [2, 2], rocketRack: [2, 2], sniperCannon: [2, 3], grenadeLauncher: [2, 2], tankGun: [2, 3], flechette: [2, 2], harpoon: [1, 2],
+  patcherCrane: [1, 2], smokeMortar: [1, 2], scrapersKnife: [1, 2], emitter: [2, 2], stockEngine: [2, 2], tunedEngine: [2, 2], flatFour: [2, 2], workhorseDiesel: [2, 2],
+  racingV6: [2, 2], heavyDiesel: [2, 2], turbine: [2, 2], plates: [1, 3], cage: [1, 2], ram: [3, 1], scrapPanels: [1, 2], ceramicPlates: [1, 2], spacedArmor: [1, 4],
+  reinforcedCage: [1, 3], plowRam: [3, 1], claymoreRam: [3, 1], rack: [2, 1], trailerBox: [2, 2], flatbed: [2, 1], lightFrame: [2, 2], enclosedFrame: [2, 2], heavyFrame: [2, 2],
+  cab: [1, 2], cabPickup: [3, 2], cabHardtop: [3, 2], transmission: [2, 2], transmissionMid: [2, 2], transmissionHeavy: [2, 2], wheel: [1, 2], wheelMid: [1, 2],
+  wheelHeavy: [1, 2], tank: [1, 2], tankLong: [1, 2], tankMid: [1, 2], tankHeavy: [1, 2],
+};
+
+function footprintCells_42_43(item: SavedJson, defId: string | null): string[] {
+  const [w, h] = defId === 'mg' ? [1, 2] : (defId && FOOTPRINTS_2_34[defId]) || [1, 1];
+  const odd = (item.rot as number) % 2 === 1;
+  const [cw, ch] = odd ? [h, w] : [w, h];
+  const cells: string[] = [];
+  for (let dy = 0; dy < ch; dy++) for (let dx = 0; dx < cw; dx++) cells.push(`${(item.x as number) + dx},${(item.y as number) + dy}`);
+  return cells;
+}
+
+function withWideMg_42_43(world: SavedJson): SavedJson {
+  const player = world.player as Player;
+  const storage = [...player.storage];
+  const widen = (v: SavedJson): SavedJson => {
+    const layout = LAYOUTS_2_34[v.chassisId as string];
+    const defOf = (item: SavedJson) => ((item.part as SavedJson | undefined)?.defId as string | undefined) ?? null;
+    const items = v.items as SavedJson[];
+    const taken = new Set(items.filter((item) => defOf(item) !== 'mg').flatMap((item) => footprintCells_42_43(item, defOf(item))));
+    const letterAt = (cell: string) => {
+      const [x, y] = cell.split(',').map(Number);
+      return layout[y]?.[x];
+    };
+    const kept: SavedJson[] = [];
+    for (const item of items) {
+      if (defOf(item) !== 'mg') {
+        kept.push(item);
+        continue;
+      }
+      const first = letterAt(`${item.x},${item.y}`);
+      const sits = (rot: number) => footprintCells_42_43({ ...item, rot }, 'mg').every((c) => !taken.has(c) && letterAt(c) === first);
+      const fit = [item.rot as number, 1 - (item.rot as number)].find(sits);
+      if (fit === undefined) {
+        if (v.id === player.vehicleId) storage.push(item.part as SavedJson);
+        continue;
+      }
+      footprintCells_42_43({ ...item, rot: fit }, 'mg').forEach((c) => taken.add(c));
+      kept.push({ ...item, rot: fit });
+    }
+    return { ...v, items: kept };
+  };
+  const vehicles = (world.vehicles as SavedJson[]).map(widen);
+  return { ...world, vehicles, player: { ...player, storage } };
 }
 
 function withFightWorn_21_22(world: SavedJson): SavedJson {
@@ -692,6 +756,8 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, player: { ...(world.player as SavedJson), quests: { world: {}, local: {}, session: null } } }),
   (world) => dropQuestVar(dropQuest(dropQuest(world, 'sample_bowl'), 'sample_nose'), null, 'sample_wagon_heard'),
   (world) => dropQuestVar(dropQuestVar(world, 'nose_depot_leak', 'evidence'), 'nose_depot_leak', 'misled'),
+  withLieUpSpot_41_42,
+  withWideMg_42_43,
 ];
 
 type SavedQuests = { world: SavedJson; local: Record<string, SavedJson>; session: { quest: string; checkpoint: string; seed: number } | null };

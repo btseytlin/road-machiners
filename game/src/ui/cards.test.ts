@@ -49,6 +49,11 @@ describe("part stats and their change against the player's part", () => {
     expect(speed(part("turbine", 2))).toBeLessThan(speed(part("turbine")) ?? 0);
   });
 
+  it("shows a rebuilt gun with more spread than a pristine one", () => {
+    const spread = diffStats(partStats(world, part("mg", 4)), partStats(world, part("mg"))).find((d) => d.stat.icon === "spread");
+    expect(spread).toMatchObject({ verdict: "worse" });
+  });
+
   it("shows a gun's damage per shot as the world deals it, so a Damage 200% world reads twice the default", () => {
     const damaging = emptyWorld();
     damaging.setup = parseSetup({ mode: "roaming", settings: { damage: 2, fuelUse: 1, supplyUse: 1 } });

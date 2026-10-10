@@ -317,6 +317,7 @@ export const LOG: Translation<typeof EN> = {
   'goal.searchOldHulks': 'Обыскать старые корпуса танков',
   'goal.searchOldRuin': 'Обыскать старые руины',
   'goal.cornered': 'Загнан в угол',
+  'goal.defeated': 'Разбит',
   'goal.watchedRoad': 'Осмотрел дорогу',
   'goal.ranFromIt': 'Сбежал от него',
   'goal.avoidRanFrom': 'Избегать грузовика, от которого бежал',

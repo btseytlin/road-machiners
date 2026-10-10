@@ -209,6 +209,7 @@ describe('engine overdrive', () => {
     const w = emptyWorld();
     w.turn = NIGHT;
     w.player.overdrive = true;
+    engine(w).wear = 0;
     const me = w.vehicles[0];
     me.speed = vehicleStats(w, me).maxSpeed;
     let turns = 0;

@@ -104,9 +104,9 @@ describe('new-game opening', () => {
     const w = openingWorld();
     expect(w.player.autoRepair).toBe(false);
     const engine = part(w, 'stockEngine');
-    expect(engine.hp).toBe(9);
-    expect(engine.wear).toBe(0);
-    expect(part(w, 'cabPickup').hp).toBe(36);
+    expect(engine.hp).toBe(8);
+    expect(engine.wear).toBe(2);
+    expect(part(w, 'cabPickup').hp).toBe(34);
     expect(mountedParts(playerVehicle(w)).some((p) => p.defId === 'cage')).toBe(false);
   });
 
@@ -126,7 +126,7 @@ describe('new-game opening', () => {
     expect(isMounted(playerVehicle(w).chassisId, cage)).toBe(false);
 
     const idle = turns(w, 2);
-    expect(part(idle, 'stockEngine').hp).toBe(9);
+    expect(part(idle, 'stockEngine').hp).toBe(8);
     expect(playerVehicle(idle).job).toBeNull();
 
     const engine = part(w, 'stockEngine');

@@ -2,12 +2,12 @@
 
 import { chassisDef } from '../data/chassis';
 import { partDef, type CoreDef, type PartKind } from '../data/parts';
-import type { GridItem, PartInstance, PlacementRefusal, Vehicle } from './types';
+import type { GridItem, PartInstance, PlacementRefusal, Rot, Vehicle } from './types';
 
 export type SideLetter = 'F' | 'B' | 'L' | 'R';
 export type Cell = 'D' | 'E' | SideLetter | 'X' | '.';
 export type Grid = { w: number; h: number; chassisH: number; deadFrom: number; cells: (Cell | null)[][] };
-export type Spot = { x: number; y: number; rot: 0 | 1 };
+export type Spot = { x: number; y: number; rot: Rot };
 
 export const MOUNT_CELLS: Record<PartKind, Cell[]> = {
   weapon: ['D'],
@@ -44,7 +44,11 @@ function toCell(ch: string): Cell | null {
 export function itemSize(item: Pick<GridItem, 'rot'> & ({ kind: 'part'; part: PartInstance } | { kind: 'good' })): { w: number; h: number } {
   if (item.kind === 'good') return { w: 1, h: 1 };
   const d = partDef(item.part.defId);
-  return item.rot === 1 ? { w: d.h, h: d.w } : { w: d.w, h: d.h };
+  return item.rot % 2 === 1 ? { w: d.h, h: d.w } : { w: d.w, h: d.h };
+}
+
+export function facingOf(item: GridItem): number {
+  return item.rot * 90;
 }
 
 export function itemCells(item: GridItem): { x: number; y: number }[] {
@@ -212,10 +216,14 @@ export function findSpot(g: Grid, items: GridItem[], item: GridItem, mount: Cell
   return tries.find((s) => allowed(s) && onlyOn(s, '.')) ?? tries.find(allowed) ?? null;
 }
 
+function isWeapon(item: GridItem): boolean {
+  return item.kind === 'part' && partDef(item.part.defId).kind === 'weapon';
+}
+
 export function mountSpots(g: Grid, items: GridItem[], item: GridItem, mount: Cell[]): Spot[] {
   const taken = takenCells(items, item.id);
-  const tries = allSpots(g);
-  const sizes = [itemSize({ ...item, rot: 0 }), itemSize({ ...item, rot: 1 })];
+  const tries = allSpots(g, isWeapon(item) ? 4 : 2);
+  const sizes = [0, 1, 2, 3].map((rot) => itemSize({ ...item, rot: rot as Rot }));
   const free = (s: Spot, letter: Cell) => {
     const { w, h } = sizes[s.rot];
     for (let dy = 0; dy < h; dy++) {
@@ -245,12 +253,18 @@ function takenCells(items: GridItem[], ignoreId: string | null): Set<number> {
 
 const spotCache = new Map<number, readonly Spot[]>();
 
-function allSpots(g: Grid): readonly Spot[] {
-  const key = cellKey(g.w, g.h);
+function allSpots(g: Grid, turns: 2 | 4 = 2): readonly Spot[] {
+  const key = cellKey(g.w, g.h) * 8 + turns;
   const cached = spotCache.get(key);
   if (cached) return cached;
-  const tries: Spot[] = [];
-  for (const rot of [0, 1] as const) for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) tries.push(Object.freeze({ x, y, rot }));
+  const rots = ([0, 1, 2, 3] as const).slice(0, turns);
+  const tries = rots.flatMap((rot) => gridSpots(g, rot));
   spotCache.set(key, tries);
   return tries;
+}
+
+function gridSpots(g: Grid, rot: Spot['rot']): Spot[] {
+  const spots: Spot[] = [];
+  for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) spots.push(Object.freeze({ x, y, rot }));
+  return spots;
 }

@@ -147,7 +147,7 @@ describe('game save', () => {
     const world = emptyWorld();
     const weapon = world.vehicles[0].items.find((item) => item.kind === 'part' && item.part.defId === 'mg');
     if (!weapon) throw new Error('Expected weapon');
-    const to = { x: 1, y: CHASSIS.scout.layout.length, rot: 0 as const };
+    const to = { x: 3, y: CHASSIS.scout.layout.length, rot: 1 as const };
     const next = moveItem(world, weapon.id, to);
     advanceJobs(next);
     writeSave(slots, 'auto', next, RUN, 1000);

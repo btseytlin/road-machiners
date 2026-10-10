@@ -37,6 +37,9 @@ import FORMAT_2_27 from './save-fixtures/format-2-27.json';
 import FORMAT_2_28 from './save-fixtures/format-2-28.json';
 import FORMAT_2_29 from './save-fixtures/format-2-29.json';
 import FORMAT_2_30 from './save-fixtures/format-2-30.json';
+import FORMAT_2_41 from './save-fixtures/format-2-41.json';
+import FORMAT_2_42 from './save-fixtures/format-2-42.json';
+import { LAYOUTS_2_34 } from './save-layouts-2-34';
 import SAVE_SHAPE from './save-shape.json';
 import FORMAT_2_31 from './save-fixtures/format-2-31.json';
 import FORMAT_2_32 from './save-fixtures/format-2-32.json';
@@ -126,11 +129,13 @@ describe('save migration 1 to 2', () => {
   });
 
   it('puts every item of every truck on a free cell, and every non-core part still mounted', () => {
+    const wide = (item: { kind: string; part?: { defId: string } }) => item.kind === 'part' && item.part?.defId === 'mg';
     for (const v of all) {
       const grid = baseGrid(v.chassisId);
-      v.items.forEach((item, i) => {
-        expect(placementError(grid, v.items.filter((_, j) => j !== i), item, null), `${v.id} ${item.id}`).toBeNull();
-        if (item.kind === 'part' && !['mg', 'rack', 'cannon'].includes(item.part.defId)) expect(isMounted(v.chassisId, item), `${v.id} ${item.id}`).toBe(true);
+      const others = v.items.filter((it) => !wide(it));
+      others.forEach((item, i) => {
+        expect(placementError(grid, others.filter((_, j) => j !== i), item, null), `${v.id} ${item.id}`).toBeNull();
+        if (item.kind === 'part' && !['rack', 'cannon'].includes(item.part.defId)) expect(isMounted(v.chassisId, item), `${v.id} ${item.id}`).toBe(true);
       });
     }
   });
@@ -838,7 +843,8 @@ describe('save migration 37 to 38', () => {
 
     expect(next.player).toEqual({ ...FORMAT_2_37.player, notes: [] });
     expect(next.obstacles).toEqual([...FORMAT_2_37.obstacles, { id: wagon.id, pos: wagon.pos, r: wagon.r, kind: 'wreck', hulk: { chassisId: wagon.chassisId, yaw: wagon.yaw } }]);
-    expect(next.salvage).toEqual([...FORMAT_2_37.salvage, fresh.salvage.find((s) => s.id === wagon.id)]);
+    const placed = (list: { id: string; parts?: object[] }[]) => list.map((s) => (s.id === wagon.id ? { ...s, parts: [] } : s));
+    expect(placed(next.salvage as never)).toEqual(placed([...FORMAT_2_37.salvage, fresh.salvage.find((s) => s.id === wagon.id)!] as never));
     expect(next.turn).toBe(FORMAT_2_37.turn);
   });
 
@@ -879,6 +885,45 @@ describe('save migration 40 to 41', () => {
       ...FORMAT_2_40,
       player: { ...FORMAT_2_40.player, quests: { ...FORMAT_2_40.player.quests, local: { nose_depot_leak: { watches: 3, ledger_read: true } } } },
     });
+  });
+});
+
+describe('save migration 41 to 42', () => {
+  it('sets every lie-up spot to its driver place and keeps every other field', () => {
+    const next = MIGRATIONS[41](FORMAT_2_41);
+    const [player, resting, patrol] = FORMAT_2_41.vehicles;
+
+    expect(next).toEqual({
+      ...FORMAT_2_41,
+      vehicles: [player, { ...resting, brain: { goals: [resting.brain!.goals[0], { ...resting.brain!.goals[1], destination: { x: 198.5, y: 230.2 } }] } }, patrol],
+    });
+  });
+});
+
+describe('save migration 42 to 43', () => {
+  const next = MIGRATIONS[42](FORMAT_2_42) as { vehicles: { id: string; items: { id: string; rot: number }[] }[]; player: { storage: { id: string }[] } };
+  const itemsOf = (id: string) => next.vehicles.find((v) => v.id === id)!.items;
+
+  it('keeps a machine gun whose second cell is free on the same kind of cell as it was', () => {
+    expect(itemsOf('player').filter((it) => ['i1', 'i2'].includes(it.id)).map((it) => it.rot)).toEqual([0, 1]);
+  });
+
+  it('turns a machine gun a quarter turn when only that way keeps it on deck cells', () => {
+    expect(itemsOf('player').find((it) => it.id === 'i4')!.rot).toBe(0);
+  });
+
+  it('stows the player machine gun with no deck room either way and drops an npc one', () => {
+    expect(itemsOf('player').some((it) => it.id === 'i5')).toBe(false);
+    expect(next.player.storage.map((p) => p.id)).toEqual(['s1', 'p5']);
+    expect(itemsOf('npc-3').some((it) => it.id === 'i8')).toBe(false);
+  });
+
+  it('leaves every other item alone', () => {
+    expect(itemsOf('player').filter((it) => ['i3', 'i6', 'i7'].includes(it.id))).toEqual(FORMAT_2_42.vehicles[0].items.filter((it) => ['i3', 'i6', 'i7'].includes(it.id)));
+  });
+
+  it('holds a copy of the chassis layouts that equals the live chassis data', () => {
+    for (const c of Object.values(CHASSIS).filter((it) => LAYOUTS_2_34[it.id])) expect(LAYOUTS_2_34[c.id], c.id).toEqual(c.layout);
   });
 });
 

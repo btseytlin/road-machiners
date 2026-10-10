@@ -1,0 +1,66 @@
+{
+  "turn": 900,
+  "vehicles": [
+    {
+      "id": "player",
+      "pos": {
+        "x": 100,
+        "y": 100
+      },
+      "brain": null
+    },
+    {
+      "id": "npc-3",
+      "pos": {
+        "x": 198.5,
+        "y": 230.2
+      },
+      "brain": {
+        "goals": [
+          {
+            "kind": "raid",
+            "targetId": null,
+            "destination": {
+              "x": 40,
+              "y": 40
+            },
+            "phase": "travel",
+            "reason": "look for prey at known hunting grounds"
+          },
+          {
+            "kind": "rearm",
+            "targetId": "kiln",
+            "destination": {
+              "x": 198,
+              "y": 228
+            },
+            "phase": "act",
+            "reason": "lie up for fresh gear",
+            "until": 1400
+          }
+        ]
+      }
+    },
+    {
+      "id": "npc-4",
+      "pos": {
+        "x": 60,
+        "y": 70
+      },
+      "brain": {
+        "goals": [
+          {
+            "kind": "patrol",
+            "targetId": null,
+            "destination": {
+              "x": 66,
+              "y": 76
+            },
+            "phase": "travel",
+            "reason": "patrol the roads near camp"
+          }
+        ]
+      }
+    }
+  ]
+}

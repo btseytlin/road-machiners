@@ -2,7 +2,7 @@ import { TERRAIN } from '../data/terrain';
 import { describe, expect, it } from 'vitest';
 import { contactsOf } from './detect';
 import { emptyWorld, addVehicle, editableTerrain, forceOption, npcBrain, rngStateForForcedRolls, testDrive , startCombat } from './testkit';
-import { planNpcOrders, turnCornered } from './ai';
+import { planNpcOrders } from './ai';
 import { getResources } from './resources';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
@@ -18,7 +18,7 @@ import { endTurn, newWorld } from './world';
 import { corePart, freeCells, goodsCount } from './grid';
 import { makePart } from './factory';
 import { addGoods, hasCargoRoom } from './inventory';
-import { finishGoal, getActivityDestination, patchGoal, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { finishGoal, getActivityDestination, patchGoal, resolveNpcActivities, thinkNpc, topGoal, turnCornered } from './npc-activities';
 import { leaveLoot } from './loot-warning';
 import { chooseOn, trackOf } from './tracks';
 import { watchStalls } from './npc-watchdog';
@@ -199,7 +199,7 @@ describe('NPC activities', () => {
 
   it('records failure when a salvage target disappears', () => {
     const { w, npc } = createScavenger();
-    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'retired-wreck', destination: { ...npc.pos }, phase: 'travel', reason: 'collectSalvage' }];
+    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'retired-wreck', destination: { ...npc.pos }, phase: 'travel', reason: 'collectSalvage' as const }];
     w.events = [];
     resolveNpcActivities(w);
     expect(w.events).toEqual([expect.objectContaining({ previous: 'scavenge', activity: null, reason: 'salvageGone' })]);
@@ -210,7 +210,7 @@ describe('NPC activities', () => {
     addGoods(w, npc, 'scrap', freeCells(npc) - 1);
     w.salvage = [{ id: 'wreck-test', pos: { x: 10.5, y: 10 }, radius: 0.6, goods: {}, parts: [makePart(w, 'plates', 0)], hidden: emptyHidden() }];
     npc.speed = 0;
-    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'wreck-test', destination: { ...npc.pos }, phase: 'travel', reason: 'collectSalvage' }];
+    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'wreck-test', destination: { ...npc.pos }, phase: 'travel', reason: 'collectSalvage' as const }];
     w.events = [];
     resolveNpcActivities(w);
     expect(npc.job).toBeNull();
@@ -230,7 +230,7 @@ describe('NPC activities', () => {
   describe('stripped stocks', () => {
     const wreck = (id: string, x: number, full = false): SalvageStock => ({ id, pos: { x, y: 10 }, radius: 0.6, goods: full ? { scrap: 1 } : {}, parts: [], hidden: { goods: {}, parts: [], fuel: 0, supplies: 0 } });
     const scavengeAt = (npc: Vehicle, id: string) => {
-      npc.brain!.goals = [{ kind: 'scavenge', targetId: id, destination: { ...npc.pos }, phase: 'travel', reason: 'collectSalvage' }];
+      npc.brain!.goals = [{ kind: 'scavenge', targetId: id, destination: { ...npc.pos }, phase: 'travel', reason: 'collectSalvage' as const }];
     };
 
     it('remembers two empty wrecks it reached and then sees no salvage in either', () => {
@@ -295,7 +295,7 @@ describe('NPC activities', () => {
 
   it('drops a scavenge goal on a cargo pile once the pile is gone, before it drives', () => {
     const { w, npc } = createScavenger();
-    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'cargo-v9-1', destination: { x: npc.pos.x + 8, y: npc.pos.y }, phase: 'travel', reason: 'collectSalvage' }];
+    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'cargo-v9-1', destination: { x: npc.pos.x + 8, y: npc.pos.y }, phase: 'travel', reason: 'collectSalvage' as const }];
     expect(() => planNpcOrders(w)).not.toThrow();
     expect(npc.brain!.goals.some((goal) => goal.targetId === 'cargo-v9-1')).toBe(false);
   });
@@ -1409,6 +1409,35 @@ describe('a trader too poor to trade', () => {
   });
 });
 
+describe('flee at its point', () => {
+  const fleeing = (foeId: string, at: { x: number; y: number }) => [
+    { kind: 'scavenge' as const, targetId: null, destination: { x: 40, y: 40 }, phase: 'travel' as const, reason: 'collectSalvage' as const },
+    { kind: 'flee' as const, targetId: foeId, destination: { ...at }, phase: 'travel' as const, reason: 'escapeAttacker' as const, perceived: 0 },
+  ];
+
+  it('turns on the foe that followed it there instead of going back to its errand', () => {
+    const { w, npc } = createScavenger();
+    const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 16, y: 10 });
+    startCombat(w, foe, npc);
+    npc.brain!.goals = fleeing(foe.id, npc.pos);
+    refreshVision(w);
+
+    resolveNpcActivities(w);
+
+    expect(topGoal(npc)).toMatchObject({ kind: 'fight', targetId: foe.id, reason: 'cornered' });
+  });
+
+  it('ends the run once no foe is in sight', () => {
+    const { w, npc } = createScavenger();
+    npc.brain!.goals = fleeing('gone', npc.pos);
+    refreshVision(w);
+
+    resolveNpcActivities(w);
+
+    expect(npc.brain!.goals.some((goal) => goal.kind === 'flee')).toBe(false);
+  });
+});
+
 describe('repair goal in combat', () => {
   it('turns on a visible foe when the driver cannot reach repairs, even after the combat timer expires', () => {
     const { w, npc } = createScavenger();
@@ -1472,7 +1501,7 @@ describe('salvage in combat', () => {
   it('is given up at the stock when no search runs, since none can start', () => {
     const { w, npc } = createScavenger();
     w.salvage.push({ id: 'test-stock', pos: { ...npc.pos }, radius: 1, goods: { scrap: 3 }, parts: [], hidden: emptyHidden() });
-    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'test-stock', destination: { ...npc.pos }, phase: 'act', reason: 'collectSalvage' }];
+    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'test-stock', destination: { ...npc.pos }, phase: 'act', reason: 'collectSalvage' as const }];
     const foe = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 16, y: 10 });
     addState(w, 'feud', foe.id, npc.id, { kind: 'feud', robbery: false });
     startCombat(w, foe, npc);
@@ -1623,6 +1652,7 @@ describe('one looter per target', () => {
   });
 
   it('never lets two drivers search one wreck at once, through full turns', () => {
+    forceOption('lootContested', 'leave');
     const w0 = emptyWorld({ x: 50, y: 50 });
     for (const key of Object.keys(NPCS)) w0.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
     const wreck = { id: 'wreck902', pos: { x: 15, y: 12 }, radius: 0.6, goods: { scrap: 8 }, parts: [], hidden: emptyHidden() };
