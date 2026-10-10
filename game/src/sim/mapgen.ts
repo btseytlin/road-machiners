@@ -1,5 +1,3 @@
-// Obstacle placement: the baked map's props, then seeded site props and road wrecks, then the fixed story wrecks.
-
 import { FORTRESS } from '../data/fortress';
 import { FORT_MODELS, type FortModel } from './fortress';
 import { PHYSICS } from '../data/physics';
@@ -12,22 +10,30 @@ import { siteGap } from './sites';
 import { TERRAIN } from '../data/terrain';
 import { randInt, randRange } from './rng';
 import { hulkBoxes } from './body';
-import { DECKS, propBase, underDeck } from './bridge';
+import { chassisDef } from '../data/chassis';
+import { propBase, underDeck } from './bridge';
+import { atlasOf, atlasSites, type Atlas } from './atlas';
+import { modeRules } from './settings';
 import type { LandmarkLook, Obstacle, World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 
 const O = REGION.obstacles;
 export function generateObstacles(world: World, map: BakedMap, fixed: Obstacle[]): Obstacle[] {
-  const baked = mapObstacles(map);
-  const out = [...baked];
+  const atlas = atlasOf(map.terrain);
+  const out = mapObstacles(map);
   for (const o of fixed) {
-    if (overlapsAny(out, o.pos, o.r) || !clearOfSites(o.pos, o.r) || !clearOfDecks(o.pos, o.r))
+    if (overlapsAny(out, o.pos, o.r) || !clearOfSites(atlas, o.pos, o.r) || !clearOfDecks(atlas, o.pos, o.r))
       throw new Error(`Obstacle ${o.id} at ${o.pos.x.toFixed(1)}, ${o.pos.y.toFixed(1)} overlaps a prop, a site or a deck`);
     out.push(o);
   }
-  placeRoadWrecks(world, out);
-  for (const w of STORY_WRECKS) out.push({ id: w.id, pos: { ...w.pos }, r: w.r, kind: 'wreck', hulk: { chassisId: w.chassisId, yaw: w.yaw } });
+  placeModeWrecks(world, out);
   return out;
+}
+
+function placeModeWrecks(world: World, out: Obstacle[]): void {
+  const rules = modeRules(world);
+  if (rules.roadWrecks) placeRoadWrecks(world, out);
+  if (rules.looting) out.push(...STORY_WRECKS.map((w): Obstacle => ({ id: w.id, pos: { ...w.pos }, r: w.r, kind: 'wreck', hulk: { chassisId: w.chassisId, yaw: w.yaw } })));
 }
 
 export function mapObstacles(map: BakedMap): Obstacle[] {
@@ -41,15 +47,22 @@ export function mapObstacles(map: BakedMap): Obstacle[] {
 }
 
 export function propObstacle(p: BakedProp, k: number): Obstacle {
+  if (p.hulk !== undefined) return hulkObstacle(p, k, p.hulk);
   if (p.kind === 'rock') return { id: `rock${k}`, pos: { ...p.pos }, r: p.r, kind: 'rock' };
   const id = p.kind === 'pole' ? `${p.kind}-${p.group}-${p.step}` : `${p.kind}-${k}`;
   return { id, pos: { ...p.pos }, r: p.r, kind: 'landmark', look: p.kind, yaw: p.yaw };
 }
 
-const BAKED_ID = new RegExp(`^(rock\\d+|pole-\\d+-\\d+|(${PROP_KINDS.filter((k) => k !== 'rock' && k !== 'pole').join('|')})-\\d+)$`);
+function hulkObstacle(p: BakedProp, k: number, chassisId: string): Obstacle {
+  chassisDef(chassisId);
+  return { id: `hulk-${k}`, pos: { ...p.pos }, r: p.r, kind: 'wreck', hulk: { chassisId, yaw: p.yaw } };
+}
+
+let bakedId: RegExp | null = null;
 
 export function isBakedObstacle(o: Obstacle): boolean {
-  return BAKED_ID.test(o.id);
+  bakedId ??= new RegExp(`^(rock\\d+|hulk-\\d+|pole-\\d+-\\d+|(${PROP_KINDS.filter((k) => k !== 'rock' && k !== 'pole').join('|')})-\\d+)$`);
+  return bakedId.test(o.id);
 }
 
 function placeRoadWrecks(world: World, out: Obstacle[]): void {
@@ -70,12 +83,13 @@ export function findRoadWreckSpot(world: World, obstacles: Obstacle[], allowed: 
     const len = dist(a, b);
     const pos = { x: a.x + (b.x - a.x) * t - ((b.y - a.y) / len) * side, y: a.y + (b.y - a.y) * t + ((b.x - a.x) / len) * side };
     const r = randRange(world, 0.55, 0.8);
-    if (clearOfSites(pos, r) && !overlapsAny(obstacles, pos, r) && clearOfDecks(pos, r) && allowed(pos, r)) return { pos, r };
+    const atlas = atlasOf(world.terrain);
+    if (clearOfSites(atlas, pos, r) && !overlapsAny(obstacles, pos, r) && clearOfDecks(atlas, pos, r) && allowed(pos, r)) return { pos, r };
   }
   throw new Error('Road wreck placement ran out of tries');
 }
 
-function overlapsAny(out: Obstacle[], pos: Vec, r: number): boolean {
+export function overlapsAny(out: Obstacle[], pos: Vec, r: number): boolean {
   return out.some((o) => o.kind !== 'site' && dist(pos, o.pos) < o.r + r + O.gap);
 }
 
@@ -87,16 +101,16 @@ export function isBreakable(o: Obstacle): boolean {
   return o.kind === 'landmark' && BREAKABLE.kinds.includes(o.look);
 }
 
-export function onDeck(pos: Vec, r: number): boolean {
-  return DECKS.some((deck) => segmentDist(pos, deck.from, deck.to) < deck.width / 2 + r);
+export function onDeck(atlas: Atlas, pos: Vec, r: number): boolean {
+  return atlas.decks.decks.some((deck) => segmentDist(pos, deck.from, deck.to) < deck.width / 2 + r);
 }
 
-function clearOfDecks(pos: Vec, r: number): boolean {
-  return !onDeck(pos, r) && TERRAIN.features.mounds.every((m) => dist(pos, m.center) >= m.radius + m.bank + r);
+export function clearOfDecks(atlas: Atlas, pos: Vec, r: number): boolean {
+  return !onDeck(atlas, pos, r) && (!atlas.landforms || TERRAIN.features.mounds.every((m) => dist(pos, m.center) >= m.radius + m.bank + r));
 }
 
-export function clearOfSites(pos: Vec, r: number): boolean {
-  return [...REGION.towns, ...REGION.locations].every((s) => siteGap(s, pos) > O.siteClearance + r);
+export function clearOfSites(atlas: Atlas, pos: Vec, r: number): boolean {
+  return atlasSites(atlas).every((s) => siteGap(s, pos) > O.siteClearance + r);
 }
 
 export type PropScale = { x: number; y: number; z: number };
@@ -229,7 +243,6 @@ export function propPose(o: Obstacle): PropPose {
   throw new Error(`Obstacle ${o.id} of kind ${o.kind} has no prop model`);
 }
 
-// A kill wreck or story wreck with a hulk lies as its dead truck did. Any other wreck is the generic model, turned by its id.
 function wreckPose(o: Exclude<Obstacle, Landmark>, pos: Vec): PropPose {
   if (o.hulk) return { model: 'hulk', chassisId: o.hulk.chassisId, pos, yaw: o.hulk.yaw, scale: even(1) };
   return { model: 'wreck', pos, yaw: idHash(o.id) * TURN, scale: even(o.r / WRECK_RADIUS) };

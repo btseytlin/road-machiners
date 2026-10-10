@@ -26,6 +26,7 @@ function host(w: World) {
     note: () => undefined,
     openTrade: (id: string) => { calls.trades.push(id); },
     openTown: () => undefined,
+    openOutpost: () => undefined,
     openDowned: () => undefined,
     openLoot: () => undefined,
   } satisfies ContextHost;

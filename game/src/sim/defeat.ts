@@ -1,7 +1,3 @@
-// A lost fight knocks a driver out, the player or an NPC alike. The truck keeps every item, trucks parked beside
-// it strip it, and nobody is its foe while it lies out. It wakes once the trucks that fought it look away. Health
-// at 0 ends the player's run. A woken NPC retreats home and lies up there, and nobody is its foe until it refits at
-// the end of the lie-up.
 
 import { NPC_BEHAVIOR, NPCS } from "../data/npcs";
 import { chassisDef } from "../data/chassis";
@@ -26,6 +22,8 @@ import { npcHomeSite, towOf } from "./tow";
 import { dropGoal, pushGoal } from "./npc-activities";
 import { liesUp } from "./npc-service";
 import { isWeak, wantsLoot } from "./npc-decisions";
+import { endRun } from "./fury-road";
+import { modeRules } from "./settings";
 import type { SalvageStock, Vehicle, World } from "./types";
 import { wreckStockId } from "./salvage";
 import { dist, type Vec } from "./vec";
@@ -39,9 +37,14 @@ export function checkDeath(world: World): void {
 }
 
 export function checkKnockout(world: World): void {
-  const p = world.player;
   const me = playerVehicle(world);
-  if (p.state !== "active" || !knockedNow(world, me)) return;
+  if (world.player.state !== "active" || !knockedNow(world, me)) return;
+  if (modeRules(world).playerKnockouts) knockOutPlayer(world, me);
+  else endRun(world, "wrecked");
+}
+
+function knockOutPlayer(world: World, me: Vehicle): void {
+  const p = world.player;
   const watchers = world.vehicles.filter((v) => isHostile(world, v, me) && canVehicleSee(world, v, me.pos));
   if (watchers.length > 0) practice(world, "knockout", 1, null, "driver");
   me.defeat = { phase: "out", turns: 0, unseen: 0, foes: withLastHitter(world, me, watchers.map((v) => v.id)), gaveUp: false };
@@ -113,6 +116,7 @@ function endDangerGoals(world: World, v: Vehicle): void {
 }
 
 export function standDown(world: World, v: Vehicle, winnerId: string): void {
+  if (!modeRules(world).npcKnockouts) throw new Error(`${v.id} cannot stand down where nobody is knocked out`);
   layDown(world, v, [...new Set([...foesOf(world, v), winnerId])], true);
 }
 
@@ -122,7 +126,7 @@ export function knockOutNpc(world: World, v: Vehicle): void {
   world.events.push({ t: "npcKnockout", vehicle: v.id, by });
   if (by === world.player.vehicleId && chance(world, NPC_BEHAVIOR.revengeChance))
     addState(world, "revenge", v.id, world.player.vehicleId, { kind: "none" });
-  sendToLoot(world, v, strippers(world, v));
+  if (modeRules(world).looting) sendToLoot(world, v, strippers(world, v));
 }
 
 function strippers(world: World, victim: Vehicle): Vehicle[] {
@@ -211,14 +215,14 @@ function inPlayerView(world: World, pos: Vec): boolean {
 }
 
 function hiddenHomeSpot(world: World, v: Vehicle): Vec | null {
-  const home = homeOf(v);
+  const home = homeOf(world, v);
   const radius = chassisDef(v.chassisId).radius;
   const pads = [...sitePads(home)].sort((a, b) => dist(v.pos, a) - dist(v.pos, b));
   return pads.find((pad) => !inPlayerView(world, pad) && isFree(world, pad, radius, v.id)) ?? null;
 }
 
-function homeOf(v: Vehicle): Site {
-  const home = npcHomeSite(v);
+function homeOf(world: World, v: Vehicle): Site {
+  const home = npcHomeSite(world, v);
   if (!home) throw new Error(`${v.id} knows no home to retreat to`);
   return home;
 }

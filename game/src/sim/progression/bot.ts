@@ -43,13 +43,15 @@ import { towData } from '../states';
 import type { Call, Faction, GoalReason, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
 import { dist, pointsAway, type Vec } from '../vec';
 import { canVehicleSee, playerExplored, playerSees } from '../vision';
+import { reachedOutpostAt } from '../fury-road';
+import { runnerOrders } from './runner';
 import { BIGGEST_PART_CELLS, mountBought, Orders, rearm, REPAIR_PARTS, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
 
-export type Archetype = 'trader' | 'scavenger' | 'hunter' | 'fastTrader' | 'hauler' | 'climber' | 'markov';
-export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'hunter', 'fastTrader', 'hauler', 'climber', 'markov'];
+export type Archetype = 'trader' | 'scavenger' | 'hunter' | 'fastTrader' | 'hauler' | 'climber' | 'markov' | 'runner';
+export const ARCHETYPES: readonly Archetype[] = ['trader', 'scavenger', 'hunter', 'fastTrader', 'hauler', 'climber', 'markov', 'runner'];
 export type Policy = Archetype | 'robber' | 'convoyRobber';
 export const POLICIES: readonly Policy[] = [...ARCHETYPES, 'robber', 'convoyRobber'];
-type Goal = Exclude<Policy, 'markov' | 'climber'>;
+type Goal = Exclude<Policy, 'markov' | 'climber' | 'runner'>;
 
 const CLIMB_GUNS = 3;
 const GOALS_PLAYED: readonly Goal[] = ['trader', 'scavenger', 'hunter', 'fastTrader'];
@@ -91,6 +93,10 @@ export function isArchetype(value: string): value is Archetype {
 }
 
 export function botOrders(world: World, archetype: Policy, options: BotOptions = {}): BotTurn {
+  return archetype === 'runner' ? runnerOrders(world) : policyOrders(world, archetype, options);
+}
+
+function policyOrders(world: World, archetype: Exclude<Policy, 'runner'>, options: BotOptions): BotTurn {
   const o = new Orders(world);
   const goal = goalOf(world, archetype, options);
   o.fieldRepair = goal === 'hunter';
@@ -123,14 +129,14 @@ function followGoal(o: Orders, goal: Goal, archetype: Policy): void {
 
 export function parkedOnPurpose(world: World): boolean {
   if (world.player.state === 'knockedOut') return true;
-  return playerVehicle(world).job !== null || patchDeal(world) !== null || shopAt(world) !== null;
+  return playerVehicle(world).job !== null || patchDeal(world) !== null || shopAt(world) !== null || reachedOutpostAt(world) !== null;
 }
 
 function climberGoal(world: World): Goal {
   return vehicleStats(world, playerVehicle(world)).weapons.length >= CLIMB_GUNS ? 'hunter' : 'trader';
 }
 
-function goalOf(world: World, archetype: Policy, options: BotOptions): Goal {
+function goalOf(world: World, archetype: Exclude<Policy, 'runner'>, options: BotOptions): Goal {
   if (archetype === 'climber') return climberGoal(world);
   if (archetype !== 'markov') return archetype;
   const { markovTurns } = options;
@@ -1049,7 +1055,7 @@ function hasLooseItems(v: Vehicle): boolean {
 }
 
 function takeFromTarget(o: Orders, target: Vehicle): void {
-  if (!canLootTruck(o.me, target)) return driveTo(o, besideStop(o.world, target.pos, chassisDef(target.chassisId).radius));
+  if (!canLootTruck(o.world, o.me, target)) return driveTo(o, besideStop(o.world, target.pos, chassisDef(target.chassisId).radius));
   for (const item of target.items.filter((it) => !isMounted(target.chassisId, it))) {
     const spot = looseSpot(o.me, item);
     if (spot) o.loot(target.id, (w) => takeFromTruck(w, target.id, item.id, spot));

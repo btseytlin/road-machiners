@@ -20,6 +20,7 @@ Mechanics pages hold the detailed rules of each system in prose, one page per se
 - [detection.md](mechanics/detection.md): sight, sound, dust, scanners and flares.
 - [world.md](mechanics/world.md): the map, sites, time of day, weather and engine heat.
 - [world-settings.md](mechanics/world-settings.md): game modes, the world settings picked at New game, and which rules are settings.
+- [fury-road.md](mechanics/fury-road.md): the Fury Road mode's rule flags, course, outposts, hostile groups and defeat.
 - [npcs.md](mechanics/npcs.md): NPC activities, traits, states and escorts.
 - [social.md](mechanics/social.md): radio topics and the horn.
 - [economy.md](mechanics/economy.md): prices, shops, contracts, hidden salvage, fuel and supplies.

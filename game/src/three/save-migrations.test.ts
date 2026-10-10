@@ -49,6 +49,10 @@ import FORMAT_2_36 from './save-fixtures/format-2-36.json';
 import { STORY_WRECKS } from '../data/salvage';
 import FORMAT_2_43 from './save-fixtures/format-2-43.json';
 import FORMAT_2_44 from './save-fixtures/format-2-44.json';
+import FORMAT_2_47 from './save-fixtures/format-2-47.json';
+import FORMAT_2_48 from './save-fixtures/format-2-48.json';
+import FORMAT_2_49 from './save-fixtures/format-2-49.json';
+import FORMAT_2_50 from './save-fixtures/format-2-50.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -1038,5 +1042,72 @@ describe('save migration 44 to 45', () => {
 describe('save migration 45 to 46', () => {
   it('returns the world unchanged, since no old save holds a business job', () => {
     expect(MIGRATIONS[45](structuredClone(FORMAT_2_44))).toEqual(FORMAT_2_44);
+  });
+});
+
+describe('save migration 47 to 48', () => {
+  it('drops a Gauntlet run laid on Icarus roads and keeps the mode, for the load to rescue it', () => {
+    const next = MIGRATIONS[47](structuredClone(FORMAT_2_47));
+
+    expect(next).toEqual({ ...FORMAT_2_47, gauntlet: null });
+    expect((next.setup as { mode: string }).mode).toBe('gauntlet');
+  });
+
+  it('keeps a world with no run as it is', () => {
+    const roaming = { ...FORMAT_2_47, setup: { ...FORMAT_2_47.setup, mode: 'roaming' }, gauntlet: null };
+
+    expect(MIGRATIONS[47](structuredClone(roaming))).toEqual(roaming);
+  });
+});
+
+describe('save migration 50 to 51', () => {
+  it('starts each outpost with no trucks sold and each group with no trucks counted', () => {
+    const run = structuredClone(FORMAT_2_50.furyRoad);
+    const outposts = run.outposts.map((post) => ({ ...post, trucksSold: [] }));
+    const groups = run.groups.map((group) => ({ ...group, counted: [] }));
+
+    expect(MIGRATIONS[50](structuredClone(FORMAT_2_50))).toEqual({ ...FORMAT_2_50, furyRoad: { ...run, outposts, groups } });
+  });
+
+  it('keeps a world with no run as it is', () => {
+    const roaming = { ...structuredClone(FORMAT_2_50), setup: { ...FORMAT_2_50.setup, mode: 'roaming' }, furyRoad: null };
+
+    expect(MIGRATIONS[50](structuredClone(roaming))).toEqual(roaming);
+  });
+});
+
+describe('save migration 49 to 50', () => {
+  it('drops each group anchor, starts each engaged list empty and dates the quiet from the saved turn', () => {
+    const run = structuredClone(FORMAT_2_49.furyRoad);
+    const groups = run.groups.map(({ at: _at, ...group }) => ({ ...group, engaged: [] }));
+
+    expect(MIGRATIONS[49](structuredClone(FORMAT_2_49))).toEqual({ ...FORMAT_2_49, furyRoad: { ...run, groups, quietFrom: 412 } });
+  });
+
+  it('keeps a world with no run as it is', () => {
+    const roaming = { ...structuredClone(FORMAT_2_49), setup: { ...FORMAT_2_49.setup, mode: 'roaming' }, furyRoad: null };
+
+    expect(MIGRATIONS[49](structuredClone(roaming))).toEqual(roaming);
+  });
+});
+
+describe('save migration 48 to 49', () => {
+  it('renames the Gauntlet mode and its run to Fury Road and keeps the run', () => {
+    const { gauntlet, ...rest } = structuredClone(FORMAT_2_48);
+
+    expect(MIGRATIONS[48](structuredClone(FORMAT_2_48))).toEqual({ ...rest, setup: { ...rest.setup, mode: 'furyRoad' }, furyRoad: gauntlet });
+  });
+
+  it('keeps a Roaming world as it is but for the run key', () => {
+    const { gauntlet: _run, ...rest } = structuredClone(FORMAT_2_48);
+    const roaming = { ...rest, setup: { ...rest.setup, mode: 'roaming' }, gauntlet: null };
+
+    expect(MIGRATIONS[48](structuredClone(roaming))).toEqual({ ...rest, setup: roaming.setup, furyRoad: null });
+  });
+});
+
+describe('save migration 46 to 47', () => {
+  it('adds an empty Gauntlet run and keeps the rest of the world', () => {
+    expect(MIGRATIONS[46](structuredClone(FORMAT_2_44))).toEqual({ ...FORMAT_2_44, gauntlet: null });
   });
 });

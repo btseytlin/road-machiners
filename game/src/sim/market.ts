@@ -7,7 +7,7 @@ import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { CONDITION } from '../data/wear';
-import { CONTRACTS, DISTANCE_PREMIUM, EFFORT, GOOD_SOURCES, PRESSURE_MAX, SHOPS, shopDef, type ShopDef, type Tier } from '../data/market';
+import { CONTRACTS, DISTANCE_PREMIUM, EFFORT, GOOD_SOURCES, PRESSURE_MAX, SHOPS, shopDef, type PartStockTable, type ShopDef, type Tier } from '../data/market';
 import { chassisDef } from '../data/chassis';
 import { makePart, newId } from './factory';
 import { sampleWeighted } from './npc-loadout';
@@ -36,17 +36,22 @@ export function goodValue(good: string): number {
   return def.value;
 }
 
-function rollStock(world: World, def: ShopDef, count: number): PartInstance[] {
+export function rollPartStock(world: World, rng: Rng, table: PartStockTable, count: number, seller: string): PartInstance[] {
   const stock: PartInstance[] = [];
   for (let i = 0; i < count; i++) {
-    const defId = sampleWeighted(world.marketRng, def.partStock.parts);
-    const wear = sampleWeighted(world.marketRng, def.partStock.wear);
+    const defId = sampleWeighted(rng, table.parts);
+    const wear = sampleWeighted(rng, table.wear);
     if (!Number.isInteger(wear) || wear < 0 || wear > CONDITION.maxWear) {
-      throw new Error(`Shop ${def.id} rolled a bad wear step ${wear} for ${defId}`);
+      throw new Error(`${seller} rolled a bad wear step ${wear} for ${defId}`);
     }
     stock.push(makePart(world, defId, wear));
   }
   return stock;
+}
+
+export function rollPartStockPerKind(world: World, rng: Rng, table: PartStockTable, perKind: number, seller: string): PartInstance[] {
+  const kinds = [...new Set(table.parts.map((p) => PARTS[p.value].kind))];
+  return kinds.flatMap((kind) => rollPartStock(world, rng, { ...table, parts: table.parts.filter((p) => PARTS[p.value].kind === kind) }, perKind, seller));
 }
 
 export function initShop(world: World, shopId: string): ShopState {
@@ -54,7 +59,7 @@ export function initShop(world: World, shopId: string): ShopState {
   const pressure: Record<string, number> = {};
   for (const good of def.goods) pressure[good] = 0;
   const count = randInt(world.marketRng, def.stockSize[0], def.stockSize[1]);
-  return { contracts: [], pressure, stock: rollStock(world, def, count), restockAt: world.turn + def.restockTurns };
+  return { contracts: [], pressure, stock: rollPartStock(world, world.marketRng, def.partStock, count, def.id), restockAt: world.turn + def.restockTurns };
 }
 
 export function advanceShop(world: World, shopId: string, state: ShopState): void {
@@ -62,7 +67,7 @@ export function advanceShop(world: World, shopId: string, state: ShopState): voi
   for (const good of def.goods) state.pressure[good] = (state.pressure[good] ?? 0) * (1 - def.driftPerTurn);
   if (world.turn >= state.restockAt) {
     const count = randInt(world.marketRng, def.stockSize[0], def.stockSize[1]);
-    state.stock = rollStock(world, def, count);
+    state.stock = rollPartStock(world, world.marketRng, def.partStock, count, def.id);
     state.restockAt = world.turn + def.restockTurns;
   }
 }
@@ -376,7 +381,7 @@ export function shopAt(world: World): string | null {
 
 export function shopNear(world: World): string | null {
   const pos = playerVehicle(world).pos;
-  return Object.keys(SHOPS).find((id) => canUseSite(pos, siteOf(id))) ?? null;
+  return Object.keys(world.shops).find((id) => canUseSite(pos, siteOf(id))) ?? null;
 }
 
 export function siteOf(siteId: string): Site {

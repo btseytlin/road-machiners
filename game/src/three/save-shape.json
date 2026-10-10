@@ -1,11 +1,12 @@
 {
- "format": "2.46",
+ "format": "2.51",
  "shape": {
   "broken": [],
   "craters": [],
   "dustClouds": [],
   "fields": [],
   "flares": [],
+  "furyRoad": "null",
   "lines": [],
   "mapHash": "string",
   "marketRng": {

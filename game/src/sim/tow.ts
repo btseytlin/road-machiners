@@ -1,6 +1,3 @@
-// Towing a stranded truck. An NPC that sees a stranded truck may choose to help at its strandedSeen decision. It
-// drives over and claims the job, so no other driver answers. A tow is a `tow` state held by the tower toward its
-// client. Once hitched, the client leaves physics and is pulled by the tower on a tow bar. Arrival fulfils the state,
 
 import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
@@ -19,11 +16,13 @@ import { skillEffect } from './progress';
 import { canUseSite, nearestPad, reachedSite, type Site } from './sites';
 import { addState, endState, stateOf, towData, towPromiseData } from './states';
 import { isStranded, vehicleStats } from './stats';
+import { modeRules } from './settings';
 import { getResources } from './resources';
 import type { GameEvent, GoalReason, NpcActivity, NpcState, Pose, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 import { playerCommand, update } from './world';
+import { atlasOf } from './atlas';
 
 export function inTowReach(tower: Vehicle, towed: Vehicle): boolean {
   const radii = chassisDef(tower.chassisId).radius + chassisDef(towed.chassisId).radius;
@@ -127,11 +126,12 @@ function answeredByOther(world: World, tower: Vehicle, client: Vehicle): boolean
 
 function towDestination(world: World, tower: Vehicle, client: Vehicle): Site | null {
   if (!isPlayer(world, client) && !client.brain) return null;
-  const site = isPlayer(world, client) ? nearestSite(npcProfile(tower).towns, client.pos) : npcHomeSite(client);
+  const site = isPlayer(world, client) ? nearestSite(npcProfile(tower).towns, client.pos) : npcHomeSite(world, client);
   return site && !canUseSite(client.pos, site) ? site : null;
 }
 
-export function npcHomeSite(v: Vehicle): Site | null {
+export function npcHomeSite(world: Pick<World, 'terrain'>, v: Vehicle): Site | null {
+  if (atlasOf(world.terrain).towns.length === 0) return null;
   const profile = npcProfile(v);
   return nearestSite(profile.bases.length > 0 ? profile.bases : profile.towns, v.pos);
 }
@@ -222,6 +222,7 @@ function beaconCenter(world: World, listener: Vehicle, me: Vehicle): Vec | null 
 
 export function setBeacon(world: World, on: boolean): World {
   return playerCommand(world, (w) => {
+    if (on && !modeRules(w).rescue) throw new Error('No one answers a beacon in this game mode');
     if (on && !isStranded(w, playerVehicle(w))) throw new Error('The beacon needs a stranded truck');
     w.player.beacon = on;
   });

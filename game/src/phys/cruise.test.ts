@@ -1,6 +1,3 @@
-// Driven speed on a straight flat road, played through the real turn pipeline and physics. A healthy ordinary car
-// cruises at about 65 km/h or more, while load, a tow, a broken transmission and a low tank keep their own limits.
-// Turns and stops are covered in drive.test.ts.
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { chassisDef } from '../data/chassis';
@@ -19,6 +16,7 @@ import type { Vehicle, World } from '../sim/types';
 import { endTurn, setMoveOrder } from '../sim/world';
 import { buildDrive, freeDrive, initPhysics, type Drive } from './drive';
 import { physicsMove } from './turn';
+import { TEST_MAP } from '../test/map';
 
 beforeAll(async () => {
   await initPhysics();
@@ -79,7 +77,7 @@ describe('driven speed on an open road', () => {
     const free = vehicleStats(w, tower).maxSpeed;
     const client = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 17, y: ROAD_Y }, 0);
     client.brain = npcBrain('scavenger', client.pos, ['scavenger']);
-    addState(w, 'tow', tower.id, client.id, { kind: 'tow', site: npcHomeSite(client)!.id, fee: 0, waived: 0, hitched: true });
+    addState(w, 'tow', tower.id, client.id, { kind: 'tow', site: npcHomeSite(TEST_MAP, client)!.id, fee: 0, waived: 0, hitched: true });
     const towed = setMoveOrder(w, { kind: 'stopAt', dest: { x: 400, y: ROAD_Y } });
     const speed = cruise(towed, tower.id);
     expect(speed).toBeLessThanOrEqual(TOW.speedShare * free + 0.3);

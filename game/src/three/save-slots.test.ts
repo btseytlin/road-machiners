@@ -72,9 +72,18 @@ describe('save slots', () => {
     expect(takeBootRequest(session, 'roam.save')).toBeNull();
   });
 
+  it('carries a road boot of a slot through the reload exactly once', () => {
+    const session = makeStorage();
+    requestBoot(session, 'roam.save', { slot: 'auto', reason: 'road' });
+
+    expect(takeBootRequest(session, 'roam.save')).toEqual({ slot: 'auto', reason: 'road' });
+    expect(takeBootRequest(session, 'roam.save')).toBeNull();
+  });
+
   it.each([
     ['a setting out of bounds', JSON.stringify({ new: { mode: 'roaming', settings: { damage: 5, fuelUse: 1, supplyUse: 1 } } })],
     ['broken JSON', '{"new":'],
+    ['a road boot of no slot', JSON.stringify({ slot: 'garage', reason: 'road' })],
     ['JSON with no new game', JSON.stringify({ old: 1 })],
     ['the old plain new request', 'new'],
   ])('removes a request with %s and throws', (_, value) => {

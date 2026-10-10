@@ -1,5 +1,3 @@
-// Shared driving helpers used by the physics engine, far-away NPC travel and the UI: parked-vehicle
-// blockers, the throttle-zone speed curve for drive-through orders, and click orders.
 
 import { RULES } from "../data/rules";
 import { chassisDef } from "../data/chassis";
@@ -9,6 +7,8 @@ import { nearestPad, siteUnder } from "./sites";
 import { straightClear } from "./path";
 import type { MoveOrder, Vehicle, World } from "./types";
 import { clamp, DEG, dist, type Vec } from "./vec";
+import { atlasOf } from "./atlas";
+import type { Terrain } from "./terrain";
 
 export function backsToDestination(
   vehicle: Pick<Vehicle, "faction" | "brain">,
@@ -69,8 +69,8 @@ export function zoneSpeed(s: VehicleStats, speed: number, d: number): number {
   );
 }
 
-export function clickOrder(dest: Vec, shift: boolean, me: Pick<Vehicle, "pos" | "order">): MoveOrder {
-  const site = siteUnder(dest);
+export function clickOrder(t: Terrain, dest: Vec, shift: boolean, me: Pick<Vehicle, "pos" | "order">): MoveOrder {
+  const site = siteUnder(atlasOf(t), dest);
   return site ? { kind: "stopAt", dest: nearestPad(site, me.pos) } : groundOrder(dest, shift, me.order);
 }
 

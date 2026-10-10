@@ -1,6 +1,3 @@
-// Ground scatter: loose stones, scrub and short cacti on open ground. Open desert takes grey stones, olive scrub
-// and cacti, with cacti gathered by rocks and crags and road shoulders keeping stones only. Ground that takes no
-// desert look keeps its small pebbles and dry scrub, as sparse as before. Road tiles scatter as the ground beside
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
@@ -8,7 +5,7 @@ import { TERRAIN_TYPES } from '../../data/terrain';
 import { REGION } from '../../data/region';
 import { desertWeight, lookTypes, type LookType } from '../../render/groundPaint';
 import { hash2 } from '../../render/noise';
-import { ROAD_INDEX } from '../../sim/road-index';
+import { atlasOf, type Atlas } from '../../sim/atlas';
 import { groundAt, type Terrain } from '../../sim/terrain';
 import type { Obstacle } from '../../sim/types';
 import type { Vec } from '../../sim/vec';
@@ -69,10 +66,11 @@ export function scatterPlacements(t: Terrain, obstacles: Obstacle[]): ScatterChu
 }
 
 function chunkScatter(t: Terrain, look: readonly LookType[], blocked: Uint8Array, rocky: Uint8Array, cx: number, cy: number): ScatterChunk {
+  const atlas = atlasOf(t);
   const chunk: ScatterChunk = { center: { x: cx + TERRAIN_CHUNK / 2, y: cy + TERRAIN_CHUNK / 2 }, pebbles: [], scrub: [], desert_stones: [], desert_scrub: [], cactus: [] };
   for (let y = cy; y < Math.min(cy + TERRAIN_CHUNK, t.size); y++) for (let x = cx; x < Math.min(cx + TERRAIN_CHUNK, t.size); x++) {
     const i = y * t.size + x;
-    const kind = blocked[i] ? null : tileScatter(look[i], x, y, rocky[i] === 1);
+    const kind = blocked[i] ? null : tileScatter(atlas, look[i], x, y, rocky[i] === 1);
     if (kind === null || onLoweredGround(t, x, y)) continue;
     const model = modelOf(kind, desertWeight(look[i]) > 0);
     chunk[model].push(placed(t, x, y, model));
@@ -100,13 +98,13 @@ function modelOf(kind: ScatterKind, desert: boolean): ScatterModel {
   return kind === 'pebbles' ? 'desert_stones' : 'desert_scrub';
 }
 
-function tileScatter(look: LookType, x: number, y: number, byRock: boolean): ScatterKind | null {
+function tileScatter(atlas: Atlas, look: LookType, x: number, y: number, byRock: boolean): ScatterKind | null {
   const h = hash2(x * 7 + 3, y * 13 + 5);
   const odds = CHANCES[look];
   const open = byRock ? odds.byRock : odds.open;
   if (pick(h, open) === null && pick(h, odds.shoulder) === null) return null;
   const p = tilePoint(x, y);
-  const road = ROAD_INDEX.nearestWithin(p.x, p.y, ROAD_GAP + SHOULDER_TILES);
+  const road = atlas.roadIndex.nearestWithin(p.x, p.y, ROAD_GAP + SHOULDER_TILES);
   return road < ROAD_GAP ? null : pick(h, road < ROAD_GAP + SHOULDER_TILES ? odds.shoulder : open);
 }
 

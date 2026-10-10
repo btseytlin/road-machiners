@@ -16,6 +16,7 @@ import { inCombat, isHostile } from './combat';
 import { getResources } from './resources';
 import type { Job, NpcState, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
 import { canVehicleSee } from './vision';
+import { modeRules } from './settings';
 
 export type WorkLeft = { turnsLeft: number; total: number };
 export type Work = WorkLeft & ({ from: 'job'; job: Job } | { from: 'state'; state: NpcState });
@@ -44,7 +45,7 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
     },
     check: (w, s) => (w.events.some((e) => (e.t === 'destroyed' || e.t === 'npcKnockout') && e.vehicle === s.other) ? 'fulfilled' : null),
     hooks: {
-      expired: (w, s) => { addState(w, 'backedOff', s.holder, s.other, { kind: 'none' }); },
+      expired: (w, s) => { if (modeRules(w).yielding) addState(w, 'backedOff', s.holder, s.other, { kind: 'none' }); },
       fulfilled: (w, s) => { if (isRobberyFeud(s)) lootRobbed(w, s.holder, s.other); },
     },
     work: noWork,
@@ -125,6 +126,16 @@ export function addState(w: World, kind: StateKindId, holder: string, other: str
   return s;
 }
 
+export function declareFeud(w: World, v: Vehicle, otherId: string): void {
+  const held = stateOf(w, 'feud', v.id, otherId);
+  if (held) held.turnsLeft = turnsOf('feud');
+  else {
+    addState(w, 'feud', v.id, otherId, { kind: 'feud', robbery: false });
+    w.events.push({ t: 'hostile', vehicle: v.id, against: otherId });
+  }
+  if (v.brain && !(otherId in v.brain.attackers)) v.brain.attackers[otherId] = false;
+}
+
 export function stateOf(w: World, kind: StateKindId, holder: string, other: string): NpcState | null {
   return w.states.find((s) => s.kind === kind && s.holder === holder && s.other === other) ?? null;
 }
@@ -146,7 +157,7 @@ export function endState(w: World, s: NpcState, ending: StateEnding): void {
   if (i < 0) throw new Error(`State ${s.id} has already ended`);
   const [ended] = w.states.splice(i, 1);
   w.events.push({ t: 'stateEnded', state: ended, ending });
-  if (kindOf(ended.kind).binds && ending !== 'broken') backOffAfterDeal(w, ended);
+  if (kindOf(ended.kind).binds && ending !== 'broken' && modeRules(w).yielding) backOffAfterDeal(w, ended);
   kindOf(ended.kind).hooks[ending]?.(w, ended);
 }
 

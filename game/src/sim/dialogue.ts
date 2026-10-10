@@ -11,6 +11,7 @@ import type { Call, CallVars, GameEvent, Vehicle, World } from './types';
 import { dist } from './vec';
 import { npcTraits } from './npc-decisions';
 import { practice } from './progress';
+import { modeRules } from './settings';
 import { openQuest, QUESTS } from './quests';
 import { canVehicleSee } from './vision';
 import { playerCommand, requireActivePlayer, update } from './world';
@@ -102,6 +103,7 @@ function begin(world: World, npc: Vehicle, line: LineId): Call {
 export function callVehicle(world: World, npcId: string): World {
   return update(world, (w) => {
     requireActivePlayer(w);
+    requireRadio(w);
     if (w.player.call) throw new Error('A call is already open');
     const npc = vehicleById(w, npcId);
     if (!npc.brain) throw new Error(`${npcId} has no driver to call`);
@@ -109,6 +111,10 @@ export function callVehicle(world: World, npcId: string): World {
     if (!canVehicleSee(w, playerVehicle(w), npc.pos)) throw new Error(`${npcId} is out of sight`);
     answer(w, npc, refusalOf(w, npc));
   });
+}
+
+function requireRadio(world: World): void {
+  if (!modeRules(world).radio) throw new Error('No radio talk in this game mode');
 }
 
 // The driver takes the call on the hub, or refuses it with the line it says.
@@ -219,7 +225,7 @@ export function hangUp(world: World): World {
 }
 
 export function raiseCalls(world: World): void {
-  if (world.player.call || world.player.state !== 'active' || world.player.frozen) return;
+  if (!hearsCalls(world)) return;
   const me = playerVehicle(world);
   for (const npc of world.vehicles) {
     const topic = raisedTopic(world, npc, me);
@@ -227,6 +233,10 @@ export function raiseCalls(world: World): void {
     enterTopic(world, npc, begin(world, npc, topic.nodes[topic.start].line), topic);
     return;
   }
+}
+
+function hearsCalls(world: World): boolean {
+  return modeRules(world).radio && !world.player.call && world.player.state === 'active' && !world.player.frozen;
 }
 
 function raisedTopic(world: World, npc: Vehicle, me: Vehicle): Topic | null {
@@ -246,6 +256,7 @@ function allowedNow(raise: NonNullable<Topic['raise']>, feud: boolean, combat: b
 
 export function honk(world: World): World {
   return playerCommand(world, (w) => {
+    requireRadio(w);
     const me = playerVehicle(w);
     w.events.push({ t: 'honk', vehicle: me.id });
     for (const npc of answering(w, me)) {

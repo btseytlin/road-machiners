@@ -66,6 +66,22 @@
 .town-shop {
   container-type: inline-size;
 }
+.outpost-screen .town-shop {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.outpost-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.outpost-road {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--space-5);
+}
 .town-truck {
   padding-right: var(--space-9);
   border-right: 1px solid var(--line-soft);

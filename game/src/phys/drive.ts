@@ -1,6 +1,3 @@
-// Physics driving for every vehicle. The map's terrain and obstacles become Rapier colliders; each
-// vehicle is a ray-cast car. Time only moves inside simulateTurn. A turn restores the world from a
-// snapshot and runs it forward, so the same state and orders always give the same result: the
 
 import RAPIER from '@dimforge/rapier3d-compat';
 import { chassisDef } from '../data/chassis';
@@ -15,7 +12,8 @@ import { groundSpeed, vehicleStats, type VehicleStats } from '../sim/stats';
 import { continueRoute, keepRoute, route, type KeptRoute } from '../sim/path';
 import { backsToDestination, throughSpeed } from '../sim/steering';
 import { routeBlockers } from '../sim/ai';
-import { DECKS, propBase, railOffset, type Deck } from '../sim/bridge';
+import { atlasOf } from '../sim/atlas';
+import { propBase, railOffset, type Deck } from '../sim/bridge';
 import { deckSegments, groundAt, heightAt, tileAt, type DeckSegment, type Terrain } from '../sim/terrain';
 import { TERRAIN, TERRAIN_TYPES } from '../data/terrain';
 import { craterReach, craterRimPoints } from '../sim/craters';
@@ -1025,7 +1023,7 @@ function addTerrain(world: RAPIER.World, w: World): number {
 }
 
 function addDecks(world: RAPIER.World, w: World): DeckColliders[] {
-  return DECKS.map((deck) => addDeck(world, w, deck));
+  return atlasOf(w.terrain).decks.decks.map((deck) => addDeck(world, w, deck));
 }
 
 function addDeck(world: RAPIER.World, w: World, deck: Deck): DeckColliders {

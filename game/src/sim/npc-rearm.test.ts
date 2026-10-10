@@ -17,6 +17,7 @@ import type { PartInstance, Vehicle, World } from './types';
 import { maxHp } from './wear';
 import { cloneWorld } from './world';
 import { dist, type Vec } from './vec';
+import { TEST_MAP } from '../test/map';
 
 const kiln = REGION.locations.find((l) => l.id === 'kiln')!;
 const gate = siteGates(kiln)[0];
@@ -82,7 +83,7 @@ function npcTurn(w: World, v: Vehicle): void {
   thinkNpc(w, v);
   const top = topGoal(v);
   if (top?.kind === 'rearm') v.pos = { ...top.destination! };
-  if (top?.kind === 'retreat') v.pos = { ...sitePads(npcHomeSite(v)!)[0] };
+  if (top?.kind === 'retreat') v.pos = { ...sitePads(npcHomeSite(TEST_MAP, v)!)[0] };
   advanceJobs(w);
   resolveNpcActivities(w);
   watchStalls(w);
@@ -238,7 +239,7 @@ describe('a defeated raider', () => {
 
   it('lies up still defeated when it reaches home, and refits only at the end', () => {
     const { w, v } = retreating();
-    v.pos = { ...sitePads(npcHomeSite(v)!)[0] };
+    v.pos = { ...sitePads(npcHomeSite(TEST_MAP, v)!)[0] };
     npcTurn(w, v);
     expect(topGoal(v)).toMatchObject({ kind: 'rearm', until: w.turn + RAIDER_LIE_UP });
     expect(goalKinds(v)).not.toContain('retreat');
@@ -255,7 +256,7 @@ describe('a defeated raider', () => {
     const { w, v } = retreating();
     const items = itemIds(v);
     for (let turn = 0; turn < RULES.retreatTeleportTurns; turn++) advanceNpcKnockouts(w);
-    expect(sitePads(npcHomeSite(v)!).some((pad) => dist(pad, v.pos) < 0.01)).toBe(true);
+    expect(sitePads(npcHomeSite(TEST_MAP, v)!).some((pad) => dist(pad, v.pos) < 0.01)).toBe(true);
     expect(isDefeated(v)).toBe(true);
     expect(itemIds(v)).toEqual(items);
     npcTurn(w, v);
@@ -268,7 +269,7 @@ describe('a defeated raider', () => {
 
   it('mints at most one fresh loadout per camp refill time however often it is knocked out and stripped', () => {
     const { w, v } = retreating();
-    v.pos = { ...sitePads(npcHomeSite(v)!)[0] };
+    v.pos = { ...sitePads(npcHomeSite(TEST_MAP, v)!)[0] };
     let minted = 0;
     let held = new Set(itemIds(v));
     for (let turn = 0; turn < RAIDER_LIE_UP * 2; turn++) {

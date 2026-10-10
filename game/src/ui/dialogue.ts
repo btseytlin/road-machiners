@@ -14,6 +14,7 @@ import { language, say } from '../text/language';
 import { byId, list, t, type Msg } from '../text/msg';
 import { goodLower, lineKey, partName, siteName, unitCount, vehicleTitle } from '../text/names';
 import { schemaOf } from '../text/resolve';
+import { modeRules } from '../sim/settings';
 import { el, isBrowserChord, panel, topCenter } from './dom';
 import { renderLine } from './quest-text';
 import { fuelLiters, meters, moneyM } from './units';
@@ -112,7 +113,7 @@ function isTyping(): boolean {
 
 export function canCall(w: World, id: string): boolean {
   const v = w.vehicles.find((x) => x.id === id);
-  return !!v?.brain && !isKnockedOut(v) && playerCanAct(w) && playerSees(w, v.pos);
+  return modeRules(w).radio && !!v?.brain && !isKnockedOut(v) && playerCanAct(w) && playerSees(w, v.pos);
 }
 
 export type DialogueHost = {
@@ -214,7 +215,7 @@ export class DialoguePanel {
   }
 
   private honk(): boolean {
-    if (!playerCanAct(this.host.world())) return false;
+    if (!playerCanAct(this.host.world()) || !modeRules(this.host.world()).radio) return false;
     this.horn.sound();
     return true;
   }

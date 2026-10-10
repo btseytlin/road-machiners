@@ -4,7 +4,8 @@ import { RULES } from "../data/rules";
 import { corePart, mountedParts } from "../sim/grid";
 import { knockOutNpc } from "../sim/defeat";
 import { STATE_TURNS } from "../data/npcs";
-import { addVehicle, emptyWorld, npcBrain, spotWorld, startCombat } from "../sim/testkit";
+import { addVehicle, emptyWorld, furyRoadWorld, npcBrain, spotWorld, startCombat } from "../sim/testkit";
+import { outpostPad } from "../sim/fury-road";
 import { maxHealthOf } from "../sim/health";
 import { suppliesCap } from "../sim/stats";
 import { maxHp } from "../sim/wear";
@@ -438,12 +439,12 @@ describe("rescue readout", () => {
     const w = emptyWorld();
     expect(getRescueReadout(w)).toBeNull();
     w.player.fuel = 0;
-    expect(rescue(w)).toEqual({ kind: "stranded", beacon: false, reason: "Out of fuel." });
+    expect(rescue(w)).toEqual({ kind: "stranded", beacon: false, reason: "Out of fuel.", canEnd: false });
     w.player.beacon = true;
-    expect(rescue(w)).toEqual({ kind: "stranded", beacon: true, reason: "Out of fuel." });
+    expect(rescue(w)).toEqual({ kind: "stranded", beacon: true, reason: "Out of fuel.", canEnd: false });
     w.player.money = 10;
     const tow = addState(w, "tow", w.vehicles[0].id, w.player.vehicleId, { kind: "tow", site: "bowl", fee: 50, waived: 0, hitched: false });
-    expect(rescue(w)).toEqual({ kind: "stranded", beacon: true, reason: "Out of fuel." });
+    expect(rescue(w)).toEqual({ kind: "stranded", beacon: true, reason: "Out of fuel.", canEnd: false });
     towData(tow).hitched = true;
     expect(getRescueReadout(w)).toMatchObject({ kind: "towed", fee: 50 });
     w.player.state = "knockedOut";
@@ -631,5 +632,44 @@ describe('overdrive switch', () => {
     expect({ checked: s.checked, reason: s.reason, title: en(s.title) }).toEqual({ checked: false, reason: null, title: 'Faster, but the engine heats fast [O]' });
     w.player.overdrive = true;
     expect(overdriveSwitch(w).checked).toBe(true);
+  });
+});
+
+describe("Fury Road readouts", () => {
+  const parkAt = (w: World, milestone: number) => {
+    const me = playerVehicle(w);
+    me.pos = outpostPad(w, milestone);
+    me.speed = 0;
+  };
+
+  it("shows the stretch and the distance to the next outpost", () => {
+    const run = getHudReadout(furyRoadWorld()).resources.find((r) => r.id === "run");
+
+    expect(en(run!.value)).toMatch(/^1: \d+(\.\d)? k?m$/);
+    expect(en(run!.tip!)).toMatch(/^Stretch 1: .* to Outpost 1$/);
+  });
+
+  it("shows no run readout in Roaming", () => {
+    const w = newWorld(3, startKit("standard"), TEST_MAP, defaultSetup("roaming"));
+
+    expect(getHudReadout(w).resources.some((r) => r.id === "run")).toBe(false);
+  });
+
+  it("offers to enter a reached outpost only while parked on its pad", () => {
+    const w = furyRoadWorld();
+    parkAt(w, 1);
+    expect(actions(w).some((a) => a.target.kind === "outpost")).toBe(false);
+
+    w.furyRoad!.outposts[0].paid = true;
+    expect(actions(w)).toContainEqual({ label: "Enter Outpost 1", ready: true, target: { kind: "outpost" } });
+    playerVehicle(w).speed = 2;
+    expect(actions(w)).toContainEqual({ label: "Enter Outpost 1", ready: false, target: { kind: "outpost" } });
+  });
+
+  it("offers End run instead of the beacon to a stranded truck", () => {
+    const w = furyRoadWorld();
+    w.player.fuel = 0;
+
+    expect(rescue(w)).toEqual({ kind: "stranded", beacon: false, reason: "Out of fuel.", canEnd: true });
   });
 });

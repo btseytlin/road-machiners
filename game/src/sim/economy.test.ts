@@ -501,6 +501,16 @@ describe("garage", () => {
     expect(w.player.storage.length).toBe(0);
   });
 
+  it("refuses a swap whose goods would not fit the new chassis and changes nothing", () => {
+    const w = longbedAtBowl();
+    w.player.money = CHASSIS.buggy.value * 10;
+    addGoods(w, w.vehicles[0], "parts", 1000);
+    const before = structuredClone(w);
+
+    expect(() => buyChassis(w, "buggy")).toThrow("Refused: noCargoRoom");
+    expect(w).toEqual(before);
+  });
+
   it("refunds the difference when the trade-in beats the new chassis price", () => {
     let w = startAtBowl();
     w.player.money = 166667;

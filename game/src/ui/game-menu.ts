@@ -3,6 +3,9 @@
 // or a panel it opened is up, it owns the keys and the pointer.
 
 import { ERROR_REPORT_URL } from "../config";
+import { modeRulesOf } from "../sim/settings";
+import type { ModeRules, WorldSetup } from "../sim/types";
+import { setupText } from "../text/names";
 import { bindAttr, setText, unbindAttr } from "../text/language";
 import { t, verbatim, type Msg } from "../text/msg";
 import { el, isBrowserChord, panel, topRight } from "./dom";
@@ -29,7 +32,7 @@ const ENTRIES: { entry: MenuEntry; label: Msg }[] = [
 ];
 
 type KeyCap = string | Msg;
-type Control = { keys: KeyCap[]; on?: Msg; does: Msg };
+type Control = { keys: KeyCap[]; on?: Msg; does: Msg; needs?: "radio" };
 type ControlGroup = { title: Msg; controls: Control[] };
 
 const click = t("help.key.click");
@@ -52,9 +55,9 @@ export const CONTROLS: ControlGroup[] = [
     controls: [
       { keys: [click], on: t("help.on.townOrSite"), does: t("help.does.stopAtPad") },
       { keys: ["E"], on: t("help.on.pad"), does: t("help.does.padWork") },
-      { keys: ["T"], does: t("help.does.radio") },
-      { keys: ["1", "9"], does: t("help.does.reply") },
-      { keys: ["H"], does: t("help.does.honk") },
+      { keys: ["T"], does: t("help.does.radio"), needs: "radio" },
+      { keys: ["1", "9"], does: t("help.does.reply"), needs: "radio" },
+      { keys: ["H"], does: t("help.does.honk"), needs: "radio" },
     ],
   },
   {
@@ -82,6 +85,10 @@ export const CONTROLS: ControlGroup[] = [
     ],
   },
 ];
+
+export function controlsFor(rules: ModeRules): ControlGroup[] {
+  return CONTROLS.map((group) => ({ ...group, controls: group.controls.filter((c) => !c.needs || rules[c.needs]) }));
+}
 
 function controlKeys(c: Control): HTMLElement {
   const range = c.keys.length === 2 && c.keys.every((k) => typeof k === "string" && /^\d$/.test(k));
@@ -111,7 +118,7 @@ export function entryReason(entry: MenuEntry, busy: boolean, hasSave: boolean): 
 }
 
 export class HelpPanel {
-  constructor(private setup: () => string) {}
+  constructor(private setup: () => WorldSetup) {}
 
   private root: HTMLElement | null = null;
   private readonly onKey = (e: KeyboardEvent) => {
@@ -126,10 +133,11 @@ export class HelpPanel {
     if (this.root) return;
     const root = panel("help dialog");
     bindAttr(root, "aria-label", t("help.title"));
-    const notes = [verbatim(versionLabel()), verbatim(this.setup()), ...(ERROR_REPORT_URL ? [t("help.errorsSent")] : [])];
+    const setup = this.setup();
+    const notes = [verbatim(versionLabel()), setupText(setup), ...(ERROR_REPORT_URL ? [t("help.errorsSent")] : [])];
     root.append(
       el("button", { class: "close btn-s", onclick: () => this.close() }, t("menu.closeEsc")),
-      el("div", { class: "help-groups" }, ...CONTROLS.map(controlGroup)),
+      el("div", { class: "help-groups" }, ...controlsFor(modeRulesOf(setup.mode)).map(controlGroup)),
       el("div", { class: "help-notes" }, ...notes.map((note) => el("div", {}, note))),
     );
     this.root = root;
@@ -188,7 +196,7 @@ export class GameMenu {
     if (e.relatedTarget instanceof Node && !this.root.contains(e.relatedTarget)) this.closeList(false);
   };
 
-  constructor(private actions: GameMenuActions, private isBusy: () => boolean, setup: () => string, private tips: TipSwitch) {
+  constructor(private actions: GameMenuActions, private isBusy: () => boolean, setup: () => WorldSetup, private tips: TipSwitch) {
     this.help = new HelpPanel(setup);
     this.savePanel = new SavePanel(actions);
     for (const { entry, label } of ENTRIES) {

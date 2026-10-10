@@ -8,6 +8,7 @@ import { TIME } from '../data/time';
 import { CHASSIS, chassisDef } from '../data/chassis';
 import { partDef } from '../data/parts';
 import { makePart, newId, partWithId } from './factory';
+import { atlasOf, icarusAtlas, type AtlasKey } from './atlas';
 import { clearOfSites, findRoadWreckSpot, isBreakable, mapObstacles, propReach } from './mapgen';
 import { startComponent } from './nav/astar';
 import { CELL, CLEARANCE, componentOf, navLayer, type NavLayer } from './nav/layer';
@@ -27,7 +28,7 @@ import { cancelJob, startJob } from './jobs';
 import type { GoalReason, GridItem, HiddenLoot, Refusal, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { estimateCrashGeometry } from './crash-contact';
 import { walkLane } from './armor';
-import { shopAt } from './market';
+import { atGarage } from './garage';
 import { isLootSpot, spotLookOf, spotTable, territoryAt, territoryOfStock } from './territory';
 import type { BakedMap, PropKind } from './terrain';
 import { inTowReach } from './tow';
@@ -36,6 +37,7 @@ import { playerCommand, Refused } from './world';
 import { clamp, dist, type Vec } from './vec';
 import { OPENING_WRECK_ID } from './opening';
 import { maxHp } from './wear';
+import { modeRules } from './settings';
 
 export function initializeSalvage(world: World): void {
   const spots = world.obstacles.filter(isLootSpot).map((o) => rollStock(world, spotTable(o), o.id, o.pos, propReach(o)));
@@ -103,6 +105,7 @@ export function rollStock(world: World, table: LootTable, id: string, pos: Vec, 
 }
 
 export function stockOldSpots(world: World, map: BakedMap): void {
+  if (!modeRules(world).looting) return;
   const picks = oldSpotPicks(map);
   const ids = new Set(picks.map(oldStockId));
   const stray = world.salvage.find((stock) => oldSpotOf(stock) && !ids.has(stock.id));
@@ -418,7 +421,7 @@ function requireNoOldSpots(gone: Set<string>): void {
 }
 
 export function renewSalvage(world: World): void {
-  if (world.turn % TIME.turnsPerDay !== 0) return;
+  if (!modeRules(world).looting || world.turn % TIME.turnsPerDay !== 0) return;
   for (const o of world.obstacles.filter(isLootSpot)) restockSite(world, spotStock(world, o.id), spotTable(o));
   for (const stock of world.salvage) {
     const old = oldSpotOf(stock);
@@ -510,8 +513,8 @@ function clearOfVehicles(world: World, pos: Vec, r: number): boolean {
 
 type TruckPickup = Extract<RefitPickup, { from: 'truck' }>;
 
-export function canLootTruck(looter: Vehicle, target: Vehicle): boolean {
-  return looter.id !== target.id && isKnockedOut(target) && looter.speed <= RULES.parkedSpeed && inTowReach(looter, target);
+export function canLootTruck(world: World, looter: Vehicle, target: Vehicle): boolean {
+  return modeRules(world).looting && looter.id !== target.id && isKnockedOut(target) && looter.speed <= RULES.parkedSpeed && inTowReach(looter, target);
 }
 
 // Why this item cannot leave the truck, or null. A built-in part stays, and a rack must be empty before it comes off.
@@ -523,7 +526,7 @@ export function takeError(target: Vehicle, item: GridItem): Refusal | null {
 
 function takeTurns(world: World, looter: Vehicle, target: Vehicle, item: GridItem, placed: GridItem): number {
   const planned = RULES.refitTurnsPerPart * (Number(isMounted(target.chassisId, item)) + Number(isMounted(looter.chassisId, placed)));
-  const garage = looter.id === world.player.vehicleId && shopAt(world) !== null;
+  const garage = looter.id === world.player.vehicleId && atGarage(world);
   return planned > 0 && !garage ? lootRefitTurns(world, looter, planned) : 0;
 }
 
@@ -549,7 +552,7 @@ export function takeFromTruck(world: World, targetId: string, itemId: string, to
     const me = playerVehicle(w);
     const target = vehicleById(w, targetId);
     requireIdleRefit(me);
-    if (!canLootTruck(me, target)) throw new Error('Park beside a knocked-out truck to loot it');
+    if (!canLootTruck(w, me, target)) throw new Error('Park beside a knocked-out truck to loot it');
     requireLootFree(w, me, targetId);
     breakLootWarning(w, me, targetId);
     const item = target.items.find((it) => it.id === itemId);
@@ -561,7 +564,7 @@ export function takeFromTruck(world: World, targetId: string, itemId: string, to
 // The part a running refit takes off the truck, at its new spot, or why the refit cannot go on.
 export function truckPickupItem(world: World, looter: Vehicle, pickup: TruckPickup): GridItem | Refusal {
   const target = world.vehicles.find((v) => v.id === pickup.vehicleId);
-  if (!target || !canLootTruck(looter, target)) return { id: 'truckOutOfReach' };
+  if (!target || !canLootTruck(world, looter, target)) return { id: 'truckOutOfReach' };
   const item = target.items.find((it) => it.kind === 'part' && it.part.id === pickup.partId);
   if (item?.kind !== 'part') return { id: 'truckPartGone' };
   return { kind: 'part', id: pickup.itemId, part: item.part, ...pickup.to };
@@ -642,7 +645,7 @@ function isLootActOn(goal: NpcActivity, targetId: string): boolean {
 
 export function inLootReach(world: World, v: Vehicle, targetId: string): boolean {
   const stock = world.salvage.find((s) => s.id === targetId);
-  return stock ? canReachSalvage(v, stock) : canLootTruck(v, vehicleById(world, targetId));
+  return stock ? canReachSalvage(v, stock) : canLootTruck(world, v, vehicleById(world, targetId));
 }
 
 export const CANNOT_HOLD: GoalReason = 'cargoFullLoot';
@@ -700,7 +703,7 @@ export const MAX_RADIUS = Math.max(...Object.values(CHASSIS).map((c) => c.radius
 const OLD_SPOTS = OLD_SPOTS_FILE as { mapHash: string; picks: OldSpotPick[] };
 
 export function oldPlaces(baked: readonly Obstacle[]): OldPlace[] {
-  const candidates = baked.filter((o) => o.kind === 'landmark' && territoryAt(o.pos) === null && clearOfSites(o.pos, o.r));
+  const candidates = baked.filter((o) => o.kind === 'landmark' && territoryAt(o.pos) === null && clearOfSites(icarusAtlas(), o.pos, o.r));
   const buildings = linked(candidates.filter((o) => o.kind === 'landmark' && BUILDINGS.includes(o.look)), OLD_PLACES.buildingGap);
   const tanks = linked(candidates.filter((o) => o.kind === 'landmark' && o.look === 'tank'), OLD_PLACES.tankGap);
   return [...buildings.map((props) => place(buildingType(props), props)), ...tanks.map((props) => place('hulks', props))];
@@ -726,7 +729,8 @@ function linked(props: Obstacle[], gap: number): Obstacle[][] {
   return [...groups.values()];
 }
 
-export function oldSpotPicks(map: { hash: string }): OldSpotPick[] {
+export function oldSpotPicks(map: { hash: string; terrain: { atlas: AtlasKey } }): OldSpotPick[] {
+  if (!atlasOf(map.terrain).oldSpots) return [];
   if (OLD_SPOTS.mapHash !== map.hash) throw new Error(`Old spots were picked for map ${OLD_SPOTS.mapHash}, not ${map.hash}. Run npm run old-spots.`);
   return OLD_SPOTS.picks;
 }
@@ -815,6 +819,6 @@ export function oldSpotOf(stock: { id: string }): { type: OldPlaceType; propId: 
   return { type, propId: rest.slice(type.length + 1) };
 }
 
-export function oldSpotsNear(mapHash: string, pos: Vec, range: number): OldSpotPick[] {
-  return oldSpotPicks({ hash: mapHash }).filter((p) => dist(p.pos, pos) <= range);
+export function oldSpotsNear(world: World, pos: Vec, range: number): OldSpotPick[] {
+  return oldSpotPicks({ hash: world.mapHash, terrain: world.terrain }).filter((p) => dist(p.pos, pos) <= range);
 }

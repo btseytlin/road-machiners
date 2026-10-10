@@ -7,6 +7,7 @@ import { REGION } from "../data/region";
 import { OUTPOSTS, siteGates } from "../sim/sites";
 import { accentOf, CombatScore, CombatWatch, engineGlide, EngineStrain, loopLevels, musicPlaceAt, SoundDirector, SoundLoops, stingOf, strainGlides } from "./sound";
 import type { CameraRig } from "./render/camera";
+import { TEST_MAP } from '../test/map';
 
 describe("stingOf", () => {
   it("plays the most important result only", () => {
@@ -44,11 +45,11 @@ describe("loopLevels", () => {
   });
   it("finds the music place of a town, an outpost, a territory and the open road", () => {
     const territory = (id: string) => REGION.locations.find((l) => l.id === id)!.pos;
-    expect(musicPlaceAt(siteGates(REGION.towns[0])[0])).toBe("town");
-    expect(musicPlaceAt(siteGates(OUTPOSTS[0])[0])).toBe("outpost");
-    expect(musicPlaceAt(territory("fallen-sun"))).toBe("abandoned");
-    expect(musicPlaceAt(territory("orchard"))).toBe("abandoned");
-    expect(musicPlaceAt({ x: 0, y: 0 })).toBeNull();
+    expect(musicPlaceAt(TEST_MAP.terrain, siteGates(REGION.towns[0])[0])).toBe("town");
+    expect(musicPlaceAt(TEST_MAP.terrain, siteGates(OUTPOSTS[0])[0])).toBe("outpost");
+    expect(musicPlaceAt(TEST_MAP.terrain, territory("fallen-sun"))).toBe("abandoned");
+    expect(musicPlaceAt(TEST_MAP.terrain, territory("orchard"))).toBe("abandoned");
+    expect(musicPlaceAt(TEST_MAP.terrain, { x: 0, y: 0 })).toBeNull();
   });
   it("plays each place's own music, and combat music over it", () => {
     expect(gains(loopLevels({ ...calm, place: "town" }, MIX))).toEqual([0, 1, 0, 0, 0]);

@@ -16,6 +16,7 @@ import { canArgue, fightOver, warnTruck } from './loot-warning';
 import { decide, holdsUp, perceiveDanger, robbedFor, visibleHostiles, wantsLoot } from './npc-decisions';
 import { SPARE_LINE } from '../data/dialogue';
 import { vehicleHasPerk } from './progress';
+import { modeRules } from './settings';
 import { cargoHaul, removableParts, surrenderHaul } from './haul';
 import { backedOff, canReachSalvage, claimantOf, claimPile, dropHaul, dumpOnPile, hasCargo, lootClaimedBy, looseCargo, salvageInRange, takeError } from './salvage';
 import { isStranded } from './stats';
@@ -60,6 +61,7 @@ export function handedOver(world: World, loser: Vehicle, winner: Vehicle): GridI
 }
 
 export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, haul: GridItem[] = handedOver(world, loser, winner)): void {
+  if (!modeRules(world).looting) throw new Error(`${loser.id} cannot hand over cargo where nothing is looted`);
   const stock = haul.length > 0 ? dropHaul(world, loser, haul) : null;
   cede(world, loser, winner, stock, 'takeHandedCargo');
   creditYield(world, loser, winner);
@@ -140,6 +142,7 @@ function grantPlea(world: World, pleader: Vehicle, answerer: Vehicle, plea: Plea
 }
 
 export function plead(world: World, npc: Vehicle, foe: Vehicle, plea: Plea): void {
+  requireRadio(world, npc, foe);
   addState(world, 'plea', npc.id, foe.id, { kind: 'plea', plea, answered: foe.brain !== null });
   if (!foe.brain) {
     world.events.push({ t: 'plea', from: npc.id, to: foe.id, plea, accepted: null });
@@ -154,6 +157,10 @@ export function plead(world: World, npc: Vehicle, foe: Vehicle, plea: Plea): voi
   if (reply !== 'comply') return;
   const held = stateOf(world, 'plea', npc.id, foe.id);
   if (held) endState(world, held, 'fulfilled');
+}
+
+function requireRadio(world: World, npc: Vehicle, foe: Vehicle): void {
+  if (!modeRules(world).radio) throw new Error(`${npc.id} cannot plead with ${foe.id} with no radio`);
 }
 
 export function settlePlayerPlea(world: World, npc: Vehicle, plea: Plea, accepted: boolean): void {
@@ -282,7 +289,7 @@ export function hasStrandedPrey(world: World, npc: Vehicle): boolean {
 
 export function strandedPrey(world: World, npc: Vehicle): Vehicle | null {
   const prey = fightTarget(world, npc);
-  if (!prey || !isBeaten(world, npc, prey)) return null;
+  if (!prey || !modeRules(world).yielding || !isBeaten(world, npc, prey)) return null;
   return visibleHostiles(world, npc).every((foe) => foe.id === prey.id) ? prey : null;
 }
 

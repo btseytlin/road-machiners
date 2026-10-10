@@ -212,7 +212,7 @@ function eventMoney(e: GameEvent, me: string): Paid {
 }
 
 // The ledger line of each money reason. Tow fees the player earns from any driver share one line.
-const LEDGER_LINES: Record<MoneyReason['kind'], string> = { contract: 'contract', failedHaul: 'failed haul contract', towing: 'towing' };
+const LEDGER_LINES: Record<MoneyReason['kind'], string> = { contract: 'contract', failedHaul: 'failed haul contract', towing: 'towing', outpost: 'outpost pay' };
 
 function moneyEvent(e: GameEvent): Paid {
   if (e.t !== 'money') return [];

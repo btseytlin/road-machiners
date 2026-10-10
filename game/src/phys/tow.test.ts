@@ -1,6 +1,3 @@
-// Tow approaches and hitched towers (src/sim/tow.ts), played through real physics.
-// These race a driving approach against the NPC's own threat and detection checks, or check that trucks get
-// past each other without a crash, so they need the game's real driving, not the generic test stand-in in
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { canVehicleSee } from '../sim/vision';
@@ -22,6 +19,7 @@ import { RULES } from '../data/rules';
 import { addState } from '../sim/states';
 import { buildDrive, freeDrive, initPhysics, TURN_STEPS, type Drive } from './drive';
 import { physicsMove } from './turn';
+import { TEST_MAP } from '../test/map';
 import { lineKey } from '../text/names';
 import { entryText } from '../text/resolve';
 
@@ -221,7 +219,7 @@ describe('a client that jumps home as its NPC tow ends', () => {
     client.defeat = { phase: 'retreat', turns: 3, unseen: RULES.retreatTeleportTurns, foes: [], gaveUp: true };
     tower.items = tower.items.filter((it) => !(it.kind === 'part' && partDef(it.part.defId).kind === 'engine'));
     tower.brain!.goals = [{ kind: 'tow', targetId: client.id, destination: null, phase: 'act', reason: 'tripToSite' }];
-    addState(w, 'tow', tower.id, client.id, { kind: 'tow', site: npcHomeSite(client)!.id, fee: 0, waived: 0, hitched: true });
+    addState(w, 'tow', tower.id, client.id, { kind: 'tow', site: npcHomeSite(TEST_MAP, client)!.id, fee: 0, waived: 0, hitched: true });
     const before = w;
 
     const after = play(before, 1).w;
@@ -229,7 +227,7 @@ describe('a client that jumps home as its NPC tow ends', () => {
     expect(after.events.some((e) => e.t === 'towDropped')).toBe(true);
     const c = after.vehicles.find((v) => v.id === client.id)!;
     expect(c.trail).toHaveLength(0);
-    expect(sitePads(npcHomeSite(c)!).some((pad) => dist(pad, c.pos) < 0.01)).toBe(true);
+    expect(sitePads(npcHomeSite(TEST_MAP, c)!).some((pad) => dist(pad, c.pos) < 0.01)).toBe(true);
     const frames: Parameters<typeof addRopeFrames>[2] = {};
     addRopeFrames(before, after, frames, {});
     expect(frames[client.id]).toHaveLength(TURN_STEPS);

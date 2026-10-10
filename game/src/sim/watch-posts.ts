@@ -1,8 +1,3 @@
-// Watch posts and the watch. A raid ends at a hide within a dash of its hunting ground: off the road, outside sites,
-// hazards and lawman reach, and clear for any raider's truck. A hide is picked by road exposure, the road sample points
-// within day sight that it has a line of sight to, so a road ground gets a spot that hills, props or distance hide from
-// road traffic. Of equal hides, one in sight of the ground wins, then the nearest ring. There the raider watches
-// HUNT.watchTurns turns, parked and silent, and springs on prey it hears or sees. Posts are pure geometry over the terrain and the map's
 
 import { chassisDef } from '../data/chassis';
 import { HUNT, NPCS } from '../data/npcs';
@@ -19,6 +14,7 @@ import type { Terrain } from './terrain';
 import { hazardZones, type HazardZone } from './territory';
 import type { GoalReason, NpcActivity, Obstacle, Vehicle, World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
+import { icarusAtlas } from './atlas';
 import { clearOverTerrain, hasLineOfSight, sightLine } from './vision';
 
 function postReach(): number {
@@ -173,7 +169,7 @@ function clearOfRoads(p: Vec): boolean {
 }
 
 function clearOfPlaces(map: PostMap, p: Vec): boolean {
-  if (siteUnder(p) !== null) return false;
+  if (siteUnder(icarusAtlas(), p) !== null) return false;
   return map.hazards.every((z) => dist(p, z.pos) > z.radius + map.reach) && map.gates.every((gate) => dist(gate, p) > HUNT.lawReach);
 }
 

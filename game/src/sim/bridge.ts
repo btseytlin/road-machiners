@@ -1,12 +1,10 @@
-// Deck geometry: straight decks like Canyon Bridge, the Broken Wing deck and the Fallen Sun's wing and flaps, listed in
-// TERRAIN.features.decks. One drivable surface is one deck, and no deck touches another. The map stays one level on
-// every deck: inside a deck outline, the deck is the ground. Each station stands its rise over the ground, and the
 
 import { PHYSICS } from '../data/physics';
 import { REGION } from '../data/region';
 import { TERRAIN, type DeckSpec } from '../data/terrain';
 import type { PosedBox } from './mapgen';
-import { deckHeight, groundAt, heightAt, type Terrain } from './terrain';
+import { highwayDecks } from './road-hazards';
+import { deckHeight, groundAt, heightAt, type AtlasKey, type Terrain } from './terrain';
 import type { Obstacle } from './types';
 import { segmentDist, type Vec } from './vec';
 
@@ -56,7 +54,11 @@ function buildDeck(spec: DeckSpec): Deck {
   const rails = offs.map((off): [Vec, Vec] => [{ x: from.x + off.x, y: from.y + off.y }, { x: to.x + off.x, y: to.y + off.y }]);
   const ends = [stations[0], stations[stations.length - 1]].filter((s) => s.rise > 0).map((s) => s.at);
   const lips = ends.map((end): [Vec, Vec] => [{ x: end.x + offs[0].x, y: end.y + offs[0].y }, { x: end.x + offs[1].x, y: end.y + offs[1].y }]);
-  return { id, width: spec.width, cut: spec.cut, skirt: spec.skirt, from, to, axis, length, stations, rails, lips };
+  return { id, width: spec.width, cut: spec.cut, skirt: spec.skirt, ...lookOf(spec), from, to, axis, length, stations, rails, lips };
+}
+
+function lookOf(spec: DeckSpec): Pick<DeckSpec, 'look'> {
+  return spec.look ? { look: spec.look } : {};
 }
 
 export function railOffset(axis: Vec, width: number, side: number): Vec {
@@ -69,6 +71,48 @@ function decksTouch(a: Deck, b: Deck): boolean {
 }
 
 export const DECKS: readonly Deck[] = buildDecks(TERRAIN.features.decks);
+
+type RailBox = { deck: Deck; walls: [Vec, Vec][]; minX: number; maxX: number; minY: number; maxY: number };
+export type DeckSet = { decks: readonly Deck[]; boxes: readonly RailBox[] };
+
+export function deckSet(decks: readonly Deck[]): DeckSet {
+  return { decks, boxes: decks.map(railBox) };
+}
+
+function railBox(deck: Deck): RailBox {
+  const points = deck.rails.flat();
+  return {
+    deck,
+    walls: [...deck.rails, ...deck.lips],
+    minX: Math.min(...points.map((p) => p.x)),
+    maxX: Math.max(...points.map((p) => p.x)),
+    minY: Math.min(...points.map((p) => p.y)),
+    maxY: Math.max(...points.map((p) => p.y)),
+  };
+}
+
+export const ICARUS_DECKS: DeckSet = deckSet(DECKS);
+export const NO_DECKS: DeckSet = deckSet([]);
+
+const DECKS_BY_KEY = new WeakMap<AtlasKey, DeckSet>();
+const HIGHWAY_DECKS = new Map<string, DeckSet>();
+const HIGHWAY_DECKS_KEPT = 4;
+
+export function decksOf(key: AtlasKey): DeckSet {
+  if (key.kind === 'icarus') return ICARUS_DECKS;
+  if (key.kind !== 'highway') throw new Error(`Unknown map kind ${JSON.stringify(key)}`);
+  const known = DECKS_BY_KEY.get(key);
+  if (known) return known;
+  const name = `${key.seed}:${key.window}`;
+  let set = HIGHWAY_DECKS.get(name);
+  if (!set) {
+    set = deckSet(buildDecks(highwayDecks(key.seed, key.window)));
+    HIGHWAY_DECKS.set(name, set);
+    while (HIGHWAY_DECKS.size > HIGHWAY_DECKS_KEPT) HIGHWAY_DECKS.delete(HIGHWAY_DECKS.keys().next().value as string);
+  }
+  DECKS_BY_KEY.set(key, set);
+  return set;
+}
 
 export function deckById(id: string): Deck {
   const deck = DECKS.find((d) => d.id === id);
@@ -88,8 +132,8 @@ function acrossOf(deck: Deck, x: number, y: number): number {
   return (y - deck.from.y) * deck.axis.x - (x - deck.from.x) * deck.axis.y;
 }
 
-export function deckAt(x: number, y: number): DeckPoint | null {
-  for (const box of RAIL_BOXES) if (inBox(box, x, y, BOX_SLACK) && inOutline(box.deck, x, y)) return { deck: box.deck, along: alongOf(box.deck, x, y) };
+export function deckAt(set: DeckSet, x: number, y: number): DeckPoint | null {
+  for (const box of set.boxes) if (inBox(box, x, y, BOX_SLACK) && inOutline(box.deck, x, y)) return { deck: box.deck, along: alongOf(box.deck, x, y) };
   return null;
 }
 
@@ -103,7 +147,7 @@ function inOutline(deck: Deck, x: number, y: number): boolean {
 }
 
 export function underDeck(box: PosedBox, base: number, t: Terrain): boolean {
-  const on = deckAt(box.center.x, box.center.y);
+  const on = deckAt(decksOf(t.atlas), box.center.x, box.center.y);
   if (on === null) return false;
   const corners = [-1, 1].flatMap((i) => [-1, 1].map((j) => ({
     x: box.center.x + box.axis.x * box.half.x * i - box.axis.y * box.half.y * j,
@@ -117,10 +161,10 @@ export function propBase(t: Terrain, o: Obstacle): number {
   return o.kind === 'wreck' ? heightAt(t, o.pos.x, o.pos.y) : groundAt(t, o.pos.x, o.pos.y);
 }
 
-export function spanAt(x: number, y: number, reach: number): DeckPoint | null {
+export function spanAt(set: DeckSet, x: number, y: number, reach: number): DeckPoint | null {
   let best: DeckPoint | null = null;
   let bestAcross = Infinity;
-  for (const box of RAIL_BOXES) {
+  for (const box of set.boxes) {
     const across = inBox(box, x, y, reach + BOX_SLACK) ? acrossBeside(box.deck, x, y, reach) : null;
     if (across === null || across >= bestAcross) continue;
     best = { deck: box.deck, along: alongOf(box.deck, x, y) };
@@ -146,9 +190,9 @@ function acrossBeside(deck: Deck, x: number, y: number, reach: number): number |
   return across <= deck.width / 2 + reach ? across : null;
 }
 
-export function bridgeCut(x: number, y: number): number {
+export function bridgeCut(set: DeckSet, x: number, y: number): number {
   let most = 0;
-  for (const deck of DECKS) if (deck.cut) most = Math.max(most, deckCut(deck, deck.cut, x, y));
+  for (const deck of set.decks) if (deck.cut) most = Math.max(most, deckCut(deck, deck.cut, x, y));
   return most;
 }
 
@@ -163,28 +207,17 @@ function deckCut(deck: Deck, cut: { abutment: number; ramp: number }, x: number,
 
 const BOX_SLACK = 1e-9;
 
-const RAIL_BOXES = DECKS.map((deck) => {
-  const points = deck.rails.flat();
-  return {
-    deck,
-    walls: [...deck.rails, ...deck.lips],
-    minX: Math.min(...points.map((p) => p.x)),
-    maxX: Math.max(...points.map((p) => p.x)),
-    minY: Math.min(...points.map((p) => p.y)),
-    maxY: Math.max(...points.map((p) => p.y)),
-  };
-});
 
-export function nearRail(x: number, y: number, reach: number): boolean {
+export function nearRail(set: DeckSet, x: number, y: number, reach: number): boolean {
   const p = { x, y };
-  return RAIL_BOXES.some((box) => {
+  return set.boxes.some((box) => {
     if (x <= box.minX - reach || x >= box.maxX + reach || y <= box.minY - reach || y >= box.maxY + reach) return false;
     return box.walls.some(([a, b]) => segmentDist(p, a, b) < reach);
   });
 }
 
-export function crossesRail(a: Vec, b: Vec, reach: number): boolean {
-  return RAIL_BOXES.some((box) =>
+export function crossesRail(set: DeckSet, a: Vec, b: Vec, reach: number): boolean {
+  return set.boxes.some((box) =>
     Math.max(a.x, b.x) > box.minX - reach && Math.min(a.x, b.x) < box.maxX + reach && Math.max(a.y, b.y) > box.minY - reach && Math.min(a.y, b.y) < box.maxY + reach &&
     box.walls.some(([c, d]) => segmentsIntersect(a, b, c, d) || Math.min(segmentDist(a, c, d), segmentDist(b, c, d), segmentDist(c, a, b), segmentDist(d, a, b)) < reach),
   );

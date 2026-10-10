@@ -11,8 +11,10 @@ import { toMap } from './frames';
 import { physicsMove } from './turn';
 import { TEST_MAP } from '../test/map';
 import { budget } from '../test/budget';
-import { PLAIN_KIT } from '../sim/testkit';
+import { furyRoadWorld, PLAIN_KIT } from '../sim/testkit';
 import { defaultSetup } from '../sim/settings';
+import { ICARUS_DECKS } from '../sim/bridge';
+import { atlasOf } from '../sim/atlas';
 
 beforeAll(async () => {
   await initPhysics();
@@ -35,7 +37,7 @@ function driveRoute(start: Vec, target: Vec): { maxTilt: number; remaining: numb
       const q = frame.rot;
       maxTilt = Math.max(maxTilt, Math.acos(Math.min(1, 1 - 2 * (q.x * q.x + q.z * q.z))));
       const p = toMap(frame.pos);
-      if (deckAt(p.x, p.y) !== null) minDeckRise = Math.min(minDeckRise, frame.pos.y - heightAt(w.terrain, p.x, p.y) * PHYSICS.metersPerTile);
+      if (deckAt(ICARUS_DECKS, p.x, p.y) !== null) minDeckRise = Math.min(minDeckRise, frame.pos.y - heightAt(w.terrain, p.x, p.y) * PHYSICS.metersPerTile);
     }
     freeDrive(drive);
     drive = result!.next;
@@ -103,3 +105,16 @@ it('the terrain collider is a heightfield whose surface matches the corner grid'
   expect(flat).toBeGreaterThan(0);
   freeDrive(drive);
 });
+
+it('builds only the ramp decks on the Fury Road highway, and every Icarus deck on Icarus', () => {
+  const road = furyRoadWorld(5);
+  const highway = buildDrive(road);
+  const icarus = buildDrive(newWorld(1337, PLAIN_KIT, TEST_MAP, defaultSetup('roaming')));
+  const ramps = atlasOf(road.terrain).decks.decks;
+
+  expect(ramps.every((d) => d.id.startsWith('ramp-'))).toBe(true);
+  expect(highway.decks).toHaveLength(ramps.length);
+  expect(icarus.decks).toHaveLength(ICARUS_DECKS.decks.length);
+  freeDrive(highway);
+  freeDrive(icarus);
+}, budget(30_000));

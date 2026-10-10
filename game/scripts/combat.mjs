@@ -2,7 +2,7 @@
 // Usage: npm run combat -- --a merc,merc:snowball --b buggy,buggy:buggy@heavy,buggy+buggy --seeds 1-5
 //   [--gap 8] [--orbit 6] [--turns 40] [--arena 9] [--set RULES.leadError=3 --set PARTS.mg.spread=4] [--trace] [--out tmp/combat]
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { formatReport, parseLineup, runFight, setNumber, turnLine } from '../src/test/combat-harness.ts';
+import { formatReport, parseLineup, parseRoad, runFight, setNumber, turnLine } from '../src/test/combat-harness.ts';
 import { initPhysics } from '../src/phys/drive.ts';
 
 function argOf(name, fallback) {
@@ -34,7 +34,9 @@ const sideA = argOf('a', 'merc').split(',').map(parseLineup);
 const sideB = argOf('b', 'buggy,gunwagon').split(',').map(parseLineup);
 const seeds = parseSeeds(argOf('seeds', '1-5'));
 const arena = argOf('arena', null);
-const base = { gap: positiveInt('gap', '8'), orbit: positiveInt('orbit', '6'), maxTurns: positiveInt('turns', arena === null ? '40' : '400'), arena: arena === null ? null : positiveInt('arena') };
+const road = parseRoad(argOf('map', null));
+if (road !== null && arena !== null) throw new Error('--map and --arena do not mix: the road has its own ground');
+const base = { gap: positiveInt('gap', '8'), orbit: positiveInt('orbit', '6'), maxTurns: positiveInt('turns', arena === null ? '40' : '400'), arena: arena === null ? null : positiveInt('arena'), road };
 
 await initPhysics();
 console.log(`Running ${sideA.length} x ${sideB.length} lineups x ${seeds.length} seeds...`);

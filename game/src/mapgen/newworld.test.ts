@@ -24,6 +24,7 @@ import {
   type Camp,
 } from './newworld';
 import { budget } from '../test/budget';
+import { ICARUS_DECKS } from '../sim/bridge';
 
 const SIZE = REGION.size;
 const HALF = REGION.roadWidth / 2;
@@ -41,7 +42,7 @@ function expectOffBuilt(p: BakedProp): void {
 }
 
 function onBuilt(c: Vec): boolean {
-  if (ROAD_INDEX.nearestWithin(c.x, c.y, HALF) < HALF || deckAt(c.x, c.y) !== null) return true;
+  if (ROAD_INDEX.nearestWithin(c.x, c.y, HALF) < HALF || deckAt(ICARUS_DECKS, c.x, c.y) !== null) return true;
   return SITES.some((site) => siteGap(site, c) <= padReach(site));
 }
 

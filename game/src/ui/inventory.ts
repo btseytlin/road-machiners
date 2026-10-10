@@ -32,6 +32,7 @@ import { vehicleHasPerk } from "../sim/progress";
 import { PERK_NUMBERS } from "../data/skills";
 import { repairPlan, type RepairPlan } from "../sim/repair";
 import { shopAt } from "../sim/market";
+import { atGarage } from "../sim/garage";
 import { needsSearch, takeAllLoot, takeLoot, takeStores } from "../sim/locations";
 import { canLootTruck, hasStores, hiddenUnits, takeFromTruck } from "../sim/salvage";
 import { gaveUp, isKnockedOut } from "../sim/defeat";
@@ -354,7 +355,7 @@ export class InventoryView {
 
   private sideList(w: World): HTMLElement | null {
     if (this.loot) return this.lootEl(w, this.loot);
-    return !this.instant && shopAt(w) ? this.storageEl(w) : null;
+    return !this.instant && atGarage(w) ? this.storageEl(w) : null;
   }
 
   private showItem(w: World, item: GridItem, mounted: boolean): void {
@@ -860,7 +861,7 @@ export class InventoryView {
 
   private moveGridItem(w: World, itemId: string, to: Spot): World {
     if (this.instant) return instantMoveItem(w, itemId, to);
-    if (shopAt(w)) return moveItem(w, itemId, to);
+    if (atGarage(w)) return moveItem(w, itemId, to);
     this.planMove(w, itemId, to);
     return w;
   }
@@ -922,7 +923,7 @@ export class InventoryScreen {
 
   openDowned(world: World, vehicleId: string): boolean {
     const downed = world.vehicles.find((v) => v.id === vehicleId);
-    if (!downed || !canLootTruck(playerVehicle(world), downed)) return false;
+    if (!downed || !canLootTruck(world, playerVehicle(world), downed)) return false;
     this.view.setTruck(downed.id);
     this.root.style.display = "";
     this.render();

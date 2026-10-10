@@ -1,16 +1,14 @@
-// Weighted NPC decisions. A decision point offers options. An option is available when the driver physically can
-// take it now. Each available option's final weight is (base + adds) x muls x situation factor. Bases live in
-// DECISIONS. Adds and muls come from the NPC's traits, and from the states it holds toward the decision's subject.
 
 import { dealAvailable } from './patch';
 import { canSpareFor } from './aid';
 import { ECONOMY } from '../data/goods';
 import { GOOD_SOURCES, SHOPS, type ShopDef } from '../data/market';
 import {
-  DECISIONS, HUNT, MIN_CHANCE, NPCS, NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, STATE_WEIGHTS, TRAITS,
+  DECISIONS, HUNT, MIN_CHANCE, NPCS, NPC_BEHAVIOR, NPC_UPKEEP, RESCUE_OPTIONS, SPAWN, STATE_WEIGHTS, TRAITS, YIELD_OPTIONS,
   type DecisionId, type DecisionOptions, type Trait, type TraitId, type TraitWeights, type Weighted, type WeightChange,
 } from '../data/npcs';
 import { REGION } from '../data/region';
+import { modeRules } from './settings';
 import { RULES } from '../data/rules';
 import { fightsAgainst, huntsForLoot, inCombatWithOther, inFeud, isHostile } from './combat';
 import { ramFactor, ramImpact } from './crash-contact';
@@ -40,6 +38,7 @@ import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
 import type { Contact, GoalReason, NpcActivity, PassReason, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
+import { icarusAtlas } from './atlas';
 import { canVehicleSee } from './vision';
 import { huntsOffRoad } from './hunt-style';
 import { postsOf } from './watch-posts';
@@ -219,6 +218,7 @@ export function tradeSpend(world: World, vehicle: Vehicle): number {
 }
 
 export function tradeOffers(world: World, vehicle: Vehicle): Weighted<TradePlan>[] {
+  if (!modeRules(world).traffic) return [];
   const spend = tradeSpend(world, vehicle);
   const shops = Object.values(SHOPS);
   return shops.flatMap((source) => shops.filter((buyer) => buyer.id !== source.id).flatMap((buyer) => runOffers(world, vehicle, source, buyer, spend)));
@@ -475,7 +475,7 @@ function roadStops(site: Site, spacing: number): readonly Vec[] {
   if (cached) return cached;
   const gates = siteGates(site);
   const near = (p: Vec) => gates.some((gate) => dist(gate, p) <= NPC_BEHAVIOR.patrolRadius);
-  const points = REGION.roads.flatMap((road) => pointsAlong(road, spacing)).filter((p) => near(p) && siteUnder(p) === null);
+  const points = REGION.roads.flatMap((road) => pointsAlong(road, spacing)).filter((p) => near(p) && siteUnder(icarusAtlas(), p) === null);
   patrolStops.set(key, points);
   return points;
 }
@@ -917,7 +917,7 @@ export function optionWeights<D extends DecisionId>(world: World, vehicle: Vehic
   const tables = changeTables(world, vehicle, subject);
   const out: Partial<Record<OptionName, number>> = {};
   for (const option of Object.keys(base) as OptionName[]) {
-    if (!AVAILABLE[option](world, vehicle, decision, subject)) continue;
+    if (!optionOpen(world, vehicle, decision, subject, option)) continue;
     const { add, mul } = sumChanges(tables, decision, option);
     const factor = SITUATION[option](world, vehicle, decision, subject, danger);
     if (!(factor > 0)) throw new Error(`${vehicle.id} has situation factor ${factor} for ${option} at ${decision}`);
@@ -997,7 +997,16 @@ export function offersChoice(world: World, vehicle: Vehicle, decision: DecisionI
   if (keepsWord(world, vehicle, decision, subject)) return false;
   const options = Object.keys(DECISIONS[decision]) as OptionName[];
   if (!options.includes('keep')) return true;
-  return options.some((option) => option !== 'keep' && AVAILABLE[option](world, vehicle, decision, subject));
+  return options.some((option) => option !== 'keep' && optionOpen(world, vehicle, decision, subject, option));
+}
+
+function optionOpen(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, option: OptionName): boolean {
+  return allowedByMode(world, option) && AVAILABLE[option](world, vehicle, decision, subject);
+}
+
+function allowedByMode(world: World, option: OptionName): boolean {
+  const rules = modeRules(world);
+  return (rules.yielding || !YIELD_OPTIONS.includes(option)) && (rules.rescue || !RESCUE_OPTIONS.includes(option));
 }
 
 export function optionChances<O extends string>(weights: Partial<Record<O, number>>): Partial<Record<O, number>> {
@@ -1024,8 +1033,16 @@ function checkWeights(vehicle: Vehicle, decision: DecisionId, weights: Partial<R
   }
 }
 
+export function yields(world: World): boolean {
+  return modeRules(world).yielding;
+}
+
+export function givesUpUnarmed(world: World, vehicle: Vehicle): boolean {
+  return yields(world) && firepower(world, vehicle) <= 0;
+}
+
 export function giveUpStrandedRobberies(world: World, vehicle: Vehicle): void {
-  if (!isStranded(world, vehicle)) return;
+  if (!yields(world) || !isStranded(world, vehicle)) return;
   for (const s of statesHeld(world, vehicle.id).filter(isRobberyFeud)) {
     const other = world.vehicles.find((v) => v.id === s.other);
     if (!other || !holdsOffRobbery(world, vehicle, other)) continue;

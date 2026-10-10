@@ -15,6 +15,7 @@ export const BOOT_TEXT = {
   sounds: t('boot.sounds'),
   loadSave: t('boot.loadSave'),
   newGame: t('boot.newGame'),
+  nextWindow: t('boot.nextWindow'),
   ground: t('boot.ground'),
   scene: t('boot.scene'),
   frame: t('boot.frame'),

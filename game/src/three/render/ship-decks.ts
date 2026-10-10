@@ -1,13 +1,12 @@
-// The Fallen Sun's wing and flaps: a plate of each deck's look on each of its straight pieces, posed on the deck line
-// like Broken Wing's deck, and a skirt strip under its rails and lips down into the ground, mirroring the physics skirt
-// (addDeck() in src/phys/drive.ts). src/sim/bridge.ts owns the decks; this view only draws them. The strips stand a
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
+import type { DeckLook } from '../../data/terrain';
 import { FALLEN_SUN_DECKS } from '../../data/territory';
 import { hash2 } from '../../render/noise';
 import { PAL } from '../../render/palette';
-import { alongOf, deckById, railOffset, type Deck } from '../../sim/bridge';
+import { atlasOf } from '../../sim/atlas';
+import { alongOf, railOffset, type Deck } from '../../sim/bridge';
 import { deckHeight, deckSegments, groundAt, type Terrain } from '../../sim/terrain';
 import { dist, type Vec } from '../../sim/vec';
 import { poseOnDeck } from './sites';
@@ -22,24 +21,27 @@ const LIP_INSET = 0.6;
 const TOP_DROP = 0.1;
 const SKIRT_COLORS = [PAL.hull.grey, PAL.hull.dark, PAL.hull.dark, PAL.hull.rust];
 
-type ShipDeck = { deck: Deck; look: (typeof FALLEN_SUN_DECKS)[number]['look'] };
+type ShipDeck = { deck: Deck; look: DeckLook };
 
 export function buildShipDecks(t: Terrain): THREE.Group {
   const root = new THREE.Group();
-  for (const ship of shipDecks()) root.add(buildShipDeck(t, ship));
+  for (const ship of shipDecks(t)) root.add(buildShipDeck(t, ship));
   return root;
 }
 
 export function addShipDecks(t: Terrain, scope: RenderScope): void {
-  for (const ship of shipDecks()) {
+  for (const ship of shipDecks(t)) {
     const { deck } = ship;
     const mid = { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 };
     scope.add(buildShipDeck(t, ship), mid, Math.hypot(deck.length, deck.width) / 2);
   }
 }
 
-function shipDecks(): ShipDeck[] {
-  return FALLEN_SUN_DECKS.map((spec) => ({ deck: deckById(spec.id), look: spec.look }));
+function shipDecks(t: Terrain): ShipDeck[] {
+  return atlasOf(t).decks.decks.flatMap((deck) => {
+    const look = deck.look ?? FALLEN_SUN_DECKS.find((spec) => spec.id === deck.id)?.look;
+    return look ? [{ deck, look }] : [];
+  });
 }
 
 function buildShipDeck(t: Terrain, ship: ShipDeck): THREE.Group {

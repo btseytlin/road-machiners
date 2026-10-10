@@ -18,6 +18,8 @@ import { deckHeight, groundAt, heightAt, PROP_KINDS, type BakedMap, type BakedPr
 import type { PosedBox } from './mapgen';
 import { budget } from '../test/budget';
 import { defaultSetup } from './settings';
+import { ICARUS_DECKS } from './bridge';
+import { ICARUS_KEY } from './atlas';
 
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
 
@@ -165,7 +167,7 @@ describe('world from the baked map', () => {
   });
 
   it('rejects a map of another size than the region', () => {
-    const small: BakedMap = { ...TEST_MAP, terrain: { size: 10, heights: [], types: [] } };
+    const small: BakedMap = { ...TEST_MAP, terrain: { size: 10, heights: [], types: [], atlas: ICARUS_KEY } };
     expect(() => newWorld(1337, START_KITS.standard, small, defaultSetup('roaming'))).toThrow(/size/);
   });
 });
@@ -443,17 +445,17 @@ describe('props under a deck', () => {
 
   it('of a prop beside the deck, drops exactly the low boxes inside the outline and under the deck line', () => {
     const junk: Obstacle = { id: 'junk-under', kind: 'landmark', look: 'junk', pos: on(3.5, 1.7), r: 0.8, yaw: 3 };
-    expect(deckAt(junk.pos.x, junk.pos.y)).toBeNull();
+    expect(deckAt(ICARUS_DECKS, junk.pos.x, junk.pos.y)).toBeNull();
     const base = heightAt(t, junk.pos.x, junk.pos.y);
     const low = propBoxes(junk).filter((b) => b.z0 < PHYSICS.truckClearance);
-    const inside = (b: PosedBox) => corners(b).every((c) => deckAt(c.x, c.y)?.deck === flap);
+    const inside = (b: PosedBox) => corners(b).every((c) => deckAt(ICARUS_DECKS, c.x, c.y)?.deck === flap);
     const under = (b: PosedBox) => {
       const along = (b.center.x - flap.from.x) * flap.axis.x + (b.center.y - flap.from.y) * flap.axis.y;
       return inside(b) && b.z1 < (deckHeight(t, flap, along) - base) * M;
     };
 
     expect(low.filter(under).length).toBeGreaterThan(0);
-    expect(low.filter((b) => !under(b) && deckAt(b.center.x, b.center.y) !== null).length).toBeGreaterThan(0);
+    expect(low.filter((b) => !under(b) && deckAt(ICARUS_DECKS, b.center.x, b.center.y) !== null).length).toBeGreaterThan(0);
     expect(blockingBoxes(junk, t)).toEqual(low.filter((b) => !under(b)));
   });
 

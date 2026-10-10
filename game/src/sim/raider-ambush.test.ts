@@ -37,6 +37,7 @@ import { hasLineOfFire } from './vision';
 import { exposureAt, hidesOf, isWatching, watchPost } from './watch-posts';
 import { defaultSetup } from './settings';
 import { endTurn, newWorld } from './world';
+import { icarusAtlas } from './atlas';
 
 const en = (line: Parameters<typeof lineKey>[0]): string => entryText('en', lineKey(line));
 
@@ -56,7 +57,7 @@ function expectPostRules(w: World, post: Vec, where: string): void {
   const gates = lawmanTowns().flatMap((town) => siteGates(town));
   expect(isRoadTile(w.terrain, post), where).toBe(false);
   for (const road of REGION.roads) expect(polylineDist(post, road) - REGION.roadWidth / 2, where).toBeGreaterThanOrEqual(HUNT.postRoadGap);
-  expect(siteUnder(post), where).toBeNull();
+  expect(siteUnder(icarusAtlas(), post), where).toBeNull();
   for (const zone of hazardZones()) expect(dist(post, zone.pos), where).toBeGreaterThan(zone.radius);
   for (const gate of gates) expect(dist(post, gate), where).toBeGreaterThan(HUNT.lawReach);
   expect(nearCliff(terrainNav(w.terrain), post.x, post.y, RAIDER_RADIUS + CLEARANCE), where).toBe(false);

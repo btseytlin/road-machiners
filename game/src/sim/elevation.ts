@@ -1,10 +1,7 @@
-// Deterministic elevation noise derived from a seed, not the seeded rng. It only seeds the
-// terrain grid in sim/terrain.ts and the map bake in mapgen/; everything else reads that grid.
-// Flattened near roads, towns and locations so they stay drivable, except in the gap under Canyon Bridge.
 
 import { TERRAIN, type Basin } from '../data/terrain';
 import { REGION } from '../data/region';
-import { bridgeCut } from './bridge';
+import { bridgeCut, ICARUS_DECKS } from './bridge';
 import { INDEX_CELL, ROAD_INDEX, RoadIndex } from './road-index';
 import { heightFromElevation } from './terrain';
 import { clamp, lerp, pointInPolygon, type Vec } from './vec';
@@ -90,7 +87,7 @@ function siteLevels(seed: number): number[] {
 }
 
 export function elevationAt(seed: number, x: number, y: number): number {
-  const height = reliefAt(seed, x, y) * (1 - flattenFactor(x, y) * (1 - bridgeCut(x, y)));
+  const height = reliefAt(seed, x, y) * (1 - flattenFactor(x, y) * (1 - bridgeCut(ICARUS_DECKS, x, y)));
   return bowls(height + rollingAt(seed, x, y), x, y);
 }
 

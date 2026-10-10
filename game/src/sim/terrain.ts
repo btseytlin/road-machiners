@@ -1,15 +1,16 @@
-// The terrain grid. Heights live on tile corners, (size + 1) x (size + 1), so neighboring tiles share
-// edges. Each tile reads its four corners for slope, and has a type. Driving, sight, routing and
-// drawing all read this grid. On a deck like Canyon Bridge, heights and slopes are the deck's (see bridge.ts).
 
 import { MAPGEN, TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../data/terrain';
-import { besideDeck, deckAt, spanAt, type Deck } from './bridge';
+import { besideDeck, deckAt, decksOf, spanAt, type Deck } from './bridge';
 import { clamp, type Vec } from './vec';
+
+export type AtlasKey = { kind: 'icarus' } | { kind: 'highway'; seed: number; window: number };
+export const ICARUS_KEY: AtlasKey = Object.freeze({ kind: 'icarus' });
 
 export type Terrain = {
   size: number;
   heights: number[];
   types: TerrainTypeId[];
+  atlas: AtlasKey;
 };
 
 const T = TERRAIN;
@@ -33,13 +34,13 @@ export function isRoadTile(t: Terrain, p: Vec): boolean {
 }
 
 export function heightAt(t: Terrain, x: number, y: number): number {
-  const on = deckAt(x, y);
+  const on = deckAt(decksOf(t.atlas), x, y);
   return on === null ? groundAt(t, x, y) : deckHeight(t, on.deck, on.along);
 }
 
 export function markHeightAt(t: Terrain, origin: Vec, x: number, y: number): number {
   const h = heightAt(t, x, y);
-  const span = spanAt(x, y, T.vision.radius);
+  const span = spanAt(decksOf(t.atlas), x, y, T.vision.radius);
   if (span === null || !besideDeck(span.deck, origin, T.vision.radius)) return h;
   const deck = deckHeight(t, span.deck, span.along);
   if (h >= deck) return h;
@@ -98,7 +99,7 @@ function stationHeight(t: Terrain, s: { at: Vec; rise: number }): number {
 export function tileSlope(t: Terrain, tile: number): Vec {
   const i = tile % t.size;
   const j = Math.floor(tile / t.size);
-  const on = deckAt(i + 0.5, j + 0.5);
+  const on = deckAt(decksOf(t.atlas), i + 0.5, j + 0.5);
   if (on === null) return groundSlope(t, tile);
   const k = pieceAt(on.deck, on.along);
   const a = on.deck.stations[k];
@@ -124,7 +125,7 @@ export function isCliff(t: Terrain, tile: number): boolean {
 
 export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'shipCache', 'reactor', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock', 'tankTrap', 'fortPumpworksWall', 'fortPumpworksTower', 'fortPumpworksGate', 'fortPumpworksInner', 'fortCisternWall', 'fortCisternTower', 'fortCisternGate', 'fortCisternInner', 'fortShipWall', 'fortShipTower', 'fortShipGate', 'fortScrapWall', 'fortScrapTower', 'fortScrapGate', 'fortScrapInner', 'fortPatchworkWall', 'fortPatchworkTower', 'fortPatchworkGate', 'fortCompoundWall', 'fortCompoundTower', 'fortCompoundGate', 'fortRingWall', 'fortRingGate', 'fortYardWall', 'fortYardTower', 'fortYardGate', 'noseRise', 'noseCrag', 'engineNozzle', 'engineFrame', 'watchtower', 'ruinCompound', 'deadTruck', 'engineCache', 'glassSpire', 'scrapWall', 'escapePod', 'habitat', 'wingShard', 'powerCell'] as const;
 export type PropKind = (typeof PROP_KINDS)[number];
-export type BakedProp = { kind: PropKind; pos: Vec; r: number; yaw: number; group: number; step: number };
+export type BakedProp = { kind: PropKind; pos: Vec; r: number; yaw: number; group: number; step: number; hulk?: string };
 export type BakedMap = { hash: string; seed: number; terrain: Terrain; props: BakedProp[] };
 export type MapGrid = { size: number; heights: Float32Array; types: Uint8Array; props: BakedProp[] };
 
@@ -196,7 +197,7 @@ export function decodeMap(bytes: Uint8Array): BakedMap {
   const types = Array.from(bytes.subarray(HEADER + corners * 2, propsAt), readType);
   const props: BakedProp[] = [];
   for (let k = 0, at = propsAt + 4; k < propCount; k++, at += PROP_BYTES) props.push(readProp(view, at, k));
-  const terrain: Terrain = { size, heights, types };
+  const terrain: Terrain = { size, heights, types, atlas: ICARUS_KEY };
   Object.freeze(heights);
   Object.freeze(types);
   Object.freeze(terrain);

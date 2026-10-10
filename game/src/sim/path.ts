@@ -1,6 +1,3 @@
-// Route planning around static obstacles and cliffs: A* on a grid weighted by terrain speed and a
-// cost for leaving the road, so routes prefer roads, then shortcut to visible corners. Moving vehicles are not in the
-// grid, so ramming and blocking still happen. The grid itself lives in ./nav. An NPC driver weighs the cost by
 
 import { REGION } from '../data/region';
 import { crossesRail } from './bridge';
@@ -228,7 +225,7 @@ function costliestFlat(nav: TerrainNav, cur: Vec, points: Vec[], i: number, last
 
 function lineCost(nav: TerrainNav, statics: StaticSet, dynamic: Blocker[], a: Vec, b: Vec, reach: number, maxCost: number, capCost: Float64Array, taste: Taste | null): number {
   for (const o of dynamic) if (segmentDist(o.pos, a, b) < o.r + reach) return Infinity;
-  if (crossesRail(a, b, reach)) return Infinity;
+  if (crossesRail(nav.decks, a, b, reach)) return Infinity;
   for (const o of statics.buckets.alongSegment(a, b, reach)) if (segmentDist(o.pos, a, b) < o.r + reach) return Infinity;
   return groundCost(nav, a, b, reach, maxCost, capCost, taste);
 }

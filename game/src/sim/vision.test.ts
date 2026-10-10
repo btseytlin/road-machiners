@@ -16,6 +16,7 @@ import type { World } from './types';
 import type { Vec } from './vec';
 import { newWorld } from './world';
 import { defaultSetup } from './settings';
+import { ICARUS_DECKS } from './bridge';
 
 describe('vision', () => {
   it('sees an unblocked tile within radius', () => {
@@ -359,8 +360,8 @@ describe('sight from the wing', () => {
     const target = at(mid, 0, 15);
     const onSpan = viewer(w, mid);
     const onGround = viewer(w, at(mid, 0, 8));
-    expect(deckAt(onSpan.pos.x, onSpan.pos.y)?.deck.id).toBe(span.id);
-    expect(deckAt(onGround.pos.x, onGround.pos.y)).toBeNull();
+    expect(deckAt(ICARUS_DECKS, onSpan.pos.x, onSpan.pos.y)?.deck.id).toBe(span.id);
+    expect(deckAt(ICARUS_DECKS, onGround.pos.x, onGround.pos.y)).toBeNull();
     expect(canVehicleSee(w, onGround, target)).toBe(true);
 
     w.obstacles.push({ id: 'plate', pos: at(mid, 0, 11), r: 1.3, kind: 'landmark', look: 'hullChunk', yaw: 0 });
@@ -371,11 +372,11 @@ describe('sight from the wing', () => {
 
   it('sees and fires along the span over the piers under it', () => {
     const w = wingWorld();
-    const piers = w.obstacles.filter((o) => o.kind === 'landmark' && o.look === 'hullDrum' && deckAt(o.pos.x, o.pos.y)?.deck.id === span.id);
+    const piers = w.obstacles.filter((o) => o.kind === 'landmark' && o.look === 'hullDrum' && deckAt(ICARUS_DECKS, o.pos.x, o.pos.y)?.deck.id === span.id);
     expect(piers).toHaveLength(2);
     const from = at(top, 1, 0);
     const to = at(from, 15, 0);
-    expect(deckAt(to.x, to.y)?.deck.id).toBe(span.id);
+    expect(deckAt(ICARUS_DECKS, to.x, to.y)?.deck.id).toBe(span.id);
 
     expect(canVehicleSee(w, viewer(w, from), to)).toBe(true);
     expect(hasLineOfFire(w, from, to)).toBe(true);

@@ -1,7 +1,7 @@
 // Shop screens: every shop the player can park at, town garage or roadside stall, and an NPC truck parked beside
 // the player to trade.
 
-import { chassisDef, PLAYER_CHASSIS } from "../data/chassis";
+import { PLAYER_CHASSIS } from "../data/chassis";
 import { ECONOMY, GOOD_IDS } from "../data/goods";
 import { CONTRACTS, shopDef, type ShopDef } from "../data/market";
 import { partDef, type PartKind } from "../data/parts";
@@ -15,7 +15,7 @@ import {
   buyTruckGood,
   buyTruckPart,
   buyTruckSupply,
-  chassisTradeIn,
+  chassisPrice,
   endTrade,
   enterTown,
   getLotTradePrice,
@@ -42,22 +42,23 @@ import { freeCells, goodsCount, MOUNT_CELLS, mountedParts } from "../sim/grid";
 import { canStowPart, cargoRoom, spareParts } from "../sim/inventory";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import type { PartInstance, Vehicle, World } from "../sim/types";
-import { chassisMap, chassisPortrait, chassisStats, compareBase, createIcon, createItemIcon, diffStats, statGrid, type IconName } from "./cards";
+import { compareBase, createIcon, createItemIcon, type IconName } from "./cards";
 import { PartRows, type PartRow } from "./part-rows";
+import { caption, keepFocus, priceEl, priceHead, priceSpan, reasonButton, repairBar, shortBy, supplyAmount, supplyCap, supplyLine, supplyRow, truckCards, type PriceHint } from "./shop-rows";
 import { el, panel, type Child } from "./dom";
 import { contractSummary, contractWindow, CRATE_NOTE, estimateText, estimateTitle, GOODS_COLUMNS, heldContractDue, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
 import { InventoryView, truckChips } from "./inventory";
-import { peopleList } from "./talk";
+import { QUESTS, startQuest } from "../sim/quests";
 import { localsAt } from "../sim/dialogue-rules";
 import type { UiHost } from "./host";
 import { coinEl, fuelLiters, moneyEl, moneyMsg, moneyNum } from "./units";
 import { fuelCap, suppliesCap } from "../sim/stats";
 import { num, PLUS, SPACE, t, type Msg } from "../text/msg";
-import { chassisName, goodName, siteName, vehicleTitle } from "../text/names";
+import { goodName, localName, localRole, siteName, vehicleTitle } from "../text/names";
 import { commandFailure } from "./format";
 import { vehicleHasPerk } from "../sim/progress";
 
-type Tab = "people" | "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
+export type Tab = "people" | "market" | "buyParts" | "sellParts" | "trucks" | "contracts";
 
 export type StockFilter = "all" | Exclude<PartKind, "core">;
 
@@ -188,11 +189,11 @@ export class TownScreen {
     });
   }
 
-  private button(label: Msg, cmd: (w: World) => World, reason: Msg | null = null, key = "", title: Msg | null = null): HTMLElement {
+  button(label: Msg, cmd: (w: World) => World, reason: Msg | null = null, key = "", title: Msg | null = null): HTMLElement {
     return reasonButton([label], () => this.run(cmd), reason, key, title);
   }
 
-  private priceButton(w: World, verb: Msg, price: number, cmd: (w: World) => World, reason: Msg | null = null, key = ""): HTMLElement {
+  priceButton(w: World, verb: Msg, price: number, cmd: (w: World) => World, reason: Msg | null = null, key = ""): HTMLElement {
     const short = shortBy(w.player.money, price);
     return reasonButton([verb, SPACE, priceSpan(price, short === null)], () => this.run(cmd), reason ?? short, key);
   }
@@ -319,68 +320,18 @@ export class TownScreen {
   }
 
   private supplyRow(w: World, k: Supply): HTMLElement {
-    const room = supplyRoom(w, k);
-    const price = ECONOMY.supplyPrice[k];
-    const afford = Math.min(room, Math.floor(w.player.money / price));
-    const have = w.player[k];
-    const cap = supplyCap(w, k);
-    const amount = (n: number) => supplyAmount(k, n);
-    const reason = room < 1 ? t("trade.full") : shortBy(w.player.money, price);
-    return supplyLine(k, have, cap, null, price, shortBy(w.player.money, price) === null, [
-      this.button(t("trade.plusAmount", { amount: amount(1) }), (x) => buySupply(x, k, 1), reason),
-      this.button(afford > 0 ? t("trade.fill", { amount: amount(afford) }) : t("trade.fillBare"), (x) => buySupply(x, k, afford), reason),
-    ]);
+    return supplyRow(w, k, this, buySupply);
   }
 
   private repairBar(w: World): HTMLElement {
-    const broken = mountedParts(playerVehicle(w)).filter((p) => p.hp === 0).length;
-    const basics = basicsRepairCost(w);
-    const all = repairCost(w);
-    const repair = (verb: Msg, cost: number, cmd: (w: World) => World, key: string) =>
-      cost === 0 ? this.button(verb, cmd, t("trade.nothingToRepair"), key) : this.priceButton(w, verb, cost, cmd, null, key);
-    return el(
-      "div",
-      { class: "town-repair" },
-      createIcon("tools"),
-      broken ? el("span", { class: "bad" }, t("trade.broken", { n: broken })) : null,
-      repair(t("trade.repairBasicsVerb"), basics, repairBasics, "repairBasics"),
-      repair(t("trade.repairAllVerb"), all, repairAll, "repairAll"),
-    );
+    return repairBar(w, this, { basics: repairBasics, all: repairAll });
   }
 
   private trucks(w: World): HTMLElement {
-    const me = playerVehicle(w);
-    const tradeIn = chassisTradeIn(w);
-    const mine = chassisStats(me.chassisId);
-    const cards = PLAYER_CHASSIS.map((id) => {
-      const cost = chassisDef(id).value - tradeIn;
-      const own = me.chassisId === id;
-      return el(
-        "div",
-        { class: `card tile truck-card${own ? " own" : ""}` },
-        el("div", { class: "truck-pics" }, chassisPortrait(id), chassisMap(id)),
-        el(
-          "div",
-          { class: "truck-body" },
-          el(
-            "div",
-            { class: "truck-head" },
-            el("div", { class: "card-name" }, el("b", {}, chassisName(id))),
-            own ? el("span", { class: "dim" }, t("vehicle.yours")) : this.swapButton(w, id, cost, tradeIn),
-          ),
-          statGrid(diffStats(chassisStats(id), own ? null : mine)),
-        ),
-      );
-    });
-    return el("div", { class: "cards trucks" }, ...cards);
-  }
-
-  private swapButton(w: World, id: string, cost: number, tradeIn: number): HTMLElement {
-    const gain = cost < 0;
-    const short = gain ? null : shortBy(w.player.money, cost);
-    const price = gain ? el("span", { class: "good" }, PLUS, moneyEl(-cost)) : priceSpan(cost, short === null);
-    const title = short ? null : t("trade.includesTradeIn", { price: moneyMsg(tradeIn) });
-    return reasonButton([t("trade.swapVerb"), SPACE, price], () => this.run((x) => buyChassis(x, id)), short, "", title);
+    return truckCards(w, PLAYER_CHASSIS, (id) => ({
+      reason: chassisPrice(w, id) < 0 ? null : shortBy(w.player.money, chassisPrice(w, id)),
+      swap: () => this.run((x) => buyChassis(x, id)),
+    }));
   }
 
   private contracts(w: World, shopId: string): HTMLElement {
@@ -421,11 +372,6 @@ function bountyPays(w: World): Msg {
   return vehicleHasPerk(w, playerVehicle(w), "bountyTalk") ? t("contract.paysGiveUp") : t("contract.pays");
 }
 
-// Fuel in liters, supplies in units with at most one decimal.
-function supplyAmount(k: Supply, n: number): Msg {
-  return k === "fuel" ? t("trade.liters", { n: fuelLiters(n) }) : num(Math.round(n * 10) / 10, "dec");
-}
-
 export const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
   weapon: "cannon",
   engine: "engine",
@@ -436,7 +382,7 @@ export const FILTER_ICON: Record<Exclude<StockFilter, "all">, IconName> = {
   utility: "utility",
 };
 
-const TAB_ICON: Record<Tab, IconName> = {
+export const TAB_ICON: Record<Tab, IconName> = {
   people: "driver",
   market: "salt",
   buyParts: "parts",
@@ -445,37 +391,9 @@ const TAB_ICON: Record<Tab, IconName> = {
   contracts: "clock",
 };
 
-export function shortBy(have: number, price: number): Msg | null {
-  return have >= price ? null : t("trade.needMore", { price: moneyMsg(price - have) });
-}
-
 function theyHave(have: number, n: number, amount: (n: number) => Msg): Msg | null {
   if (have >= n) return null;
   return have < 1 ? t("trade.theyNone") : t("trade.theyHave", { amount: amount(have) });
-}
-
-function supplyCap(w: World, k: Supply): number {
-  return k === "fuel" ? fuelCap(playerVehicle(w)) : suppliesCap(playerVehicle(w));
-}
-
-function supplyUnit(k: Supply): Msg {
-  return k === "fuel" ? t("trade.perUnit", { unit: supplyAmount(k, 1) }) : t("trade.eachUnit");
-}
-
-function supplyLine(k: Supply, have: number, cap: number, theirs: HTMLElement | null, price: number, payable: boolean, buttons: HTMLElement[]): HTMLElement {
-  const amount = (n: number) => supplyAmount(k, n);
-  return el(
-    "div",
-    { class: "good-row row" },
-    el(
-      "div",
-      { class: "good-name supply" },
-      createIcon(k),
-      el("div", { class: "service-meter" }, el("span", {}, t("trade.ofCap", { have: amount(have), cap: amount(cap) })), bar(have / cap)),
-    ),
-    theirs,
-    el("div", { class: "trade buy wide" }, caption(GOODS_COLUMNS.buy, true), priceEl(price, payable, { tone: "", title: supplyUnit(k) }), ...buttons),
-  );
 }
 
 function theyLack(npc: Vehicle, price: number): Msg | null {
@@ -483,20 +401,8 @@ function theyLack(npc: Vehicle, price: number): Msg | null {
   return money >= price ? null : t("trade.theyLack", { price: moneyMsg(price - money) });
 }
 
-function priceSpan(price: number, payable: boolean): HTMLElement {
-  return el("span", { class: payable ? "" : "bad" }, moneyEl(price));
-}
-
 function stockCount(stock: PartInstance[], f: StockFilter): number {
   return f === "all" ? stock.length : stock.filter((p) => partDef(p.defId).kind === f).length;
-}
-
-function reasonAttrs(reason: Msg | null, title: Msg | null): Record<string, Msg | string | undefined> {
-  return { class: "btn-s", "aria-disabled": reason ? "true" : undefined, title: reason ?? title ?? undefined };
-}
-
-function reasonButton(label: Child[], click: () => void, reason: Msg | null, key = "", title: Msg | null = null): HTMLElement {
-  return el("button", { ...reasonAttrs(reason, title), "data-key": key || undefined, onclick: () => reason || click() }, ...label);
 }
 
 const CONTRACT_ICON: Record<Contract["kind"], IconName> = {
@@ -505,21 +411,7 @@ const CONTRACT_ICON: Record<Contract["kind"], IconName> = {
   bounty: "cannon",
 };
 
-type PriceHint = { tone: "good" | "bad" | ""; title: Msg };
-
-function priceEl(price: number, payable = true, hint: PriceHint | null = null): HTMLElement {
-  return el("span", { class: `price ${priceTone(payable, hint)}`.trim(), title: hint?.title }, moneyNum(price));
-}
-
-function priceTone(payable: boolean, hint: PriceHint | null): string {
-  return payable ? (hint?.tone ?? "") : "bad";
-}
-
 const PROFIT_TONE = { gain: "better", loss: "worse", even: "same" } as const;
-
-function caption(text: Msg, coin = false): HTMLElement {
-  return el("span", { class: "cap" }, text, coin ? coinEl() : null);
-}
 
 function goodsHead(withTheirs: boolean): DocumentFragment {
   const c = GOODS_COLUMNS;
@@ -546,10 +438,6 @@ function theirsHead(): HTMLElement {
   return el("span", { class: "end" }, GOODS_COLUMNS.theirs);
 }
 
-function priceHead(label: Msg): HTMLElement {
-  return el("span", { class: "price-head" }, label, coinEl());
-}
-
 function countCell(cls: "theirs" | "held", n: number, text: Msg = num(n, "int")): HTMLElement {
   return el("div", { class: `count ${cls}` }, caption(GOODS_COLUMNS[cls]), el("span", { class: n === 0 ? "num dim" : "num" }, text));
 }
@@ -558,17 +446,6 @@ function profitCell(e: SaleEstimate): HTMLElement {
   if (e.kind === "none") return el("div", { class: "profit" });
   const tone = e.kind === "unrecorded" ? "dim" : `delta ${PROFIT_TONE[e.kind]}`;
   return el("div", { class: "profit", title: estimateTitle(e) }, caption(GOODS_COLUMNS.profit, true), el("span", { class: `num ${tone}` }, estimateText(e)));
-}
-
-function keepFocus(root: HTMLElement, render: () => void): void {
-  const key = document.activeElement instanceof HTMLElement ? document.activeElement.dataset.key : undefined;
-  render();
-  if (!key) return;
-  root.querySelector<HTMLElement>(`button[data-key="${key}"]:not(:disabled)`)?.focus({ preventScroll: true });
-}
-
-function bar(share: number): HTMLElement {
-  return el("div", { class: "meter" }, el("div", { style: `width:${Math.max(0, Math.min(1, share)) * 100}%` }));
 }
 
 function contractRow(w: World, c: Contract, action: HTMLElement, posted = false): HTMLElement {
@@ -711,7 +588,7 @@ export class TruckTradeScreen {
     });
   }
 
-  private button(label: Msg, cmd: (w: World) => World, reason: Msg | null = null, key = ""): HTMLElement {
+  button(label: Msg, cmd: (w: World) => World, reason: Msg | null = null, key = ""): HTMLElement {
     return reasonButton([label], () => this.run(cmd), reason, key);
   }
 
@@ -823,5 +700,21 @@ function partnerChips(npc: Vehicle): HTMLElement {
     el("span", { class: "dim" }, t("trade.them")),
     el("span", { class: "chip", title: t("trade.theirMoney") }, moneyEl(money)),
     el("span", { class: "chip", title: t("trade.theirCells") }, createIcon("cells"), t("inv.freeCells", { n: freeCells(npc) })),
+  );
+}
+
+function peopleList(town: string, run: (cmd: (w: World) => World) => void): HTMLElement {
+  return el(
+    "div",
+    { class: "people" },
+    ...localsAt(town).map((l) =>
+      el(
+        "button",
+        { class: "person", "data-local": l.id, onclick: () => run((w) => startQuest(w, QUESTS, l.quest, "start")) },
+        createIcon("driver"),
+        el("b", {}, localName(l.id)),
+        el("span", { class: "dim" }, localRole(l.id)),
+      ),
+    ),
   );
 }

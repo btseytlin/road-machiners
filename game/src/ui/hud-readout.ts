@@ -19,11 +19,11 @@ import { dist, type Vec } from "../sim/vec";
 import type { NpcState, SalvageStock, Vehicle, World } from "../sim/types";
 import { REGION } from "../data/region";
 import { clock, vehicleName } from "./format";
-import { celsius, engineCelsius, fuelLiters, hp, kg, kph, moneyMsg } from "./units";
+import { celsius, distanceText, engineCelsius, fuelLiters, hp, kg, kph, moneyMsg } from "./units";
+import { canAbandonRun, furyRoadReadout, outpostNear, reachedOutpostAt } from "../sim/fury-road";
 import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
 import { contextKey, type ContextAction } from './hud';
-import { SHOPS } from '../data/market';
 import { canUseSite } from '../sim/sites';
 import { shopAt } from '../sim/market';
 import { downedListNear, emptySalvageNear, hasLootFor, lootBlockerHere, needsSearch, salvageListNear } from '../sim/locations';
@@ -51,7 +51,7 @@ export function overdriveSwitch(w: World): { checked: boolean; reason: Msg | nul
 // The shop in reach of the player truck at any speed, or null. Moving trucks must stop to use it.
 function shopNear(world: World): string | null {
   const pos = playerVehicle(world).pos;
-  const sites = [...REGION.towns, ...REGION.locations].filter((s) => s.id in SHOPS);
+  const sites = [...REGION.towns, ...REGION.locations].filter((s) => s.id in world.shops);
   return sites.find((s) => canUseSite(pos, s))?.id ?? null;
 }
 
@@ -101,8 +101,10 @@ function getPlaceActions(world: World): ContextAction[] {
   const actions: ContextAction[] = [];
   const shop = shopNear(world);
   if (shop) actions.push({ label: t("action.enter", { site: siteName(shop) }), ready: shopAt(world) === shop, target: { kind: 'shop' } });
+  const post = outpostNear(world);
+  if (post) actions.push({ label: t("action.enterOutpost", { site: siteName(post.id) }), ready: reachedOutpostAt(world) !== null, target: { kind: 'outpost' } });
   for (const downed of downedListNear(world)) {
-    actions.push({ label: t("action.lootTruck", { truck: vehicleTitle(world, downed) }), ready: canLootTruck(playerVehicle(world), downed), target: { kind: 'downed', id: downed.id } });
+    actions.push({ label: t("action.lootTruck", { truck: vehicleTitle(world, downed) }), ready: canLootTruck(world, playerVehicle(world), downed), target: { kind: 'downed', id: downed.id } });
   }
   if (!isBusy(playerVehicle(world))) actions.push(...getSiteActions(world));
   return actions;
@@ -224,7 +226,7 @@ export function moneyLabel(money: number): Msg {
 export type RescueReadout =
   | { kind: "knockedOut" }
   | { kind: "towed"; tower: Msg; town: Msg; fee: number }
-  | { kind: "stranded"; beacon: boolean; reason: Msg | null };
+  | { kind: "stranded"; beacon: boolean; reason: Msg | null; canEnd: boolean };
 
 export function getRescueReadout(w: World): RescueReadout | null {
   const p = w.player;
@@ -236,7 +238,7 @@ export function getRescueReadout(w: World): RescueReadout | null {
     return { kind: "towed", tower: vehicleName(w, state.holder), town: siteName(data.site), fee: data.fee };
   }
   if (p.beacon || isStranded(w, playerVehicle(w)))
-    return { kind: "stranded", beacon: p.beacon, reason: strandedReason(w) };
+    return { kind: "stranded", beacon: p.beacon, reason: strandedReason(w), canEnd: canAbandonRun(w) };
   return null;
 }
 
@@ -366,6 +368,7 @@ export function getHudReadout(w: World) {
     { id: "fuel", label: t("readout.fuel"), value: t("readout.litersShort", { n: fuelLiters(p.fuel) }), warning: p.fuel < capacity * RULES.lowFuelThreshold, icon: "fuel", tip: fuelTip },
     { id: "supplies", label: t("readout.supplies"), value: kg(p.supplies), warning: p.supplies <= RULES.suppliesLow, icon: "supplies" },
     { id: "driver", label: t("readout.driver"), value: num(hp(p.health), "int"), warning: p.health < maxHealth, icon: "driver" },
+    ...runResources(w),
   ];
   const storm = w.weather.some((e) => e.kind === "storm" && dist(me.pos, e.pos) - e.radius <= TERRAIN.vision.radius);
   const survival: Readout[] = [
@@ -382,6 +385,14 @@ export function getHudReadout(w: World) {
     resources,
     survival,
   };
+}
+
+function runResources(w: World): Readout[] {
+  const run = furyRoadReadout(w);
+  if (!run) return [];
+  const left = distanceText(run.toOutpost);
+  const tip = t("readout.runTip", { stretch: run.stretch, left, site: siteName(run.outpostId) });
+  return [{ id: "run", label: t("readout.run"), value: t("readout.runValue", { stretch: run.stretch, left }), warning: false, icon: "range", tip }];
 }
 
 const NEW_ISSUE_URL = "https://github.com/btseytlin/road-machiners/issues/new";

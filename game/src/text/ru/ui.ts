@@ -1,5 +1,5 @@
 import type { UI as EN } from '../en/ui';
-import type { Translation } from '../msg';
+import { noun, type Translation } from '../msg';
 
 export const UI: Translation<typeof EN> = {
   'money.minus': '−{n, plural, one {# М} few {# М} many {# М} other {# М}}',
@@ -203,4 +203,29 @@ export const UI: Translation<typeof EN> = {
   'hud.tipsOff': 'Подсказки выключены. Меню, Показывать подсказки, включит их снова.',
   'hud.douseBlock.noSupplies': 'Нужно припасов: {n}',
   'hud.douseBlock.engineCool': 'Двигатель холодный',
+  'mode.furyRoad': 'Дорога ярости',
+  'mode.furyRoad.description': 'Бесконечное шоссе на север от форпоста к форпосту.',
+  'boot.nextWindow': 'Открываем дорогу на север',
+  'death.wrecked': 'Грузовик разбит',
+  'death.stranded': 'Вы застряли',
+  'death.restartRun': 'Начать заезд заново',
+  'death.runReached': '{mode}. Дошли до {site, case, gen}, {north} на север.',
+  'death.runStart': '{mode}. Первый перегон, {north} на север.',
+  'hud.confirmEndRun': 'Закончить заезд здесь? Это нельзя отменить.',
+  'hud.endRun': 'Закончить заезд',
+  'readout.run': 'Заезд',
+  'readout.runValue': '{stretch}: {left}',
+  'readout.runTip': 'Перегон {stretch}: {left} до {site, case, gen}',
+  'log.outpostReached': '{site}. Заплатили {pay} за дорогу.',
+  'log.outpostReachedWrecks': '{site}. Заплатили {pay} за дорогу и {n, plural, one {# разбитую машину} few {# разбитые машины} many {# разбитых машин} other {# разбитой машины}}.',
+  'log.runWrecked': 'Грузовик разбит. Заезд окончен на {n}-м перегоне.',
+  'log.runEnded': 'Вы закончили заезд на {n}-м перегоне.',
+  'money.outpost': 'плата форпоста',
+  'outpost.name': '{word} {n}',
+  'outpost.word': noun('m', 'аванпост', 'аванпоста', 'аванпосту', 'аванпост', 'аванпостом', 'аванпосте'),
+  'outpost.soldOut': 'Всё раскуплено',
+  'outpost.waitForRoad': 'Ждать проезда',
+  'action.enterOutpost': 'Въехать на {site, case, acc}',
+  'units.km': '{n} км',
+  'units.m': '{n} м',
 };

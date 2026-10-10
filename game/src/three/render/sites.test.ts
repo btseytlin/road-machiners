@@ -14,6 +14,9 @@ import { isFortress } from '../../sim/sites';
 import { deckAt, deckById } from '../../sim/bridge';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import { TEST_MAP } from '../../test/map';
+import { ICARUS_DECKS } from '../../sim/bridge';
+import { ICARUS_KEY } from '../../sim/atlas';
+import { highwayMap } from '../../sim/highway';
 import { GATE_APRON_MARGIN, groundHits, SITE_LIGHT_POOL } from './siteLights';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
@@ -22,7 +25,7 @@ await loadModels(async (name) => {
   if (!url) throw new Error(`Missing model file for ${name}`);
   return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0)).buffer;
 });
-const built = buildSites({ size: 1, heights: [0, 0, 0, 0], types: ['hardpan'] });
+const built = buildSites({ size: 1, heights: [0, 0, 0, 0], types: ['hardpan'], atlas: ICARUS_KEY });
 const { root: sites, movers } = built;
 
 const FORTRESS_WALL_TILES = 4;
@@ -73,7 +76,7 @@ describe('landmark scale', () => {
   it('keeps every pulled-in interior piece at its height over the ground on a slope', () => {
     const size = 800;
     const heights = Array.from({ length: (size + 1) ** 2 }, (_, k) => 0.004 * (k % (size + 1)) + 0.003 * Math.floor(k / (size + 1)));
-    const slope: Terrain = { size, heights, types: Array.from({ length: size * size }, () => 'hardpan' as const) };
+    const slope: Terrain = { size, heights, types: Array.from({ length: size * size }, () => 'hardpan' as const), atlas: ICARUS_KEY };
     const sloped = buildSites(slope).root;
     for (const site of ALL.filter(isFortress)) {
       const flat = sites.getObjectByName(`landmark-${site.id}`)!.children;
@@ -576,7 +579,7 @@ describe('deck models', () => {
           expect(Math.abs(across)).toBeLessThan(1e-3);
           expect(along).toBeGreaterThanOrEqual(Math.SQRT1_2 - 1e-3);
           expect(along).toBeLessThanOrEqual(deck.length - Math.SQRT1_2 + 1e-3);
-          expect(deckAt(Math.floor(x) + 0.5, Math.floor(y) + 0.5)?.deck).toBe(deck);
+          expect(deckAt(ICARUS_DECKS, Math.floor(x) + 0.5, Math.floor(y) + 0.5)?.deck).toBe(deck);
         }
       }
     }
@@ -591,6 +594,18 @@ describe('deck models', () => {
     onMap.traverse((o) => {
       if (o instanceof Mesh && !bridgeModel(o)) expect(o.geometry.getAttribute('sightAt'), o.name).toBeUndefined();
     });
+  });
+});
+
+describe('a Fury Road outpost fort', () => {
+  it('builds the Salvage Yard interior inside its own curtain beside the highway', () => {
+    const map = highwayMap(3, 0);
+    const { root } = buildSites(map.terrain);
+    const fort = root.getObjectByName('landmark-outpost-1');
+    const yard = sites.getObjectByName('landmark-salvage-yard')!;
+
+    expect(fort).toBeDefined();
+    expect(fort!.children.length).toBe(yard.children.length);
   });
 });
 

@@ -1,11 +1,9 @@
-// Blast craters: the one owner of World.craters. An exploding round with a craterRadius digs one where it bursts on
-// open ground (see resolveRound() in src/sim/combat.ts), and it fades once its days have passed out of sight. The
-// ground heights never change: physics and the view draw the crater's rim from craterRimPoints().
 
 import { CRATER } from '../data/rules';
 import { PHYSICS } from '../data/physics';
 import { TERRAIN_TYPES } from '../data/terrain';
 import { TIME } from '../data/time';
+import { atlasOf } from './atlas';
 import { deckAt } from './bridge';
 import { canVanish } from './salvage';
 import { tileAt } from './terrain';
@@ -15,7 +13,7 @@ import { dist, type Vec } from './vec';
 const M = PHYSICS.metersPerTile;
 
 export function digCrater(world: World, pos: Vec, radius: number): void {
-  if (deckAt(pos.x, pos.y) !== null) return;
+  if (deckAt(atlasOf(world.terrain).decks, pos.x, pos.y) !== null) return;
   if (!TERRAIN_TYPES[world.terrain.types[tileAt(world.terrain, pos)]].craters) return;
   const host = world.craters.find((c) => dist(c.pos, pos) * M < c.radius);
   const merged: Crater = { id: freeId(world), pos: host ? host.pos : { ...pos }, radius, turn: world.turn };

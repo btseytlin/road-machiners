@@ -1,9 +1,8 @@
-// Road look for the ground shader. The mask marks where region roads (red) and territory dirt roads (green) lie on
-// the map, and where fused glass (blue) lies. The detail is a small tiling image of packed dirt with gravel, cracked
-// patches and potholes, drawn in pixels a third the size of the ground paint pixels. The tone is slow noise that varies the road and wanders its
 
 import { REGION, type TerritoryDef } from "../data/region";
 import { TERRITORIES, type FarmRoad, type WreckRules } from "../data/territory";
+import { HIGHWAY } from "../data/modes";
+import { atlasSites, type Atlas, type AtlasRoad } from "../sim/atlas";
 import { bridgeCut, deckAt } from "../sim/bridge";
 import { isTerritory, siteGap } from "../sim/sites";
 import { territoryRoads } from "../sim/territory";
@@ -15,7 +14,6 @@ import { PAL, mix, shade } from "./palette";
 export const ROAD_DETAIL_SIDE = 256;
 export const ROAD_TONE_SIDE = 64;
 export const ROAD_TONE_PIXELS = 12;
-const SITES = [...REGION.towns, ...REGION.locations];
 const WRECKS: { territory: TerritoryDef; wreck: WreckRules }[] = REGION.locations.filter(isTerritory).flatMap((territory) => {
   const wreck = TERRITORIES[territory.id].wreck;
   return wreck === null ? [] : [{ territory, wreck }];
@@ -35,14 +33,18 @@ export type RoadImage = { side: number; pixels: Uint8ClampedArray };
 
 export const REGION_ROAD_STYLE = "#f00";
 export const DIRT_ROAD_STYLE = "#0f0";
+export const LANE_STYLE = "#00f";
 
-export function paintRoadMask(c: PaintCanvas): void {
+export type RoadHole = { pos: Vec; radius: number };
+
+export function paintRoadMask(c: PaintCanvas, atlas: Atlas, holes: readonly RoadHole[] = []): void {
   const ctx = c.ctx;
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, c.size, c.size);
   ctx.lineJoin = "round";
   ctx.strokeStyle = REGION_ROAD_STYLE;
-  strokeRuns(c, REGION.roads.flatMap((road) => runsWhere(evenPoints(road), drawn)), WIDTH);
+  const dirt = atlas.roads.filter((road) => road.lanes === 0);
+  strokeRuns(c, dirt.flatMap((road) => runsWhere(evenPoints(road.points), (p) => drawn(atlas, p))), WIDTH);
   ctx.filter = `blur(${BLUR * c.res}px)`;
   ctx.globalCompositeOperation = "copy";
   ctx.drawImage(ctx.canvas, 0, 0);
@@ -50,14 +52,85 @@ export function paintRoadMask(c: PaintCanvas): void {
   ctx.filter = `blur(${dirtBlur}px)`;
   ctx.globalCompositeOperation = "lighten";
   ctx.strokeStyle = DIRT_ROAD_STYLE;
-  for (const { territory, wreck } of WRECKS) {
+  const offDeck = (p: Vec) => deckAt(atlas.decks, p.x, p.y) === null;
+  for (const { territory, wreck } of atlas.landforms ? WRECKS : []) {
     const { roads, spurs } = territoryRoads(territory);
     const fade = wreck.spurFade;
     for (const road of roads) strokeRuns(c, runsWhere(evenPoints(road.points), offDeck), road.width * 0.9, dirtBlur);
-    for (const spur of spurs) strokeSpur(c, spur, fade, dirtBlur);
+    for (const spur of spurs) strokeSpur(c, spur, fade, offDeck, dirtBlur);
   }
   ctx.filter = "none";
-  ctx.globalCompositeOperation = "source-over";
+  paintHighways(c, atlas.roads.filter((r) => r.lanes > 0), holes);
+}
+
+function paintHighways(c: PaintCanvas, roads: readonly AtlasRoad[], holes: readonly RoadHole[]): void {
+  for (const road of roads) {
+    paintAsphalt(c, road);
+    paintLanes(c, road);
+  }
+  c.ctx.globalCompositeOperation = "source-over";
+  paintHoles(c, holes);
+}
+
+export const ASPHALT_STYLE = `rgb(0, 0, ${Math.round(HIGHWAY.road.paint.band * 255)})`;
+
+function paintAsphalt(c: PaintCanvas, road: AtlasRoad): void {
+  const ctx = c.ctx;
+  ctx.globalCompositeOperation = "lighten";
+  ctx.strokeStyle = ASPHALT_STYLE;
+  ctx.lineCap = "butt";
+  strokeRuns(c, [evenPoints(road.points)], road.width + 2 * HIGHWAY.road.paint.bandSpread);
+}
+
+function paintHoles(c: PaintCanvas, holes: readonly RoadHole[]): void {
+  const ctx = c.ctx;
+  ctx.fillStyle = "#000";
+  for (const hole of holes) {
+    ctx.beginPath();
+    ctx.arc(c.toPx(hole.pos.x), c.toPx(hole.pos.y), hole.radius * c.res, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+type LaneLine = { offset: number; dashed: boolean };
+
+export function laneLines(road: AtlasRoad): LaneLine[] {
+  const { lanes, laneWidth } = HIGHWAY.road;
+  if (road.lanes !== lanes.length) throw new Error(`A road of ${road.lanes} lanes is no highway of ${lanes.length}`);
+  const edge = lanes[lanes.length - 1] + laneWidth / 2;
+  const dividers = lanes.slice(1).map((center, i) => (center + lanes[i]) / 2);
+  return [{ offset: -edge, dashed: false }, { offset: edge, dashed: false }, ...dividers.map((offset) => ({ offset, dashed: true }))];
+}
+
+function paintLanes(c: PaintCanvas, road: AtlasRoad): void {
+  const ctx = c.ctx;
+  const { dash, gap, line, wear } = HIGHWAY.road.paint;
+  ctx.globalCompositeOperation = "lighten";
+  ctx.strokeStyle = LANE_STYLE;
+  ctx.lineWidth = line * c.res;
+  ctx.lineCap = "butt";
+  const points = evenPoints(road.points);
+  laneLines(road).forEach((lane, k) => {
+    const shifted = offsetLine(points, lane.offset);
+    ctx.beginPath();
+    for (let i = 1; i < shifted.length; i++) {
+      const along = i * STEP;
+      const painted = !lane.dashed || along % (dash + gap) < dash;
+      if (!painted || hash2(Math.floor(along / 2), k * 37 + 11) < wear) continue;
+      ctx.moveTo(c.toPx(shifted[i - 1].x), c.toPx(shifted[i - 1].y));
+      ctx.lineTo(c.toPx(shifted[i].x), c.toPx(shifted[i].y));
+    }
+    ctx.stroke();
+  });
+}
+
+function offsetLine(points: readonly Vec[], offset: number): Vec[] {
+  return points.map((p, i) => {
+    const a = points[Math.max(0, i - 1)];
+    const b = points[Math.min(points.length - 1, i + 1)];
+    const length = dist(a, b);
+    return { x: p.x - ((b.y - a.y) / length) * offset, y: p.y + ((b.x - a.x) / length) * offset };
+  });
 }
 
 function strokeRuns(c: PaintCanvas, runs: Vec[][], width: number, blurPx = 0): void {
@@ -93,7 +166,7 @@ function strokeClipped(ctx: CanvasRenderingContext2D, lines: readonly (readonly 
   ctx.restore();
 }
 
-function strokeSpur(c: PaintCanvas, spur: FarmRoad, fade: number, blurPx: number): void {
+function strokeSpur(c: PaintCanvas, spur: FarmRoad, fade: number, offDeck: (p: Vec) => boolean, blurPx: number): void {
   const points = evenPoints(spur.points);
   const left = tilesToEnd(points);
   const width = spur.width * 0.9;
@@ -125,13 +198,9 @@ function runsWhere(points: Vec[], keep: (p: Vec) => boolean): Vec[][] {
   return runs.filter((run) => run.length > 1);
 }
 
-function offDeck(p: Vec): boolean {
-  return deckAt(p.x, p.y) === null;
-}
-
-function drawn(p: Vec): boolean {
-  if (!offDeck(p) || bridgeCut(p.x, p.y) > 0) return false;
-  return !SITES.some((site) => siteGap(site, p) < 0);
+function drawn(atlas: Atlas, p: Vec): boolean {
+  if (deckAt(atlas.decks, p.x, p.y) !== null || bridgeCut(atlas.decks, p.x, p.y) > 0) return false;
+  return !atlasSites(atlas).some((site) => siteGap(site, p) < 0);
 }
 
 function evenPoints(road: readonly Vec[]): Vec[] {

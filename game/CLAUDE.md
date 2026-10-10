@@ -60,7 +60,7 @@ Game settings live in `src/config.ts`. Copy `.env.example` to `.env` for sound g
 - `src/data/` holds all balance numbers and content. Sim code reads numbers from there, never inline.
 - `src/phys/` runs vehicle movement in Rapier and plugs into the turn pipeline. The path preview runs the same physics as the turn.
 - `src/three/` holds the 3D game, with `game.ts` wiring input, sim, physics, view and UI. `src/three/render/` holds the 3D views, `src/render/` the palette, painters and part looks, and `src/ui/` the HTML panels.
-- `src/mapgen/` bakes the map offline. The game only reads the map file.
+- `src/mapgen/` bakes the map offline. The game only reads the map file, but for Fury Road's highway, which `src/sim/highway.ts` generates from the seed, with its hazard scenes, ramps and closures from `src/sim/road-hazards.ts`.
 - Map coordinates are in tiles. Physics and 3D space are in meters: map x is 3D x, map y is 3D z, height is 3D y. `src/phys/frames.ts` converts.
 - The UI shows real units. `src/ui/units.ts` converts from sim units, with display numbers in `src/data/units.ts`.
 

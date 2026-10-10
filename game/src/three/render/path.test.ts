@@ -4,8 +4,9 @@ import { PHYSICS } from "../../data/physics";
 import type { Terrain } from "../../sim/terrain";
 import { emptyWorld } from "../../sim/testkit";
 import { PathView } from "./path";
+import { ICARUS_KEY } from '../../sim/atlas';
 
-const terrain: Terrain = { size: 2, heights: Array(9).fill(0), types: Array(4).fill("road") };
+const terrain: Terrain = { size: 2, heights: Array(9).fill(0), types: Array(4).fill("road"), atlas: ICARUS_KEY };
 
 function orderIcon(path: PathView): THREE.Object3D {
   return path.root.children.find((c) => c !== path.preview)!;

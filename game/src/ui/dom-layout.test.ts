@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clipped, escapes, latinLeft, pairOverlaps } from "./dom";
+import { clipped, escapes, intersect, latinLeft, pairOverlaps } from "./dom";
 
 const box = (left: number, top: number, right: number, bottom: number) => ({ left, top, right, bottom });
 
@@ -28,6 +28,17 @@ describe("escapes", () => {
   it("keeps text inside its box, and ignores an empty text box", () => {
     expect(escapes(box(10, 5, 90, 20), box(0, 0, 100, 40))).toBe(false);
     expect(escapes(box(500, 500, 500, 500), box(0, 0, 100, 40))).toBe(false);
+  });
+});
+
+describe("intersect", () => {
+  it("keeps the part of a control its scroll box shows", () => {
+    expect(intersect(box(0, 90, 50, 120), box(0, 0, 100, 100))).toEqual(box(0, 90, 50, 100));
+  });
+
+  it("leaves an empty box for a control scrolled out of view, which overlaps nothing", () => {
+    const hidden = intersect(box(0, 110, 50, 130), box(0, 0, 100, 100));
+    expect(pairOverlaps([hidden, box(0, 105, 100, 140)])).toEqual([]);
   });
 });
 

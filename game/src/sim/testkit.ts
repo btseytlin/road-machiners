@@ -1,4 +1,4 @@
-import { START_KITS, type StartKit } from '../data/start';
+import { START_KITS, startKit, type StartKit } from '../data/start';
 
 import { RULES } from '../data/rules';
 import { makeVehicle } from './factory';
@@ -13,7 +13,9 @@ import { DECISIONS, NPC_UPKEEP, STATE_WEIGHTS, TRAITS, type DecisionId, type Dec
 import { addState } from './states';
 import { advanceJobs } from './jobs';
 import { resolveNpcActivities } from './npc-activities';
-import type { Faction, GameEvent, NpcBrain, Obstacle, SalvageStock, Vehicle, World, XpSource } from './types';
+import type { Faction, GameEvent, NpcBrain, Obstacle, PartInstance, SalvageStock, Vehicle, World, XpSource } from './types';
+import { ICARUS_KEY } from './atlas';
+import { highwayMap } from './highway';
 import { dist, type Vec } from './vec';
 import { REGION } from '../data/region';
 import { propReach } from './mapgen';
@@ -23,11 +25,38 @@ import { refreshVision } from './vision';
 import { openingStockOf } from './opening';
 import { playerVehicle } from './damage';
 import { stormDepth } from './weather';
-import { cloneWorld, newWorld } from './world';
+import { cloneWorld, endTurn, newWorld } from './world';
+import { outpostPad } from './fury-road';
+import { addGoods } from './inventory';
+import { partDef, type PartKind } from '../data/parts';
 import { defaultSetup } from './settings';
 
 export function flatTerrain(size: number): Terrain {
-  return { size, heights: new Array((size + 1) * (size + 1)).fill(0), types: new Array(size * size).fill('road') };
+  return { size, heights: new Array((size + 1) * (size + 1)).fill(0), types: new Array(size * size).fill('road'), atlas: ICARUS_KEY };
+}
+
+export function furyRoadWorld(seed = 3): World {
+  return newWorld(seed, startKit('furyRoad'), highwayMap(seed, 0), defaultSetup('furyRoad'));
+}
+
+export function parkedAtOutpost(seed = 3): World {
+  const w = furyRoadWorld(seed);
+  const me = playerVehicle(w);
+  me.pos = outpostPad(w, 1);
+  me.speed = 0;
+  const parked = endTurn(w, () => {});
+  parked.player.money = 10_000_000;
+  return parked;
+}
+
+export function fillCargo(w: World): void {
+  addGoods(w, playerVehicle(w), 'parts', 1000);
+}
+
+export function stockOfKind(w: World, kind: PartKind): PartInstance {
+  const part = w.furyRoad!.outposts[0].stock.find((p) => partDef(p.defId).kind === kind);
+  if (!part) throw new Error(`Outpost 1 stocks no ${kind}`);
+  return part;
 }
 
 export function editableTerrain(w: World): Terrain {

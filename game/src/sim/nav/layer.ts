@@ -1,17 +1,14 @@
-// Static navigation layers: per-tile cliff flags and route costs, and per-cell blocked flags and step
-// costs for one vehicle radius. Road and kill wrecks and parked vehicles are not in here; the A* overlay
-// stamps them per query. Breakable props make their cells costly instead of blocked. Per-driver route taste
 
-import { hazardZones } from '../territory';
 import { REGION } from '../../data/region';
 import { BREAKABLE } from '../../data/rules';
 import { TERRAIN, TERRAIN_TYPES, type TerrainTypeId } from '../../data/terrain';
-import { nearRail } from '../bridge';
+import { atlasOf, atlasSites } from '../atlas';
+import { nearRail, type DeckSet } from '../bridge';
 import { blockingBoxes, boxDistance, isBreakable, isDriveObstacle, propKey, propReach, type PosedBox } from '../mapgen';
 import { isCliff, tileSlope, type Terrain } from '../terrain';
 import { hashRandom } from '../rng';
 import type { Obstacle, Vehicle, World } from '../types';
-import { siteGap } from '../sites';
+import { isTerritory, siteGap, type Site } from '../sites';
 import { dist, type Vec } from '../vec';
 import { marksOf, ObstacleBuckets, sameMarks, type Blocker, type ObstacleMark } from './buckets';
 
@@ -27,6 +24,7 @@ export type TerrainNav = {
   roadTile: Uint8Array;
   roadShy: Float32Array;
   slow: Float32Array;
+  decks: DeckSet;
 };
 
 export const COARSE = 8;
@@ -69,7 +67,7 @@ function terrainEntry(t: Terrain) {
     const tiles = tileLayers(t);
     const slow = new Float32Array(n * n);
     for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) slow[y * n + x] = tiles.tileCost[tileIndex(t.size, (x + 0.5) * CELL, (y + 0.5) * CELL)];
-    e = { nav: { size: t.size, n, ...tiles, slow }, cellCliff: new Map(), solidGrids: new Map(), layers: new Map() };
+    e = { nav: { size: t.size, n, ...tiles, slow, decks: atlasOf(t).decks }, cellCliff: new Map(), solidGrids: new Map(), layers: new Map() };
     terrains.set(t, e);
   }
   return e;
@@ -80,9 +78,10 @@ function tileLayers(t: Terrain): Pick<TerrainNav, 'cliffTile' | 'tileCost' | 'fl
   const tileCost = new Float64Array(t.size * t.size);
   const flatCost = new Float64Array(t.size * t.size);
   const roadTile = new Uint8Array(t.size * t.size);
+  const sites = atlasSites(atlasOf(t)).filter((s) => !isTerritory(s));
   for (let i = 0; i < t.size * t.size; i++) {
     cliffTile[i] = isCliff(t, i) ? 1 : 0;
-    const bySite = nearSite((i % t.size) + 0.5, Math.floor(i / t.size) + 0.5);
+    const bySite = nearSite(sites, (i % t.size) + 0.5, Math.floor(i / t.size) + 0.5);
     flatCost[i] = routeCost(t.types[i], bySite);
     tileCost[i] = flatCost[i] * slopeCost(t, i);
     roadTile[i] = t.types[i] === 'road' && !bySite ? 1 : 0;
@@ -134,10 +133,8 @@ function slopeCost(t: Terrain, tile: number): number {
   return 1 + REGION.navigation.slopeCost * (Math.hypot(s.x, s.y) / TERRAIN.drive.maxSlope) ** 2;
 }
 
-const SITES = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
-
-function nearSite(x: number, y: number): boolean {
-  return SITES.some((s) => siteGap(s, { x, y }) < REGION.roadWidth);
+function nearSite(sites: readonly Site[], x: number, y: number): boolean {
+  return sites.some((s) => siteGap(s, { x, y }) < REGION.roadWidth);
 }
 
 export function terrainNav(t: Terrain): TerrainNav {
@@ -172,7 +169,7 @@ export function staticSet(obstacles: Obstacle[], terrain: Terrain): StaticSet {
     return hit.set;
   }
   const statics = obstacles.filter((o) => isDriveObstacle(o) && !isTransientWreck(o));
-  const all = [...statics.map((o) => driveBlocker(o, terrain)), ...hazardZones().map((z) => ({ pos: z.pos, r: z.radius }))];
+  const all = [...statics.map((o) => driveBlocker(o, terrain)), ...atlasOf(terrain).hazards.map((z) => ({ pos: z.pos, r: z.radius }))];
   const breakable = statics.map(isBreakable);
   const solid = all.filter((_, i) => !breakable[i]);
   const set = {
@@ -232,7 +229,7 @@ function markCliffCells(nav: TerrainNav, reach: number): Uint8Array {
   for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
     const cx = (x + 0.5) * CELL;
     const cy = (y + 0.5) * CELL;
-    if (nearCliff(nav, cx, cy, reach) || nearRail(cx, cy, reach)) cliff[y * n + x] = 1;
+    if (nearCliff(nav, cx, cy, reach) || nearRail(nav.decks, cx, cy, reach)) cliff[y * n + x] = 1;
   }
   return cliff;
 }

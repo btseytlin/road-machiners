@@ -1,7 +1,7 @@
 import { defaultSetup } from '../sim/settings';
 import { describe, expect, it } from "vitest";
 import { playerVehicle } from "../sim/damage";
-import { addVehicle, emptyWorld, npcBrain, openingStopPoint, testDrive } from "../sim/testkit";
+import { addVehicle, emptyWorld, furyRoadWorld, npcBrain, openingStopPoint, testDrive } from "../sim/testkit";
 import { vehicleStats } from "../sim/stats";
 import { refreshVision } from "../sim/vision";
 import { endTurn, newWorld, setMoveOrder, startPose } from "../sim/world";
@@ -277,6 +277,18 @@ describe("opening tips", () => {
 
   it("has no opening step in a game without the opening wreck, like an old save", () => {
     expect(openingStep(emptyWorld())).toBeNull();
+  });
+});
+
+describe("tips in a Fury Road run", () => {
+  it("runs no opening and offers no horn", () => {
+    const w = furyRoadWorld(3);
+    addVehicle(w, "raiders", "wagon", ["mg"], { x: playerVehicle(w).pos.x + 4, y: playerVehicle(w).pos.y }).brain = npcBrain("buggy", playerVehicle(w).pos, ["raider"]);
+    refreshVision(w);
+    const seen = new Set<TipId>(["waypoint", "drive", "autoStop", "stop", "stopAt", "manual", "zones", "aim"]);
+
+    expect(openingStep(w)).toBeNull();
+    expect(tipToShow(w, false, seen, null)).not.toBe("honk");
   });
 });
 

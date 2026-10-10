@@ -9,6 +9,9 @@ export type SiteLocationDef = {
   pos: Vec;
   radius: number;
   edge?: SiteEdge;
+  look?: string;
+  turn?: number;
+  gates?: readonly Vec[];
 };
 // Open ground full of loot spots. It has no edge, gates or pads: trucks drive in. Its rules live in TERRITORIES.
 // outline is its edge as a polygon, in tiles from pos, or null when the edge is the circle of radius. For an outline,

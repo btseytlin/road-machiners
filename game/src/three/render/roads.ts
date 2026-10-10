@@ -1,16 +1,17 @@
-// Roads and site pads are drawn by the ground shader, so they lie exactly on the ground that wheels touch.
-// The shader splits the ground into road pixels a third the size of the ground paint pixels. A road pixel
-// takes the road look where the road mask covers its center, and the slow tone and a per-pixel dither fray
 
 import * as THREE from "three";
 import { PHYSICS } from "../../data/physics";
 import { REGION } from "../../data/region";
 import { TERRAIN_TYPES } from "../../data/terrain";
 import { desertWeight, glassField, lookTypes, ROAD_PLAIN, ROAD_SAND, type PaintCanvas } from "../../render/groundPaint";
+import { atlasOf, atlasSites, type Atlas } from "../../sim/atlas";
 import { sitePads } from "../../sim/sites";
 import type { Terrain } from "../../sim/terrain";
 import { mix, PAL } from "../../render/palette";
-import { paintRoadDetail, paintRoadMask, paintRoadTone, ROAD_DETAIL_SIDE, ROAD_TONE_PIXELS, ROAD_TONE_SIDE, type RoadImage } from "../../render/roadPaint";
+import { HIGHWAY } from "../../data/modes";
+import { fromRoad } from "../../sim/highway";
+import { windowCraters } from "../../sim/road-hazards";
+import { paintRoadDetail, paintRoadMask, type RoadHole, paintRoadTone, ROAD_DETAIL_SIDE, ROAD_TONE_PIXELS, ROAD_TONE_SIDE, type RoadImage } from "../../render/roadPaint";
 
 const S = PHYSICS.metersPerTile;
 const PIXEL_SPLIT = 3;
@@ -25,6 +26,11 @@ const DIRT_EDGE = 0.44;
 const DIRT_WANDER = 0.2;
 const DIRT_SOFT = 0.15;
 const DIRT_SHOULDER = 0.9;
+const LANE_EDGE = "0.42";
+const LANE_FADE = "0.04";
+const BAND_FROM = "0.1";
+const BAND_FULL = "0.25";
+const LANE_MIX = "0.82";
 const GLASS_PLATE = 2;
 const GLASS_TINT = 0.16;
 const GLASS_SEAM = 0.25;
@@ -41,13 +47,15 @@ const GLASS_DUST = mix(PAL.glass.top, 0xb9a47c, 0.6);
 const GLASS_SEAM_COLOR = mix(PAL.glass.top, 0xffffff, 0.45);
 
 export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas, t: Terrain): void {
-  paintRoadMask(mask);
+  paintRoadMask(mask, atlasOf(t), roadHoles(t));
   const pixel = S / mask.res / PIXEL_SPLIT;
   const uniforms = {
     roadMask: { value: maskTexture(mask) },
     roadDetail: { value: imageTexture(paintRoadDetail(), THREE.NearestFilter, THREE.SRGBColorSpace) },
     roadTone: { value: imageTexture(paintRoadTone(), THREE.LinearFilter, THREE.NoColorSpace) },
     roadPixel: { value: pixel },
+    laneColor: { value: new THREE.Color(PAL.laneLine) },
+    asphaltColor: { value: new THREE.Color(PAL.highwayAsphalt) },
     roadOrigin: { value: mask.from * S },
     roadMaskMeters: { value: (mask.size / mask.res) * S },
     roadDetailMeters: { value: ROAD_DETAIL_SIDE * pixel },
@@ -73,7 +81,7 @@ export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas
     glassSeam: { value: GLASS_SEAM },
     glassSeamColor: { value: new THREE.Color(GLASS_SEAM_COLOR) },
     glassDust: { value: new THREE.Color(GLASS_DUST) },
-    ...padUniforms(pixel),
+    ...padUniforms(atlasOf(t), pixel),
   };
   const before = material.onBeforeCompile.bind(material);
   const key = material.customProgramCacheKey.bind(material);
@@ -96,6 +104,8 @@ uniform sampler2D roadMask;
 uniform sampler2D roadDetail;
 uniform sampler2D roadTone;
 uniform float roadPixel;
+uniform vec3 laneColor;
+uniform vec3 asphaltColor;
 uniform float roadOrigin;
 uniform float roadMaskMeters;
 uniform float roadDetailMeters;
@@ -121,8 +131,10 @@ uniform float glassTint;
 uniform float glassSeam;
 uniform vec3 glassSeamColor;
 uniform vec3 glassDust;
+#if PAD_COUNT > 0
 uniform vec2 padCenters[PAD_COUNT];
 uniform vec2 padAxes[PAD_COUNT];
+#endif
 uniform vec2 padHalf;
 uniform float padBorder;
 uniform vec3 padDust;
@@ -167,9 +179,10 @@ const ROAD_FRAGMENT = `{
     diffuseColor.rgb = mix(groundColor, diffuseColor.rgb, glassCover);
   }
   vec2 roadAt = roadOrigin + (floor((vRoadXZ - roadOrigin) / roadPixel) + 0.5) * roadPixel;
-  vec2 roadMaskAt = texture2D(roadMask, (roadAt - roadOrigin) / roadMaskMeters).rg;
+  vec3 roadMaskAt = texture2D(roadMask, (roadAt - roadOrigin) / roadMaskMeters).rgb;
   float roadCover = roadMaskAt.r;
   float dirtCover = roadMaskAt.g;
+  float laneCover = roadMaskAt.b;
   vec4 roadLook = texture2D(roadDetail, (roadAt - roadOrigin) / roadDetailMeters);
   float roadWander = texture2D(roadTone, (roadAt - roadOrigin) / roadToneMeters).r;
   float roadSand = texture2D(roadDesert, roadAt / roadDesertMeters).r;
@@ -194,6 +207,10 @@ const ROAD_FRAGMENT = `{
     float dirtShade = mix(${DIRT_SHOULDER}, 1.0, smoothstep(dirtEdge, dirtEdge + ${DIRT_SOFT}, dirtCover));
     diffuseColor.rgb = mix(diffuseColor.rgb, dirtColor * dirtShade, dirtIn);
   }
+  float bandCover = smoothstep(${BAND_FROM}, ${BAND_FULL}, laneCover);
+  if (bandCover > 0.0) diffuseColor.rgb = mix(diffuseColor.rgb, asphaltColor * (0.94 + 0.12 * roadWander) * (0.96 + 0.08 * roadLook.a), bandCover);
+  if (laneCover > ${LANE_EDGE} && roadLook.a > ${LANE_FADE}) diffuseColor.rgb = mix(diffuseColor.rgb, laneColor * (0.9 + 0.2 * roadWander), ${LANE_MIX});
+#if PAD_COUNT > 0
   for (int i = 0; i < PAD_COUNT; i++) {
     vec2 padOff = roadAt - padCenters[i];
     vec2 padIn = padHalf - abs(vec2(dot(padOff, padAxes[i]), dot(padOff, vec2(-padAxes[i].y, padAxes[i].x))));
@@ -202,12 +219,20 @@ const ROAD_FRAGMENT = `{
     diffuseColor.rgb = mix(roadColor, padDust * groundShade, 0.35);
     if (padDepth < padBorder && roadLook.a > 0.12) diffuseColor.rgb = padMark * groundShade;
   }
+#endif
 }`;
 
-function padUniforms(pixel: number) {
+function roadHoles(t: Terrain): RoadHole[] {
+  const key = t.atlas;
+  if (key.kind !== 'highway') return [];
+  const inset = HIGHWAY.road.paint.holeInset;
+  return windowCraters(key.seed, key.window).map((c) => ({ pos: fromRoad(key.window, c.at.n, c.at.u), radius: Math.max(inset, c.radius - inset) }));
+}
+
+function padUniforms(atlas: Atlas, pixel: number) {
   const centers: THREE.Vector2[] = [];
   const axes: THREE.Vector2[] = [];
-  for (const site of [...REGION.towns, ...REGION.locations])
+  for (const site of atlasSites(atlas))
     for (const pad of sitePads(site)) {
       centers.push(new THREE.Vector2(pad.x * S, pad.y * S));
       axes.push(new THREE.Vector2(pad.x - site.pos.x, pad.y - site.pos.y).normalize());
@@ -224,13 +249,8 @@ function padUniforms(pixel: number) {
 }
 
 function maskTexture(c: PaintCanvas): THREE.DataTexture {
-  const rgba = c.ctx.getImageData(0, 0, c.size, c.size).data;
-  const cover = new Uint8Array(c.size * c.size * 2);
-  for (let i = 0; i < c.size * c.size; i++) {
-    cover[i * 2] = rgba[i * 4];
-    cover[i * 2 + 1] = rgba[i * 4 + 1];
-  }
-  const texture = new THREE.DataTexture(cover, c.size, c.size, THREE.RGFormat);
+  const cover = new Uint8Array(c.ctx.getImageData(0, 0, c.size, c.size).data.buffer);
+  const texture = new THREE.DataTexture(cover, c.size, c.size, THREE.RGBAFormat);
   texture.magFilter = THREE.LinearFilter;
   texture.minFilter = THREE.LinearFilter;
   texture.needsUpdate = true;

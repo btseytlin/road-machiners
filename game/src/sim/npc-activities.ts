@@ -1,5 +1,3 @@
-// NPC goals: the goal stack, the fixed survival rule, the decision points that push and pop goals, and each goal's
-// work. See src/sim/npc-decisions.ts for the weighted rolls.
 
 import { ECONOMY } from '../data/goods';
 import { NPC_BEHAVIOR, NPC_UPKEEP, SPAWN, type DecisionOptions } from '../data/npcs';
@@ -19,7 +17,7 @@ import { huntsOffRoad } from './hunt-style';
 import {
   tradeOffers, tradeSpend, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolStopsOf, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, npcSenses, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  passReason, canStartFight, lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, noteStripped, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition, firepower,
+  passReason, canStartFight, lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, noteStripped, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition, givesUpUnarmed, yields,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -183,7 +181,7 @@ export function fuelReserveFor(world: World, vehicle: Vehicle, profile: NpcProfi
 const isLowOnFuel = (world: World, vehicle: Vehicle, profile: NpcProfile): boolean => getResources(world, vehicle).fuel <= fuelReserveFor(world, vehicle, profile);
 
 function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): ServiceNeed | null {
-  if (holdsRearm(vehicle)) return null;
+  if (holdsRearm(vehicle) || !yields(world)) return null;
   const needs: [GoalReason, boolean][] = [
     ['lowFuel', isLowOnFuel(world, vehicle, profile)],
     ['lowSupplies', getResources(world, vehicle).supplies <= suppliesCap(vehicle) * NPC_UPKEEP.lowSupplies],
@@ -256,7 +254,7 @@ function siteGoal(world: World, vehicle: Vehicle): NpcActivity {
 }
 
 function oldSpotGoal(world: World, vehicle: Vehicle): NpcActivity | null {
-  const near = oldSpotsNear(world.mapHash, vehicle.pos, OLD_PLACES.npcRange);
+  const near = oldSpotsNear(world, vehicle.pos, OLD_PLACES.npcRange);
   if (near.length === 0 || !chance(world, OLD_PLACES.npcShare)) return null;
   const pick = near[randInt(world, 0, near.length - 1)];
   return createActivity('scavenge', oldStockId(pick), { ...pick.pos }, pick.type === 'hulks' ? 'searchOldHulks' : 'searchOldRuin');
@@ -360,7 +358,7 @@ function fightInvalid(world: World, vehicle: Vehicle, goal: NpcActivity, contact
   const target = world.vehicles.find((v) => v.id === goal.targetId);
   if (!target || !isHostile(world, vehicle, target)) return 'lostTarget';
   if (holdsOffRobbery(world, vehicle, target)) return GAVE_UP_ROBBERY;
-  if (firepower(world, vehicle) <= 0) return 'noGun';
+  if (givesUpUnarmed(world, vehicle)) return 'noGun';
   return fightTargetLost(world, vehicle, target, contacts) ? 'lostTarget' : null;
 }
 
@@ -399,7 +397,7 @@ function stalls(world: World, goal: NpcActivity, target: Vehicle): boolean {
   if (!goal.worn) throw new Error(`A fight on ${goal.targetId} has no record of wearing it down`);
   const condition = bodyCondition(target);
   if (goal.worn.condition - condition >= NPC_BEHAVIOR.fightWearShare) goal.worn = { turn: world.turn, condition };
-  return world.turn - goal.worn.turn > NPC_BEHAVIOR.fightStallTurns;
+  return yields(world) && world.turn - goal.worn.turn > NPC_BEHAVIOR.fightStallTurns;
 }
 
 function onHoldUp(world: World, vehicle: Vehicle): void {
@@ -606,7 +604,7 @@ function reactSeen(world: World, vehicle: Vehicle, enemy: Vehicle, profile: NpcP
 }
 
 function runsAgain(world: World, vehicle: Vehicle, track: Track, enemy: Vehicle, profile: NpcProfile): 'flee' | null {
-  if (!comesInSight(world, track) || topGoal(vehicle)?.kind === 'flee') return null;
+  if (!yields(world) || !comesInSight(world, track) || topGoal(vehicle)?.kind === 'flee') return null;
   const run = fleeGoal(world, vehicle, profile, enemy.id, enemy.pos, 'avoidRanFrom');
   return withinReach(vehicle, run) ? null : 'flee';
 }
@@ -920,7 +918,7 @@ function defeatedActivity(world: World, vehicle: Vehicle, profile: NpcProfile, c
 function retreatHome(world: World, vehicle: Vehicle): NpcActivity {
   const top = topGoal(vehicle)?.kind;
   if (top !== 'retreat' && top !== 'rearm') {
-    const home = npcHomeSite(vehicle);
+    const home = npcHomeSite(world, vehicle);
     if (!home) throw new Error(`${vehicle.id} knows no home to retreat to`);
     pushGoal(world, vehicle, createSiteActivity('retreat', home.id, 'retreatHome'));
   }
@@ -1085,7 +1083,7 @@ function resolveSearch(world: World, vehicle: Vehicle, activity: NpcActivity): v
 }
 
 function resolveTruckLoot(world: World, vehicle: Vehicle, activity: NpcActivity, truck: Vehicle): void {
-  if (!canLootTruck(vehicle, truck)) return;
+  if (!canLootTruck(world, vehicle, truck)) return;
   activity.phase = 'act';
   const ended = lootTruckTurn(world, vehicle, truck);
   if (ended) finishGoal(world, vehicle, ended);

@@ -6,6 +6,7 @@
 // truck. One that ends in leaving lasts as the record that keeps the warned truck off the target. Pile claims warn
 // trespassers through the same path, see src/sim/parley.ts.
 
+import { modeRules } from './settings';
 import { NPC_BEHAVIOR, type DecisionOptions } from '../data/npcs';
 import { isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
@@ -132,7 +133,7 @@ export function warnRefusalOf(world: World, warner: Vehicle, warned: Vehicle): R
 }
 
 export function fightOver(world: World, npc: Vehicle, other: Vehicle, reason: GoalReason): void {
-  defyThreat(world, npc, other, firepower(world, npc) > 0 ? 'fightBack' : 'flee', reason);
+  defyThreat(world, npc, other, firepower(world, npc) > 0 || !modeRules(world).yielding ? 'fightBack' : 'flee', reason);
 }
 
 export function leaveLoot(world: World, v: Vehicle, targetId: string, reason: GoalReason): void {

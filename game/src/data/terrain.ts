@@ -66,7 +66,10 @@ export type DeckSpec = {
   width: number;
   cut: { abutment: number; ramp: number } | null;
   skirt: boolean;
+  look?: DeckLook;
 };
+
+export type DeckLook = 'ship_flap' | 'ship_wing_deck';
 
 const CANYON_BRIDGE: DeckSpec = {
   id: "canyon-bridge",

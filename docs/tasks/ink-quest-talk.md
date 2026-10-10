@@ -9,7 +9,7 @@
 ## Context
 
 - Stage 2 of 4 in `docs/tasks/ink-quest-engine.md`. Stage 1 gave the runner, saves and tools, with no UI.
-- #347 runs town talk from TypeScript tables: `LOCAL_TOPICS` in `game/src/data/locals.ts`, the commands in `game/src/sim/dialogue-rules.ts`, and an inline conversation in the People tab, `game/src/ui/talk.ts`.
+- #347 runs town talk from TypeScript tables: `LOCAL_TOPICS` in `game/src/data/locals.ts`, the commands in `game/src/sim/dialogue-rules.ts`, and an inline conversation in the People tab, `peopleList()` in `game/src/ui/town.ts`.
 - #347's facts behind topics are game state: discovered sites, `player.notes` for the journal, scavenged wrecks and the town board. The radio's wagon topic reads `player.notes` too.
 - `<b>`-style angle-bracket markup passes through ink unchanged in lines and choices. Square brackets break choice syntax.
 - Load replays a checkpoint's opening, so effects belong after a choice (stage 1 review).
@@ -63,7 +63,7 @@ TDD: yes for the markup parser, the hooks and `leaveQuest`. The window and scree
 ### PH3 — Town hooks and content
 - `game/src/sim/quests.ts`: the seven hooks. `game/src/data/quests/world.ink` declares them.
 - `game/src/data/quests/*.ink`: six locals. Samples removed. `game/src/data/locals.ts` slimmed. `game/src/sim/dialogue-rules.ts` loses the topic commands.
-- `game/src/ui/talk.ts`: the People tab lists locals and starts their quest.
+- `peopleList()` in `game/src/ui/town.ts`: the People tab lists locals and starts their quest.
 - `game/src/three/save-migrations.ts`: a step dropping the sample quests.
 - Tests: hook tests, the wagon chain played through quests, the in-character check over ink, `quest-check` on the real bundle.
 - Commit: "Bowl and Nose locals talk from ink"

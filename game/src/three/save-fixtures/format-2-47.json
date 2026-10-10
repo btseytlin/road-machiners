@@ -1,0 +1,18 @@
+{
+  "seed": 12,
+  "mapHash": "6b4c2d1e",
+  "setup": { "mode": "gauntlet", "settings": { "damage": 1, "fuelUse": 1, "supplyUse": 1 } },
+  "gauntlet": {
+    "rng": { "rngState": 1937204501 },
+    "course": { "road": 1, "reversed": true, "start": 31.5, "end": 402.25 },
+    "stretch": 1,
+    "outposts": [
+      { "id": "outpost-0", "name": "Outpost 1", "at": 120.5, "side": 1, "pad": { "x": 211.2, "y": 340.8 }, "stock": [], "paid": true },
+      { "id": "outpost-1", "name": "Outpost 2", "at": 210.75, "side": -1, "pad": { "x": 190.4, "y": 260.1 }, "stock": [{ "id": "p91", "defId": "plates", "wear": 1, "hp": 40 }], "paid": false }
+    ],
+    "groups": [
+      { "id": "g1-0", "stretch": 1, "at": 160.2, "from": "ahead", "templates": ["buggy"], "level": "light", "spawned": false, "vehicles": [], "wrecked": 0, "retryUntil": null }
+    ],
+    "complete": false
+  }
+}

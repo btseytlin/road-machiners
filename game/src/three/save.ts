@@ -2,10 +2,13 @@ import { t, type Msg } from '../text/msg';
 import type { BakedMap } from '../sim/terrain';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
+import { reachedOutpostAt } from '../sim/fury-road';
+import { highwayMap } from '../sim/highway';
+export { newMapFor } from '../sim/highway';
 import type { BrokenProp, Obstacle, Player, QuestState, Vehicle, World, WorldSetup } from '../sim/types';
 import { QUESTS, questProblems, restoreQuest } from '../sim/quests';
 import { refreshVision } from '../sim/vision';
-import { parseSetup } from '../sim/settings';
+import { modeMap, parseSetup } from '../sim/settings';
 import { clearTips } from '../ui/tips';
 import type { NewGameActions } from '../ui/new-game';
 import { settleAims } from '../sim/combat';
@@ -78,10 +81,24 @@ type SavedWorld = Omit<World, 'terrain' | 'events' | 'removed' | 'broken' | 'veh
 
 type ViewField = 'visible' | 'contacts' | 'clouds';
 
-export function loadWorld(slots: SaveSlots, slot: SlotId, map: BakedMap): World | null {
+export function mapFor(saved: Pick<World, 'mapHash' | 'seed' | 'setup' | 'furyRoad'>, icarus: BakedMap): BakedMap {
+  const highway = saved.mapHash.startsWith('highway:');
+  if (modeMap(saved.setup.mode) !== 'highway') {
+    if (highway) throw new SaveError('otherMap', null, `A ${saved.setup.mode} save names highway map ${saved.mapHash}`);
+    return icarus;
+  }
+  if (!saved.furyRoad) throw new SaveError('otherMap', null, 'This Fury Road run was laid on Icarus roads, and the highway has replaced them');
+  if (!highway) throw new SaveError('otherMap', null, `A Fury Road save names map ${saved.mapHash}, which is no highway`);
+  const map = highwayMap(saved.seed, saved.furyRoad.window);
+  if (map.hash !== saved.mapHash) throw new SaveError('otherMap', null, `map ${saved.mapHash}, not the current highway ${map.hash}`);
+  return map;
+}
+
+export function loadWorld(slots: SaveSlots, slot: SlotId, icarus: BakedMap): World | null {
   const envelope = slots.get(slot);
   if (envelope === null) return null;
   const world = savedWorld(envelope);
+  const map = mapFor(world, icarus);
   if (world.mapHash !== map.hash) throw new SaveError('otherMap', null, `map ${world.mapHash}, not ${map.hash}`);
   const explored = unpackExplored(world.player.explored, world.size * world.size);
   if (world.obstacles.some(isBakedObstacle)) throw new SaveError('bakedProps');
@@ -213,7 +230,11 @@ export function saveWorld(slots: SaveSlots, world: World, runId: string, interva
 }
 
 export function saveInTown(slots: SaveSlots, world: World, runId: string, savedAt: number): void {
-  if (world.player.state === 'active' && townAt(world)) writeSave(slots, 'auto', world, runId, savedAt);
+  if (world.player.state === 'active' && (townAt(world) || reachedOutpostAt(world))) writeSave(slots, 'auto', world, runId, savedAt);
+}
+
+export function saveOnArrival(slots: SaveSlots, world: World, runId: string, savedAt: number): void {
+  if (world.player.state === 'active' && world.events.some((e) => e.t === 'outpostReached')) writeSave(slots, 'auto', world, runId, savedAt);
 }
 
 export function writeSave(slots: SaveSlots, slot: SlotId, world: World, runId: string, savedAt: number): void {
@@ -303,10 +324,22 @@ export const SAVE_HELD_NOTE = t('save.held');
 export const SAVE_FAILED_NOTE = t('save.failed');
 export const TURN_FAILED_NOTE = t('save.turnFailed');
 
-export type Run = { slots: SaveSlots; runId: string; log: RunLog };
+export type Run = { slots: SaveSlots; runId: string; log: RunLog; mapHash: string };
+
+export function changeMapIfMoved(run: Run, world: World, hold: SaveHold, session: Storage, reload: () => void): boolean {
+  if (world.mapHash === run.mapHash) return false;
+  if (hold.held) throw new Error(`The map moved to ${world.mapHash} while saves are held, so a reboot would lose the turn`);
+  if (!world.events.some((e) => e.t === 'roadOpened')) throw new Error(`The map moved to ${world.mapHash} with no road opened`);
+  writeSave(run.slots, 'auto', world, run.runId, Date.now());
+  run.mapHash = world.mapHash;
+  requestBoot(session, SAVE_KEY, { slot: 'auto', reason: 'road' });
+  Promise.all([run.slots.flush(), run.log.flush()]).then(reload, reportError);
+  return true;
+}
 
 export class GameSaves {
   private readonly hold = new SaveHold();
+  private moving = false;
 
   constructor(private readonly run: Run, private readonly note: (text: Msg) => void, private readonly record: (text: Msg) => void) {
     run.slots.onError = (err) => this.failed(err);
@@ -352,7 +385,14 @@ export class GameSaves {
 
   afterTurn(world: World): void {
     this.hold.finishTurn();
-    if (!this.hold.held) saveWorld(this.run.slots, world, this.run.runId, CONFIG.saveTurns, Date.now());
+    if (this.hold.held) return;
+    saveWorld(this.run.slots, world, this.run.runId, CONFIG.saveTurns, Date.now());
+    saveOnArrival(this.run.slots, world, this.run.runId, Date.now());
+  }
+
+  changeMapIfMoved(world: World): boolean {
+    this.moving ||= changeMapIfMoved(this.run, world, this.hold, window.sessionStorage, () => window.location.reload());
+    return this.moving;
   }
 
   afterCommand(world: World): void {

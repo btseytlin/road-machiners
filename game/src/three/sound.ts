@@ -1,5 +1,3 @@
-// Turns game events into sound cues. Positioned cues use the same points as the visual effects, so fog of
-// war silences what the player may not see.
 
 import { BEATS_PER_BAR, engineFileFor, engineStrainFileFor, hornSoundFor, MIX, scorePhaseOf, SOUNDS, type CueId } from "../data/sounds";
 import { Fading, SoundDesigner, type Grid, type Hit, type Offer } from "../audio/designer";
@@ -16,6 +14,8 @@ import { PHYSICS } from "../data/physics";
 import type { GameEvent, ShotRound } from "../sim/types";
 import { isInTerritory, isNearOutpost, isNearTown } from "../sim/sites";
 import type { Vec } from "../sim/vec";
+import { atlasOf } from "../sim/atlas";
+import type { Terrain } from "../sim/terrain";
 import type { CameraRig } from "./render/camera";
 
 const CENTER: Placement = { pan: 0, gain: 1 };
@@ -224,10 +224,11 @@ export class SoundDirector {
 
 export type MusicPlace = "town" | "outpost" | "abandoned" | null;
 
-export function musicPlaceAt(pos: Vec): MusicPlace {
-  if (isNearTown(pos, MIX.music.musicReachTiles)) return "town";
-  if (isNearOutpost(pos, MIX.music.musicReachTiles)) return "outpost";
-  return isInTerritory(pos) ? "abandoned" : null;
+export function musicPlaceAt(t: Terrain, pos: Vec): MusicPlace {
+  const atlas = atlasOf(t);
+  if (isNearTown(atlas, pos, MIX.music.musicReachTiles)) return "town";
+  if (isNearOutpost(atlas, pos, MIX.music.musicReachTiles)) return "outpost";
+  return isInTerritory(atlas, pos) ? "abandoned" : null;
 }
 
 export type LoopState = { stormShare: number; inCombat: boolean; place: MusicPlace; paused: boolean };

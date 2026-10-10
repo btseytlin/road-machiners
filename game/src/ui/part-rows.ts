@@ -91,7 +91,7 @@ export class PartRows {
     return el(
       "span",
       { class: "part-name" },
-      el("b", {}, partName(part.defId)),
+      el("b", { title: partName(part.defId) }, partName(part.defId)),
       conditionTag(part),
       showStatus ? el("span", { class: status.tone }, status.text) : null,
     );
@@ -148,7 +148,7 @@ export class PartRows {
 }
 
 function scrollBoxes(root: HTMLElement): HTMLElement[] {
-  return [...root.querySelectorAll<HTMLElement>(".town-shop, .town-split")];
+  return [...root.querySelectorAll<HTMLElement>(".town-shop, .town-split, .outpost-body")];
 }
 
 function rowIds(root: HTMLElement): string[] {

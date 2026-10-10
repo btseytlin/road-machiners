@@ -1,11 +1,13 @@
 import * as THREE from "three";
 import { PHYSICS } from "../../data/physics";
+import { REGION } from "../../data/region";
 import {
   paintGroundCanvas,
   TERRAIN_MARGIN,
   type PaintCanvas,
 } from "../../render/groundPaint";
-import { deckAt, DECKS, railOffset, type Deck } from "../../sim/bridge";
+import { atlasOf } from "../../sim/atlas";
+import { deckAt, railOffset, type Deck } from "../../sim/bridge";
 import { deckHeight, deckSegments, type DeckSegment, type Terrain } from "../../sim/terrain";
 import type { World } from "../../sim/types";
 import { drawRoads } from "./roads";
@@ -14,19 +16,24 @@ import type { RenderScope } from "./scope";
 
 const S = PHYSICS.metersPerTile;
 const TEXTURE_SIDE = 2048;
+const GROUND_PIXELS_PER_TILE = TEXTURE_SIDE / (REGION.size + 2 * TERRAIN_MARGIN);
 export const TERRAIN_CHUNK = 32;
 const FACET_TINT = 0.04;
 
-function mapCanvas(w: World): PaintCanvas {
+function groundSide(w: World): number {
+  return Math.min(TEXTURE_SIDE, Math.round(GROUND_PIXELS_PER_TILE * (w.size + 2 * TERRAIN_MARGIN)));
+}
+
+function mapCanvas(w: World, side: number): PaintCanvas {
   const from = -TERRAIN_MARGIN;
-  const res = TEXTURE_SIDE / (w.size + 2 * TERRAIN_MARGIN);
+  const res = side / (w.size + 2 * TERRAIN_MARGIN);
   const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = TEXTURE_SIDE;
+  canvas.width = canvas.height = side;
   const ctx = canvas.getContext("2d", { willReadFrequently: true });
   if (!ctx) throw new Error("Could not get terrain canvas context");
   return {
     ctx,
-    size: TEXTURE_SIDE,
+    size: side,
     res,
     from,
     toPx: (tile) => (tile - from) * res,
@@ -45,7 +52,7 @@ export function groundTexture(w: World): THREE.CanvasTexture {
 }
 
 function paintTexture(w: World): THREE.CanvasTexture {
-  const c = mapCanvas(w);
+  const c = mapCanvas(w, groundSide(w));
   paintGroundCanvas(c, w.terrain, { hillshade: 0.35 });
   const texture = new THREE.CanvasTexture(c.ctx.canvas);
   texture.colorSpace = THREE.SRGBColorSpace;
@@ -69,7 +76,7 @@ export type TerrainChunk = {
 const DECK_FLOOR_GAP = 0.5;
 
 export function deckFloorCap(t: Terrain, x: number, y: number): number | null {
-  const on = deckAt(x, y);
+  const on = deckAt(atlasOf(t).decks, x, y);
   return on === null ? null : deckHeight(t, on.deck, on.along) - DECK_FLOOR_GAP / S;
 }
 
@@ -98,7 +105,7 @@ export function chunkGeometry(t: Terrain, x: number, y: number, width: number, d
 export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
   const chunks: TerrainChunk[] = [];
   const material = new THREE.MeshLambertMaterial({ map: groundTexture(w) });
-  drawRoads(material, mapCanvas(w), w.terrain);
+  drawRoads(material, mapCanvas(w, TEXTURE_SIDE), w.terrain);
   facetGround(material);
   NIGHT_POOLS.light(material);
   for (let y = 0; y < w.size; y += TERRAIN_CHUNK)
@@ -117,7 +124,7 @@ export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
       );
       chunks.push({ x, y, width, depth, mesh });
     }
-  for (const deck of DECKS) deckPick(w.terrain, deck, scope);
+  for (const deck of atlasOf(w.terrain).decks.decks) deckPick(w.terrain, deck, scope);
   return chunks;
 }
 

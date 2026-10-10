@@ -1,5 +1,3 @@
-// The save format and the steps that carry an old save to it. A save loads only in its own major format. Within
-// it, load runs every step from the save's minor format on, so the minor format is the number of steps.
 
 import { CORES_2_1, CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { GOAL_REASONS_2_19, LINES_2_19, WARN_LINES_2_19 } from './save-text-2-19';
@@ -727,6 +725,32 @@ function withNotesAndWagon_34_35(world: SavedJson): SavedJson {
   };
 }
 
+function withoutIcarusRun_47_48(world: SavedJson): SavedJson {
+  const run = world.gauntlet as SavedJson | null;
+  return run !== null && 'course' in run ? { ...world, gauntlet: null } : world;
+}
+
+function renamedFuryRoad_48_49(world: SavedJson): SavedJson {
+  const { gauntlet, ...rest } = world;
+  const setup = world.setup as SavedJson;
+  return { ...rest, setup: { ...setup, mode: setup.mode === 'gauntlet' ? 'furyRoad' : setup.mode }, furyRoad: gauntlet };
+}
+
+function withRunPacing_49_50(world: SavedJson): SavedJson {
+  const run = world.furyRoad as SavedJson | null;
+  if (run === null) return world;
+  const groups = (run.groups as SavedJson[]).map(({ at: _at, ...group }) => ({ ...group, engaged: [] }));
+  return { ...world, furyRoad: { ...run, groups, quietFrom: world.turn } };
+}
+
+function withOutpostTrucks_50_51(world: SavedJson): SavedJson {
+  const run = world.furyRoad as SavedJson | null;
+  if (run === null) return world;
+  const outposts = (run.outposts as SavedJson[]).map((post) => ({ ...post, trucksSold: [] }));
+  const groups = (run.groups as SavedJson[]).map((group) => ({ ...group, counted: [] }));
+  return { ...world, furyRoad: { ...run, outposts, groups } };
+}
+
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, player: { ...(world.player as SavedJson), townPatched: false } }),
   (world) => {
@@ -818,6 +842,11 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withoutRetiredSites_43_44,
   (world) => world,
   (world) => world,
+  (world) => ({ ...world, gauntlet: null }),
+  withoutIcarusRun_47_48,
+  renamedFuryRoad_48_49,
+  withRunPacing_49_50,
+  withOutpostTrucks_50_51,
 ];
 
 type SavedQuests = { world: SavedJson; local: Record<string, SavedJson>; session: { quest: string; checkpoint: string; seed: number } | null };

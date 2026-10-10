@@ -36,6 +36,7 @@ import { concat, list, t, verbatim, type Msg } from '../text/msg';
 import { goalText, goodName, moneyReasonText, noteText, noteTitle, partName as partNameOf, refusalText, siteName, skillName, templateName, traitName, vehicleTitle } from '../text/names';
 import { Refused } from '../sim/world';
 import { aidWords, lineText } from './dialogue';
+import { isOutpostSite, outpostId } from '../sim/highway';
 import { damage, fuelLiters, hp, kg, kph, moneyM, moneyMsg } from './units';
 
 // What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
@@ -644,12 +645,24 @@ function lootArgumentText(world: World, e: Extract<GameEvent, { t: 'lootArgument
   return line(text, e.end === 'fight' ? 'bad' : 'dim');
 }
 
-function moneyText(world: World, e: Extract<GameEvent, { t: 'money' }>): LogLine {
+function outpostReachedText(world: World, e: Extract<GameEvent, { t: 'outpostReached' }>): LogLine {
+  const site = siteName(outpostId(e.milestone));
+  const pay = moneyMsg(e.pay);
+  return line(e.wrecks === 0 ? t('log.outpostReached', { site, pay }) : t('log.outpostReachedWrecks', { site, pay, n: e.wrecks }), 'good');
+}
+
+function runLostText(_world: World, e: Extract<GameEvent, { t: 'runLost' }>): LogLine {
+  return line(t(e.cause === 'wrecked' ? 'log.runWrecked' : 'log.runEnded', { n: e.stretch }), 'bad');
+}
+
+function moneyText(world: World, e: Extract<GameEvent, { t: 'money' }>): LogLine | null {
+  if (e.reason.kind === 'outpost') return null;
   const reason = moneyReasonText(world, e.reason);
   return e.amount > 0 ? line(t('log.moneyGain', { n: moneyMsg(e.amount), reason }), 'good') : line(t('log.moneyLoss', { n: moneyMsg(-e.amount), reason }), 'bad');
 }
 
-function discoverText(e: Extract<GameEvent, { t: 'discover' }>): LogLine {
+function discoverText(e: Extract<GameEvent, { t: 'discover' }>): LogLine | null {
+  if (isOutpostSite(e.location)) return null;
   return line(t('log.discovered', { site: siteName(e.location) }), 'good');
 }
 
@@ -758,6 +771,9 @@ const EVENT_TEXTS: { [K in GameEvent['t']]: (world: World, e: Extract<GameEvent,
   practice: quiet,
   skillUp: (_, e) => line(skillUpText(e.skill, e.level), 'good'),
   money: moneyText,
+  outpostReached: outpostReachedText,
+  roadOpened: quiet,
+  runLost: runLostText,
   discover: (_, e) => discoverText(e),
   supply: (_, e) => line(noteText(e.note), 'bad'),
   death: () => line(t('log.death'), 'bad'),

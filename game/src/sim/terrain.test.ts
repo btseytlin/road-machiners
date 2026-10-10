@@ -29,6 +29,7 @@ import type { World } from "./types";
 import { TEST_MAP } from "../test/map";
 import { FALLEN_SUN_DECKS, TERRITORIES } from "../data/territory";
 import { defaultSetup } from "./settings";
+import { ICARUS_KEY } from './atlas';
 
 let startWorld: World | undefined;
 function worldOnMap(): World {
@@ -43,7 +44,7 @@ function flatWith(
   const heights: number[] = [];
   for (let j = 0; j <= size; j++)
     for (let i = 0; i <= size; i++) heights.push(lift(i, j));
-  return { size, heights, types: new Array(size * size).fill("hardpan") };
+  return { size, heights, types: new Array(size * size).fill("hardpan"), atlas: ICARUS_KEY };
 }
 
 describe("road index", () => {

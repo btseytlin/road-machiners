@@ -50,7 +50,7 @@ describe('readCarried', () => {
 
   it('keeps old perks whose rank holds and drops the rest', () => {
     const world = { ...FORMAT_2_9, player: { ...FORMAT_2_9.player, perks: ['welder', 'desertRat', 'steadyAim'] } };
-    const { world: rescued } = carriedWorld(readCarried({ world }), KIT, TEST_MAP, fresh);
+    const { world: rescued } = carriedWorld(readCarried({ world }), KIT, () => TEST_MAP, fresh);
     expect(rescued.player.perks).toEqual(['welder', 'desertRat']);
     expect(rescued.player.ranks.toughness).toBe(5);
   });

@@ -113,3 +113,18 @@ Details: [economy](wiki/mechanics/economy.md), [economy reference](wiki/economy.
 The game shows what the player needs to decide and hides what they should discover. The HUD shows state. The log tells important events and the story, never mechanical state like reloads. Hidden things, like a driver's traits, show themselves through behavior first.
 
 In-character and out-of-character info is separated. For example, in talking NPCs never mention "turns", "quests" or things like that to avoid immersion-breaking. 
+
+## Game modes
+
+Roaming is the sandbox every section above describes. Another mode is a separate world picked at New game, and it changes only the rules it names. Every mode keeps the world settings, the truck, driving and tactical combat.
+
+Fury Road is a highway combat run on its own map, never on Icarus: an endless generated four-lane highway that runs north, from the bottom left of the screen to the top right under the same camera, and bends now and then so the player must steer. Walled forts stand at its milestones. Flat verges either side give room to turn and fight at gun range. The road carries hazard scenes built from the game's wrecks, barriers, rocks and hull plates, each with a cause and a way through, between open stretches where the fights happen. Each stretch between forts is a level. Its hostile groups mix every kind of vehicle and driver, come from ahead, behind and either side, race in until they engage, and arrive about 20 seconds of quiet driving apart. They grow and arm up for eight stretches, then hold. Parking at the fort wins the level at once: it pays, and the hostiles left leave the road. The next level starts when the player chooses to wait for the road there, and its land is generated seamless with the last. It has no traffic, salvage or shops. Each mode difference is a named switch in the mode's row. The committee approved these exceptions for Fury Road only:
+
+- Combat: hostile groups find the player and fight until a truck is beaten. A fight ends when a truck is knocked out or wrecked, or the two part. A beaten truck leaves no loot. A knocked-out one gets up later and leaves the road. Beating a truck, either way, pays once at the next outpost.
+- Defeat and recovery: a beaten NPC is knocked out or wrecked by the normal rules. A beaten player is never knocked out and ends the run. A stranded player with no way to patch ends the run. There are no tows, beacon or town patches. Restart run starts a new run with the same settings.
+- Social: no radio, hails, horn, pleas, truces, mercy or surrender.
+- Economy: money comes from outpost payouts, not loot or trade. Outposts are garages with storage and instant refits. They sell repairs, fuel, supplies, repair parts, two parts of every type and three trucks.
+- Life is valued (principle 4) does not hold: nobody surrenders or flees.
+
+Details: [Fury Road](wiki/mechanics/fury-road.md).
+

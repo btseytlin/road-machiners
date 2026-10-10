@@ -1,14 +1,12 @@
-// Town and location models. Buildings that block movement are obstacles already (see obstacles.ts),
-// so nothing here blocks. Blender models come from tools/blender/; each script's docstring gives its size.
-
 import * as THREE from 'three';
 import { REGION, type SiteLocationDef, type TownDef } from '../../data/region';
-import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES, type FortressKind } from '../../data/fortress';
-import { fortressGates, fortressOutline, fortressPieces, insideCurtain, onFortressRock, type FortGate, type FortressPiece } from '../../sim/fortress';
+import { FORTRESS, FORTRESS_STYLES, type FortressKind } from '../../data/fortress';
+import { fortressGates, fortressOutline, fortressPieces, fortressStyle, insideCurtain, onFortressRock, type FortGate, type FortressPiece } from '../../sim/fortress';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
-import { isFortress } from '../../sim/sites';
+import { isFortress, siteLook } from '../../sim/sites';
+import { atlasOf } from '../../sim/atlas';
 import { deckById, deckCenterAt, type Deck } from '../../sim/bridge';
 import { deckSegments, heightAt, type DeckSegment, type Terrain } from '../../sim/terrain';
 import { pointInPolygon, segmentDist } from '../../sim/vec';
@@ -298,7 +296,7 @@ function dressGate(b: SiteBuilder, site: Site, fort: FortGate, guarded: boolean)
   }
   if (!guarded) return;
   const lift = (x: number, z: number) => b.groundAt(face.x - site.pos.x, face.y - site.pos.y) - b.groundAt(x, z);
-  const depth = FORTRESS_STYLES[FORTRESS_SITES[site.id].style].gate.depth;
+  const depth = FORTRESS_STYLES[fortressStyle(site)].gate.depth;
   const pole = at(-depth / 2, width / 2 - 0.6);
   b.addBox(pole.x, pole.z, 0.12, SET.gatePoleHeight - height, 0.12, PAL.trunk, height + lift(pole.x, pole.z), -a);
   const flag = at(-depth / 2 + 0.5, width / 2 - 0.6);
@@ -456,8 +454,8 @@ function resolveLights(b: SiteBuilder, site: Site, t: Terrain): SiteLight[] {
 
 function buildSite(t: Terrain, site: Site): BuiltSite {
   const b = new SiteBuilder(t, site);
-  const decor = SITE_DECOR[site.id];
-  if (decor === undefined) throw new Error(`Missing landmark model for ${site.id}`);
+  const decor = SITE_DECOR[siteLook(site)];
+  if (decor === undefined) throw new Error(`Missing landmark model for ${siteLook(site)}`);
   decor(b, site, t);
   closeSite(b, site, t);
   const lights = resolveLights(b, site, t);
@@ -470,21 +468,33 @@ function buildSite(t: Terrain, site: Site): BuiltSite {
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
-const SITES = [...REGION.towns, ...REGION.locations.filter((l): l is SiteLocationDef => l.kind !== 'territory')];
+function sitesOf(t: Terrain): (TownDef | SiteLocationDef)[] {
+  const atlas = atlasOf(t);
+  return [...atlas.towns, ...atlas.locations.filter((l): l is SiteLocationDef => l.kind !== 'territory')];
+}
+
+function deckOf(t: Terrain, id: string): Deck | null {
+  return atlasOf(t).decks.decks.find((d) => d.id === id) ?? null;
+}
+
+const DECK_MODELS = [
+  { id: 'canyon-bridge', build: buildCanyonBridge },
+  { id: 'broken-wing', build: buildWingDeck },
+] as const;
 
 export function buildSites(t: Terrain): BuiltSite {
   const root = new THREE.Group();
   const movers: Mover[] = [];
   const lights: SiteLight[] = [];
   const lamps: PoolLamp[] = [];
-  for (const site of SITES) {
+  for (const site of sitesOf(t)) {
     const built = buildSite(t, site);
     root.add(built.root);
     movers.push(...built.movers);
     lights.push(...built.lights);
     lamps.push(...built.lamps);
   }
-  root.add(buildCanyonBridge(t), buildWingDeck(t));
+  for (const { id, build } of DECK_MODELS) if (deckOf(t, id)) root.add(build(t));
   return { root, movers, lights, lamps };
 }
 
@@ -492,7 +502,7 @@ export function addSites(t: Terrain, scope: RenderScope, play: PlayClock): { lig
   const motion = new SiteMotion();
   const lights: SiteLight[] = [];
   const lamps: PoolLamp[] = [];
-  for (const site of SITES) {
+  for (const site of sitesOf(t)) {
     const built = buildSite(t, site);
     scope.add(built.root, site.pos, site.radius);
     lights.push(...built.lights);
@@ -506,9 +516,9 @@ export function addSites(t: Terrain, scope: RenderScope, play: PlayClock): { lig
     motion.tick((now - last) / 1000);
     last = now;
   });
-  for (const [id, build] of [['canyon-bridge', buildCanyonBridge], ['broken-wing', buildWingDeck]] as const) {
-    const deck = deckById(id);
-    scope.add(build(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
+  for (const { id, build } of DECK_MODELS) {
+    const deck = deckOf(t, id);
+    if (deck) scope.add(build(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
   }
   return { lights, lamps };
 }

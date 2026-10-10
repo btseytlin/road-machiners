@@ -1,9 +1,8 @@
-// The reactor hazard: a truck inside a hazard zone costs its driver health each turn, down to the zone's floor.
-// It is the only writer of that loss, for the player and NPC trucks alike. Zones come from src/sim/territory.ts.
 
 import { getResources } from './resources';
 import { isKnockedOut } from './defeat';
-import { hazardZones, type HazardZone } from './territory';
+import { atlasOf } from './atlas';
+import type { HazardZone } from './territory';
 import type { Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 
@@ -12,7 +11,7 @@ function inside(zone: HazardZone, pos: Vec): boolean {
 }
 
 export function applyHazards(world: World): void {
-  for (const zone of hazardZones()) {
+  for (const zone of atlasOf(world.terrain).hazards) {
     for (const vehicle of world.vehicles) if (!isKnockedOut(vehicle) && inside(zone, vehicle.pos)) hurt(world, vehicle, zone);
   }
 }

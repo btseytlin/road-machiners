@@ -53,6 +53,7 @@
   }
   .town-split {
     grid-template-columns: 1fr;
+    grid-auto-rows: max-content;
     overflow: auto;
   }
   .town-truck,
