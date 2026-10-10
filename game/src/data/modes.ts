@@ -85,9 +85,9 @@ export type BandRule = { kind: PropKind; count: [number, number]; r: [number, nu
 export type GroundBand = { below: number; type: TerrainTypeId };
 
 export const HIGHWAY = {
-  version: 2,
-  size: 320,
-  stride: 220,
+  version: 3,
+  size: 410,
+  stride: 310,
   milestoneInset: 50,
   road: {
     lanes: [-3, -1, 1, 3],
@@ -98,7 +98,7 @@ export const HIGHWAY = {
     flatTo: 15,
     blend: 7,
     ridge: { rise: 3, run: 4 },
-    bend: { amplitude: 8, wavelength: 520, seedOffset: 101 },
+    bend: { ends: 60, cells: 2, shift: [16, 36] as [number, number], straightChance: 0.2, maxHeading: 35 },
     profile: { amplitude: 1.5, wavelength: 300, seedOffset: 103 },
     sample: 2,
     paint: { dash: 3, gap: 3, line: 0.2, wear: 0.02, band: 0.3, bandSpread: 0.75, holeInset: 0.75 },
@@ -158,7 +158,7 @@ export const HAZARDS = {
   jackknife: { lanes: [2, 3] as Range, hulks: ['bus', 'hauler'], yaw: [60, 90] as Range, cars: [1, 2] as Range, carYaw: 15, behind: [2.2, 3.2] as Range },
   checkpoint: { lines: [2, 3] as Range, spacing: 10, inner: 1, barrierStep: 1, lineYaw: 3, sandbags: [1, 2] as Range, behind: 0.9, bagStep: 1.2, traps: [3, 6] as Range, trapFrom: 5.6, trapStep: 0.9, truckAcross: [8.5, 11] as Range, truckYaw: 10 },
   tankline: { lanes: [1, 2] as Range, tankAcross: [8, 12] as Range, tankYaw: 20, traps: [6, 10] as Range, step: [3, 4] as Range },
-  rockfall: { crag: { across: [17, 18.5] as Range, r: [1.6, 2.2] as Range }, rocks: [6, 12] as Range, reach: 3, r: [0.4, 1.3] as Range, fan: 4 },
+  rockfall: { crag: { across: [17, 18.5] as Range, r: [1.6, 2.2] as Range }, rocks: [6, 12] as Range, gap: 0.6, reach: 3, r: [0.4, 1.3] as Range, fan: 4 },
   craters: { count: [2, 4] as Range, radius: [1.5, 2.5] as Range, depth: [0.3, 0.5] as Range, spacing: [3.5, 5] as Range, junk: [1, 2] as Range },
   ramp: { width: 3, length: 5, rise: 0.35, craterChance: 0.5, craterGap: 3 },
   passage: 3,
@@ -169,6 +169,6 @@ export const HAZARDS = {
   maxTries: 60,
   closures: {
     north: { gap: 16, reach: 30, rows: 2, rowGap: 1.4, sandbags: 4, traps: 10, trapsAhead: 2.5 },
-    south: { at: 45, reach: 30, rows: 2, rowGap: 2, yaw: 15, hulkShare: 0.5 },
+    south: { behind: 26, reach: 30, rows: 2, rowGap: 2, yaw: 15, hulkShare: 0.5 },
   },
 };

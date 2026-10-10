@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FURY_ROAD, HIGHWAY } from '../data/modes';
 import { playerVehicle } from './damage';
 import { abandonRun, advanceFuryRoad, canAbandonRun, furyRoadReadout, moveWindow, outpostPad, payOf, reachedOutpostAt, runEarnings, stockSizeOf, waveOf, WINDOW_MOVE } from './fury-road';
-import { highwayHash, milestoneAt, roadPoint, STRIDE } from './highway';
+import { highwayHash, milestoneAt, roadPoint, WINDOW_SHIFT } from './highway';
 import { topGoal } from './npc-activities';
 import { optionWeights, tradeOffers } from './npc-decisions';
 import { getResources } from './resources';
@@ -116,14 +116,14 @@ describe('arriving at an outpost', () => {
     expect(after.mapHash).toBe(highwayHash(w.seed, 1));
     expect(after.player.money).toBe(money + payOf(1, 0));
     expect(after.events).toContainEqual({ t: 'outpostReached', milestone: 1, pay: payOf(1, 0), wrecks: 0 });
-    expect(me.pos).toEqual({ x: before.x + STRIDE, y: before.y + STRIDE });
+    expect(me.pos).toEqual({ x: before.x + WINDOW_SHIFT.x, y: before.y + WINDOW_SHIFT.y });
     expect(after.terrain.types[Math.floor(me.pos.y) * after.size + Math.floor(me.pos.x)]).toBe(ground);
     expect(runOf(after).outposts.map((o) => [o.milestone, o.paid])).toEqual([[1, true], [2, false]]);
     expect(runOf(after).groups.every((g) => g.stretch === 2)).toBe(true);
     expect(reachedOutpostAt(after)?.id).toBe('outpost-1');
   });
 
-  it('shifts the player, the ground under it and the explored overlap one stride up the diagonal', () => {
+  it('shifts the player, the ground under it and the explored overlap one stride north', () => {
     const w = furyRoadWorld();
     parkOnNext(w);
     const before = playerVehicle(w).pos;
@@ -131,7 +131,7 @@ describe('arriving at an outpost', () => {
 
     const after = endTurn(w, still);
     const me = playerVehicle(after);
-    const shifted = (95 + STRIDE) * after.size + 5 + STRIDE;
+    const shifted = (95 + WINDOW_SHIFT.y) * after.size + 5 + WINDOW_SHIFT.x;
 
     expect(heightAt(after.terrain, me.pos.x, me.pos.y)).toBeCloseTo(heightAt(w.terrain, before.x, before.y), 9);
     expect(after.player.explored[shifted]).toBe(1);

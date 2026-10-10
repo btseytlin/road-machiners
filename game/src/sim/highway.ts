@@ -14,13 +14,13 @@ import { DEG, type Vec } from './vec';
 
 const SIZE = HIGHWAY.size;
 const ROAD = HIGHWAY.road;
-const ROOT2 = Math.SQRT2;
-export const STRIDE = HIGHWAY.stride;
+const STRIDE = HIGHWAY.stride;
+const BEND = ROAD.bend;
 
 const STRETCH_SALT = 0x68777374;
 const CHUNK_SALT = 0x6877636b;
 const LINE_SALT = 0x68776c6e;
-const STREAM_PARTS = { post: 1, scenes: 2, groups: 3, stock: 4 } as const;
+const STREAM_PARTS = { post: 1, scenes: 2, groups: 3, stock: 4, bends: 5, sides: 6 } as const;
 export type StretchPart = keyof typeof STREAM_PARTS;
 
 export type RoadPos = { n: number; u: number };
@@ -33,29 +33,35 @@ export function chunkStream(seed: number, c: number): Rng {
   return { rngState: Math.floor(hashRandom(seed, CHUNK_SALT, c) * 0x100000000) | 0 };
 }
 
+export const WINDOW_SHIFT: Vec = { x: 0, y: STRIDE };
+
+export function roadVector(dn: number, du: number): Vec {
+  return { x: du, y: -dn };
+}
+
 export function toRoad(window: number, p: Vec): RoadPos {
-  return { n: (2 * SIZE - p.x - p.y + 2 * window * STRIDE) / ROOT2, u: (p.x - p.y) / ROOT2 };
+  return { n: SIZE + window * STRIDE - p.y, u: p.x - SIZE / 2 };
 }
 
 export function fromRoad(window: number, n: number, u: number): Vec {
-  const base = SIZE + window * STRIDE;
-  return { x: base + (u - n) / ROOT2, y: base - (u + n) / ROOT2 };
+  const step = roadVector(n - SIZE - window * STRIDE, u);
+  return { x: SIZE / 2 + step.x, y: step.y };
 }
 
 export function windowSpan(window: number): { from: number; to: number } {
-  return { from: window * STRIDE * ROOT2, to: (window * STRIDE + SIZE) * ROOT2 };
+  return { from: window * STRIDE, to: window * STRIDE + SIZE };
 }
 
 export function milestoneAt(j: number): number {
-  return (HIGHWAY.milestoneInset + j * STRIDE) * ROOT2;
+  return HIGHWAY.milestoneInset + j * STRIDE;
 }
 
 export function stretchOf(n: number): number {
-  return Math.floor((n / ROOT2 - HIGHWAY.milestoneInset) / STRIDE) + 1;
+  return Math.floor((n - HIGHWAY.milestoneInset) / STRIDE) + 1;
 }
 
 export function nearestMilestone(n: number): number {
-  return Math.round((n / ROOT2 - HIGHWAY.milestoneInset) / STRIDE);
+  return Math.round((n - HIGHWAY.milestoneInset) / STRIDE);
 }
 
 export function highwayHash(seed: number, window: number): string {
@@ -85,9 +91,41 @@ function noise2(x: number, y: number, seed: number): number {
   return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
 }
 
+const BENDS = new Map<string, number[]>();
+
+export function bendPlan(seed: number, j: number): number[] {
+  const key = `${seed}:${j}`;
+  let plan = BENDS.get(key);
+  if (!plan) {
+    plan = drawBend(seed, j);
+    BENDS.set(key, plan);
+  }
+  return plan;
+}
+
+function bendCell(): number {
+  return (STRIDE - 2 * BEND.ends) / BEND.cells;
+}
+
+function drawBend(seed: number, j: number): number[] {
+  const rng = stretchStream(seed, j, 'bends');
+  const straight = j < 1 || nextRandom(rng) < BEND.straightChance;
+  const shift = randRange(rng, BEND.shift[0], BEND.shift[1]) * sideOf(rng);
+  const plan = Array.from({ length: BEND.cells + 1 }, (_, i) => (straight || i === 0 || i === BEND.cells ? 0 : shift));
+  const steepest = Math.max(...plan.slice(1).map((w, i) => (Math.abs(w - plan[i]) * Math.PI) / (2 * bendCell())));
+  if (Math.atan(steepest) > BEND.maxHeading * DEG) throw new Error(`Stretch ${j} of seed ${seed} bends ${(Math.atan(steepest) / DEG).toFixed(1)} degrees off north, past ${BEND.maxHeading}`);
+  return plan;
+}
+
 export function centerU(seed: number, n: number): number {
-  const b = ROAD.bend;
-  return b.amplitude * (2 * noise1(n / b.wavelength, seed + b.seedOffset) - 1);
+  const j = stretchOf(n);
+  const along = n - milestoneAt(j - 1) - BEND.ends;
+  const cell = bendCell();
+  if (along <= 0 || along >= cell * BEND.cells) return 0;
+  const plan = bendPlan(seed, j);
+  const i = Math.floor(along / cell);
+  const ramp = (1 - Math.cos((Math.PI * (along - i * cell)) / cell)) / 2;
+  return plan[i] + (plan[i + 1] - plan[i]) * ramp;
 }
 
 function centerSlope(seed: number, n: number): number {
@@ -100,8 +138,8 @@ export function roadHeight(seed: number, n: number): number {
 }
 
 export function roadHeading(seed: number, n: number): number {
-  const slope = centerSlope(seed, n);
-  return Math.atan2(-(slope + 1), slope - 1);
+  const ahead = roadVector(1, centerSlope(seed, n));
+  return Math.atan2(ahead.y, ahead.x);
 }
 
 export function roadAt(seed: number, n: number, offset: number): RoadPos {
@@ -115,8 +153,24 @@ export function roadPoint(seed: number, window: number, n: number, offset: numbe
   return fromRoad(window, at.n, at.u);
 }
 
+const FOOT_STEPS = 3;
+
+function roadFoot(seed: number, at: RoadPos): { n: number; across: number } {
+  let n = at.n;
+  for (let step = 0; step < FOOT_STEPS; step++) {
+    const slope = centerSlope(seed, n);
+    n += (at.n - n + (at.u - centerU(seed, n)) * slope) / (1 + slope * slope);
+  }
+  const slope = centerSlope(seed, n);
+  return { n, across: (at.u - centerU(seed, n) - (at.n - n) * slope) / Math.hypot(1, slope) };
+}
+
 export function acrossOf(seed: number, at: RoadPos): number {
-  return (at.u - centerU(seed, at.n)) / Math.hypot(1, centerSlope(seed, at.n));
+  return roadFoot(seed, at).across;
+}
+
+export function alongOf(seed: number, at: RoadPos): number {
+  return roadFoot(seed, at).n;
 }
 
 export type OutpostSite = { milestone: number; n: number; side: 1 | -1; center: RoadPos; out: number };
@@ -173,10 +227,7 @@ function fortAxes(seed: number, j: number): FortAxes | null {
 
 function fortFrame(axes: FortAxes | null, at: RoadPos): FortFrame | null {
   if (!axes) return null;
-  const dn = at.n - axes.center.n;
-  const du = at.u - axes.center.u;
-  const dx = (du - dn) / ROOT2;
-  const dy = -(du + dn) / ROOT2;
+  const { x: dx, y: dy } = roadVector(at.n - axes.center.n, at.u - axes.center.u);
   return { out: dx * axes.cos + dy * axes.sin, lat: dy * axes.cos - dx * axes.sin };
 }
 
@@ -243,8 +294,8 @@ type LineSample = { n: number; c: number; len: number; h: number; fort: FortAxes
 
 function lineSamples(seed: number, window: number): LineSample[] {
   const forts = new Map<number, FortAxes | null>();
-  return Array.from({ length: 2 * SIZE + 1 }, (_, sum) => {
-    const n = (2 * SIZE - sum + 2 * window * STRIDE) / ROOT2;
+  return Array.from({ length: 2 * SIZE + 1 }, (_, half) => {
+    const n = toRoad(window, { x: 0, y: half / 2 }).n;
     const j = nearestMilestone(n);
     if (!forts.has(j)) forts.set(j, fortAxes(seed, j));
     return { n, c: centerU(seed, n), len: Math.hypot(1, centerSlope(seed, n)), h: roadHeight(seed, n), fort: forts.get(j) ?? null };
@@ -258,16 +309,16 @@ function landOf(seed: number, window: number): Pick<Terrain, 'heights' | 'types'
   const craters = windowCraters(seed, window);
   const lines = lineSamples(seed, window);
   for (let y = 0; y <= SIZE; y++) {
+    const line = lines[2 * y];
     for (let x = 0; x <= SIZE; x++) {
-      const line = lines[x + y];
-      const at = { n: line.n, u: (x - y) / ROOT2 };
+      const at = { n: line.n, u: x - SIZE / 2 };
       heights[y * row + x] = cornerHeight(seed, at, line, fortFlat(fortFrame(line.fort, at)), craters);
     }
   }
   for (let y = 0; y < SIZE; y++) {
+    const line = lines[2 * y + 1];
     for (let x = 0; x < SIZE; x++) {
-      const line = lines[x + y + 1];
-      const at = { n: line.n, u: (x - y) / ROOT2 };
+      const at = { n: line.n, u: x + 0.5 - SIZE / 2 };
       types[y * SIZE + x] = tileType(seed, at, Math.abs(at.u - line.c) / line.len, onFortConcrete(fortFrame(line.fort, at)), craters);
     }
   }

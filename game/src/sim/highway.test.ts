@@ -5,7 +5,8 @@ import { TERRAIN } from '../data/terrain';
 import { atlasOf } from './atlas';
 import { REGION } from '../data/region';
 import { fortressProps } from './fortress';
-import { acrossOf, centerU, fromRoad, highwayMap, highwayStart, milestoneAt, outpostFort, roadHeading, roadHeight, roadPoint, STRIDE, toRoad, windowSpan } from './highway';
+import { deckAt } from './bridge';
+import { acrossOf, centerU, fromRoad, highwayMap, highwayStart, milestoneAt, outpostFort, roadAt, roadHeading, roadHeight, roadPoint, roadVector, stretchOf, toRoad, WINDOW_SHIFT, windowSpan } from './highway';
 import { isBakedObstacle, mapObstacles } from './mapgen';
 import { northClosureAt, sceneAt, southClosureAt } from './road-hazards';
 import { canUseSite, sitePads } from './sites';
@@ -13,16 +14,18 @@ import { CELL, componentOf, navLayer } from './nav/layer';
 import { groundAt, heightAt, isCliff, type BakedMap, type BakedProp } from './terrain';
 
 const SIZE = HIGHWAY.size;
+const STRIDE = HIGHWAY.stride;
 const OVERLAP = SIZE - STRIDE;
 const ROAD = HIGHWAY.road;
-const SCREEN_UP = -3 * Math.PI / 4;
+const NORTH = -Math.PI / 2;
+const DEGREE = Math.PI / 180;
 
 function propKey(p: BakedProp, shift: number): string {
-  return [p.kind, (p.pos.x + shift).toFixed(4), (p.pos.y + shift).toFixed(4), p.yaw.toFixed(4), p.r.toFixed(4)].join(':');
+  return [p.kind, (p.pos.x + shift * WINDOW_SHIFT.x / STRIDE).toFixed(4), (p.pos.y + shift * WINDOW_SHIFT.y / STRIDE).toFixed(4), p.yaw.toFixed(4), p.r.toFixed(4)].join(':');
 }
 
-function inSquare(p: BakedProp, from: number, to: number): boolean {
-  return [p.pos.x, p.pos.y].every((v) => v >= from + 2 && v <= to - 2);
+function inBand(p: BakedProp, from: number, to: number): boolean {
+  return p.pos.y >= from + 3 && p.pos.y <= to - 3 && p.pos.x >= 3 && p.pos.x <= SIZE - 3;
 }
 
 function typeAt(map: BakedMap, p: { x: number; y: number }): string {
@@ -40,13 +43,16 @@ describe('the road frame', () => {
     }
   });
 
-  it('runs along the diagonal that is screen-up, with each milestone at the same spot of its window', () => {
+  it('runs map north, toward the top right of the screen, with each milestone at the same spot of its window', () => {
+    expect(roadVector(1, 0)).toEqual({ x: 0, y: -1 });
+    expect(WINDOW_SHIFT).toEqual({ x: 0, y: STRIDE });
     for (const k of [0, 1, 4]) {
       const south = fromRoad(k, milestoneAt(k), 0);
       const north = fromRoad(k, milestoneAt(k + 1), 0);
-      expect([south.x, south.y].map((v) => +v.toFixed(6))).toEqual([270, 270]);
-      expect([north.x, north.y].map((v) => +v.toFixed(6))).toEqual([50, 50]);
-      expect(toRoad(k + 1, { x: north.x + STRIDE, y: north.y + STRIDE }).n).toBeCloseTo(milestoneAt(k + 1), 9);
+      expect([south.x, south.y].map((v) => +v.toFixed(6))).toEqual([SIZE / 2, SIZE - HIGHWAY.milestoneInset]);
+      expect([north.x, north.y].map((v) => +v.toFixed(6))).toEqual([SIZE / 2, HIGHWAY.milestoneInset]);
+      expect(toRoad(k + 1, { x: north.x + WINDOW_SHIFT.x, y: north.y + WINDOW_SHIFT.y }).n).toBeCloseTo(milestoneAt(k + 1), 9);
+      expect(windowSpan(k)).toEqual({ from: k * STRIDE, to: k * STRIDE + SIZE });
     }
   });
 });
@@ -66,16 +72,11 @@ describe('a highway window', () => {
         const a = highwayMap(seed, k);
         const b = highwayMap(seed, k + 1);
         const row = SIZE + 1;
-        for (let y = 0; y <= OVERLAP; y++) {
-          const ra = a.terrain.heights.slice(y * row, y * row + OVERLAP + 1);
-          const rb = b.terrain.heights.slice((y + STRIDE) * row + STRIDE, (y + STRIDE) * row + SIZE + 1);
-          expect(ra, `seed ${seed} window ${k} row ${y}`).toEqual(rb);
-          const ta = a.terrain.types.slice(y * SIZE, y * SIZE + OVERLAP);
-          if (y < OVERLAP) expect(ta).toEqual(b.terrain.types.slice((y + STRIDE) * SIZE + STRIDE, (y + STRIDE) * SIZE + SIZE));
-        }
+        expect(a.terrain.heights.slice(0, (OVERLAP + 1) * row), `seed ${seed} window ${k}`).toEqual(b.terrain.heights.slice(STRIDE * row));
+        expect(a.terrain.types.slice(0, OVERLAP * SIZE), `seed ${seed} window ${k}`).toEqual(b.terrain.types.slice(STRIDE * SIZE));
         const open = (window: number) => (p: BakedProp) => [northClosureAt(k), southClosureAt(k + 1)].every((n) => Math.abs(toRoad(window, p.pos).n - n) > 5);
-        const fromA = a.props.filter((p) => inSquare(p, 0, OVERLAP)).filter(open(k));
-        const fromB = b.props.filter((p) => inSquare(p, STRIDE, SIZE)).filter(open(k + 1));
+        const fromA = a.props.filter((p) => inBand(p, 0, OVERLAP)).filter(open(k));
+        const fromB = b.props.filter((p) => inBand(p, STRIDE, SIZE)).filter(open(k + 1));
         expect(fromB.map((p) => propKey(p, -STRIDE)).sort(), `seed ${seed} window ${k}`).toEqual(fromA.map((p) => propKey(p, 0)).sort());
       }
     }
@@ -93,8 +94,7 @@ describe('a highway window', () => {
           for (const d of [5.8, 9, 13, 17.2]) expect(['hardpan', 'sand']).toContain(typeAt(map, at(side * d)));
           for (const d of [18.8, 22, 25.2]) expect(['gravel', 'scrub', 'scree']).toContain(typeAt(map, at(side * d)));
           expect(typeAt(map, at(side * 30))).toBe('scree');
-          const road = roadHeight(seed, n);
-          for (const d of [3, 8, 14]) expect(heightAt(map.terrain, at(side * d).x, at(side * d).y)).toBeCloseTo(road, 1);
+          for (const d of [3, 8, 14]) expect(heightAt(map.terrain, at(side * d).x, at(side * d).y)).toBeCloseTo(roadHeight(seed, roadAt(seed, n, side * d).n), 1);
           const ridge = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((k) => at(side * (ROAD.badlands + 0.5 * k)));
           expect(ridge.some((p) => isCliff(map.terrain, Math.floor(p.y) * SIZE + Math.floor(p.x))), `seed ${seed} n ${n} side ${side}`).toBe(true);
           for (let d = 0; d <= ROAD.verge; d += 1.5) {
@@ -125,15 +125,16 @@ describe('a highway window', () => {
     expect(atlas.roads).toHaveLength(1);
     expect(atlas.roads[0].lanes).toBe(4);
     expect(atlas.roads[0].width).toBe(10);
-    for (let y = 0; y < SIZE; y += 7) for (let x = 0; x < SIZE; x += 7) expect(heightAt(map.terrain, x + 0.3, y + 0.6)).toBe(groundAt(map.terrain, x + 0.3, y + 0.6));
+    const offRamps = (x: number, y: number) => deckAt(atlas.decks, x, y) === null;
+    for (let y = 0; y < SIZE; y += 7) for (let x = 0; x < SIZE; x += 7) if (offRamps(x + 0.3, y + 0.6)) expect(heightAt(map.terrain, x + 0.3, y + 0.6)).toBe(groundAt(map.terrain, x + 0.3, y + 0.6));
   });
 
-  it('starts the truck on a lane at the first milestone, facing up the screen', () => {
+  it('starts the truck on a lane at the first milestone, facing north', () => {
     const start = highwayStart(7);
     const map = highwayMap(7, 0);
 
     expect(typeAt(map, start.pos)).toBe('asphalt');
-    expect(Math.abs(start.heading - SCREEN_UP)).toBeLessThan((6 * Math.PI) / 180);
+    expect(start.heading).toBeCloseTo(NORTH, 9);
     expect(toRoad(0, start.pos).n).toBeCloseTo(milestoneAt(0), 0);
   });
 
@@ -147,14 +148,53 @@ describe('a highway window', () => {
 });
 
 describe('the highway road', () => {
-  it('keeps within six degrees of screen-up, its bends wide and its grade under the road limit', () => {
-    const bendRadius = 900;
+  it('keeps within 35 degrees of north, its bends wide and its grade under the road limit', () => {
+    const bendRadius = 40;
     for (let seed = 1; seed <= 30; seed++) {
-      for (let n = 0; n < windowSpan(5).to; n += 1) {
+      for (let n = milestoneAt(0); n < milestoneAt(8); n += 1) {
         expect(Math.abs(roadHeight(seed, n + 1) - roadHeight(seed, n))).toBeLessThan(TERRAIN.roadGrade);
-        expect(Math.abs(roadHeading(seed, n) - SCREEN_UP), `seed ${seed} n ${n}`).toBeLessThanOrEqual((6 * Math.PI) / 180);
+        expect(Math.abs(roadHeading(seed, n) - NORTH), `seed ${seed} n ${n}`).toBeLessThanOrEqual(35 * DEGREE);
         const bend = Math.abs(centerU(seed, n + 1) - 2 * centerU(seed, n) + centerU(seed, n - 1));
         expect(1 / Math.max(bend, 1e-9), `seed ${seed} n ${n}`).toBeGreaterThanOrEqual(bendRadius);
+      }
+    }
+  });
+
+  it('runs straight in the middle of the window near every milestone', () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      for (let j = 0; j <= 8; j++) {
+        for (let d = -ROAD.bend.ends; d <= ROAD.bend.ends; d += 2) expect(centerU(seed, milestoneAt(j) + d), `seed ${seed} milestone ${j} d ${d}`).toBe(0);
+      }
+    }
+  });
+
+  it('bends in many stretches, now to one side and now to the other', () => {
+    const swings: number[] = [];
+    for (let seed = 1; seed <= 30; seed++) {
+      for (let j = 1; j <= 8; j++) {
+        const mid = (milestoneAt(j - 1) + milestoneAt(j)) / 2;
+        expect(stretchOf(mid)).toBe(j);
+        swings.push(centerU(seed, mid));
+      }
+    }
+    const bent = swings.filter((w) => Math.abs(w) >= ROAD.bend.shift[0]);
+
+    expect(bent.length).toBeGreaterThanOrEqual(swings.length / 5);
+    expect(bent.some((w) => w > 0) && bent.some((w) => w < 0)).toBe(true);
+    expect(swings.every((w) => Math.abs(w) <= ROAD.bend.shift[1])).toBe(true);
+  });
+
+  it('keeps the lanes on asphalt and the verge off it on bends', () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      for (const k of [0, 1, 2]) {
+        const map = highwayMap(seed, k);
+        for (let n = milestoneAt(k) + ROAD.bend.ends; n < milestoneAt(k + 1) - ROAD.bend.ends; n += 2) {
+          if (sceneAt(seed, n, 4) !== null) continue;
+          for (const side of [-1, 1]) {
+            expect(typeAt(map, roadPoint(seed, k, n, side * 4.2)), `seed ${seed} n ${n} side ${side}`).toBe('asphalt');
+            expect(typeAt(map, roadPoint(seed, k, n, side * 5.8)), `seed ${seed} n ${n} side ${side}`).not.toBe('asphalt');
+          }
+        }
       }
     }
   });

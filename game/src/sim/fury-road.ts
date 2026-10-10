@@ -5,7 +5,7 @@ import { RULES } from '../data/rules';
 import { chassisDef } from '../data/chassis';
 import { inCombat } from './combat';
 import { playerVehicle } from './damage';
-import { highwayMap, milestoneAt, outpostFort, outpostId, outpostSite, roadPoint, STRIDE, stretchStream, toRoad } from './highway';
+import { highwayMap, milestoneAt, outpostFort, outpostId, outpostSite, roadPoint, stretchStream, toRoad, WINDOW_SHIFT } from './highway';
 import { canUseSite, sitePads } from './sites';
 import { mapObstacles } from './mapgen';
 import { rollPartStock } from './market';
@@ -309,15 +309,19 @@ export function moveWindow(world: World): void {
   refreshVision(world);
 }
 
+function shifted(p: Vec): Vec {
+  return { x: p.x + WINDOW_SHIFT.x, y: p.y + WINDOW_SHIFT.y };
+}
+
 function shiftStorms(world: World): void {
-  for (const storm of world.weather) if (storm.kind === 'storm') storm.pos = { x: storm.pos.x + STRIDE, y: storm.pos.y + STRIDE };
+  for (const storm of world.weather) if (storm.kind === 'storm') storm.pos = shifted(storm.pos);
 }
 
 function shiftVehicles(world: World): void {
   const me = playerVehicle(world);
   world.removed.push(...world.vehicles.filter((v) => v !== me));
   world.vehicles = [me];
-  me.pos = { x: me.pos.x + STRIDE, y: me.pos.y + STRIDE };
+  me.pos = shifted(me.pos);
   me.order = null;
   me.trail = [];
   me.weaponOrders = {};
@@ -328,8 +332,10 @@ function shiftPlayer(world: World): void {
   const p = world.player;
   const size = world.size;
   const explored = new Uint8Array(size * size);
-  const kept = size - STRIDE;
-  for (let y = 0; y < kept; y++) explored.set(p.explored.subarray(y * size, y * size + kept), (y + STRIDE) * size + STRIDE);
+  const { x: sx, y: sy } = WINDOW_SHIFT;
+  const fromX = Math.max(0, -sx);
+  const toX = Math.min(size, size - sx);
+  for (let y = Math.max(0, -sy); y < Math.min(size, size - sy); y++) explored.set(p.explored.subarray(y * size + fromX, y * size + toX), (y + sy) * size + fromX + sx);
   p.explored = explored;
   p.marked = [];
   p.hostilesSeen = [];

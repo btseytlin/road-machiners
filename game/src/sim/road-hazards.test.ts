@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { HAZARDS, HIGHWAY, type SceneKind } from '../data/modes';
-import { acrossOf, fromRoad, STRIDE, highwayMap, milestoneAt, outpostFort, roadHeading, roadPoint, toRoad } from './highway';
+import { acrossOf, alongOf, fromRoad, highwayMap, WINDOW_SHIFT, milestoneAt, outpostFort, roadHeading, roadPoint, toRoad } from './highway';
 import { boxDistance, mapObstacles, propBoxes, propObstacle, type PosedBox } from './mapgen';
 import { CELL, componentOf, navLayer } from './nav/layer';
 import { closurePieces, highwayDecks, lanesCoveredOf, leavesPassage, northClosureAt, scenesOf, southClosureAt, stretchLayout, type Scene } from './road-hazards';
@@ -12,6 +12,7 @@ import type { Vec } from './vec';
 import type { RoadPiece } from './highway';
 
 const SIZE = HIGHWAY.size;
+const STRIDE = HIGHWAY.stride;
 const ROAD = HIGHWAY.road;
 const SEEDS = Array.from({ length: 20 }, (_, i) => i + 1);
 const STRETCHES = Array.from({ length: 10 }, (_, i) => i + 1);
@@ -161,10 +162,10 @@ describe('a highway window with its scenes', () => {
         const map = highwayMap(seed, k);
         const stray = map.props.filter((p) => {
           const at = toRoad(k, p.pos);
-          return inArena(seed, at.n) && Math.abs(acrossOf(seed, at)) - p.r <= ROAD.verge && !['pole', 'carWreck', 'deadTruck'].includes(p.kind);
+          return inArena(seed, alongOf(seed, at)) && Math.abs(acrossOf(seed, at)) - p.r <= ROAD.verge && !['pole', 'carWreck', 'deadTruck'].includes(p.kind);
         });
         expect(stray.map((p) => p.kind), `seed ${seed} window ${k}`).toEqual([]);
-        expect(map.props.filter((p) => p.hulk && inArena(seed, toRoad(k, p.pos).n))).toEqual([]);
+        expect(map.props.filter((p) => p.hulk && inArena(seed, alongOf(seed, toRoad(k, p.pos))))).toEqual([]);
       }
     }
   });
@@ -196,6 +197,18 @@ describe('a highway window with its scenes', () => {
         expect(componentOf(layer, nCell(start))).toBe(inside);
         expect(componentOf(layer, nCell(beyond)), `seed ${seed} window ${k} north`).not.toBe(inside);
         expect(componentOf(layer, nCell(behind)), `seed ${seed} window ${k} south`).not.toBe(inside);
+      }
+    }
+  });
+
+  it('lays the south closure a fixed way behind its milestone, on straight road and clear of the fort', () => {
+    for (const k of [1, 2, 5]) {
+      expect(southClosureAt(k)).toBe(milestoneAt(k) - HAZARDS.closures.south.behind);
+      for (const seed of [1, 2, 3]) {
+        const fort = outpostFort(seed, k, k);
+        const wrecks = closurePieces(seed, k).filter((p) => Math.abs(p.at.n - southClosureAt(k)) < 5);
+        expect(wrecks.length).toBeGreaterThan(0);
+        expect(wrecks.every((p) => siteGap(fort, fromRoad(k, p.at.n, p.at.u)) > p.r), `seed ${seed} window ${k}`).toBe(true);
       }
     }
   });
@@ -240,8 +253,8 @@ describe('a hull-plate ramp', () => {
   it('is the same deck in both windows that hold it', () => {
     for (const seed of SEEDS.slice(0, 10)) {
       for (const k of [0, 1, 2]) {
-        const shift = (spec: ReturnType<typeof highwayDecks>[number], by: number) => ({ ...spec, line: spec.line.map((s) => ({ at: { x: +(s.at.x + by).toFixed(6), y: +(s.at.y + by).toFixed(6) }, rise: s.rise })) });
-        const inOverlap = (spec: ReturnType<typeof highwayDecks>[number], from: number, to: number) => spec.line.every((s) => [s.at.x, s.at.y].every((v) => v >= from && v <= to));
+        const shift = (spec: ReturnType<typeof highwayDecks>[number], by: number) => ({ ...spec, line: spec.line.map((s) => ({ at: { x: +(s.at.x + by * WINDOW_SHIFT.x / STRIDE).toFixed(6), y: +(s.at.y + by * WINDOW_SHIFT.y / STRIDE).toFixed(6) }, rise: s.rise })) });
+        const inOverlap = (spec: ReturnType<typeof highwayDecks>[number], from: number, to: number) => spec.line.every((s) => s.at.y >= from && s.at.y <= to);
         const a = highwayDecks(seed, k).filter((s) => inOverlap(s, 0, SIZE - STRIDE)).map((s) => shift(s, 0));
         const b = highwayDecks(seed, k + 1).filter((s) => inOverlap(s, STRIDE, SIZE)).map((s) => shift(s, -STRIDE));
         expect(b).toEqual(a);

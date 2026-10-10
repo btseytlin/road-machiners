@@ -142,10 +142,10 @@ function hulkPiece(chassisId: string, a: number, o: number, rel: number): Local 
   return { kind: 'deadTruck', a, o, r: chassisDef(chassisId).radius * RULES.wreckRadiusScale, rel, hulk: chassisId };
 }
 
-function place(out: Local[], tries: number, make: () => Local): boolean {
+function place(out: Local[], tries: number, make: () => Local, gap = H.pieceGap): boolean {
   for (let t = 0; t < tries; t++) {
     const p = make();
-    if (out.every((q) => !overlaps(p, q))) {
+    if (out.every((q) => !overlaps(p, q, gap))) {
       out.push(p);
       return true;
     }
@@ -245,7 +245,7 @@ function draftRockfall(rng: Rng): Draft | null {
       const r = R.r[1] + (R.r[0] - R.r[1]) * t;
       const o = side * (from - t * (from - R.reach) - r);
       return { kind: 'rock', a: randRange(rng, -R.fan, R.fan) * (0.4 + t), o, r, rel: 0 };
-    });
+    }, R.gap);
   }
   return out.length >= R.rocks[0] ? { kind: 'rockfall', rows: [out], craters: [], ramps: [] } : null;
 }
@@ -317,16 +317,16 @@ function boxesApart(a: PosedBox, b: PosedBox): boolean {
   });
 }
 
-function shapesTouch(a: Shape, b: Shape): boolean {
-  if ('circle' in a && 'circle' in b) return Math.hypot(a.circle.c.x - b.circle.c.x, a.circle.c.y - b.circle.c.y) < a.circle.r + b.circle.r + H.pieceGap;
-  if ('circle' in a) return 'box' in b && boxDistance(b.box, a.circle.c) < a.circle.r + H.pieceGap;
-  if ('circle' in b) return boxDistance(a.box, b.circle.c) < b.circle.r + H.pieceGap;
+function shapesTouch(a: Shape, b: Shape, gap: number): boolean {
+  if ('circle' in a && 'circle' in b) return Math.hypot(a.circle.c.x - b.circle.c.x, a.circle.c.y - b.circle.c.y) < a.circle.r + b.circle.r + gap;
+  if ('circle' in a) return 'box' in b && boxDistance(b.box, a.circle.c) < a.circle.r + gap;
+  if ('circle' in b) return boxDistance(a.box, b.circle.c) < b.circle.r + gap;
   return !boxesApart(a.box, b.box);
 }
 
-function overlaps(p: Local, q: Local): boolean {
-  if (Math.hypot(p.a - q.a, p.o - q.o) > 6) return false;
-  return shapesOf(p).some((a) => shapesOf(q).some((b) => shapesTouch(a, b)));
+function overlaps(p: Local, q: Local, gap: number): boolean {
+  if (Math.hypot(p.a - q.a, p.o - q.o) > 6 + gap) return false;
+  return shapesOf(p).some((a) => shapesOf(q).some((b) => shapesTouch(a, b, gap)));
 }
 
 const ACROSS: Vec = { x: 1, y: 0 };
@@ -455,7 +455,7 @@ export function northClosureAt(window: number): number {
 }
 
 export function southClosureAt(window: number): number {
-  return windowSpan(window).from + H.closures.south.at;
+  return milestoneAt(window) - H.closures.south.behind;
 }
 
 function northClosure(seed: number, window: number): RoadPiece[] {
