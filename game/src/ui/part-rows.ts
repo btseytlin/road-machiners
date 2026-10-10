@@ -2,6 +2,7 @@
 // reader's scroll and keyboard place across the screens' full redraws.
 
 import { partDef } from "../data/parts";
+import { partName } from "../text/names";
 import type { PartInstance, World } from "../sim/types";
 import { conditionTag, footprint, headlineStat, partDetail, partIconEl, statChip, toneStyle } from "./cards";
 import { el } from "./dom";
@@ -90,7 +91,7 @@ export class PartRows {
     return el(
       "span",
       { class: "part-name" },
-      el("b", {}, partDef(part.defId).name),
+      el("b", {}, partName(part.defId)),
       conditionTag(part),
       showStatus ? el("span", { class: status.tone }, status.text) : null,
     );

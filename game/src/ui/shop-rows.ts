@@ -4,31 +4,30 @@ import { basicsRepairCost, repairCost, supplyRoom, type Supply } from "../sim/ec
 import { mountedParts } from "../sim/grid";
 import { fuelCap, suppliesCap } from "../sim/stats";
 import type { World } from "../sim/types";
+import { num, SPACE, t, type Msg } from "../text/msg";
 import { createIcon } from "./cards";
-import { el } from "./dom";
+import { el, type Child } from "./dom";
 import { GOODS_COLUMNS } from "./format";
-import { coinEl, fuelLiters, moneyEl, moneyNumber, moneyText } from "./units";
+import { coinEl, fuelLiters, moneyEl, moneyMsg, moneyNum } from "./units";
 
 export type ShopCommand = (w: World) => World;
 
 export type ShopButtons = {
-  button(label: string, cmd: ShopCommand, reason?: string, key?: string, title?: string): HTMLElement;
-  priceButton(w: World, verb: string, price: number, cmd: ShopCommand, reason?: string, key?: string): HTMLElement;
+  button(label: Msg, cmd: ShopCommand, reason?: Msg | null, key?: string, title?: Msg | null): HTMLElement;
+  priceButton(w: World, verb: Msg, price: number, cmd: ShopCommand, reason?: Msg | null, key?: string): HTMLElement;
 };
-
-export const NOTHING_TO_REPAIR = "Nothing to repair";
 
 export function repairBar(w: World, buttons: ShopButtons, repair: { basics: ShopCommand; all: ShopCommand }): HTMLElement {
   const broken = mountedParts(playerVehicle(w)).filter((p) => p.hp === 0).length;
-  const button = (verb: string, cost: number, cmd: ShopCommand) =>
-    cost === 0 ? buttons.button(verb, cmd, NOTHING_TO_REPAIR) : buttons.priceButton(w, verb, cost, cmd);
+  const button = (verb: Msg, cost: number, cmd: ShopCommand, key: string) =>
+    cost === 0 ? buttons.button(verb, cmd, t("trade.nothingToRepair"), key) : buttons.priceButton(w, verb, cost, cmd, null, key);
   return el(
     "div",
     { class: "town-repair" },
     createIcon("tools"),
-    broken ? el("span", { class: "bad" }, `${broken} broken`) : null,
-    button("Repair basics", basicsRepairCost(w), repair.basics),
-    button("Repair all", repairCost(w), repair.all),
+    broken ? el("span", { class: "bad" }, t("trade.broken", { n: broken })) : null,
+    button(t("trade.repairBasicsVerb"), basicsRepairCost(w), repair.basics, "repairBasics"),
+    button(t("trade.repairAllVerb"), repairCost(w), repair.all, "repairAll"),
   );
 }
 
@@ -36,38 +35,34 @@ export function supplyRow(w: World, k: Supply, buttons: ShopButtons, buy: (w: Wo
   const room = supplyRoom(w, k);
   const price = ECONOMY.supplyPrice[k];
   const afford = Math.min(room, Math.floor(w.player.money / price));
-  const amount = supplyAmount(k);
-  const reason = room < 1 ? "Full" : shortBy(w.player.money, price);
-  return supplyLine(k, w.player[k], supplyCap(w, k), null, price, shortBy(w.player.money, price) === "", [
-    buttons.button(`+${amount(1)}`, (x) => buy(x, k, 1), reason),
-    buttons.button(afford > 0 ? `Fill ${amount(afford)}` : "Fill", (x) => buy(x, k, afford), reason),
+  const amount = (n: number) => supplyAmount(k, n);
+  const reason = room < 1 ? t("trade.full") : shortBy(w.player.money, price);
+  return supplyLine(k, w.player[k], supplyCap(w, k), null, price, shortBy(w.player.money, price) === null, [
+    buttons.button(t("trade.plusAmount", { amount: amount(1) }), (x) => buy(x, k, 1), reason),
+    buttons.button(afford > 0 ? t("trade.fill", { amount: amount(afford) }) : t("trade.fillBare"), (x) => buy(x, k, afford), reason),
   ]);
 }
 
-export type PriceHint = { tone: "good" | "bad" | ""; title: string };
+export type PriceHint = { tone: "good" | "bad" | ""; title: Msg };
 
-export function priceHead(label: string): HTMLElement {
-  return el("span", { class: "price-head" }, label, coinEl());
+export function shortBy(have: number, price: number): Msg | null {
+  return have >= price ? null : t("trade.needMore", { price: moneyMsg(price - have) });
 }
 
-export function shortBy(have: number, price: number): string {
-  return have >= price ? "" : `Need ${moneyText(price - have)} more`;
+export function supplyAmount(k: Supply, n: number): Msg {
+  return k === "fuel" ? t("trade.liters", { n: fuelLiters(n) }) : num(Math.round(n * 10) / 10, "dec");
 }
 
 export function supplyCap(w: World, k: Supply): number {
   return k === "fuel" ? fuelCap(playerVehicle(w)) : suppliesCap(playerVehicle(w));
 }
 
-export function supplyAmount(k: Supply): (n: number) => string {
-  return (n) => (k === "fuel" ? `${fuelLiters(n)} L` : `${Math.round(n * 10) / 10}`);
-}
-
-export function supplyUnit(k: Supply): string {
-  return k === "fuel" ? `Per ${supplyAmount(k)(1)}` : "Each";
+export function supplyUnit(k: Supply): Msg {
+  return k === "fuel" ? t("trade.perUnit", { unit: supplyAmount(k, 1) }) : t("trade.eachUnit");
 }
 
 export function supplyLine(k: Supply, have: number, cap: number, theirs: HTMLElement | null, price: number, payable: boolean, buttons: HTMLElement[]): HTMLElement {
-  const amount = supplyAmount(k);
+  const amount = (n: number) => supplyAmount(k, n);
   return el(
     "div",
     { class: "good-row row" },
@@ -75,7 +70,7 @@ export function supplyLine(k: Supply, have: number, cap: number, theirs: HTMLEle
       "div",
       { class: "good-name supply" },
       createIcon(k),
-      el("div", { class: "service-meter" }, el("span", {}, `${amount(have)} / ${amount(cap)}`), bar(have / cap)),
+      el("div", { class: "service-meter" }, el("span", {}, t("trade.ofCap", { have: amount(have), cap: amount(cap) })), bar(have / cap)),
     ),
     theirs,
     el("div", { class: "trade buy wide" }, caption(GOODS_COLUMNS.buy, true), priceEl(price, payable, { tone: "", title: supplyUnit(k) }), ...buttons),
@@ -86,28 +81,28 @@ export function priceSpan(price: number, payable: boolean): HTMLElement {
   return el("span", { class: payable ? "" : "bad" }, moneyEl(price));
 }
 
-export function setIf(node: HTMLElement, name: string, value: string | false): void {
-  if (value) node.setAttribute(name, value);
+export function reasonAttrs(reason: Msg | null, title: Msg | null): Record<string, Msg | string | undefined> {
+  return { class: "btn-s", "aria-disabled": reason ? "true" : undefined, title: reason ?? title ?? undefined };
 }
 
-export function reasonButton(label: (Node | string)[], click: () => void, reason: string, key = "", title = ""): HTMLElement {
-  const button = el("button", { class: "btn-s", onclick: () => reason || click() }, ...label);
-  setIf(button, "aria-disabled", reason && "true");
-  setIf(button, "title", reason || title);
-  setIf(button, "data-key", key);
-  return button;
+export function reasonButton(label: Child[], click: () => void, reason: Msg | null, key = "", title: Msg | null = null): HTMLElement {
+  return el("button", { ...reasonAttrs(reason, title), "data-key": key || undefined, onclick: () => reason || click() }, ...label);
 }
 
 export function priceEl(price: number, payable = true, hint: PriceHint | null = null): HTMLElement {
-  return el("span", { class: `price ${priceTone(payable, hint)}`.trim(), title: hint?.title }, moneyNumber(price));
+  return el("span", { class: `price ${priceTone(payable, hint)}`.trim(), title: hint?.title }, moneyNum(price));
 }
 
 export function priceTone(payable: boolean, hint: PriceHint | null): string {
   return payable ? (hint?.tone ?? "") : "bad";
 }
 
-export function caption(text: string, coin = false): HTMLElement {
+export function caption(text: Msg, coin = false): HTMLElement {
   return el("span", { class: "cap" }, text, coin ? coinEl() : null);
+}
+
+export function priceHead(label: Msg): HTMLElement {
+  return el("span", { class: "price-head" }, label, coinEl());
 }
 
 export function keepFocus(root: HTMLElement, render: () => void): void {

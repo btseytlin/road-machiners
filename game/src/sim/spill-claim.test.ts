@@ -11,9 +11,13 @@ import { spillDeadRows } from './spill';
 import { addState } from './states';
 import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls, startCombat } from './testkit';
 import type { Faction, GridItem, SalvageStock, Vehicle, World } from './types';
+import { lineKey } from '../text/names';
+import { entryText } from '../text/resolve';
 import { canVehicleSee, refreshVision } from './vision';
 
-const ACCEPT = "It's yours.";
+const en = (line: Parameters<typeof lineKey>[0]): string => entryText('en', lineKey(line));
+
+const ACCEPT = 'It is yours.';
 const REFUSE = 'Over my wreck.';
 
 function quietWorld(): World {
@@ -30,8 +34,8 @@ function npcAt(w: World, faction: Faction, x: number, y = 30): Vehicle {
 }
 
 function pick(w: World, text: string): World {
-  const i = currentOptions(w).findIndex((o) => o.text === text);
-  if (i < 0) throw new Error(`No option "${text}" in ${currentOptions(w).map((o) => o.text).join(' | ')}`);
+  const i = currentOptions(w).findIndex((o) => en(o.line) === text);
+  if (i < 0) throw new Error(`No option "${text}" in ${currentOptions(w).map((o) => en(o.line)).join(' | ')}`);
   return chooseOption(w, i);
 }
 
@@ -177,7 +181,7 @@ describe('a robber claims spilled cargo', () => {
     const { w } = robbedPlayer();
     const pile = spillPile(w);
     const other = npcAt(w, 'scavengers', pile.pos.x + 1, pile.pos.y);
-    pushGoal(w, other, { kind: 'loot', targetId: pile.id, destination: { ...pile.pos }, phase: 'travel', reason: 'test' });
+    pushGoal(w, other, { kind: 'loot', targetId: pile.id, destination: { ...pile.pos }, phase: 'travel', reason: 'lootOnTheWay' });
     w.rngState = rngStateForForcedRolls(6);
     expect(warnedOff(w, other, pile)).toBe(true);
     expect(backedOff(pile, other.id)).toBe(true);

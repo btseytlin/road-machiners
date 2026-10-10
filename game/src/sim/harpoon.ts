@@ -39,7 +39,7 @@ function mapPoint(v: Vehicle, at: BodyPoint): { x: number; z: number } {
 
 function anchorOf(v: Vehicle, partId: string): BodyPoint {
   const item = mountedItem(v, partId);
-  if (!item) throw new Error(`${v.name} has no mounted part ${partId}`);
+  if (!item) throw new Error(`${v.id} has no mounted part ${partId}`);
   const r = cellRect(v.chassisId, itemCells(item));
   return { x: (r.x0 + r.x1) / 2, y: 0, z: (r.z0 + r.z1) / 2 };
 }

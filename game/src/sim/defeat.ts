@@ -233,7 +233,7 @@ function teleportHome(world: World, v: Vehicle, spot: Vec): void {
 export function refitAtHome(world: World, v: Vehicle): void {
   const template = NPCS[v.brain!.templateId];
   const loadout = generateNpcLoadout(world, template, v.chassisId);
-  const fresh = makeVehicle(world, { name: v.name, faction: v.faction, ...loadout, pos: v.pos, heading: v.heading, brain: null });
+  const fresh = makeVehicle(world, { faction: v.faction, ...loadout, pos: v.pos, heading: v.heading, brain: null });
   v.items = fresh.items;
   v.resources = { ...fresh.resources!, money: getResources(world, v).money };
   v.job = null;
@@ -251,5 +251,5 @@ export function lootRobbed(w: World, robberId: string, victimId: string): void {
   if (!robber) return;
   const stock = robbedLoot(w, victimId);
   if (!stock) throw new Error(`${robberId} won a robbery, but ${victimId} left no stock`);
-  pushGoal(w, robber, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'loot the robbed truck' });
+  pushGoal(w, robber, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'lootRobbed' });
 }

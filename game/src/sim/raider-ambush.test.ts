@@ -30,12 +30,16 @@ import { isRoadTile } from './terrain';
 import { hazardZones } from './territory';
 import { addVehicle, emptyWorld, forceOption, npcBrain, testDrive } from './testkit';
 import type { NpcActivity, Vehicle, World } from './types';
+import { lineKey } from '../text/names';
+import { entryText } from '../text/resolve';
 import { dist, polylineDist, type Vec } from './vec';
 import { hasLineOfFire } from './vision';
 import { isWatching, watchPost } from './watch-posts';
 import { defaultSetup } from './settings';
 import { endTurn, newWorld } from './world';
 import { icarusAtlas } from './atlas';
+
+const en = (line: Parameters<typeof lineKey>[0]): string => entryText('en', lineKey(line));
 
 const CAMPS = REGION.locations.filter((l) => l.kind === 'camp');
 
@@ -130,7 +134,7 @@ function raidingDriver(w: World, home: Vec, post: Vec): Vehicle {
 }
 
 function raidGoal(post: Vec): NpcActivity {
-  return { kind: 'raid', targetId: null, destination: { ...post }, phase: 'travel', reason: 'watch the road for prey' };
+  return { kind: 'raid', targetId: null, destination: { ...post }, phase: 'travel', reason: 'raid' };
 }
 
 const scrapjaw = CAMPS.find((c) => c.id === 'scrapjaw') as Site;
@@ -178,7 +182,7 @@ describe('the watch', () => {
       const top = topGoal(raider);
       if (started === null && top?.kind === 'raid' && top.phase === 'act') started = w.turn;
       if (started !== null && w.turn - started < 10) expect(raider.speed).toBe(0);
-      if (w.events.some((e) => e.t === 'activity' && e.vehicle === raiderId && e.reason === 'watched the road')) ended = w.turn;
+      if (w.events.some((e) => e.t === 'activity' && e.vehicle === raiderId && e.reason === 'watchedRoad')) ended = w.turn;
     }
     expect(started).not.toBeNull();
     expect(ended! - started!).toBe(HUNT.watchTurns);
@@ -190,12 +194,12 @@ describe('the watch', () => {
     const { w, raider } = watchingRaider(200);
     w.turn += HUNT.watchTurns;
     planNpcOrders(w);
-    expect(w.events).toContainEqual(expect.objectContaining({ t: 'activity', vehicle: raider.id, previous: 'raid', reason: 'watched the road' }));
+    expect(w.events).toContainEqual(expect.objectContaining({ t: 'activity', vehicle: raider.id, previous: 'raid', reason: 'watchedRoad' }));
   });
 
   it('is the only goal that may hold a watch end', () => {
     const { w, raider } = watchingRaider(200);
-    raider.brain!.goals = [{ kind: 'patrol', targetId: 'scrapjaw', destination: null, phase: 'act', reason: 'patrol', watchUntil: w.turn + 5 }];
+    raider.brain!.goals = [{ kind: 'patrol', targetId: 'scrapjaw', destination: null, phase: 'act', reason: 'patrolTown', watchUntil: w.turn + 5 }];
     expect(() => planNpcOrders(w)).toThrow(/watch/);
   });
 
@@ -244,7 +248,7 @@ describe('the watch', () => {
     forceOption('hostileSeen', 'fight');
     planNpcOrders(w);
     expect(topGoal(raider)?.kind).toBe('fight');
-    finishGoal(w, raider, 'lost the target');
+    finishGoal(w, raider, 'lostTarget');
     expect(raider.brain!.goals.some((g) => g.kind === 'raid' && g.phase === 'act')).toBe(false);
     expect(isWatching(raider)).toBe(false);
     expect(trader.id).toBeDefined();
@@ -302,7 +306,7 @@ function playTurns(start: World, turns: number, each: (w: World) => void): World
 }
 
 function soldCargo(w: World, id: string): boolean {
-  return w.events.some((e) => e.t === 'activity' && e.vehicle === id && e.reason === 'sold cargo');
+  return w.events.some((e) => e.t === 'activity' && e.vehicle === id && e.reason === 'soldCargo');
 }
 
 function holdings(w: World, ids: string[]): string[] {
@@ -337,7 +341,7 @@ function watchingNearCamp(gap: number) {
 
 function droppedRaidAfterLoot(w: World, id: string): boolean {
   const events = w.events.filter((e) => e.t === 'activity' && e.vehicle === id);
-  return events.some((e) => e.t === 'activity' && e.previous === 'loot') && events.some((e) => e.t === 'activity' && e.previous === 'raid' && e.reason === 'chose something new');
+  return events.some((e) => e.t === 'activity' && e.previous === 'loot') && events.some((e) => e.t === 'activity' && e.previous === 'raid' && e.reason === 'choseNew');
 }
 
 describe('going home with loot', () => {
@@ -353,7 +357,7 @@ describe('going home with loot', () => {
     const empty = resumeShare(w, raider);
     if (addGoods(w, raider, 'electronics', 2) < 2) throw new Error('No room for the raider cargo');
     const raiding = resumeShare(w, raider);
-    raider.brain!.goals = [{ kind: 'patrol', targetId: scrapjaw.id, destination: { ...raider.pos }, phase: 'travel', reason: 'patrol' }];
+    raider.brain!.goals = [{ kind: 'patrol', targetId: scrapjaw.id, destination: { ...raider.pos }, phase: 'travel', reason: 'patrolTown' }];
     const patrolling = resumeShare(w, raider);
     expect(empty).toBeGreaterThan(0.8);
     expect(raiding).toBeLessThan(0.15);
@@ -408,7 +412,7 @@ describe('going home with loot', () => {
     forceOption('hostileSeen', 'fight');
     const demanded = playUntil(start, 4, (x) => x.player.call?.topic === 'demand');
     expect(inCombat(demanded, vehicle(demanded, raider.id))).toBe(true);
-    const handed = chooseOption(demanded, currentOptions(demanded).findIndex((o) => o.text === 'Fine. Take it.'));
+    const handed = chooseOption(demanded, currentOptions(demanded).findIndex((o) => en(o.line) === 'Fine. Take it.'));
     expect(inCombat(handed, vehicle(handed, raider.id))).toBe(false);
     expect(topGoal(vehicle(handed, raider.id))?.kind).toBe('loot');
     const end = playUntil(handed, 20, (x) => topGoal(vehicle(x, raider.id))?.kind === 'sell', (x) => {

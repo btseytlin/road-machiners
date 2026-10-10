@@ -42,8 +42,9 @@ import FORMAT_2_31 from './save-fixtures/format-2-31.json';
 import FORMAT_2_32 from './save-fixtures/format-2-32.json';
 import FORMAT_2_33 from './save-fixtures/format-2-33.json';
 import FORMAT_2_35 from './save-fixtures/format-2-35.json';
-import FORMAT_2_37 from './save-fixtures/format-2-37.json';
+import FORMAT_2_36 from './save-fixtures/format-2-36.json';
 import FORMAT_2_38 from './save-fixtures/format-2-38.json';
+import FORMAT_2_39 from './save-fixtures/format-2-39.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -784,38 +785,79 @@ describe('save migration 35 to 36', () => {
   });
 });
 
-describe('save migration 37 to 38', () => {
-  it('drops a Gauntlet run laid on Icarus roads and keeps the mode, for the load to rescue it', () => {
-    const next = MIGRATIONS[37](structuredClone(FORMAT_2_37));
+describe('save migration 36 to 37', () => {
+  type Goal = { reason: string };
+  type Saved = {
+    vehicles: { id: string; name?: string; brain: { goals: Goal[] } | null }[];
+    player: { call: { line: unknown; vars: Record<string, unknown> } | null; contracts: Record<string, unknown>[] };
+    shops: Record<string, { contracts: Record<string, unknown>[] }>;
+  };
+  const next = MIGRATIONS[36](FORMAT_2_36) as unknown as Saved;
+  const reasons = (v: { brain: { goals: Goal[] } | null }) => v.brain?.goals.map((g) => g.reason);
 
-    expect(next).toEqual({ ...FORMAT_2_37, gauntlet: null });
-    expect((next.setup as { mode: string }).mode).toBe('gauntlet');
+  it('turns known goal reasons into ids, an old phrase into the id that replaced it, and an unknown one into legacy', () => {
+    expect(reasons(next.vehicles[1])).toEqual(['buyCargo', 'lowFuel']);
+    expect(reasons(next.vehicles[2])).toEqual(['explore', 'legacy']);
+    expect(reasons(next.vehicles[3])).toEqual(['raid']);
   });
 
-  it('keeps a world with no run as it is', () => {
-    const roaming = { ...FORMAT_2_37, setup: { ...FORMAT_2_37.setup, mode: 'roaming' }, gauntlet: null };
+  it('removes the names of trucks and bounty targets', () => {
+    expect(next.vehicles.some((v) => 'name' in v)).toBe(false);
+    expect(next.player.contracts.map((c) => 'targetName' in c)).toEqual([false, false]);
+    expect('targetName' in next.shops.nose.contracts[0]).toBe(false);
+    expect(next.player.contracts[0]).toEqual({ id: 'c1', shop: 'bowl', kind: 'bounty', template: 'buggy', reward: 400, deadline: 990, window: 300, tier: 2 });
+  });
 
-    expect(MIGRATIONS[37](structuredClone(roaming))).toEqual(roaming);
+  it('keeps an open call on a known line as its id', () => {
+    expect(next.player.call?.line).toEqual({ line: 'dealTerms', vars: FORMAT_2_36.player.call.line.vars });
+  });
+
+  it('turns the warning line of an open loot call into its id', () => {
+    const call = { ...FORMAT_2_36.player.call, topic: 'lootWarning', line: { text: '{warnLine}', vars: {} }, vars: { warnLine: { kind: 'line', text: "That's my pick. Roll on." } } };
+    const saved = { ...FORMAT_2_36, player: { ...FORMAT_2_36.player, call } };
+    const migrated = MIGRATIONS[36](saved) as unknown as Saved;
+    expect(migrated.player.call?.vars).toEqual({ warnLine: { kind: 'line', line: 'thatsMyPick' } });
+    expect(migrated.player.call?.line).toEqual({ line: 'warnTerms', vars: {} });
+  });
+
+  it('hangs up a call on a line no table knows', () => {
+    const unknown = { ...FORMAT_2_36, player: { ...FORMAT_2_36.player, call: { ...FORMAT_2_36.player.call, line: { text: 'Words from a mod', vars: {} } } } };
+    expect((MIGRATIONS[36](unknown) as unknown as Saved).player.call).toBeNull();
   });
 });
 
 describe('save migration 38 to 39', () => {
-  it('renames the Gauntlet mode and its run to Fury Road and keeps the run', () => {
-    const { gauntlet, ...rest } = structuredClone(FORMAT_2_38);
+  it('drops a Gauntlet run laid on Icarus roads and keeps the mode, for the load to rescue it', () => {
+    const next = MIGRATIONS[38](structuredClone(FORMAT_2_38));
 
-    expect(MIGRATIONS[38](structuredClone(FORMAT_2_38))).toEqual({ ...rest, setup: { ...rest.setup, mode: 'furyRoad' }, furyRoad: gauntlet });
+    expect(next).toEqual({ ...FORMAT_2_38, gauntlet: null });
+    expect((next.setup as { mode: string }).mode).toBe('gauntlet');
   });
 
-  it('keeps a Roaming world as it is but for the run key', () => {
-    const { gauntlet: _run, ...rest } = structuredClone(FORMAT_2_38);
-    const roaming = { ...rest, setup: { ...rest.setup, mode: 'roaming' }, gauntlet: null };
+  it('keeps a world with no run as it is', () => {
+    const roaming = { ...FORMAT_2_38, setup: { ...FORMAT_2_38.setup, mode: 'roaming' }, gauntlet: null };
 
-    expect(MIGRATIONS[38](structuredClone(roaming))).toEqual({ ...rest, setup: roaming.setup, furyRoad: null });
+    expect(MIGRATIONS[38](structuredClone(roaming))).toEqual(roaming);
   });
 });
 
-describe('save migration 36 to 37', () => {
+describe('save migration 39 to 40', () => {
+  it('renames the Gauntlet mode and its run to Fury Road and keeps the run', () => {
+    const { gauntlet, ...rest } = structuredClone(FORMAT_2_39);
+
+    expect(MIGRATIONS[39](structuredClone(FORMAT_2_39))).toEqual({ ...rest, setup: { ...rest.setup, mode: 'furyRoad' }, furyRoad: gauntlet });
+  });
+
+  it('keeps a Roaming world as it is but for the run key', () => {
+    const { gauntlet: _run, ...rest } = structuredClone(FORMAT_2_39);
+    const roaming = { ...rest, setup: { ...rest.setup, mode: 'roaming' }, gauntlet: null };
+
+    expect(MIGRATIONS[39](structuredClone(roaming))).toEqual({ ...rest, setup: roaming.setup, furyRoad: null });
+  });
+});
+
+describe('save migration 37 to 38', () => {
   it('adds an empty Gauntlet run and keeps the rest of the world', () => {
-    expect(MIGRATIONS[36](structuredClone(FORMAT_2_35))).toEqual({ ...FORMAT_2_35, gauntlet: null });
+    expect(MIGRATIONS[37](structuredClone(FORMAT_2_36))).toEqual({ ...FORMAT_2_36, gauntlet: null });
   });
 });

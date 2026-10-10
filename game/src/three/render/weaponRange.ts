@@ -17,6 +17,7 @@ import { createIcon } from '../../ui/cards';
 import { el } from '../../ui/dom';
 import type { CameraRig } from './camera';
 import { READY_ARC_BIT, SPENT_ARC_BIT } from './models';
+import { num } from '../../text/msg';
 
 const S = PHYSICS.metersPerTile;
 const ICON_PX = 26;
@@ -181,7 +182,7 @@ export class HoverArcsView {
     for (const arc of arcs) {
       const id = arc.weapon.part.id;
       if (this.icons.has(id)) continue;
-      const number = el('span', { class: 'arc-icon-slot' }, `${arc.slot}`);
+      const number = el('span', { class: 'arc-icon-slot' }, num(arc.slot, 'int'));
       const node = el('div', { class: 'arc-icon' }, createIcon(arc.weapon.def.look), number);
       node.style.width = `${ICON_PX}px`;
       node.style.height = `${ICON_PX}px`;

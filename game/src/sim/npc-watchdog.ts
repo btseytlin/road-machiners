@@ -60,7 +60,7 @@ function giveUp(world: World, v: Vehicle): void {
   const top = topGoal(v);
   world.events.push({ t: 'stall', vehicle: v.id, goal: top?.kind ?? null, reason: top?.reason ?? 'idle' });
   v.brain!.goals = [];
-  logChange(world, v, top, 'no progress for too long');
+  logChange(world, v, top, 'noProgress');
   jumpClear(world, v);
   freshGoal(world, v);
   v.brain!.progress = { key: progressKey(v), since: world.turn };

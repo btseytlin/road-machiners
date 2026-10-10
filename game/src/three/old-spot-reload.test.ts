@@ -55,7 +55,7 @@ describe('a scavenger bound for an old-world loot spot', () => {
     const stockId = oldStockId(pick);
     const stock = w.salvage.find((s) => s.id === stockId)!;
     stock.goods = { ...stock.goods, scrap: 2, parts: 1 };
-    npc.brain.goals = [{ kind: 'scavenge', targetId: stockId, destination: { ...pick.pos }, phase: 'travel', reason: 'search an old ruin' }];
+    npc.brain.goals = [{ kind: 'scavenge', targetId: stockId, destination: { ...pick.pos }, phase: 'travel', reason: 'searchOldRuin' }];
     const before = held(w, stockId);
 
     let next = w;

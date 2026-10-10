@@ -21,7 +21,7 @@ import { backedOff, canReachSalvage, claimantOf, claimPile, createCargoSalvage, 
 import { isStranded } from './stats';
 import { addState, endState, lootWarningData, pleaData, stateOf } from './states';
 import type { DecisionOptions } from '../data/npcs';
-import type { Aim, GridItem, Plea, SalvageStock, Vehicle, World } from './types';
+import type { Aim, GoalReason, GridItem, Plea, SalvageStock, Vehicle, World } from './types';
 import { canVehicleSee } from './vision';
 import { dist } from './vec';
 
@@ -58,15 +58,15 @@ function holdFire(v: Vehicle, target: Vehicle): void {
 export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, dumped: SalvageStock | null = null): void {
   if (!modeRules(world).salvage) throw new Error(`${loser.id} cannot hand over cargo where nothing is looted`);
   const stock = hasCargo(loser) ? createCargoSalvage(world, loser, 1) : dumped;
-  cede(world, loser, winner, stock, 'take the handed-over cargo');
+  cede(world, loser, winner, stock, 'takeHandedCargo');
   creditYield(world, loser, winner);
 }
 
 export function abandonSpill(world: World, loser: Vehicle, winner: Vehicle, stock: SalvageStock): void {
-  cede(world, loser, winner, stock, 'take the spilled cargo');
+  cede(world, loser, winner, stock, 'takeSpilledCargo');
 }
 
-function cede(world: World, loser: Vehicle, winner: Vehicle, stock: SalvageStock | null, reason: string): void {
+function cede(world: World, loser: Vehicle, winner: Vehicle, stock: SalvageStock | null, reason: GoalReason): void {
   makePeace(world, loser, winner);
   endFight(world, loser, winner);
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
@@ -74,7 +74,7 @@ function cede(world: World, loser: Vehicle, winner: Vehicle, stock: SalvageStock
   if (stock && winner.brain) goTake(world, winner, stock, [loser.id], reason);
 }
 
-function goTake(world: World, npc: Vehicle, stock: SalvageStock, warned: string[], reason: string): void {
+function goTake(world: World, npc: Vehicle, stock: SalvageStock, warned: string[], reason: GoalReason): void {
   pushGoal(world, npc, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason });
   claimPile(world, stock, npc, warned);
 }
@@ -203,7 +203,7 @@ export function settleThreat(world: World, npc: Vehicle, answer: ThreatAnswer): 
 }
 
 export function defendClaim(world: World, claimant: Vehicle, trespasser: Vehicle): void {
-  fightOver(world, claimant, trespasser, 'defend its claimed loot');
+  fightOver(world, claimant, trespasser, 'defendLoot');
 }
 
 export function warnedOff(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
@@ -215,7 +215,7 @@ export function warnedOff(world: World, vehicle: Vehicle, stock: SalvageStock): 
 
 function backsOffClaim(world: World, claimant: Vehicle, vehicle: Vehicle, stock: SalvageStock): boolean {
   if (!backedOff(stock, vehicle.id) && canArgue(world, claimant, vehicle)) return lootWarningData(warnTruck(world, claimant, vehicle, stock.id, 'fight')).answer === 'comply';
-  finishGoal(world, vehicle, 'the loot is claimed');
+  finishGoal(world, vehicle, 'lootClaimed');
   return true;
 }
 
@@ -228,7 +228,7 @@ export function claimSpill(world: World, victim: Vehicle, stock: SalvageStock): 
   const robbers = world.vehicles.filter((npc) => npc.brain && npc.id !== victim.id && claimsSpillOf(world, npc, victim, stock));
   const robber = robbers.sort((a, b) => dist(a.pos, stock.pos) - dist(b.pos, stock.pos))[0];
   if (!robber) return;
-  goTake(world, robber, stock, [], 'take the spilled cargo');
+  goTake(world, robber, stock, [], 'takeSpilledCargo');
   if (!victim.brain || isKnockedOut(victim)) return;
   if (decide(world, victim, 'threatened', robber.id, perceiveDanger(world, victim, robber)) === 'comply') abandonSpill(world, victim, robber, stock);
 }
@@ -313,7 +313,7 @@ export function judgeStrandedFoe(world: World, npc: Vehicle): void {
 }
 
 function spare(world: World, npc: Vehicle, prey: Vehicle): void {
-  if (!prey.brain) world.events.push({ t: 'say', speaker: npc.id, text: SPARE_LINE, vars: {} });
+  if (!prey.brain) world.events.push({ t: 'say', speaker: npc.id, line: SPARE_LINE, vars: {} });
   makePeace(world, npc, prey);
 }
 

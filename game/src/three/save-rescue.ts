@@ -72,7 +72,7 @@ function truckOf(world: Json, player: Json): Carried['truck'] {
   const chassisId = idOf(vehicle?.chassisId);
   if (!vehicle || chassisId === null) return null;
   const items = listOf(vehicle.items).map(itemOf).filter((it): it is CarriedItem => it !== null);
-  return { chassisId, name: idOf(vehicle.name), items };
+  return { chassisId, items };
 }
 
 const NO_CARRIED: Carried = {

@@ -1,3 +1,4 @@
+import { t, type Msg } from '../text/msg';
 import type { BakedMap } from '../sim/terrain';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
 import { townAt } from '../sim/sites';
@@ -28,7 +29,19 @@ export function saveKey(scope: string): string {
 
 export const SAVE_KEY = saveKey(__SAVE_SCOPE__);
 
-export class SaveError extends Error {}
+// Why a stored save does not load. The boot screen shows it in words. format is the save's format for the codes that
+// name it.
+export type SaveErrorCode =
+  | 'unreadable' | 'otherMap' | 'bakedProps' | 'brokenProp' | 'invalidWorld' | 'invalidSave' | 'badSetup'
+  | 'incompatible' | 'newer' | 'notMigrated' | 'noFormat' | 'badExplored' | 'badOldSpots';
+
+// A stored save the game cannot load. Boot offers to migrate it to a new world or to start over. The message carries
+// the detail for the console. The player reads the code's words.
+export class SaveError extends Error {
+  constructor(readonly code: SaveErrorCode, readonly format: { major: number; minor: number } | null = null, detail = '') {
+    super(`Save error ${code}${detail ? `: ${detail}` : ''}`);
+  }
+}
 
 export type SaveEnvelope = { format: typeof SAVE_FORMAT; savedAt: number; runId: string; world: object };
 
@@ -70,13 +83,13 @@ type ViewField = 'visible' | 'contacts' | 'clouds';
 export function mapFor(saved: Pick<World, 'mapHash' | 'seed' | 'setup' | 'furyRoad'>, icarus: BakedMap): BakedMap {
   const highway = saved.mapHash.startsWith('highway:');
   if (saved.setup.mode !== 'furyRoad') {
-    if (highway) throw new SaveError(`A ${saved.setup.mode} save names highway map ${saved.mapHash}`);
+    if (highway) throw new SaveError('otherMap', null, `A ${saved.setup.mode} save names highway map ${saved.mapHash}`);
     return icarus;
   }
-  if (!saved.furyRoad) throw new SaveError('This Fury Road run was laid on Icarus roads, and the highway has replaced them');
-  if (!highway) throw new SaveError(`A Fury Road save names map ${saved.mapHash}, which is no highway`);
+  if (!saved.furyRoad) throw new SaveError('otherMap', null, 'This Fury Road run was laid on Icarus roads, and the highway has replaced them');
+  if (!highway) throw new SaveError('otherMap', null, `A Fury Road save names map ${saved.mapHash}, which is no highway`);
   const map = highwayMap(saved.seed, saved.furyRoad.window);
-  if (map.hash !== saved.mapHash) throw new SaveError(`Game save was made on map ${saved.mapHash}, not on the current highway ${map.hash}`);
+  if (map.hash !== saved.mapHash) throw new SaveError('otherMap', null, `map ${saved.mapHash}, not the current highway ${map.hash}`);
   return map;
 }
 
@@ -85,9 +98,9 @@ export function loadWorld(slots: SaveSlots, slot: SlotId, icarus: BakedMap): Wor
   if (envelope === null) return null;
   const world = savedWorld(envelope);
   const map = mapFor(world, icarus);
-  if (world.mapHash !== map.hash) throw new SaveError(`Game save was made on map ${world.mapHash}, not on the current map ${map.hash}`);
+  if (world.mapHash !== map.hash) throw new SaveError('otherMap', null, `map ${world.mapHash}, not ${map.hash}`);
   const explored = unpackExplored(world.player.explored, world.size * world.size);
-  if (world.obstacles.some(isBakedObstacle)) throw new SaveError('Game save holds baked map props, which come from the map file');
+  if (world.obstacles.some(isBakedObstacle)) throw new SaveError('bakedProps');
   const baked = mapObstacles(map);
   const broken = brokenProps(baked, world.broken);
   const gone = new Set(world.broken.map((b) => b.id));
@@ -111,7 +124,7 @@ function stockedOldSpots(world: World, map: BakedMap): void {
   try {
     stockOldSpots(world, map);
   } catch (error) {
-    throw new SaveError(`Game save holds a broken set of old-world loot spots: ${(error as Error).message}`);
+    throw new SaveError('badOldSpots', null, (error as Error).message);
   }
 }
 
@@ -119,14 +132,14 @@ function brokenProps(baked: readonly Obstacle[], broken: readonly SavedBroken[])
   const byId = new Map(baked.map((o) => [o.id, o]));
   return broken.map(({ id, turn }) => {
     const obstacle = byId.get(id);
-    if (!obstacle || !isBreakable(obstacle)) throw new SaveError(`Game save holds broken prop ${id}, which is no breakable prop of the map`);
+    if (!obstacle || !isBreakable(obstacle)) throw new SaveError('brokenProp', null, id);
     return { obstacle, turn };
   });
 }
 
 function savedWorld(save: unknown): SavedWorld {
   const world = migratedWorld(save);
-  if (!isWorld(world)) throw new SaveError('Invalid saved world');
+  if (!isWorld(world)) throw new SaveError('invalidWorld');
   return { ...world, setup: savedSetup(world.setup) };
 }
 
@@ -134,33 +147,33 @@ function savedSetup(setup: unknown): WorldSetup {
   try {
     return parseSetup(setup);
   } catch (err) {
-    throw new SaveError(`Invalid world settings: ${err instanceof Error ? err.message : String(err)}`);
+    throw new SaveError('badSetup', null, err instanceof Error ? err.message : String(err));
   }
 }
 
 function migratedWorld(stored: unknown): unknown {
   const save = envelopeOf(stored);
   const { major, minor } = formatOf(save);
-  if (major !== SAVE_MAJOR) throw new SaveError(`Game save format ${major}.${minor} is from an incompatible game version. Start a new game.`);
-  if (minor > MIGRATIONS.length) throw new SaveError(`Game save format ${major}.${minor} is from a newer game version`);
-  if (!isJsonObject(save.world)) throw new SaveError('Invalid saved world');
+  if (major !== SAVE_MAJOR) throw new SaveError('incompatible', { major, minor });
+  if (minor > MIGRATIONS.length) throw new SaveError('newer', { major, minor });
+  if (!isJsonObject(save.world)) throw new SaveError('invalidWorld');
   try {
     return MIGRATIONS.slice(minor).reduce((world, step) => step(world), save.world);
-  } catch {
-    throw new SaveError(`Game save format ${major}.${minor} could not be migrated`);
+  } catch (err) {
+    throw new SaveError('notMigrated', { major, minor }, String(err));
   }
 }
 
 function envelopeOf(stored: unknown): SavedJson {
-  if (typeof stored === 'string') throw new SaveError('Game save is unreadable');
-  if (!isJsonObject(stored)) throw new SaveError('Invalid game save');
+  if (typeof stored === 'string') throw new SaveError('unreadable');
+  if (!isJsonObject(stored)) throw new SaveError('invalidSave');
   return stored;
 }
 
 function formatOf(save: SavedJson): { major: number; minor: number } {
   if (save.version === '1.0.0') return { major: 1, minor: 0 };
   const format = save.format;
-  if (!isJsonObject(format) || !isCount(format.major) || !isCount(format.minor)) throw new SaveError('Game save has no valid format version');
+  if (!isJsonObject(format) || !isCount(format.major) || !isCount(format.minor)) throw new SaveError('noFormat');
   return { major: format.major, minor: format.minor };
 }
 
@@ -233,14 +246,14 @@ export function packExplored(explored: Uint8Array): string {
 }
 
 export function unpackExplored(packed: unknown, tiles: number): Uint8Array {
-  if (typeof packed !== 'string') throw new SaveError('Invalid saved explored tiles');
+  if (typeof packed !== 'string') throw new SaveError('badExplored');
   let binary: string;
   try {
     binary = atob(packed);
   } catch {
-    throw new SaveError('Invalid saved explored tiles');
+    throw new SaveError('badExplored');
   }
-  if (binary.length !== Math.ceil(tiles / 8)) throw new SaveError('Invalid saved explored tiles');
+  if (binary.length !== Math.ceil(tiles / 8)) throw new SaveError('badExplored');
   const explored = new Uint8Array(tiles);
   for (let i = 0; i < tiles; i++) explored[i] = (binary.charCodeAt(i >> 3) >> (i & 7)) & 1;
   return explored;
@@ -288,15 +301,10 @@ export class SaveHold {
   }
 }
 
-export const SAVE_HELD_NOTE = 'Not saved: an error happened since the last good turn.';
+export const SAVE_HELD_NOTE = t('save.held');
 
-export function saveFailedNote(err: unknown): string {
-  return `The game could not save: ${err instanceof Error ? err.message : String(err)}.`;
-}
-
-export function turnFailedNote(err: unknown): string {
-  return `The turn failed and did not play: ${err instanceof Error ? err.message : String(err)}. The game was not saved.`;
-}
+export const SAVE_FAILED_NOTE = t('save.failed');
+export const TURN_FAILED_NOTE = t('save.turnFailed');
 
 export type Run = { slots: SaveSlots; runId: string; log: RunLog; mapHash: string };
 
@@ -316,7 +324,7 @@ export class GameSaves {
   private readonly hold = new SaveHold();
   private moving = false;
 
-  constructor(private readonly run: Run, private readonly note: (text: string) => void, private readonly record: (text: string) => void) {
+  constructor(private readonly run: Run, private readonly note: (text: Msg) => void, private readonly record: (text: Msg) => void) {
     run.slots.onError = (err) => this.failed(err);
   }
 
@@ -333,7 +341,7 @@ export class GameSaves {
   private saveManual(slot: SlotId, save: (slot: SlotId) => void): void {
     if (this.hold.held) return this.note(SAVE_HELD_NOTE);
     save(slot);
-    this.record(`Saved to ${slotLabel(slot)}`);
+    this.record(t('save.savedTo', { slot: slotLabel(slot) }));
   }
 
   logWorld(world: World): void {
@@ -375,7 +383,7 @@ export class GameSaves {
   }
 
   private failed(err: unknown): void {
-    this.note(saveFailedNote(err));
+    this.note(SAVE_FAILED_NOTE);
     reportError(err);
   }
 }

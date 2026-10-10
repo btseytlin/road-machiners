@@ -16,6 +16,7 @@ import { vehicleStats } from "../sim/stats";
 import { playerSees } from "../sim/vision";
 import { dist } from "../sim/vec";
 import { playerCanAct, hostileToPlayer, startPose } from "../sim/world";
+import { t } from "../text/msg";
 import { modeRules } from "../sim/settings";
 import { el, panel } from "./dom";
 
@@ -25,13 +26,13 @@ const TIPS_OFF_KEY = "roam.tipsOff";
 export type OpeningStep = "wreck" | "search" | "loot" | "patch" | "install";
 export type TipId = OpeningStep | "waypoint" | "drive" | "autoStop" | "stop" | "stopAt" | "manual" | "zones" | "aim" | "honk" | "farewell";
 
+// A tip's words live in src/text/ as hint.<id>.
 type Tip = {
   id: TipId;
-  text: string;
   opening?: true;
-  after?: TipId;
-  seenWhenOver?: true;
-  when: (w: World, auto: boolean, o: OpeningState) => boolean;
+  after?: TipId; // shows only once this tip is seen
+  seenWhenOver?: true; // counts as seen once its moment ends while it shows
+  when: (w: World, auto: boolean, o: OpeningState) => boolean; // auto: turns follow each other without a key press
   done: (w: World, o: OpeningState) => boolean;
 };
 
@@ -95,9 +96,8 @@ const patchDue = (w: World): boolean => engineNeedsPatch(w) && (goodsCount(playe
 
 const installDue = (w: World): boolean => holdsLooseCage(w) && !cageMounted(w);
 
-const openingTip = (id: OpeningStep, text: string, done: (w: World, o: OpeningState) => boolean): Tip => ({
+const openingTip = (id: OpeningStep, done: (w: World, o: OpeningState) => boolean): Tip => ({
   id,
-  text,
   opening: true,
   when: (w, _auto, o) => !playerVehicle(w).direct && o.step === id,
   done,
@@ -106,41 +106,34 @@ const openingTip = (id: OpeningStep, text: string, done: (w: World, o: OpeningSt
 const TIPS: readonly Tip[] = [
   openingTip(
     "wreck",
-    "[Shift]-click the ground by the wreck, then [Space] to drive there.",
     (w, o) => inOpeningReach(w, o) || searchedOpening(w, o),
   ),
-  openingTip("search", "Click Search the wreck, then [Space].", searchedOpening),
+  openingTip("search", searchedOpening),
   openingTip(
     "loot",
-    "Click Take all that fits.",
     (w, o) => o.stock !== null && searchedOpening(w, o) && !hasSalvage(o.stock),
   ),
   openingTip(
     "patch",
-    "[I], click the engine, click Patch, then [Space].",
     (w, o) => o.stock !== null && !engineNeedsPatch(w),
   ),
   openingTip(
     "install",
-    "[I], drag the Rebar cage to a free cell at the truck's edge, then [Space].",
     (w, o) => o.stock !== null && cageMounted(w),
   ),
   {
     id: "waypoint",
-    text: "Click the ground to set a waypoint.",
     when: (w) => !playerVehicle(w).direct,
     done: (w) => hasWaypoint(w),
   },
   {
     id: "drive",
-    text: "[Space] to drive to the waypoint.",
     after: "waypoint",
     when: (w) => !playerVehicle(w).direct && hasWaypoint(w),
     done: moving,
   },
   {
     id: "autoStop",
-    text: "[Space] to stop automatic travel.",
     after: "drive",
     when: (_w, auto) => auto,
     done: () => false,
@@ -148,46 +141,39 @@ const TIPS: readonly Tip[] = [
   },
   {
     id: "stop",
-    text: "Click your truck to stop.",
     after: "drive",
     when: moving,
     done: (w) => playerVehicle(w).order?.kind === "brake",
   },
   {
     id: "stopAt",
-    text: "[Shift]-click to set a stop point.",
     after: "stop",
     when: (w) => !playerVehicle(w).direct,
     done: (w) => playerVehicle(w).order?.kind === "stopAt",
   },
   {
     id: "manual",
-    text: "[R] to drive in manual mode.",
     after: "stopAt",
     when: (w) => !playerVehicle(w).direct,
     done: (w) => playerVehicle(w).direct,
   },
   {
     id: "zones",
-    text: "Click a zone to drive: green speeds up, yellow holds, red slows.",
     when: (w) => playerVehicle(w).direct,
     done: () => false,
   },
   {
     id: "aim",
-    text: "Pick a weapon, then click a truck to aim at its body.",
     when: (w) => vehicleStats(w, playerVehicle(w)).weapons.length > 0 && hostileInSight(w),
     done: (w) => Object.values(playerVehicle(w).weaponOrders).some((o) => o.aim !== "body"),
   },
   {
     id: "honk",
-    text: "[H] to honk.",
     when: (w) => modeRules(w).radio && npcInSight(w),
     done: (w) => w.events.some((e) => e.t === "honk" && e.vehicle === w.player.vehicleId),
   },
   {
     id: "farewell",
-    text: "That's it, good luck.",
     after: "honk",
     when: (w) => dist(playerVehicle(w).pos, spawn) >= FAREWELL_DISTANCE,
     done: () => false,
@@ -317,9 +303,9 @@ export class Tips {
     if (!tip) return;
     this.box.classList.toggle("opening-tip", tip.opening === true);
     this.box.replaceChildren(
-      el("span", { class: "tip-text" }, tip.text),
-      el("button", { class: "tip-close", title: "Close this tip", "aria-label": "Close this tip", onclick: () => this.close() }, "×"),
-      el("div", { class: "tip-actions" }, el("button", { class: "tip-off", onclick: () => this.setOn(false) }, "Turn off tips")),
+      el("span", { class: "tip-text" }, t(`hint.${tip.id}`)),
+      el("button", { class: "tip-close", title: t("hint.closeThis"), "aria-label": t("hint.closeThis"), onclick: () => this.close() }, t("hint.closeMark")),
+      el("div", { class: "tip-actions" }, el("button", { class: "tip-off", onclick: () => this.setOn(false) }, t("hint.turnOff"))),
     );
   }
 }

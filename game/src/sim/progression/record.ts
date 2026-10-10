@@ -16,8 +16,7 @@ import { isStranded } from '../stats';
 import { buyCheapestRanks } from '../progress';
 import { clockOf } from '../sun';
 import { isTowed } from '../tow';
-import type { GameEvent, GameModeId, NpcActivity, Vehicle, World, WorldSetup, XpSource } from '../types';
-import { OUTPOST_PAY } from '../fury-road';
+import type { GameEvent, GameModeId, MoneyReason, NpcActivity, Vehicle, World, WorldSetup, XpSource } from '../types';
 import { dist, type Vec } from '../vec';
 import { canVehicleSee } from '../vision';
 import { maxHp, partValue, restorePart } from '../wear';
@@ -169,11 +168,9 @@ function paidBetween(payee: string, payer: string, me: string, fee: number): Mov
   return payer === me ? { key: 'fees', amount: -fee } : null;
 }
 
-function moneyEventKey(reason: string): Move['key'] {
-  if (reason === OUTPOST_PAY) return 'payouts';
-  if (reason === 'contract' || reason === 'failed haul contract') return 'contracts';
-  if (reason.startsWith('towing ')) return 'fees';
-  throw new Error(`Money event with an unknown reason "${reason}"`);
+function moneyEventKey(reason: MoneyReason): Move['key'] {
+  if (reason.kind === 'outpost') return 'payouts';
+  return reason.kind === 'towing' ? 'fees' : 'contracts';
 }
 
 function playTurn(world: World, archetype: Policy, options: BotOptions): PlayedTurn {

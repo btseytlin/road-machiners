@@ -38,7 +38,7 @@ describe('combat state', () => {
 
   it('a fight goal on a seen target starts combat before any shot', () => {
     const { w, me, raider } = passingRaider();
-    raider.brain!.goals.push({ kind: 'fight', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'test' });
+    raider.brain!.goals.push({ kind: 'fight', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'tripToSite' });
     noteEngagements(w);
     expect(inCombat(w, me)).toBe(true);
     expect(combatTurnsLeft(w, me)).toBe(TURNS);

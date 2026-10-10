@@ -14,7 +14,7 @@ import { getResources } from './resources';
 import { canUseSite, type Site } from './sites';
 import { isStranded, suppliesCap } from './stats';
 import { isOnRope } from './tow';
-import type { NpcActivity, Vehicle, World } from './types';
+import type { GoalReason, NpcActivity, Vehicle, World } from './types';
 
 export function servingSiteIds(profile: NpcProfile): string[] {
   return profile.bases.length > 0 ? profile.bases : REGION.towns.map((t) => t.id);
@@ -45,9 +45,9 @@ export function resolveResupply(world: World, vehicle: Vehicle, activity: NpcAct
   serviceAt(world, vehicle, site);
   scrapFuelIfBroke(world, vehicle, profile, site.id);
   if (needsFreshGear(world, vehicle) && servingSiteIds(profile).includes(site.id)) {
-    popGoal(world, vehicle, 'finished service');
+    popGoal(world, vehicle, 'finishedService');
     beginRearm(world, vehicle, site);
-  } else finishGoal(world, vehicle, 'finished service');
+  } else finishGoal(world, vehicle, 'finishedService');
 }
 
 function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
@@ -75,10 +75,10 @@ function rearmTurns(vehicle: Vehicle): number {
 export function beginRearm(world: World, vehicle: Vehicle, site: Site): void {
   if (!servingSiteIds(npcProfile(vehicle)).includes(site.id)) throw new Error(`${vehicle.id} cannot lie up at ${site.id}`);
   const retreat = vehicle.brain!.goals.find((g) => g.kind === 'retreat');
-  if (retreat) dropGoal(world, vehicle, retreat, 'home to lie up');
+  if (retreat) dropGoal(world, vehicle, retreat, 'homeToLieUp');
   if (holdsRearm(vehicle)) return;
   const until = world.turn + rearmTurns(vehicle);
-  pushGoal(world, vehicle, { kind: 'rearm', targetId: site.id, destination: { ...site.pos }, phase: 'act', reason: 'lie up for fresh gear', until });
+  pushGoal(world, vehicle, { kind: 'rearm', targetId: site.id, destination: { ...site.pos }, phase: 'act', reason: 'lieUp', until });
 }
 
 export function liesUp(vehicle: Vehicle): boolean {
@@ -86,13 +86,13 @@ export function liesUp(vehicle: Vehicle): boolean {
   return top?.kind === 'rearm' && canUseSite(vehicle.pos, getKnownSite(top.targetId!));
 }
 
-export function rearmInvalid(world: World, vehicle: Vehicle): string | null {
-  return needsFreshGear(world, vehicle) ? null : 'fit again';
+export function rearmInvalid(world: World, vehicle: Vehicle): GoalReason | null {
+  return needsFreshGear(world, vehicle) ? null : 'fitAgain';
 }
 
 export function resolveRearm(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   if (activity.until === undefined) throw new Error(`${vehicle.id} lies up with no until turn`);
   if (!reachSite(vehicle, activity) || world.turn < activity.until) return;
   refitAtHome(world, vehicle);
-  finishGoal(world, vehicle, 'refitted at home');
+  finishGoal(world, vehicle, 'refitted');
 }

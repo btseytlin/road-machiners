@@ -53,7 +53,7 @@ describe('a raider unfit to hunt', () => {
     forceOption('idle', 'raid');
     expect(corePart(v, 'cab').hp).toBe(maxHp(corePart(v, 'cab')));
     expect(fitToHunt(w, v)).toBe(false);
-    expect(thinkNpc(w, v)).toMatchObject({ kind: 'resupply', targetId: 'kiln', reason: 'unfit to hunt' });
+    expect(thinkNpc(w, v)).toMatchObject({ kind: 'resupply', targetId: 'kiln', reason: 'unfitToHunt' });
     expect(v.brain!.goals.map((g) => g.kind)).toEqual(['resupply']);
   });
 
@@ -148,7 +148,7 @@ describe('the lie-up for fresh gear', () => {
     getResources(w, v).health = RULES.maxHealth * 0.6;
     npcTurn(w, v);
     expect(goalKinds(v)).not.toContain('rearm');
-    expect(w.events).toContainEqual(expect.objectContaining({ t: 'activity', previous: 'rearm', reason: 'fit again' }));
+    expect(w.events).toContainEqual(expect.objectContaining({ t: 'activity', previous: 'rearm', reason: 'fitAgain' }));
     expect(itemIds(v)).toEqual(items);
   });
 

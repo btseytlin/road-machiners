@@ -120,7 +120,7 @@ describe('arriving at an outpost', () => {
     expect(after.terrain.types[Math.floor(me.pos.y) * after.size + Math.floor(me.pos.x)]).toBe(ground);
     expect(runOf(after).outposts.map((o) => [o.milestone, o.paid])).toEqual([[1, true], [2, false]]);
     expect(runOf(after).groups.every((g) => g.stretch === 2)).toBe(true);
-    expect(reachedOutpostAt(after)?.name).toBe('Outpost 1');
+    expect(reachedOutpostAt(after)?.id).toBe('outpost-1');
   });
 
   it('shifts the player, the ground under it and the explored overlap one stride up the diagonal', () => {
@@ -276,7 +276,7 @@ describe('the endless run', () => {
 
     const readout = furyRoadReadout(w)!;
 
-    expect(readout).toMatchObject({ stretch: 1, outpost: 'Outpost 1' });
+    expect(readout).toMatchObject({ stretch: 1, outpostId: 'outpost-1' });
     expect(readout.toOutpost).toBeCloseTo(50, 0);
   });
 });

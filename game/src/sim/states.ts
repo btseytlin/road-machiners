@@ -16,7 +16,6 @@ import { inCombat, isHostile } from './combat';
 import { getResources } from './resources';
 import type { Job, NpcState, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
 import { canVehicleSee } from './vision';
-import { npcName } from './spawn';
 import { modeRules } from './settings';
 
 export type WorkLeft = { turnsLeft: number; total: number };
@@ -253,7 +252,7 @@ function payTow(w: World, s: NpcState): void {
   if (towed.brain) forgetClient(tower, s.other);
   towed.speed = 0;
   towed.order = null;
-  if (s.holder === w.player.vehicleId) w.events.push({ t: 'money', amount: tow.fee, reason: `towing ${npcName(towed)}` });
+  if (s.holder === w.player.vehicleId) w.events.push({ t: 'money', amount: tow.fee, reason: { kind: 'towing', vehicle: towed.id } });
   if (s.holder === w.player.vehicleId && tow.waived > 0) practice(w, 'freeTow', tow.waived, null, s.other);
   else w.events.push({ t: 'towDone', by: s.holder, client: s.other, fee: tow.fee });
 }

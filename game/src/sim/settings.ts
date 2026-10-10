@@ -55,15 +55,6 @@ export function supplyUseScale(world: World): number {
   return world.setup.settings.supplyUse;
 }
 
-export function setupLabel(setup: WorldSetup): string {
-  const parts = SETTING_IDS.map((id) => `${WORLD_SETTINGS[id].name} ${percent(setup.settings[id])}`);
-  return [GAME_MODES[setup.mode].name, ...parts].join(', ');
-}
-
-export function percent(value: number): string {
-  return `${Math.round(value * 100)}%`;
-}
-
 function validSetting(id: SettingId, value: unknown): value is number {
   const def = WORLD_SETTINGS[id];
   if (typeof value !== 'number' || !Number.isFinite(value) || value < def.min || value > def.max) return false;

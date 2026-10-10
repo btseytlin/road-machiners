@@ -1,7 +1,8 @@
+// Waste Of Time Radio. RadioStation decides what J.J. broadcasts from the worlds the HUD hears. It reads world
+// state and events and never writes them, so the radio changes no rule. RadioPanel streams each broadcast onto a
+// pager screen and holds the sound knobs on its faceplate. Lines and pacing live in src/data/radio.ts.
 
-import { GOODS } from '../data/goods';
-import { partDef } from '../data/parts';
-import { BASIN_DIRECTIONS, HEADINGS, RADIO, RADIO_HOURS, RADIO_LINES, type RadioTopic } from '../data/radio';
+import { DIRECTIONS, RADIO, RADIO_HOURS, RADIO_VARIANTS, type Direction, type RadioTopic } from '../data/radio';
 import { atlasOf, atlasSites } from '../sim/atlas';
 import { TIME } from '../data/time';
 import type { Contract } from '../sim/market';
@@ -10,9 +11,16 @@ import { robbing } from '../sim/states';
 import { clockOf } from '../sim/sun';
 import type { GameEvent, Vehicle, WeatherEvent, World } from '../sim/types';
 import { dist, type Vec } from '../sim/vec';
+import { say } from '../text/language';
+import { byId, t, type Msg } from '../text/msg';
+import { goodLower, partName, siteName, templateName } from '../text/names';
 import { el, panel, rightDock } from './dom';
 
-export type Broadcast = { topic: RadioTopic; text: string; turn: number; rank: 'news' | 'time' | 'filler' };
+// variant: which of the topic's lines J.J. says. text: the line with its slots filled.
+export type Broadcast = { topic: RadioTopic; variant: number; text: Msg; turn: number; rank: 'news' | 'time' | 'filler' };
+type Slots = Record<string, Msg>;
+// Where news happened: key tells one place from another for the cooldown, words name it on air.
+type Place = { key: string; words: Msg };
 
 const RANKS: Broadcast['rank'][] = ['news', 'time', 'filler'];
 
@@ -29,12 +37,9 @@ const CLOCK_CALLS: { topic: RadioTopic; hour: number }[] = [
   { topic: 'dusk', hour: TIME.sunset },
 ];
 
-export function fill(template: string, vars: Record<string, string>): string {
-  return template.replace(/\{(\w+)\}/g, (_, slot: string) => {
-    const value = vars[slot];
-    if (value === undefined) throw new Error(`Radio line has no value for {${slot}}: ${template}`);
-    return value;
-  });
+// A line with its slots filled. The resolver throws on a missing or unknown slot, which is a content bug.
+export function radioLine(topic: RadioTopic, variant: number, slots: Slots): Msg {
+  return byId(`radio.${topic}.${variant}`, slots);
 }
 
 export class RadioStation {
@@ -42,11 +47,11 @@ export class RadioStation {
   private seed: number | null = null;
   private board = new Set<string>();
   private queue: Broadcast[] = [];
-  private lastSent: number | null = null;
-  private nextAir = 0;
-  private lastAir = 0;
-  private placeHeard = new Map<string, number>();
-  private lastText = new Map<RadioTopic, string>();
+  private lastSent: number | null = null; // turn of the last broadcast sent
+  private nextAir = 0; // randomized earliest turn for the next broadcast
+  private lastAir = 0; // turn of the last broadcast queued or sent, for the idle filler
+  private placeHeard = new Map<string, number>(); // raid place key -> turn it was last reported
+  private lastVariant = new Map<RadioTopic, number>();
 
   constructor(private random: () => number) {}
 
@@ -109,14 +114,14 @@ export class RadioStation {
     const w = e.event;
     const topic = WEATHER_TOPICS[w.kind][e.outcome];
     if (!topic) return;
-    this.push(topic, w.kind === 'storm' ? { place: placeWord(world, w.pos), heading: compass(w.vel, HEADINGS) } : {}, 'news');
+    this.push(topic, w.kind === 'storm' ? { place: placeOf(world, w.pos).words, heading: t(`radio.heading.${compass(w.vel)}`) } : {}, 'news');
   }
 
   private raidNews(world: World, topic: RadioTopic, attackerId: string, victimId: string): void {
     const place = raidPlace(world, attackerId, victimId);
-    if (place === null || this.recentlyHeard(place, world.turn)) return;
-    this.placeHeard.set(place, world.turn);
-    this.push(topic, { place }, 'news');
+    if (place === null || this.recentlyHeard(place.key, world.turn)) return;
+    this.placeHeard.set(place.key, world.turn);
+    this.push(topic, { place: place.words }, 'news');
   }
 
   private recentlyHeard(place: string, turn: number): boolean {
@@ -149,18 +154,20 @@ export class RadioStation {
     if (latest && this.random() < RADIO.clockChance) this.push(latest.topic, {}, 'time');
   }
 
-  private push(topic: RadioTopic, vars: Record<string, string>, rank: Broadcast['rank']): void {
-    this.queue.push({ topic, text: fill(this.pick(topic), vars), turn: this.turn!, rank });
+  private push(topic: RadioTopic, slots: Slots, rank: Broadcast['rank']): void {
+    const variant = this.pick(topic);
+    this.queue.push({ topic, variant, text: radioLine(topic, variant, slots), turn: this.turn!, rank });
     this.lastAir = this.turn!;
     while (this.queue.length > RADIO.queueCap) this.queue.splice(this.queue.indexOf(dropFirst(this.queue)), 1);
   }
 
-  private pick(topic: RadioTopic): string {
-    const all = RADIO_LINES[topic];
-    const options = all.length > 1 ? all.filter((t) => t !== this.lastText.get(topic)) : all;
-    const text = options[Math.floor(this.random() * options.length)];
-    this.lastText.set(topic, text);
-    return text;
+  // A random variant, never the same one twice in a row.
+  private pick(topic: RadioTopic): number {
+    const all = Array.from({ length: RADIO_VARIANTS[topic] }, (_, i) => i);
+    const options = all.length > 1 ? all.filter((i) => i !== this.lastVariant.get(topic)) : all;
+    const variant = options[Math.floor(this.random() * options.length)];
+    this.lastVariant.set(topic, variant);
+    return variant;
   }
 }
 
@@ -172,11 +179,12 @@ function clockCalls(from: number, to: number): { topic: RadioTopic; at: number }
   return calls;
 }
 
-function raidPlace(world: World, attackerId: string, victimId: string): string | null {
+// Where a raider robbed or knocked out another driver. Null for anything touching the player or not by raiders.
+function raidPlace(world: World, attackerId: string, victimId: string): Place | null {
   if ([attackerId, victimId].includes(world.player.vehicleId)) return null;
   const victim = vehicleIn(world, victimId);
   if (!victim || vehicleIn(world, attackerId)?.faction !== 'raiders') return null;
-  return placeWord(world, victim.pos);
+  return placeOf(world, victim.pos);
 }
 
 function dropFirst(queue: Broadcast[]): Broadcast {
@@ -191,11 +199,11 @@ function boardIds(world: World): Set<string> {
   return new Set(Object.values(world.shops).flatMap((s) => s.contracts.map((c) => c.id)));
 }
 
-function contractVars(c: Contract): Record<string, string> {
-  const shop = siteOf(c.shop).name;
-  if (c.kind === 'haul') return { shop, good: GOODS[c.good].name.toLowerCase(), to: siteOf(c.to).name };
-  if (c.kind === 'fetch') return { shop, part: partDef(c.defId).name };
-  return { shop, target: c.targetName };
+function contractVars(c: Contract): Slots {
+  const shop = siteName(siteOf(c.shop).id);
+  if (c.kind === 'haul') return { shop, good: goodLower(c.good), to: siteName(siteOf(c.to).id) };
+  if (c.kind === 'fetch') return { shop, part: partName(c.defId) };
+  return { shop, target: templateName(c.template) };
 }
 
 function vehicleIn(world: World, id: string): Vehicle | undefined {
@@ -207,16 +215,22 @@ function hoursOf(turn: number): number {
   return (day - 1) * 24 + hour;
 }
 
-function placeWord(world: World, pos: Vec): string {
+// "near X" for the nearest found site within reach, else the basin direction from the map's center.
+// Unfound sites stay unnamed, so the radio never does the Rumor mill perk's work.
+function placeOf(world: World, pos: Vec): Place {
   const nearest = atlasSites(atlasOf(world.terrain)).reduce((a, b) => (dist(b.pos, pos) < dist(a.pos, pos) ? b : a));
-  if (dist(nearest.pos, pos) <= RADIO.nearTiles && world.player.discovered.includes(nearest.id)) return `near ${nearest.name}`;
+  if (dist(nearest.pos, pos) <= RADIO.nearTiles && world.player.discovered.includes(nearest.id)) {
+    return { key: nearest.id, words: t('radio.near', { site: siteName(nearest.id) }) };
+  }
   const center = world.size / 2;
-  return compass({ x: pos.x - center, y: pos.y - center }, BASIN_DIRECTIONS);
+  const basin = compass({ x: pos.x - center, y: pos.y - center });
+  return { key: basin, words: t(`radio.basin.${basin}`) };
 }
 
-function compass<T extends string>(v: Vec, words: readonly T[]): T {
+// One of the eight directions clockwise from east for a direction on the map, where north is -y.
+function compass(v: Vec): Direction {
   const turns = Math.atan2(v.y, v.x) / (2 * Math.PI);
-  return words[(Math.round(turns * 8) + 8) % 8];
+  return DIRECTIONS[(Math.round(turns * 8) + 8) % 8];
 }
 
 export function revealed(text: string, elapsedMs: number, charsPerSecond: number): string {
@@ -228,12 +242,21 @@ export class RadioPanel {
   readonly faceplate = el('div', { class: 'radio-faceplate' });
   readonly keys = el('div', { class: 'radio-keys' });
   private text = el('div', { class: 'radio-text', 'aria-live': 'polite', 'aria-busy': 'false' });
+  private lcd: HTMLElement;
   private streaming: { text: string; start: number } | null = null;
+  // The broadcast on screen, so a language switch can show it again in the new words.
+  private shown: Msg | null = null;
 
   constructor(private station: RadioStation) {
-    const band = el('div', { class: 'radio-band' }, el('span', {}, 'WOT RADIO'), el('span', {}, 'FM 66.6'));
-    const ghost = el('div', { class: 'radio-ghost', 'aria-hidden': 'true' }, '\u2588'.repeat(3 * 30));
-    this.root.append(this.keys, el('div', { class: 'radio-screen' }, band, el('div', { class: 'radio-lcd' }, ghost, this.text)), this.faceplate);
+    const band = el('div', { class: 'radio-band' }, el('span', {}, t('radio.band')), el('span', {}, t('radio.frequency')));
+    const ghost = el('div', { class: 'radio-ghost', 'aria-hidden': 'true' }, t('radio.ghost', { blocks: '\u2588'.repeat(3 * 30) }));
+    this.lcd = el('div', { class: 'radio-lcd' }, ghost, this.text);
+    this.root.append(this.keys, el('div', { class: 'radio-screen' }, band, this.lcd), this.faceplate);
+  }
+
+  private write(text: string): void {
+    this.text.replaceChildren(text);
+    this.lcd.scrollTop = this.lcd.scrollHeight;
   }
 
   hear(world: World): void {
@@ -244,8 +267,9 @@ export class RadioPanel {
   private play(): void {
     const b = this.station.next();
     if (!b) return;
-    this.streaming = { text: b.text, start: performance.now() };
-    this.text.textContent = '';
+    this.shown = b.text;
+    this.streaming = { text: say(b.text), start: performance.now() };
+    this.write('');
     this.text.setAttribute('aria-busy', 'true');
     this.text.classList.add('streaming');
     requestAnimationFrame(this.tick);
@@ -255,7 +279,8 @@ export class RadioPanel {
     const s = this.streaming;
     if (!s) return;
     const shown = revealed(s.text, now - s.start, RADIO.charsPerSecond);
-    if (shown.length !== this.text.textContent?.length) this.text.textContent = shown;
+    // Several frames pass per character, so the screen is written only when one appears.
+    if (shown.length !== this.text.textContent?.length) this.write(shown);
     if (shown.length < s.text.length) {
       requestAnimationFrame(this.tick);
       return;
@@ -265,4 +290,13 @@ export class RadioPanel {
     this.text.classList.remove('streaming');
     this.play();
   };
+
+  // A language switch shows the broadcast on screen whole in the new words. A stream in progress ends with it.
+  relocalize(): void {
+    if (!this.shown) return;
+    this.streaming = null;
+    this.text.setAttribute('aria-busy', 'false');
+    this.text.classList.remove('streaming');
+    this.write(say(this.shown));
+  }
 }

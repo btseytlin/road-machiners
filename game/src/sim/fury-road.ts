@@ -5,7 +5,7 @@ import { RULES } from '../data/rules';
 import { chassisDef } from '../data/chassis';
 import { inCombat } from './combat';
 import { playerVehicle } from './damage';
-import { highwayMap, milestoneAt, outpostFort, outpostName, outpostSite, roadPoint, STRIDE, stretchStream, toRoad } from './highway';
+import { highwayMap, milestoneAt, outpostFort, outpostId, outpostSite, roadPoint, STRIDE, stretchStream, toRoad } from './highway';
 import { canUseSite, sitePads } from './sites';
 import { mapObstacles } from './mapgen';
 import { rollPartStock } from './market';
@@ -24,12 +24,11 @@ import { refreshVision } from './vision';
 import { dist, type Vec } from './vec';
 import { playerCommand } from './world';
 
-export const OUTPOST_PAY = 'outpostPay';
 
-export type Outpost = OutpostFacts & { name: string; pad: Vec };
-export type FuryRoadReadout = { stretch: number; toOutpost: number; outpost: string };
+export type Outpost = OutpostFacts & { id: string; pad: Vec };
+export type FuryRoadReadout = { stretch: number; toOutpost: number; outpostId: string };
 
-export { outpostName };
+export { outpostId };
 
 function curveAt(c: Curve, j: number): number {
   return Math.min(c.max, c.first + c.step * (j - 1));
@@ -70,7 +69,7 @@ export function planStretch(seed: number, j: number): WaveGroup[] {
 }
 
 function outpostFacts(world: World, j: number): OutpostFacts {
-  const stock: PartInstance[] = rollPartStock(world, stretchStream(world.seed, j, 'stock'), GARAGE_STOCK, stockSizeOf(j), outpostName(j));
+  const stock: PartInstance[] = rollPartStock(world, stretchStream(world.seed, j, 'stock'), GARAGE_STOCK, stockSizeOf(j), outpostId(j));
   return { milestone: j, stock, paid: false };
 }
 
@@ -89,7 +88,7 @@ export function outpostPad(world: World, milestone: number): Vec {
 }
 
 function outpostOf(world: World, facts: OutpostFacts): Outpost {
-  return { ...facts, name: outpostName(facts.milestone), pad: outpostPad(world, facts.milestone) };
+  return { ...facts, id: outpostId(facts.milestone), pad: outpostPad(world, facts.milestone) };
 }
 
 export function outpostFactsAt(world: World, milestone: number): OutpostFacts {
@@ -226,7 +225,7 @@ function completeStretch(world: World, run: FuryRoadRun): void {
   const wrecks = run.groups.reduce((n, g) => n + g.wrecked, 0);
   const pay = payOf(j, wrecks);
   world.player.money += pay;
-  world.events.push({ t: 'money', amount: pay, reason: OUTPOST_PAY });
+  world.events.push({ t: 'money', amount: pay, reason: { kind: 'outpost' } });
   post.paid = true;
   run.earned += pay;
   run.wrecks += wrecks;
@@ -288,7 +287,7 @@ const DROPPED: { [K in keyof World as (typeof WINDOW_MOVE)[K] extends 'drop' ? K
 
 function requireMovable(world: World, run: FuryRoadRun): void {
   if (aliveCount(world, run) > 0) throw new Error('The window cannot move while a group truck is alive');
-  if (!parkedOnPad(world, run.window + 1)) throw new Error(`The window moves only with the player parked at ${outpostName(run.window + 1)}`);
+  if (!parkedOnPad(world, run.window + 1)) throw new Error(`The window moves only with the player parked at outpost ${run.window + 1}`);
   if (world.salvage.length > 0 || Object.keys(world.shops).length > 0) throw new Error('A Fury Road window holds no salvage and no shops');
 }
 
@@ -386,5 +385,5 @@ export function furyRoadReadout(world: World): FuryRoadReadout | null {
   const run = world.furyRoad;
   if (!run) return null;
   const j = run.window + 1;
-  return { stretch: j, toOutpost: Math.max(0, outpostSite(world.seed, j).n - playerProgress(world, run)), outpost: outpostName(j) };
+  return { stretch: j, toOutpost: Math.max(0, outpostSite(world.seed, j).n - playerProgress(world, run)), outpostId: outpostId(j) };
 }

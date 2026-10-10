@@ -41,7 +41,7 @@ describe('game mode rules', () => {
   it('gives Roaming the configured kit and Fury Road its own', () => {
     expect(modeKit('roaming', 'standard')).toBe('standard');
     expect(modeKit('furyRoad', 'standard')).toBe('furyRoad');
-    expect(GAME_MODES.furyRoad.name).toBe('Fury Road');
+    expect(GAME_MODES.furyRoad.kit).toBe('furyRoad');
   });
 });
 

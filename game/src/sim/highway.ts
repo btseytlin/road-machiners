@@ -125,8 +125,8 @@ const FORTS = new Map<string, SiteLocationDef>();
 const POST = FURY_ROAD.outpost;
 const PAD = REGION.sites.pad;
 
-export function outpostName(milestone: number): string {
-  return `Outpost ${milestone}`;
+export function outpostId(milestone: number): string {
+  return `outpost-${milestone}`;
 }
 
 export function outpostSite(seed: number, j: number): OutpostSite {
@@ -150,7 +150,7 @@ export function outpostFort(seed: number, window: number, j: number): SiteLocati
     const site = outpostSite(seed, j);
     const pos = fromRoad(window, site.center.n, site.center.u);
     const gate = { x: pos.x + Math.cos(site.out) * POST.radius, y: pos.y + Math.sin(site.out) * POST.radius };
-    fort = { id: `outpost-${j}`, name: outpostName(j), kind: 'convoy', pos, radius: POST.radius, look: POST.look, turn: site.out / DEG - 45, gates: [gate] };
+    fort = { id: outpostId(j), kind: 'convoy', pos, radius: POST.radius, look: POST.look, turn: site.out / DEG - 45, gates: [gate] };
     FORTS.set(key, fort);
   }
   return fort;

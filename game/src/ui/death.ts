@@ -1,7 +1,12 @@
+// The fullscreen death screen. A dead run takes no more turns or commands, so it covers the whole game.
+// Load save opens the Load panel, and New game opens the New game screen over it.
 
-import { abandonRun, canAbandonRun, outpostName, runEarnings } from "../sim/fury-road";
-import { GAME_MODES } from "../data/modes";
+import { abandonRun, canAbandonRun, runEarnings } from "../sim/fury-road";
 import type { RunLossCause, World } from "../sim/types";
+import { bindAttr, say } from "../text/language";
+import { t, type Msg } from "../text/msg";
+import { modeName, siteName } from "../text/names";
+import { outpostId } from "../sim/highway";
 import { disabledWith, el, panel } from "./dom";
 import { CONFIRM_NEW_GAME, openNewGame, type NewGameActions } from "./new-game";
 import { SavePanel, type SavePanelActions } from "./save-panel";
@@ -12,12 +17,11 @@ export type DeathActions = SavePanelActions & {
   newGame: NewGameActions;
 };
 
-const NO_SAVE = "No saves yet";
-const RUN_TITLE: Record<RunLossCause, string> = { wrecked: "Wrecked", abandoned: "Stranded" };
-export const CONFIRM_END_RUN = "End the run here? It cannot be undone.";
+const RUN_TITLE: Record<RunLossCause, Msg> = { wrecked: t("death.wrecked"), abandoned: t("death.stranded") };
+export const CONFIRM_END_RUN = t("hud.confirmEndRun");
 
 export function confirmedEndRun(world: World): World | null {
-  return canAbandonRun(world) && window.confirm(CONFIRM_END_RUN) ? abandonRun(world) : null;
+  return canAbandonRun(world) && window.confirm(say(CONFIRM_END_RUN)) ? abandonRun(world) : null;
 }
 
 export class DeathScreen {
@@ -39,23 +43,23 @@ export class DeathScreen {
     const title = deathTitle(world);
     this.root = panel("death");
     this.root.setAttribute("role", "alertdialog");
-    this.root.setAttribute("aria-label", title);
+    bindAttr(this.root, "aria-label", title);
     this.root.append(
       el("h3", {}, title),
-      ...runCaption(world),
+      runCaption(world) ?? el("div", { class: "dim" }, t("death.epitaph")),
       el(
         "div",
         { class: "death-buttons" },
-        el("button", disabledWith(saved ? null : NO_SAVE, () => this.savePanel.openLoad()), "Load save"),
-        world.furyRoad ? el("button", { onclick: () => this.restart(world) }, "Restart run") : null,
-        el("button", { onclick: () => openNewGame(this.actions.newGame, () => {}) }, "New game"),
+        el("button", disabledWith(saved ? null : t("save.none"), () => this.savePanel.openLoad()), t("menu.loadSave")),
+        world.furyRoad ? el("button", { onclick: () => this.restart(world) }, t("death.restartRun")) : null,
+        el("button", { onclick: () => openNewGame(this.actions.newGame, () => {}) }, t("menu.newGame")),
       ),
     );
   }
 
   private restart(world: World): void {
     const { newGame } = this.actions;
-    if (!newGame.confirm(CONFIRM_NEW_GAME)) return;
+    if (!newGame.confirm(say(CONFIRM_NEW_GAME))) return;
     newGame.requestBoot({ new: world.setup });
     newGame.reload();
   }
@@ -66,13 +70,13 @@ function lossCause(world: World): RunLossCause {
   return lost?.t === "runLost" ? lost.cause : "wrecked";
 }
 
-function deathTitle(world: World): string {
-  return world.furyRoad ? RUN_TITLE[lossCause(world)] : "You died";
+function deathTitle(world: World): Msg {
+  return world.furyRoad ? RUN_TITLE[lossCause(world)] : t("death.title");
 }
 
-function runCaption(world: World): HTMLElement[] {
-  if (!world.furyRoad) return [];
+function runCaption(world: World): HTMLElement | null {
+  if (!world.furyRoad) return null;
   const { reached, north } = runEarnings(world);
-  const where = reached > 0 ? `Reached ${outpostName(reached)}` : "Stretch 1";
-  return [el("div", { class: "death-caption" }, `${GAME_MODES.furyRoad.name}. ${where}, ${distanceText(north)} north`)];
+  const caption = reached > 0 ? t("death.runReached", { mode: modeName("furyRoad"), site: siteName(outpostId(reached)), north: distanceText(north) }) : t("death.runStart", { mode: modeName("furyRoad"), north: distanceText(north) });
+  return el("div", { class: "death-caption" }, caption);
 }

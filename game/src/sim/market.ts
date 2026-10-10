@@ -54,7 +54,7 @@ export function initShop(world: World, shopId: string): ShopState {
   const pressure: Record<string, number> = {};
   for (const good of def.goods) pressure[good] = 0;
   const count = randInt(world.marketRng, def.stockSize[0], def.stockSize[1]);
-  return { contracts: [], pressure, stock: rollPartStock(world, world.marketRng, def.partStock, count, `Shop ${def.id}`), restockAt: world.turn + def.restockTurns };
+  return { contracts: [], pressure, stock: rollPartStock(world, world.marketRng, def.partStock, count, def.id), restockAt: world.turn + def.restockTurns };
 }
 
 export function advanceShop(world: World, shopId: string, state: ShopState): void {
@@ -62,7 +62,7 @@ export function advanceShop(world: World, shopId: string, state: ShopState): voi
   for (const good of def.goods) state.pressure[good] = (state.pressure[good] ?? 0) * (1 - def.driftPerTurn);
   if (world.turn >= state.restockAt) {
     const count = randInt(world.marketRng, def.stockSize[0], def.stockSize[1]);
-    state.stock = rollPartStock(world, world.marketRng, def.partStock, count, `Shop ${def.id}`);
+    state.stock = rollPartStock(world, world.marketRng, def.partStock, count, def.id);
     state.restockAt = world.turn + def.restockTurns;
   }
 }
@@ -136,7 +136,7 @@ export function addStockPart(state: ShopState, part: PartInstance): void {
 export type Contract =
   | { id: string; shop: string; kind: 'haul'; good: string; units: number; to: string; reward: number; deadline: number; window: number; rush: boolean; tier: Tier }
   | { id: string; shop: string; kind: 'fetch'; defId: string; reward: number; deadline: number; window: number; tier: Tier }
-  | { id: string; shop: string; kind: 'bounty'; template: string; targetName: string; reward: number; deadline: number; window: number; tier: Tier; fulfilled: boolean };
+  | { id: string; shop: string; kind: 'bounty'; template: string; reward: number; deadline: number; window: number; tier: Tier; fulfilled: boolean };
 
 export function estimateTurns(from: Vec, to: Vec): number {
   return (dist(from, to) * EFFORT.routeFactor) / EFFORT.refSpeed + EFFORT.handlingTurns;
@@ -240,7 +240,7 @@ function rollBounty(world: World, input: RollInput, id: string): Contract {
   const tier = highestPartTier(target);
   const turns = randInt(world.marketRng, CONTRACTS.bounty.durationTurns[0], CONTRACTS.bounty.durationTurns[1]);
   const reward = bountyReward(target.brain.templateId);
-  return { id, shop: input.shop.id, kind: 'bounty', template: target.brain.templateId, targetName: target.name, reward, deadline: world.turn + turns, window: turns, tier, fulfilled: false };
+  return { id, shop: input.shop.id, kind: 'bounty', template: target.brain.templateId, reward, deadline: world.turn + turns, window: turns, tier, fulfilled: false };
 }
 
 const ROLLS = { haul: rollHaul, fetch: rollFetch, bounty: rollBounty };
@@ -441,7 +441,7 @@ function handInBounty(world: World, c: Extract<Contract, { kind: 'bounty' }>): v
 function handInHaul(world: World, c: Extract<Contract, { kind: 'haul' }>): void {
   requireParkedAt(world, c.to);
   const v = playerVehicle(world);
-  if ((goodsCount(v)[c.good] ?? 0) < c.units) throw new Error(`Needs ${c.units} ${GOODS[c.good].name}`);
+  if ((goodsCount(v)[c.good] ?? 0) < c.units) throw new Error(`Needs ${c.units} ${c.good}`);
   removeGoods(v, c.good, c.units);
 }
 
@@ -458,7 +458,7 @@ function handInFetch(world: World, c: Extract<Contract, { kind: 'fetch' }>): voi
     return;
   }
   const stored = world.player.storage.findIndex((p) => fitsFetch(c, p));
-  if (stored < 0) throw new Error(`Needs a spare ${PARTS[c.defId].name}, working and rebuilt at most ${CONTRACTS.fetch.maxWear} time${CONTRACTS.fetch.maxWear === 1 ? '' : 's'}`);
+  if (stored < 0) throw new Error(`Needs a spare ${c.defId}, working and rebuilt at most ${CONTRACTS.fetch.maxWear} time${CONTRACTS.fetch.maxWear === 1 ? '' : 's'}`);
   world.player.storage.splice(stored, 1);
 }
 
@@ -477,14 +477,14 @@ function finishContract(world: World, c: Contract, outcome: 'done' | 'failed' | 
 
 function payContract(world: World, c: Contract): void {
   world.player.money += c.reward;
-  world.events.push({ t: 'money', amount: c.reward, reason: 'contract' });
+  world.events.push({ t: 'money', amount: c.reward, reason: { kind: 'contract' } });
   practice(world, 'contract', contractXp(c), null, c.shop);
 }
 
 function chargeHaulPenalty(world: World, c: Extract<Contract, { kind: 'haul' }>): void {
   const penalty = haulPenalty(c, goodValue(c.good));
   world.player.money -= penalty;
-  world.events.push({ t: 'money', amount: -penalty, reason: 'failed haul contract' });
+  world.events.push({ t: 'money', amount: -penalty, reason: { kind: 'failedHaul' } });
 }
 
 function isMetBounty(c: Contract): boolean {

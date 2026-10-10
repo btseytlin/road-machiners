@@ -141,9 +141,9 @@ function truck(world: World, id: string): string {
 }
 
 export function describe(world: World, e: GameEvent): string {
-  if (e.t === 'say') return `say ${e.speaker}: ${e.text}`;
+  if (e.t === 'say') return `say ${e.speaker}: ${e.line}`;
   if (e.t === 'shot') return `shot ${truck(world, e.shooter)}>${truck(world, e.target)} ${e.weapon} hits ${e.rounds.filter((r) => r.hit).length}/${e.rounds.length}`;
-  if (e.t === 'money') return `money ${e.amount} ${e.reason}`;
+  if (e.t === 'money') return `money ${e.amount} ${e.reason.kind}`;
   if (e.t === 'contract') return `contract ${e.outcome} ${e.contract.kind}`;
   if (e.t === 'stateEnded') return `stateEnded ${e.state.kind}:${e.state.holder}>${e.state.other} ${e.ending}`;
   const { t, ...rest } = e;

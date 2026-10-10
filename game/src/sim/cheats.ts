@@ -4,10 +4,10 @@
 import { chassisDef, PLAYER_CHASSIS } from '../data/chassis';
 import { GOOD_IDS, GOODS } from '../data/goods';
 import { GEAR_LEVEL_IDS, NPCS, type GearLevel, type NpcTemplate } from '../data/npcs';
-import { PARTS, partDef } from '../data/parts';
+import { PARTS } from '../data/parts';
 import { REGION } from '../data/region';
 import { CHEATS } from '../data/rules';
-import { PERK_IDS, PERKS } from '../data/skills';
+import { PERK_IDS } from '../data/skills';
 import { TIME } from '../data/time';
 import { resolveDestroyed, wreckVehicle } from './combat';
 import { damagePart, isJunk, maxHp, restorePart } from './wear';
@@ -39,8 +39,8 @@ export class CheatError extends Error {}
 
 export type VehicleRow = {
   id: string;
-  name: string;
-  templateId: string | null;
+  driver: string | null; // null for a vehicle without an NPC brain
+  templateId: string | null; // null for a vehicle without an NPC brain
   faction: Faction;
   distance: number;
   hostile: boolean;
@@ -92,7 +92,7 @@ export function addXp(world: World, n: number): World {
 export function grantPerk(world: World, id: string): World {
   if (!isPerkId(id)) throw new CheatError(`No perk ${id}. Perks: ${PERK_IDS.join(', ')}`);
   const picked = pickedFromPair(world, id);
-  if (picked) throw new CheatError(`${PERKS[picked].name} is already picked from the pair of ${PERKS[id].name}`);
+  if (picked) throw new CheatError(`${picked} is already picked from the pair of ${id}`);
   return update(world, (w) => { w.player.perks.push(id); });
 }
 
@@ -115,7 +115,7 @@ export function damagePartTo(world: World, defId: string, hp: number): World {
       spillDeadRows(w);
       return;
     }
-    if (part.hp === 0 && isJunk(part)) throw new CheatError(`${partDef(defId).name} is junk and cannot be rebuilt`);
+    if (part.hp === 0 && isJunk(part)) throw new CheatError(`${defId} is junk and cannot be rebuilt`);
     restorePart(part, hp);
   });
 }
@@ -142,7 +142,7 @@ export function instantMoveItem(world: World, itemId: string, to: Spot): World {
   return update(world, (w) => {
     const me = playerVehicle(w);
     const result = planItemMove(me, itemId, to);
-    if (result.error !== null) throw new CheatError(result.error);
+    if (result.error !== null) throw new CheatError(result.error.id);
     const item = me.items.find((it) => it.id === itemId);
     if (item?.kind === 'part') disarm(item.part);
     applyRefitLayout(w, me, result.plan.items);
@@ -332,7 +332,7 @@ export function randomKit(world: World, level: number | null): World {
     const spot = freeSpotNear(w, old.pos, chassisDef(chassisId).radius, old.id);
     if (!spot) throw new CheatError(`No free spot for a ${chassisId} here`);
     const loadout = generateNpcLoadout(w, tpl, chassisId, gear);
-    const truck = makeVehicle(w, { name: old.name, faction: 'player', chassisId, parts: loadout.parts, spares: [], cargo: {}, pos: spot, heading: old.heading, brain: null });
+    const truck = makeVehicle(w, { faction: 'player', chassisId, parts: loadout.parts, spares: [], cargo: {}, pos: spot, heading: old.heading, brain: null });
     truck.id = old.id;
     w.vehicles = w.vehicles.map((v) => (v.id === old.id ? truck : v));
     w.player.fuel = Math.min(w.player.fuel, fuelCap(truck));
@@ -353,7 +353,7 @@ function spawnInDraft(w: World, tpl: NpcTemplate, hostile: boolean): void {
   const me = playerVehicle(w);
   const circle = frontFirst(me.pos, me.heading, CHEATS.spawnDistance, CHEATS.spawnAngles);
   const spot = firstFree(w, circle, radius, null) ?? freeSpotNear(w, me.pos, radius, null);
-  if (!spot) throw new CheatError(`No free spot to spawn ${tpl.name}`);
+  if (!spot) throw new CheatError(`No free spot to spawn ${tpl.id}`);
   const v = spawnAt(w, tpl, loadout, spot);
   if (hostile) declareFeud(w, v, w.player.vehicleId);
 }
@@ -395,7 +395,7 @@ export function nearbyVehicles(world: World): VehicleRow[] {
     .filter((v) => v.id !== me.id)
     .map((v) => ({
       id: v.id,
-      name: v.name,
+      driver: v.brain ? v.brain.driver : null,
       templateId: v.brain ? v.brain.templateId : null,
       faction: v.faction,
       distance: dist(me.pos, v.pos),

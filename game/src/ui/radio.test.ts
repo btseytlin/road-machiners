@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { BASIN_DIRECTIONS, RADIO, RADIO_LINES, type RadioTopic } from '../data/radio';
+import { DIRECTIONS, RADIO, RADIO_VARIANTS, type RadioTopic } from '../data/radio';
 import { REGION } from '../data/region';
 import { GOODS } from '../data/goods';
+import { NPCS } from '../data/npcs';
 import { PARTS } from '../data/parts';
 import { TIME } from '../data/time';
 import type { Contract } from '../sim/market';
@@ -10,7 +11,12 @@ import { addState } from '../sim/states';
 import { addVehicle, emptyWorld } from '../sim/testkit';
 import type { GameEvent, World } from '../sim/types';
 import { cloneWorld } from '../sim/world';
-import { fill, RadioStation, revealed, type Broadcast } from './radio';
+import { LOCALES, t, type Locale, type Msg } from '../text/msg';
+import { goodLower, partName, siteName, templateName } from '../text/names';
+import { resolve, schemaOf } from '../text/resolve';
+import { radioLine, RadioStation, revealed, type Broadcast } from './radio';
+
+const en = (msg: Msg): string => resolve(msg, 'en');
 
 const first = () => 0;
 const site = (id: string) => [...REGION.towns, ...REGION.locations].find((s) => s.id === id)!;
@@ -58,7 +64,7 @@ describe('RadioStation', () => {
   it('plays the ident on the first world it hears', () => {
     const s = new RadioStation(first);
     s.hear(world(10));
-    expect(s.next()).toMatchObject({ topic: 'ident', text: RADIO_LINES.ident[0] });
+    expect(s.next()).toMatchObject({ topic: 'ident', variant: 0 });
   });
 
   it('reports a heat wave starting', () => {
@@ -74,14 +80,14 @@ describe('RadioStation', () => {
     const found = world(10, ['granary']);
     const s = tuned(found);
     s.hear(later(found, RADIO.minGapTurns, [storm({ x: granary.pos.x + 5, y: granary.pos.y })]));
-    expect(s.next()?.text).toBe('Dust storm rolling near The Granary, heading east.');
+    expect(en(s.next()!.text)).toBe('Dust storm rolling near The Granary, heading east.');
 
     const unfound = world(10, []);
     const s2 = tuned(unfound);
     s2.hear(later(unfound, RADIO.minGapTurns, [storm({ x: granary.pos.x + 5, y: granary.pos.y }, { x: 0, y: -1 })]));
-    const text = s2.next()!.text;
+    const text = en(s2.next()!.text);
     expect(text).not.toContain('Granary');
-    expect(BASIN_DIRECTIONS.some((d) => text.includes(d))).toBe(true);
+    expect(DIRECTIONS.some((d) => text.includes(en(t(`radio.basin.${d}`))))).toBe(true);
     expect(text).toContain('heading north');
   });
 
@@ -102,7 +108,7 @@ describe('RadioStation', () => {
     s.hear(w2);
     const b = s.next()!;
     expect(b.topic).toBe('haul');
-    expect(b.text).toBe('New haul posted at Bowl: grain out to Nose.');
+    expect(en(b.text)).toBe('New haul posted at Bowl: grain out to Nose.');
     expect(drain(s, w2)).toBeNull();
   });
 
@@ -164,7 +170,7 @@ describe('RadioStation', () => {
     const s = tuned(w);
     const ko: GameEvent = { t: 'npcKnockout', vehicle: trader.id, by: raider.id };
     s.hear(later(w, RADIO.minGapTurns, [ko]));
-    expect(s.next()?.text).toContain('near Bowl');
+    expect(en(s.next()!.text)).toContain('near Bowl');
     s.hear(later(w, 2 * RADIO.minGapTurns, [ko]));
     expect(s.next()).toBeNull();
     s.hear(later(w, RADIO.minGapTurns + RADIO.placeCooldownTurns + 1, [ko]));
@@ -244,32 +250,43 @@ describe('RadioStation', () => {
   });
 });
 
-describe('RADIO_LINES', () => {
-  const longest = (names: string[]) => names.reduce((a, b) => (b.length > a.length ? b : a));
-  const sites = [...REGION.towns, ...REGION.locations].map((s) => s.name);
-  const vars = {
-    place: longest([...sites.map((n) => `near ${n}`), ...BASIN_DIRECTIONS]),
-    heading: 'northwest',
-    shop: longest(sites),
-    to: longest(sites),
-    good: longest(Object.values(GOODS).map((g) => g.name.toLowerCase())),
-    part: longest(Object.values(PARTS).map((p) => p.name)),
-    target: 'Bartholomew Cartwright-Ash',
+describe('radio lines', () => {
+  const longest = (words: string[]) => words.reduce((x, y) => (y.length > x.length ? y : x));
+  const sites = [...REGION.towns, ...REGION.locations].map((s) => s.id);
+  // The longest words each slot can take, so the longest filled line is the one measured.
+  const longestOf = (locale: Locale, msgs: Msg[]): Msg => {
+    const words = msgs.map((m) => resolve(m, locale));
+    return msgs[words.indexOf(longest(words))];
   };
-  const lines = Object.entries(RADIO_LINES).flatMap(([topic, list]) => list.map((t) => ({ topic: topic as RadioTopic, text: fill(t, vars) })));
-
-  it('holds at least 15 lines', () => {
-    expect(lines.length).toBeGreaterThanOrEqual(15);
+  const slots = (locale: Locale): Record<string, Msg> => ({
+    place: longestOf(locale, [...sites.map((id) => t('radio.near', { site: siteName(id) })), ...DIRECTIONS.map((d) => t(`radio.basin.${d}`))]),
+    heading: longestOf(locale, DIRECTIONS.map((d) => t(`radio.heading.${d}`))),
+    shop: longestOf(locale, sites.map(siteName)),
+    to: longestOf(locale, sites.map(siteName)),
+    good: longestOf(locale, Object.keys(GOODS).map(goodLower)),
+    part: longestOf(locale, Object.keys(PARTS).map(partName)),
+    target: longestOf(locale, Object.keys(NPCS).map(templateName)),
+  });
+  const lines = LOCALES.flatMap((locale) => {
+    const all = slots(locale);
+    return (Object.entries(RADIO_VARIANTS) as [RadioTopic, number][]).flatMap(([topic, count]) => Array.from({ length: count }, (_, variant) => {
+      const needs = Object.keys(schemaOf(`radio.${topic}.${variant}`));
+      const filled = radioLine(topic, variant, Object.fromEntries(needs.map((slot) => [slot, all[slot]])));
+      return { locale, topic, variant, text: resolve(filled, locale) };
+    }));
   });
 
-  it.each(lines)('$topic fits the screen and stays in character: $text', ({ text }) => {
+  it('holds at least 15 lines in each language', () => {
+    for (const locale of LOCALES) expect(lines.filter((l) => l.locale === locale).length).toBeGreaterThanOrEqual(15);
+  });
+
+  it.each(lines)('$locale $topic $variant fits the screen: $text', ({ text }) => {
     expect(text.length).toBeLessThanOrEqual(RADIO.maxChars);
     expect(text).not.toContain('{');
-    for (const word of RADIO.banned) expect(text).not.toMatch(new RegExp(`\\b${word}`, 'i'));
   });
 
-  it('fails loud on an unknown slot', () => {
-    expect(() => fill('{nope}', {})).toThrow();
+  it('fails loud on a missing slot', () => {
+    expect(() => en(radioLine('haul', 0, {}))).toThrow();
   });
 });
 

@@ -10,6 +10,9 @@
 import { GAME_VERSION } from '../config';
 import { noWebGLText, WebGLUnavailable } from './webgl';
 
+import { setText } from '../text/language';
+import { t } from '../text/msg';
+
 let shown = false;
 let report: ((text: string) => void) | null = null;
 const reported = new Set<string>();
@@ -131,12 +134,12 @@ function showCrash(err: unknown, facts: ErrorFacts | null): void {
   box.className = 'crash-screen';
   const title = document.createElement('div');
   title.className = 'crash-title';
-  title.textContent = 'The game crashed';
+  setText(title, t('crash.title'));
   const body = document.createElement('div');
   body.textContent = text;
   const hint = document.createElement('div');
   hint.className = 'crash-hint';
-  hint.textContent = 'Reload the page to start again.';
+  setText(hint, t('crash.hint'));
   box.append(title, body, hint);
   document.body.appendChild(box);
 }
@@ -149,11 +152,11 @@ function showNoWebGL(err: WebGLUnavailable): void {
   box.className = 'crash-screen';
   const title = document.createElement('div');
   title.className = 'crash-title';
-  title.textContent = text.title;
+  setText(title, text.title);
   box.append(title);
   for (const line of text.lines) {
     const row = document.createElement('div');
-    row.textContent = line;
+    setText(row, line);
     box.append(row);
   }
   if (text.detail) {
