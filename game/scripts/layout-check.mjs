@@ -13,6 +13,7 @@ const SEED = 4242;
 // LAYOUT_LOCALES=ru and LAYOUT_STATES=shop,trade narrow a run while fixing one screen.
 const LOCALES = process.env.LAYOUT_LOCALES?.split(',') ?? ['en', 'ru', 'pseudo'];
 const VIEWPORTS = [[1280, 720], [700, 800]];
+const TALL = [1440, 900];
 // Keyboard caps keep their Latin labels in Russian, like the WASD keys.
 const KEY_CAPS = ['WASD', 'Shift', 'Esc'];
 const OUT = 'tmp/layout';
@@ -141,6 +142,29 @@ async function boot() {
   return { browser, page, errors };
 }
 
+async function inspectNpc(page, armed) {
+  await page.evaluate(async (armed) => {
+    const g = window.__ROAM__;
+    const { runCommand } = await import('/src/ui/console.ts');
+    const { partDef } = await import('/src/data/parts.ts');
+    const world = structuredClone(runCommand(g.state, 'spawn gunwagon hostile').world);
+    const npc = world.vehicles.filter((v) => v.brain).at(-1);
+    if (!armed) npc.items = npc.items.filter((it) => !(it.kind === 'part' && partDef(it.part.defId).kind === 'weapon'));
+    g.apply(world);
+    g.hovered = npc.id;
+    g.refreshInfo();
+    g.hitCard.show();
+  }, armed);
+}
+
+const clearInspect = (page) => page.evaluate(() => {
+  const g = window.__ROAM__;
+  g.hovered = null;
+  g.refreshInfo();
+});
+
+const INSPECT_VIEWPORTS = [...VIEWPORTS, TALL];
+
 // Each state builds one screen through window.__ROAM__ and leaves it with its teardown.
 const STATES = {
   menu: { setup: () => undefined },
@@ -155,11 +179,15 @@ const STATES = {
   character: { setup: (page) => key(page, 'KeyC'), teardown: escape },
   saves: { setup: openSaves, teardown: escape },
   options: { setup: openOptions, teardown: escape },
+  inspect: { setup: (page) => inspectNpc(page, true), teardown: clearInspect, viewports: INSPECT_VIEWPORTS },
+  'inspect-unarmed': { setup: (page) => inspectNpc(page, false), teardown: clearInspect, viewports: INSPECT_VIEWPORTS },
 };
 
 // The log state always runs, since its long lines stay for every later screen.
 const ONLY = process.env.LAYOUT_STATES?.split(',');
 const PICKED = Object.entries(STATES).filter(([name]) => !ONLY || name === 'log' || ONLY.includes(name));
+
+const WINDOWS = [...new Set(PICKED.flatMap(([, state]) => state.viewports ?? VIEWPORTS))];
 
 const started = Date.now();
 const seconds = () => Math.round((Date.now() - started) / 1000);
@@ -182,9 +210,9 @@ async function capture(page, locale, [width, height], [name, state]) {
 async function checkLocale(page, locale) {
   await page.evaluate((l) => window.__ROAM__.language.set(l), locale);
   await probe(page, locale);
-  for (const viewport of VIEWPORTS) {
+  for (const viewport of WINDOWS) {
     await page.setViewportSize({ width: viewport[0], height: viewport[1] });
-    for (const entry of PICKED) await capture(page, locale, viewport, entry);
+    for (const entry of PICKED.filter(([, state]) => (state.viewports ?? VIEWPORTS).includes(viewport))) await capture(page, locale, viewport, entry);
   }
 }
 
