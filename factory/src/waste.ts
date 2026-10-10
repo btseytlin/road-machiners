@@ -55,9 +55,8 @@ function modelNumbers(jobs: JobLine[]): WasteNumbers['models'] {
   return [...group(jobs.flatMap((line) => line.agents), (agent) => agent.model)].map(([model, runs]) => ({ model, runs: runs.length, costUsd: cost(runs) })).sort(byCost);
 }
 
-// Card jobs on a GitHub issue. A change job's id is no issue, so it counts only in the totals, stages and models.
 const cardJobs = (jobs: JobLine[]): (JobLine & { issue: number })[] =>
-  jobs.filter((line): line is JobLine & { issue: number } => line.issue !== null && QUEUE_OF[line.stage] !== 'branch' && JOB_ISSUE[line.stage] === 'issue');
+  jobs.filter((line): line is JobLine & { issue: number } => line.issue !== null && QUEUE_OF[line.stage] !== 'branch' && JOB_ISSUE[line.stage] === 'github-issue');
 
 const POSTS: JobStage[] = ['verify', 'checks'];
 

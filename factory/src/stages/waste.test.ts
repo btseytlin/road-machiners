@@ -181,6 +181,17 @@ describe('waste review', () => {
     expect(readState(retry.ctx.statePath).lastWasteReview).toBe(NOW.toISOString());
   });
 
+  it('fixes the start of a first review run by hand, so its retry finishes the same issue', async () => {
+    writeState(`${HOME}/state/state.json`, { ...structuredClone(EMPTY_STATE), lastWasteReview: null });
+    const failed = fakeCtx(BRIEF, { close: true });
+    await expect(runStage(failed.ctx)).rejects.toThrow('gh issue close failed');
+    expect(readState(failed.ctx.statePath).lastWasteReview).toBe('2026-10-03T09:00:00.000Z');
+    const retry = fakeCtx(BRIEF, { now: new Date('2026-10-11T09:00:00Z') });
+    await runStage(retry.ctx);
+    expect(retry.seen.issues).toEqual([]);
+    expect(readState(retry.ctx.statePath).lastWasteReview).toBe(NOW.toISOString());
+  });
+
   it('refuses to start without a ledger', async () => {
     rmSync(`${HOME}/ledger.jsonl`);
     await expect(runStage(fakeCtx(BRIEF).ctx)).rejects.toThrow('no ledger');

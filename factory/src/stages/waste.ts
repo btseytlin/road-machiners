@@ -59,7 +59,10 @@ const reviewsPath = (factoryHome: string): string => join(factoryHome, 'waste-re
 
 function periodStart(ctx: Ctx, to: Date): Date {
   const last = readState(ctx.statePath).lastWasteReview;
-  return last === null ? new Date(to.getTime() - ctx.cfg.wasteReviewDays * DAY_MS) : new Date(last);
+  if (last !== null) return new Date(last);
+  const from = new Date(to.getTime() - ctx.cfg.wasteReviewDays * DAY_MS);
+  updateState(ctx.statePath, (state) => ({ ...state, lastWasteReview: from.toISOString() }));
+  return from;
 }
 
 async function runReviewAgent(ctx: Ctx, dir: string): Promise<void> {

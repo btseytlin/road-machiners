@@ -118,11 +118,10 @@ export const QUEUE_OF: Record<JobStage, Queue> = {
   approve: 'branch', merge: 'branch', 'catch-up': 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', incident: 'branch',
   playtest: 'verify',
 };
-// What a job's issue field holds. Only 'issue' is a GitHub issue number: a change job holds its change request id.
-export const JOB_ISSUE: Record<JobStage, 'issue' | 'change' | 'none'> = {
-  triage: 'issue', design: 'issue', implement: 'issue', verify: 'issue', harden: 'issue', checks: 'issue', adhoc: 'issue',
-  approve: 'issue', 'catch-up': 'issue', remove: 'issue', ship: 'issue', playtest: 'issue', candidate: 'issue', incident: 'issue',
-  change: 'change',
+export const JOB_ISSUE: Record<JobStage, 'github-issue' | 'change-id' | 'none'> = {
+  triage: 'github-issue', design: 'github-issue', implement: 'github-issue', verify: 'github-issue', harden: 'github-issue', checks: 'github-issue', adhoc: 'github-issue',
+  approve: 'github-issue', 'catch-up': 'github-issue', remove: 'github-issue', ship: 'github-issue', playtest: 'github-issue', candidate: 'github-issue', incident: 'github-issue',
+  change: 'change-id',
   release: 'none', merge: 'none', dev: 'none', waste: 'none',
 };
 export type Route = 'answer' | 'patch' | 'redesign';
