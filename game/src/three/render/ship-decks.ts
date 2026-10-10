@@ -1,6 +1,7 @@
 
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
+import type { DeckLook } from '../../data/terrain';
 import { FALLEN_SUN_DECKS } from '../../data/territory';
 import { hash2 } from '../../render/noise';
 import { PAL } from '../../render/palette';
@@ -20,7 +21,7 @@ const LIP_INSET = 0.6;
 const TOP_DROP = 0.1;
 const SKIRT_COLORS = [PAL.hull.grey, PAL.hull.dark, PAL.hull.dark, PAL.hull.rust];
 
-type ShipDeck = { deck: Deck; look: (typeof FALLEN_SUN_DECKS)[number]['look'] };
+type ShipDeck = { deck: Deck; look: DeckLook };
 
 export function buildShipDecks(t: Terrain): THREE.Group {
   const root = new THREE.Group();
@@ -37,10 +38,9 @@ export function addShipDecks(t: Terrain, scope: RenderScope): void {
 }
 
 function shipDecks(t: Terrain): ShipDeck[] {
-  const decks = atlasOf(t).decks.decks;
-  return FALLEN_SUN_DECKS.flatMap((spec) => {
-    const deck = decks.find((d) => d.id === spec.id);
-    return deck ? [{ deck, look: spec.look }] : [];
+  return atlasOf(t).decks.decks.flatMap((deck) => {
+    const look = deck.look ?? FALLEN_SUN_DECKS.find((spec) => spec.id === deck.id)?.look;
+    return look ? [{ deck, look }] : [];
   });
 }
 

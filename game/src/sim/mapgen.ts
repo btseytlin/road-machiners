@@ -54,10 +54,11 @@ function hulkObstacle(p: BakedProp, k: number, chassisId: string): Obstacle {
   return { id: `hulk-${k}`, pos: { ...p.pos }, r: p.r, kind: 'wreck', hulk: { chassisId, yaw: p.yaw } };
 }
 
-const BAKED_ID = new RegExp(`^(rock\\d+|hulk-\\d+|pole-\\d+-\\d+|(${PROP_KINDS.filter((k) => k !== 'rock' && k !== 'pole').join('|')})-\\d+)$`);
+let bakedId: RegExp | null = null;
 
 export function isBakedObstacle(o: Obstacle): boolean {
-  return BAKED_ID.test(o.id);
+  bakedId ??= new RegExp(`^(rock\\d+|hulk-\\d+|pole-\\d+-\\d+|(${PROP_KINDS.filter((k) => k !== 'rock' && k !== 'pole').join('|')})-\\d+)$`);
+  return bakedId.test(o.id);
 }
 
 function placeSites(atlas: Atlas): Obstacle[] {

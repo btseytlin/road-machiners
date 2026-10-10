@@ -118,7 +118,8 @@ describe('a highway window', () => {
     const map = highwayMap(3, 1);
     const atlas = atlasOf(map.terrain);
 
-    expect([atlas.towns, atlas.hazards, atlas.decks.decks]).toEqual([[], [], []]);
+    expect([atlas.towns, atlas.hazards]).toEqual([[], []]);
+    expect(atlas.decks.decks.every((d) => d.id.startsWith('ramp-') && d.look === 'ship_flap')).toBe(true);
     expect(atlas.locations.map((l) => l.id)).toEqual(['outpost-1', 'outpost-2']);
     expect(atlas.oldSpots || atlas.landforms).toBe(false);
     expect(atlas.roads).toHaveLength(1);

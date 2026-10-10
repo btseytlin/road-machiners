@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
 import { HAZARDS, HIGHWAY, type SceneKind } from '../data/fury-road';
-import { acrossOf, fromRoad, highwayMap, milestoneAt, outpostFort, roadHeading, roadPoint, toRoad } from './highway';
+import { acrossOf, fromRoad, STRIDE, highwayMap, milestoneAt, outpostFort, roadHeading, roadPoint, toRoad } from './highway';
 import { boxDistance, mapObstacles, propBoxes, propObstacle, type PosedBox } from './mapgen';
 import { CELL, componentOf, navLayer } from './nav/layer';
-import { closurePieces, lanesCoveredOf, leavesPassage, northClosureAt, scenesOf, southClosureAt, stretchLayout, type Scene } from './road-hazards';
+import { closurePieces, highwayDecks, lanesCoveredOf, leavesPassage, northClosureAt, scenesOf, southClosureAt, stretchLayout, type Scene } from './road-hazards';
 import { sitePads, siteGap } from './sites';
 import type { BakedMap, BakedProp } from './terrain';
 import type { Vec } from './vec';
@@ -223,5 +223,28 @@ describe('a highway window with its scenes', () => {
     const ms = performance.now() - started;
     console.info(`highway window with scenes built in ${ms.toFixed(0)} ms`);
     expect(ms).toBeLessThan(1500);
+  });
+});
+
+describe('a hull-plate ramp', () => {
+  it('stands in one lane, rising north, with the rest of the road open', () => {
+    for (const { seed, j, scene } of allScenes().filter((s) => s.scene.kind === 'ramp')) {
+      const [ramp] = scene.ramps;
+      expect(ramp.to.n).toBeGreaterThan(ramp.from.n);
+      const d = acrossOf(seed, ramp.from);
+      expect(leavesPassage([[d - ramp.width / 2, d + ramp.width / 2]]), `seed ${seed} stretch ${j}`).toBe(true);
+    }
+  });
+
+  it('is the same deck in both windows that hold it', () => {
+    for (const seed of SEEDS.slice(0, 10)) {
+      for (const k of [0, 1, 2]) {
+        const shift = (spec: ReturnType<typeof highwayDecks>[number], by: number) => ({ ...spec, line: spec.line.map((s) => ({ at: { x: +(s.at.x + by).toFixed(6), y: +(s.at.y + by).toFixed(6) }, rise: s.rise })) });
+        const inOverlap = (spec: ReturnType<typeof highwayDecks>[number], from: number, to: number) => spec.line.every((s) => [s.at.x, s.at.y].every((v) => v >= from && v <= to));
+        const a = highwayDecks(seed, k).filter((s) => inOverlap(s, 0, SIZE - STRIDE)).map((s) => shift(s, 0));
+        const b = highwayDecks(seed, k + 1).filter((s) => inOverlap(s, STRIDE, SIZE)).map((s) => shift(s, -STRIDE));
+        expect(b).toEqual(a);
+      }
+    }
   });
 });

@@ -4,9 +4,10 @@ import { NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { START_KITS } from '../data/start';
 import { hulkBoxes } from './body';
-import { milestoneAt, roadAt, roadHeading, roadPiece, stretchOf, stretchStream, windowSpan, type RoadPiece, type RoadPos } from './highway';
+import { fromRoad, milestoneAt, roadAt, roadHeading, roadPiece, stretchOf, stretchStream, windowSpan, type RoadPiece, type RoadPos } from './highway';
 import { boxDistance, propBoxes, propObstacle, type PosedBox } from './mapgen';
 import { hashRandom, nextRandom, randInt, randRange, type Rng } from './rng';
+import type { DeckSpec } from '../data/terrain';
 import type { PropKind } from './terrain';
 import type { Vec } from './vec';
 
@@ -489,4 +490,15 @@ function southClosure(seed: number, window: number): RoadPiece[] {
 
 export function closurePieces(seed: number, window: number): RoadPiece[] {
   return [...northClosure(seed, window), ...southClosure(seed, window)];
+}
+
+export function highwayDecks(seed: number, window: number): DeckSpec[] {
+  const size = HIGHWAY.size;
+  const inside = (p: Vec) => p.x >= 0 && p.y >= 0 && p.x <= size && p.y <= size;
+  return windowStretches(window).flatMap((j) => stretchLayout(seed, j).scenes.flatMap((s) => s.ramps)).flatMap((ramp) => {
+    const from = fromRoad(window, ramp.from.n, ramp.from.u);
+    const to = fromRoad(window, ramp.to.n, ramp.to.u);
+    if (!inside(from) || !inside(to)) return [];
+    return [{ id: ramp.id, line: [{ at: from, rise: 0 }, { at: to, rise: ramp.rise }], width: ramp.width, cut: null, skirt: true, look: 'ship_flap' as const }];
+  });
 }

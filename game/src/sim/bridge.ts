@@ -3,6 +3,7 @@ import { PHYSICS } from '../data/physics';
 import { REGION } from '../data/region';
 import { TERRAIN, type DeckSpec } from '../data/terrain';
 import type { PosedBox } from './mapgen';
+import { highwayDecks } from './road-hazards';
 import { deckHeight, groundAt, heightAt, type AtlasKey, type Terrain } from './terrain';
 import type { Obstacle } from './types';
 import { segmentDist, type Vec } from './vec';
@@ -53,7 +54,11 @@ function buildDeck(spec: DeckSpec): Deck {
   const rails = offs.map((off): [Vec, Vec] => [{ x: from.x + off.x, y: from.y + off.y }, { x: to.x + off.x, y: to.y + off.y }]);
   const ends = [stations[0], stations[stations.length - 1]].filter((s) => s.rise > 0).map((s) => s.at);
   const lips = ends.map((end): [Vec, Vec] => [{ x: end.x + offs[0].x, y: end.y + offs[0].y }, { x: end.x + offs[1].x, y: end.y + offs[1].y }]);
-  return { id, width: spec.width, cut: spec.cut, skirt: spec.skirt, from, to, axis, length, stations, rails, lips };
+  return { id, width: spec.width, cut: spec.cut, skirt: spec.skirt, ...lookOf(spec), from, to, axis, length, stations, rails, lips };
+}
+
+function lookOf(spec: DeckSpec): Pick<DeckSpec, 'look'> {
+  return spec.look ? { look: spec.look } : {};
 }
 
 export function railOffset(axis: Vec, width: number, side: number): Vec {
@@ -89,10 +94,24 @@ function railBox(deck: Deck): RailBox {
 export const ICARUS_DECKS: DeckSet = deckSet(DECKS);
 export const NO_DECKS: DeckSet = deckSet([]);
 
+const DECKS_BY_KEY = new WeakMap<AtlasKey, DeckSet>();
+const HIGHWAY_DECKS = new Map<string, DeckSet>();
+const HIGHWAY_DECKS_KEPT = 4;
+
 export function decksOf(key: AtlasKey): DeckSet {
   if (key.kind === 'icarus') return ICARUS_DECKS;
-  if (key.kind === 'highway') return NO_DECKS;
-  throw new Error(`Unknown map kind ${JSON.stringify(key)}`);
+  if (key.kind !== 'highway') throw new Error(`Unknown map kind ${JSON.stringify(key)}`);
+  const known = DECKS_BY_KEY.get(key);
+  if (known) return known;
+  const name = `${key.seed}:${key.window}`;
+  let set = HIGHWAY_DECKS.get(name);
+  if (!set) {
+    set = deckSet(buildDecks(highwayDecks(key.seed, key.window)));
+    HIGHWAY_DECKS.set(name, set);
+    while (HIGHWAY_DECKS.size > HIGHWAY_DECKS_KEPT) HIGHWAY_DECKS.delete(HIGHWAY_DECKS.keys().next().value as string);
+  }
+  DECKS_BY_KEY.set(key, set);
+  return set;
 }
 
 export function deckById(id: string): Deck {

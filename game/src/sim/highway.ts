@@ -2,7 +2,7 @@ import { FURY_ROAD, HIGHWAY, type BandRule, type GroundBand } from '../data/fury
 import { REGION, type SiteLocationDef } from '../data/region';
 import type { TerrainTypeId } from '../data/terrain';
 import type { Atlas } from './atlas';
-import { NO_DECKS } from './bridge';
+import { decksOf } from './bridge';
 import { fortressProps } from './fortress';
 import { closurePieces, craterDip, sceneAt, scenePieces, stretchLayout, windowCraters, windowStretches, type Crater } from './road-hazards';
 import { INDEX_CELL, RoadIndex } from './road-index';
@@ -409,7 +409,7 @@ export function highwayAtlas(seed: number, window: number): Atlas {
     roadIndex: new RoadIndex([line], INDEX_CELL),
     towns: [],
     locations: windowForts(seed, window),
-    decks: NO_DECKS,
+    decks: decksOf({ kind: 'highway', seed, window }),
     hazards: [],
     oldSpots: false,
     landforms: false,
