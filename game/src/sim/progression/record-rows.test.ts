@@ -95,7 +95,7 @@ describe('turnLedger', () => {
   });
 
   it('books contract pay as contracts and a tow fee the player earns as fees', () => {
-    const { orders, next } = turnWith([{ t: 'money', amount: 100, reason: 'contract' }, { t: 'money', amount: 30, reason: 'towing Bob' }], 130);
+    const { orders, next } = turnWith([{ t: 'money', amount: 100, reason: { kind: 'contract' } }, { t: 'money', amount: 30, reason: { kind: 'towing', vehicle: 'npc' } }], 130);
 
     const ledger = turnLedger(orders, next);
 
@@ -124,12 +124,6 @@ describe('turnLedger', () => {
     const { orders, next } = turnWith([{ t: 'contract', contract: { id: 'x' } as Contract, outcome: 'accepted' }], 50);
 
     expect(() => turnLedger(orders, next)).toThrow('50 money');
-  });
-
-  it('throws on a money event with an unknown reason', () => {
-    const { orders, next } = turnWith([{ t: 'money', amount: 5, reason: 'a gift' }], 5);
-
-    expect(() => turnLedger(orders, next)).toThrow('unknown reason');
   });
 });
 

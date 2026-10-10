@@ -1,38 +1,28 @@
 // The boot steps and their state. A step moves only when real boot work starts, counts or ends.
 
+import { list, t, type Msg } from '../text/msg';
+
 export type BootStep = 'code' | 'map' | 'physics' | 'models' | 'sounds' | 'world' | 'ground' | 'scene' | 'frame';
 export type BootState = 'waiting' | 'running' | 'done' | 'failed';
 
 export const BOOT_STEPS: readonly BootStep[] = ['code', 'map', 'physics', 'models', 'sounds', 'world', 'ground', 'scene', 'frame'];
 
-// Every player-visible boot string. index.html repeats `title`, `code` and `failedToLoad`; a test keeps them equal.
 export const BOOT_TEXT = {
-  title: 'Road Machiners',
-  barLabel: 'Loading',
-  code: 'Loading the game',
-  map: 'Reading the map',
-  physics: 'Starting physics',
-  models: 'Loading models',
-  sounds: 'Loading sounds',
-  loadSave: 'Loading your save',
-  newGame: 'Starting a new game',
-  ground: 'Painting the ground',
-  scene: 'Building the scene',
-  frame: 'Drawing the first frame',
-  waiting: 'waiting',
-  running: '...',
-  done: 'done',
-  failed: 'failed',
-  failedToLoad: 'The game failed to load. Check your connection and reload the page.',
+  code: t('boot.code'),
+  map: t('boot.map'),
+  physics: t('boot.physics'),
+  models: t('boot.models'),
+  sounds: t('boot.sounds'),
+  loadSave: t('boot.loadSave'),
+  newGame: t('boot.newGame'),
+  ground: t('boot.ground'),
+  scene: t('boot.scene'),
+  frame: t('boot.frame'),
 } as const;
-
-export function countedLabel(label: string, done: number, total: number): string {
-  return `${label} ${done} of ${total}`;
-}
 
 interface Entry {
   state: BootState;
-  label: string;
+  label: Msg;
   done: number;
   total: number | null;
 }
@@ -49,7 +39,7 @@ export class BootProgress {
     this.start('code');
   }
 
-  start(step: BootStep, label?: string): void {
+  start(step: BootStep, label?: Msg): void {
     const entry = this.entry(step);
     if (this.failed) throw new Error(`Boot already failed, cannot change ${step}`);
     if (entry.state !== 'waiting') throw new Error(`Boot step ${step} is ${entry.state}, not waiting`);
@@ -78,7 +68,7 @@ export class BootProgress {
     return this.entry(step).state;
   }
 
-  label(step: BootStep): string {
+  label(step: BootStep): Msg {
     return this.entry(step).label;
   }
 
@@ -91,17 +81,15 @@ export class BootProgress {
   }
 
   // The running steps' labels with counts, joined.
-  get stageLine(): string {
-    return this.runningEntries()
-      .map((e) => (e.total === null ? e.label : countedLabel(e.label, e.done, e.total)))
-      .join(', ');
+  get stageLine(): Msg | null {
+    const running = this.runningEntries();
+    return running.length > 0 ? list(running.map((e) => (e.total === null ? e.label : t('boot.counted', { label: e.label, done: e.done, total: e.total })))) : null;
   }
 
   // The same without counts, so it changes only when the set of running steps does.
-  get liveLine(): string {
-    return this.runningEntries()
-      .map((e) => e.label)
-      .join(', ');
+  get liveLine(): Msg | null {
+    const running = this.runningEntries();
+    return running.length > 0 ? list(running.map((e) => e.label)) : null;
   }
 
   private runningEntries(): Entry[] {

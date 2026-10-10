@@ -13,6 +13,7 @@ export type UiHost = {
   pressTurn(): void;
   releaseTurn(): void;
   runKey(code: string): void;
+  searchStock(stockId: string): void;
   autoTravel(): boolean;
-  getTurnPhase(): "Moving" | "Firing" | "Results" | null;
+  getTurnPhase(): "moving" | "firing" | "results" | null;
 };

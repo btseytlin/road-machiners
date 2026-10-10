@@ -167,8 +167,8 @@ describe('the Smoke mortar', () => {
     const { w, me, part } = playerWith('smokeMortar');
     const at = (dx: number) => ({ kind: 'point' as const, pos: { x: me.pos.x + dx, y: me.pos.y } });
 
-    expect(utilityOrderError(w, me, part.id, at(4.9))).toMatch(/range/);
-    expect(utilityOrderError(w, me, part.id, at(16.1))).toMatch(/range/);
+    expect(utilityOrderError(w, me, part.id, at(4.9))).toMatchObject({ id: 'utilityBlocked', block: 'range' });
+    expect(utilityOrderError(w, me, part.id, at(16.1))).toMatchObject({ id: 'utilityBlocked', block: 'range' });
     expect(utilityOrderError(w, me, part.id, at(5))).toBeNull();
     expect(utilityOrderError(w, me, part.id, at(16))).toBeNull();
   });

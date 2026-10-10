@@ -53,7 +53,7 @@ describe('built-in parts', () => {
     for (const tpl of Object.values(NPCS)) {
       const w = emptyWorld();
       const loadout = generateNpcLoadout(w, tpl);
-      const v = makeVehicle(w, { name: tpl.name, faction: tpl.faction, ...loadout, pos: { x: 40, y: 40 }, heading: 0, brain: null });
+      const v = makeVehicle(w, { faction: tpl.faction, ...loadout, pos: { x: 40, y: 40 }, heading: 0, brain: null });
       const mounted = mountedParts(v).map((p) => p.defId).filter((id) => PARTS[id].kind !== 'core');
       expect(mounted.sort()).toEqual(loadout.parts.map((p) => p.defId).sort());
     }
@@ -62,8 +62,8 @@ describe('built-in parts', () => {
   it('moving or storing a core part throws', () => {
     const w = emptyWorld(sitePads(bowl)[0]);
     const cab = coreItem(w, 'cab');
-    expect(() => moveItem(w, cab.id, { x: cab.x, y: cab.y, rot: cab.rot })).toThrow(/built.in/i);
-    expect(() => storePart(w, cab.id)).toThrow(/built.in/i);
+    expect(() => moveItem(w, cab.id, { x: cab.x, y: cab.y, rot: cab.rot })).toThrow('Refused: builtInFixed');
+    expect(() => storePart(w, cab.id)).toThrow(/Refused/);
   });
 
   it('shops never stock core parts', () => {
@@ -92,7 +92,7 @@ describe('cargo rows', () => {
     const g = gridOf(v);
     const spare = (y: number, rot: 0 | 1): GridItem => ({ id: 'i-spare', x: 1, y, rot, kind: 'part', part: makePart(w, 'rack', 0) });
     expect(g.cells[g.chassisH][1]).toBe('.');
-    expect(placementError(g, v.items, spare(g.chassisH - 1, 1), null)).toBe('Does not fit there');
+    expect(placementError(g, v.items, spare(g.chassisH - 1, 1), null)).toEqual({ id: 'noFit' });
     expect(placementError(g, v.items, spare(g.chassisH, 0), null)).toBeNull();
   });
 });
@@ -133,7 +133,7 @@ describe('broken cargo rows', () => {
     box.hp = 0;
     const g = gridOf(v);
     const salt: GridItem = { id: 'i-salt', x: 0, y: g.h - 1, rot: 0, kind: 'good', good: 'salt' };
-    expect(placementError(g, v.items, salt, null)).toBe('Does not fit there');
+    expect(placementError(g, v.items, salt, null)).toEqual({ id: 'noFit' });
     expect(onDeadRow(g, salt)).toBe(true);
     expect(onDeadRow(g, { ...salt, y: g.deadFrom - 1 })).toBe(false);
   });
@@ -277,8 +277,8 @@ describe('side armor skin', () => {
   it('lets armor lie on a side column and refuses every other item there', () => {
     const g = baseGrid('scout');
     expect(placementError(g, [], probe('steelPlate', 0, 2), null)).toBeNull();
-    expect(placementError(g, [], probe('mg', 0, 2), null)).toMatch(/only armor/i);
-    expect(placementError(g, [], { id: 'g', x: g.w - 1, y: 2, rot: 0, kind: 'good', good: 'scrap' }, null)).toMatch(/only armor/i);
+    expect(placementError(g, [], probe('mg', 0, 2), null)).toEqual({ id: 'armorOnly' });
+    expect(placementError(g, [], { id: 'g', x: g.w - 1, y: 2, rot: 0, kind: 'good', good: 'scrap' }, null)).toEqual({ id: 'armorOnly' });
   });
 
   it('does not count the side columns as cargo cells', () => {

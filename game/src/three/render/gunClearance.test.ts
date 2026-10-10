@@ -120,7 +120,7 @@ function place(world: World, v: Vehicle, defId: string | null, good: string | nu
 
 function bare(chassisId: string): { world: World; v: Vehicle } {
   const world = emptyWorld();
-  const v = makeVehicle(world, { name: chassisId, faction: 'player', chassisId, parts: [], spares: [], cargo: {}, pos: { x: 50, y: 50 }, heading: 0, brain: null });
+  const v = makeVehicle(world, { faction: 'player', chassisId, parts: [], spares: [], cargo: {}, pos: { x: 50, y: 50 }, heading: 0, brain: null });
   return { world, v };
 }
 
@@ -159,7 +159,7 @@ describe('gun heads clear what they sweep over', () => {
         let v: Vehicle;
         try {
           const l = generateNpcLoadout(world, t, null, 'loaded');
-          v = makeVehicle(world, { ...l, name: 'x', faction: t.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+          v = makeVehicle(world, { ...l, faction: t.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
         } catch {
           continue;
         }

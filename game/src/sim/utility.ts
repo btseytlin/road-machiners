@@ -10,7 +10,7 @@ import { isMounted, mountedParts } from './grid';
 import { armClaymore } from './claymore';
 import { endLines } from './harpoon';
 import { deploySmoke, dropField, launchFlare, oilShort, spillOil } from './hazards';
-import type { ChargeState, GameEvent, PartInstance, UtilityOrder, Vehicle, World } from './types';
+import type { ChargeState, Refusal, UtilityBlock, GameEvent, PartInstance, UtilityOrder, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
 import { wornDef, wornTurns } from './wear';
 
@@ -65,7 +65,7 @@ const ARMS: Record<UseKind, (world: World, use: Use) => void> = {
 
 function effectOf<T extends UtilityEffectType>(part: PartInstance, type: T): Extract<UtilityEffect, { type: T }> {
   const def = partDef(part.defId);
-  if (def.kind !== 'utility' || def.effect.type !== type) throw new Error(`${def.name} is not a ${type}`);
+  if (def.kind !== 'utility' || def.effect.type !== type) throw new Error(`${def.id} is not a ${type}`);
   return def.effect as Extract<UtilityEffect, { type: T }>;
 }
 
@@ -77,7 +77,7 @@ function pointOf(order: UtilityOrder): Vec {
 export function useKindOf(def: PartDef): UseKind {
   if (def.kind === 'utility') return def.effect.type;
   if (def.kind === 'armor' && def.claymore) return 'claymore';
-  throw new Error(`${def.name} is not a utility`);
+  throw new Error(`${def.id} is not a utility`);
 }
 
 export function orderKindOf(part: PartInstance): UtilityOrder['kind'] | null {
@@ -97,14 +97,14 @@ export function wornReload(part: PartInstance): number {
   const def = partDef(part.defId);
   if (def.kind === 'armor' && def.claymore) return wornTurns(def.claymore.reload, part.wear);
   const reload = def.kind === 'utility' ? wornDef<UtilityDef>(part).reload : null;
-  if (reload === null) throw new Error(`${def.name} has no reload`);
+  if (reload === null) throw new Error(`${def.id} has no reload`);
   return reload;
 }
 
 function partOn(v: Vehicle, partId: string): { part: PartInstance; mounted: boolean } {
   for (const it of v.items)
     if (it.kind === 'part' && it.part.id === partId) return { part: it.part, mounted: isMounted(v.chassisId, it) };
-  throw new Error(`${v.name} has no part ${partId}`);
+  throw new Error(`${v.id} has no part ${partId}`);
 }
 
 export function utilityBlock(world: World, v: Vehicle, part: PartInstance): FireBlock | null {
@@ -115,35 +115,33 @@ export function utilityBlock(world: World, v: Vehicle, part: PartInstance): Fire
   return chargeOf(part).reload > 0 ? 'cooldown' : null;
 }
 
-export function utilityOrderError(world: World, v: Vehicle, partId: string, order: UtilityOrder): string | null {
+export function utilityOrderError(world: World, v: Vehicle, partId: string, order: UtilityOrder): Refusal | null {
   const { part } = partOn(v, partId);
   const def = partDef(part.defId);
   const wanted = ORDER_KIND[useKindOf(def)];
-  if (wanted === null) return `${def.name} is passive and takes no order`;
-  if (order.kind !== wanted) return `${def.name} takes a ${wanted} order`;
-  const charge = chargeError(world, v, part);
-  if (charge) return `${def.name}: ${charge}`;
-  return costError(world, v, def) ?? pointError(v, part, order);
+  if (wanted === null) return { id: 'utilityPassive', part: def.id };
+  if (order.kind !== wanted) return { id: 'utilityOrder', part: def.id, order: wanted };
+  const block = chargeError(world, v, part) ?? costError(world, v, def) ?? pointError(v, part, order);
+  return block ? { id: 'utilityBlocked', part: def.id, block } : null;
 }
 
-function chargeError(world: World, v: Vehicle, part: PartInstance): string | null {
+function chargeError(world: World, v: Vehicle, part: PartInstance): UtilityBlock | null {
   return utilityBlock(world, v, part) ?? (chargeOf(part).armed ? 'armed' : null);
 }
 
-function costError(world: World, v: Vehicle, def: PartDef): string | null {
+function costError(world: World, v: Vehicle, def: PartDef): UtilityBlock | null {
   if (def.kind !== 'utility' || def.effect.type !== 'oil') return null;
-  return oilShort(world, v, def.effect.fuel) ? `${def.name}: fuel` : null;
+  return oilShort(world, v, def.effect.fuel) ? 'fuel' : null;
 }
 
-function pointError(v: Vehicle, part: PartInstance, order: UtilityOrder): string | null {
-  if (order.kind === 'point' && pointBlock(v, part, order.pos)) return `${partDef(part.defId).name}: range`;
-  return null;
+function pointError(v: Vehicle, part: PartInstance, order: UtilityOrder): UtilityBlock | null {
+  return order.kind === 'point' ? pointBlock(v, part, order.pos) : null;
 }
 
 export function pointReach(part: PartInstance): { minRange: number; maxRange: number } {
   const def = partDef(part.defId);
   const e = def.kind === 'utility' ? def.effect : null;
-  if (!e || !('maxRange' in e)) throw new Error(`${def.name} takes no point`);
+  if (!e || !('maxRange' in e)) throw new Error(`${def.id} takes no point`);
   return { minRange: e.minRange, maxRange: e.maxRange };
 }
 
@@ -246,7 +244,7 @@ export function pulseEffect(world: World, userId: string): EmitterEffect {
     const def = partDef(part.defId);
     if (def.kind === 'utility' && def.effect.type === 'emitter') return def.effect;
   }
-  throw new Error(`${user.name} pulsed with no emitter mounted`);
+  throw new Error(`${user.id} pulsed with no emitter mounted`);
 }
 
 export function isShutDown(world: World, v: Vehicle): boolean {

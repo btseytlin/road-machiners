@@ -287,7 +287,7 @@ describe('noclipMove', () => {
 
   it('names an open radio call as what blocks the flight', () => {
     const w = emptyWorld();
-    w.player.call = { with: 'v9', topic: null, node: 'demand', vars: {}, line: { text: 'Dump your cargo.', vars: {} } };
+    w.player.call = { with: 'v9', topic: null, node: 'demand', vars: {}, line: { line: 'demandCargo', vars: {} } };
     expect(() => noclipMove(w, { x: 80, y: 90 })).toThrow('Cannot fly while a radio call is open');
   });
 });
@@ -502,7 +502,7 @@ describe('vehicle cheats', () => {
     hunter.brain = npcBrain('scavenger', hunter.pos, ['scavenger']);
     const prey = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 45, y: 30 });
     addState(w, 'feud', hunter.id, prey.id, { kind: 'feud', robbery: false });
-    hunter.brain.goals.push({ kind: 'fight', targetId: prey.id, destination: { ...prey.pos }, phase: 'travel', reason: 'test', worn: { turn: w.turn, condition: 1 } });
+    hunter.brain.goals.push({ kind: 'fight', targetId: prey.id, destination: { ...prey.pos }, phase: 'travel', reason: 'tripToSite', worn: { turn: w.turn, condition: 1 } });
     const next = killVehicles(w, prey.id);
     expect(next.states).toEqual([]);
     const after = endTurn(next, testDrive).vehicles.find((v) => v.id === hunter.id)!;
@@ -515,8 +515,8 @@ describe('vehicle cheats', () => {
     const near = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 35, y: 30 });
     addState(w, 'feud', near.id, w.player.vehicleId, { kind: 'feud', robbery: false });
     expect(nearbyVehicles(w)).toEqual([
-      { id: near.id, name: near.name, templateId: null, faction: 'raiders', distance: 5, hostile: true },
-      { id: far.id, name: far.name, templateId: null, faction: 'traders', distance: 20, hostile: false },
+      { id: near.id, driver: null, templateId: null, faction: 'raiders', distance: 5, hostile: true },
+      { id: far.id, driver: null, templateId: null, faction: 'traders', distance: 20, hostile: false },
     ]);
   });
 });

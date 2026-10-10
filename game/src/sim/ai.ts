@@ -192,7 +192,7 @@ function longestRange(world: World, v: Vehicle): number {
 
 function gunRanges(world: World, v: Vehicle): number[] {
   const weapons = vehicleStats(world, v).weapons;
-  if (weapons.length === 0) throw new Error(`${v.name} is fighting without a gun`);
+  if (weapons.length === 0) throw new Error(`${v.id} is fighting without a gun`);
   return weapons.map((weapon) => weapon.def.range);
 }
 

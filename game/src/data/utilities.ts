@@ -4,7 +4,6 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
   sprout: {
     id: 'sprout',
     kind: 'utility',
-    name: 'Sprout',
     hp: 25,
     base: 4333,
     tier: 1,
@@ -19,7 +18,6 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
   caltrops: {
     id: 'caltrops',
     kind: 'utility',
-    name: 'Caltrops',
     hp: 30,
     base: 2900,
     tier: 1,
@@ -34,7 +32,6 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
   oilSpiller: {
     id: 'oilSpiller',
     kind: 'utility',
-    name: 'Oil spiller',
     hp: 30,
     base: 3933,
     tier: 1,
@@ -49,7 +46,6 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
   patcherCrane: {
     id: 'patcherCrane',
     kind: 'utility',
-    name: 'Patcher crane',
     hp: 50,
     base: 6000,
     tier: 1,
@@ -64,7 +60,6 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
   smokeMortar: {
     id: 'smokeMortar',
     kind: 'utility',
-    name: 'Smoke mortar',
     hp: 36,
     base: 8767,
     tier: 2,
@@ -79,7 +74,6 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
   flareCannon: {
     id: 'flareCannon',
     kind: 'utility',
-    name: 'Flare cannon',
     hp: 28,
     base: 4733,
     tier: 2,
@@ -94,7 +88,6 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
   scrapersKnife: {
     id: 'scrapersKnife',
     kind: 'utility',
-    name: "Scraper's knife",
     hp: 50,
     base: 9333,
     tier: 2,
@@ -109,7 +102,6 @@ export const UNPRICED_UTILITIES: Record<string, Omit<UtilityDef, 'value'>> = {
   emitter: {
     id: 'emitter',
     kind: 'utility',
-    name: 'Emitter',
     hp: 44,
     base: 24267,
     tier: 3,

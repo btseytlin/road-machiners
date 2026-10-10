@@ -19,6 +19,11 @@ import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf } from './tes
 import type { Contract } from './market';
 import type { Faction, Vehicle, World } from './types';
 import { refreshVision } from './vision';
+import { lineKey } from '../text/names';
+import { entryText } from '../text/resolve';
+
+// A line's English words, so the tests read like the talk they check.
+const en = (line: Parameters<typeof lineKey>[0]): string => entryText('en', lineKey(line));
 
 function quietWorld(): World {
   const w = emptyWorld({ x: 30, y: 30 });
@@ -39,8 +44,8 @@ function feud(w: World, a: Vehicle, b: Vehicle): void {
 }
 
 function pick(w: World, text: string): World {
-  const i = currentOptions(w).findIndex((o) => o.text === text);
-  if (i < 0) throw new Error(`No option "${text}" in ${currentOptions(w).map((o) => o.text).join(' | ')}`);
+  const i = currentOptions(w).findIndex((o) => en(o.line) === text);
+  if (i < 0) throw new Error(`No option "${text}" in ${currentOptions(w).map((o) => en(o.line)).join(' | ')}`);
   return chooseOption(w, i);
 }
 
@@ -226,7 +231,7 @@ describe('NPC pleas to NPCs', () => {
     const gone = npcAt(w, 'raiders', ['raider'], 200, 200);
     feud(w, a, b);
     feud(w, a, gone);
-    pushGoal(w, a, { kind: 'flee', targetId: gone.id, destination: { x: 10, y: 10 }, phase: 'travel', reason: 'damaged and threatened', perceived: w.turn - NPC_BEHAVIOR.fleeCalmTurns - 1 });
+    pushGoal(w, a, { kind: 'flee', targetId: gone.id, destination: { x: 10, y: 10 }, phase: 'travel', reason: 'damagedThreatened', perceived: w.turn - NPC_BEHAVIOR.fleeCalmTurns - 1 });
     a.brain!.hurt = 5;
     a.lastHitBy = b.id;
     thinkNpc(w, a);
@@ -286,7 +291,7 @@ describe('NPC pleas to the player', () => {
     const w = quietWorld();
     const npc = npcAt(w, 'traders', ['trader'], 36);
     feud(w, npc, playerVehicle(w));
-    npc.brain!.goals.push({ kind: 'flee', targetId: 'someone-else', destination: { x: 60, y: 30 }, reason: 'escape an attacker', phase: 'travel' });
+    npc.brain!.goals.push({ kind: 'flee', targetId: 'someone-else', destination: { x: 60, y: 30 }, reason: 'escapeAttacker', phase: 'travel' });
     plead(w, npc, playerVehicle(w), 'mercy');
     raiseCalls(w);
     expect(w.player.call).toMatchObject({ with: npc.id, topic: 'mercyPlea' });
@@ -319,13 +324,13 @@ describe('player pleas', () => {
     const { w: start, npc } = atWar();
     const w = callVehicle(start, npc.id);
     expect(w.player.call).toMatchObject({ with: npc.id });
-    expect(currentOptions(w).map((o) => o.text)).toEqual(['Enough shooting. Can we call a truce?', 'I give up. Let me go.', 'Hang up.']);
+    expect(currentOptions(w).map((o) => en(o.line))).toEqual(['Enough shooting. Can we call a truce?', 'I give up. Let me go.', 'Hang up.']);
   });
 
   it('a foe busy fighting another truck takes the call, and the player can offer a truce', () => {
     forceOption('truceOffered', 'accept');
     const { w: start, npc } = atWar();
-    npc.brain!.goals.push({ kind: 'fight', targetId: 'someone-else', destination: { x: 40, y: 30 }, reason: 'fight back', phase: 'travel' });
+    npc.brain!.goals.push({ kind: 'fight', targetId: 'someone-else', destination: { x: 40, y: 30 }, reason: 'fightBack', phase: 'travel' });
     let w = pick(callVehicle(start, npc.id), 'Enough shooting. Can we call a truce?');
     w = pick(w, 'We both drive away.');
     expect(isHostile(w, w.vehicles.find((v) => v.id === npc.id)!, playerVehicle(w))).toBe(false);
@@ -406,7 +411,7 @@ describe('player robbery', () => {
     forceOption('threatened', 'comply');
     const { w: start, npc } = loaded();
     const empty = npcAt(start, 'traders', ['trader'], 36, 33);
-    expect(currentOptions(callVehicle(start, empty.id)).map((o) => o.text)).not.toContain(DEMAND);
+    expect(currentOptions(callVehicle(start, empty.id)).map((o) => en(o.line))).not.toContain(DEMAND);
     let w = pick(callVehicle(start, npc.id), DEMAND);
     w = hangUp(w);
     w = pick(callVehicle(w, npc.id), DEMAND);
@@ -425,7 +430,7 @@ describe('warning a looter off', () => {
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine', 'mg'], { x: 31.5, y: 30 });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
     npc.speed = 0;
-    npc.brain.goals = [{ kind: 'scavenge', targetId: wreck.id, destination: { ...wreck.pos }, phase: 'act', reason: 'test loot' }];
+    npc.brain.goals = [{ kind: 'scavenge', targetId: wreck.id, destination: { ...wreck.pos }, phase: 'act', reason: 'lootDowned' }];
     beginSearch(w, npc, wreck.id);
     refreshVision(w);
     return { w, npc, wreckId: wreck.id };
@@ -477,7 +482,7 @@ describe('warning a looter off', () => {
 });
 
 describe('bounty talk', () => {
-  const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'trader', targetName: 'Test Driver', reward: 13333, deadline: 900, window: 900, tier: 2, fulfilled: false };
+  const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'trader', reward: 13333, deadline: 900, window: 900, tier: 2, fulfilled: false };
 
   function beggar(perks: World['player']['perks']): { w: World; npc: Vehicle } {
     const w = quietWorld();
@@ -580,7 +585,7 @@ describe('pile claims', () => {
       const victim = loser === 'player' ? playerVehicle(w) : addVehicle(w, 'scavengers', 'scout', ['mg'], { x: 37, y: 30 });
       if (loser === 'npc') victim.brain = npcBrain('trader', victim.pos, ['raider']);
       addGoods(w, victim, 'scrap', 2);
-      pushGoal(w, robber, { kind: 'fight', targetId: victim.id, destination: null, phase: 'travel', reason: 'robbery' });
+      pushGoal(w, robber, { kind: 'fight', targetId: victim.id, destination: null, phase: 'travel', reason: 'strandedRobbery' });
       fightBetween(w, robber, victim);
       refreshVision(w);
       return { w, robber, victim };
@@ -668,7 +673,7 @@ describe('warning off a trespasser', () => {
     if (!armed) claimant.items = claimant.items.filter((item) => item.kind !== 'part' || !/mg/.test(item.part.defId));
     const pile = w.salvage.find((s) => s.pile)!;
     const trespasser = npcAt(w, 'scavengers', ['scavenger'], pile.pos.x + 1, pile.pos.y);
-    pushGoal(w, trespasser, { kind: 'loot', targetId: pile.id, destination: { ...pile.pos }, phase: 'travel', reason: 'test' });
+    pushGoal(w, trespasser, { kind: 'loot', targetId: pile.id, destination: { ...pile.pos }, phase: 'travel', reason: 'tripToSite' });
     refreshVision(w);
     return { w, claimant, trespasser, pile };
   }
@@ -688,7 +693,7 @@ describe('warning off a trespasser', () => {
     resolveNpcActivities(w);
     expect(stateOf(w, 'feud', trespasser.id, claimant.id)).not.toBeNull();
     expect(stateOf(w, 'feud', claimant.id, trespasser.id)).not.toBeNull();
-    expect(topGoal(claimant)).toMatchObject({ kind: 'fight', reason: 'defend its claimed loot' });
+    expect(topGoal(claimant)).toMatchObject({ kind: 'fight', reason: 'defendLoot' });
     expect(topGoal(trespasser)?.kind).toBe('fight');
     expect(trespasser.job).toBeNull();
   });
@@ -706,7 +711,7 @@ describe('warning off a trespasser', () => {
     const { w, claimant, trespasser } = trespass();
     forceOption('warnedOff', 'refuse');
     resolveNpcActivities(w);
-    expect(topGoal(claimant)).toMatchObject({ kind: 'fight', targetId: trespasser.id, reason: 'defend its claimed loot' });
+    expect(topGoal(claimant)).toMatchObject({ kind: 'fight', targetId: trespasser.id, reason: 'defendLoot' });
     expect(trespasser.job).toBeNull();
   });
 
@@ -714,7 +719,7 @@ describe('warning off a trespasser', () => {
     const { w, claimant } = trespass(false);
     forceOption('warnedOff', 'refuse');
     resolveNpcActivities(w);
-    expect(topGoal(claimant)).toMatchObject({ kind: 'flee', reason: 'defend its claimed loot' });
+    expect(topGoal(claimant)).toMatchObject({ kind: 'flee', reason: 'defendLoot' });
   });
 });
 
@@ -765,7 +770,7 @@ describe('the player at a claimed pile', () => {
     const { w, claimant } = claimedNearPlayer();
     raiseCalls(w);
     expect(w.player.call).toMatchObject({ with: claimant.id, topic: 'claim' });
-    expect(currentLine(w)).toBe('This is mine.');
+    expect(currentLine(w)).toBe('thisIsMine');
     const done = pick(w, 'Rolling on.');
     expect(feuding(done, claimant)).toBe(false);
     raiseCalls(done);

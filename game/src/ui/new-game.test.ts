@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { WORLD_SETTINGS } from "../data/modes";
+import type { WorldSettings } from "../sim/types";
+import { settingDescription, settingName } from "../text/names";
+import { resolve } from "../text/resolve";
 import type { BootRequest } from "../three/save-slots";
 import { CONFIRM_NEW_GAME, isNewGameOpen, openNewGame } from "./new-game";
 
@@ -49,7 +52,7 @@ function open(confirmed = true) {
   const opener = new FakeNode("button");
   const local = spyStorage();
   const session = spyStorage();
-  vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t), getElementById: () => ui, activeElement: opener });
+  vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t), createTextNode: (text: string) => Object.assign(new FakeNode("#text"), { children: [text] }), getElementById: () => ui, activeElement: opener });
   vi.stubGlobal("window", Object.assign(win, { localStorage: local, sessionStorage: session }));
   const requests: BootRequest[] = [];
   const actions = { requestBoot: (r: BootRequest) => requests.push(r), reload: vi.fn(), confirm: vi.fn(() => confirmed) };
@@ -94,9 +97,9 @@ describe("the New game screen", () => {
       const slider = screen.slider(id);
       expect([slider.attrs.min, slider.attrs.max, slider.attrs.step, slider.attrs.value]).toEqual([def.min, def.max, def.step, def.default].map(String));
       const row = screen.all((n) => n.attrs["data-setting"] === id)[0];
-      expect(row.textContent).toContain(def.name);
-      expect(row.textContent).toBe(`${def.name}100%`);
-      expect(row.all((n) => n.tag === "label")[0].attrs.title).toBe(def.description);
+      expect(row.textContent).toContain(resolve(settingName(id as keyof WorldSettings), "en"));
+      expect(row.textContent).toBe(`${resolve(settingName(id as keyof WorldSettings), "en")}100%`);
+      expect(row.all((n) => n.tag === "label")[0].attrs.title).toBe(resolve(settingDescription(id as keyof WorldSettings), "en"));
       expect(row.all((n) => n.className === "default-tick")[0].attrs.style).toBe(`--default-at: ${(def.default - def.min) / (def.max - def.min)}`);
     }
   });
@@ -156,7 +159,7 @@ describe("the New game screen", () => {
     slide("damage", 1.5);
     screen.button("Start").fire("click");
 
-    expect(actions.confirm).toHaveBeenCalledWith(CONFIRM_NEW_GAME);
+    expect(actions.confirm).toHaveBeenCalledWith(resolve(CONFIRM_NEW_GAME, "en"));
     expect(requests).toEqual([]);
     expect(actions.reload).not.toHaveBeenCalled();
     expect(wroteStorage()).toBe(false);

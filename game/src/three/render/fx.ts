@@ -2,6 +2,8 @@
 // damage numbers, like the 2D src/render/fx.ts, and what a truck puffs out as it drives. Particles live
 // in fixed pools of billboards that age and recycle, one draw call per pool, so any number of effects in
 
+import { setText } from '../../text/language';
+import type { Msg } from '../../text/msg';
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
 import { TERRAIN_TYPES } from '../../data/terrain';
@@ -340,7 +342,7 @@ export class Fx3D {
     this.puffs.spawn(p, { vel, life: 0.9, fromScale: 0.15, toScale: 0.7 + Math.random() * 0.3, color: 0x8a8278, opacity: 0.6, drag: 2, gravity: -0.2 });
   }
 
-  label(p: V3, text: string, color: string, row: number, delayMs: number, readMs: number): void {
+  label(p: V3, text: Msg, color: string, row: number, delayMs: number, readMs: number): void {
     this.pending.push({ left: delayMs / 1000, run: () => this.floatText(p, text, color, readMs, row * LABEL_ROW_PX) });
   }
 
@@ -394,14 +396,14 @@ export class Fx3D {
     this.puffs.spawn(p, { vel, life: 2.6, fromScale: 0.5, toScale: 2.2 + Math.random() * 0.8, color: 0x151311, opacity: 0.7, drag: 0.6, gravity: -0.35 });
   }
 
-  floatText(p: V3, text: string, color: string, durationMs: number, rowPx = 0): void {
+  floatText(p: V3, text: Msg, color: string, durationMs: number, rowPx = 0): void {
     const slot = this.texts.find((x) => !x.used) ?? this.texts.reduce((a, b) => (a.age > b.age ? a : b));
     slot.used = true;
     slot.age = 0;
     slot.life = durationMs / 1000;
     slot.rowPx = rowPx;
     slot.pos = { x: p.x, y: p.y, z: p.z };
-    slot.el.textContent = text;
+    setText(slot.el, text);
     slot.el.style.color = color;
     slot.el.style.display = 'block';
     slot.el.style.opacity = '1';

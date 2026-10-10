@@ -34,7 +34,7 @@ function foeAt(w: World, npc: Vehicle, dx: number, heading = 0, speed = 3): Vehi
 }
 
 function goal(kind: NpcActivity['kind'], target: Vehicle | null, destination: { x: number; y: number } | null = null): NpcActivity {
-  return { kind, targetId: target?.id ?? null, destination, phase: 'travel', reason: 'test' };
+  return { kind, targetId: target?.id ?? null, destination, phase: 'travel', reason: 'idle' };
 }
 
 function fleeing(w: World, npc: Vehicle, foe: Vehicle): void {

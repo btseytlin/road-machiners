@@ -1,4 +1,4 @@
-import { MAX_RANK, PERK_LEVELS, PERKS, type PerkId, SKILL_IDS, SKILL_INFO, XP_RULES } from '../data/skills';
+import { MAX_RANK, PERK_LEVELS, type PerkId, SKILL_IDS, XP_RULES } from '../data/skills';
 import { maxHealthOf } from '../sim/health';
 import { buyRank, canBuyRank, choosePerk, hasPerk, pendingPerkPairs, perkPair, type PerkPair, rankCost, xpTodayOf } from '../sim/progress';
 import type { SkillId, World } from '../sim/types';
@@ -6,6 +6,8 @@ import { createIcon, type IconName } from './cards';
 import { disabledWith, el, panel } from './dom';
 import type { UiHost } from './host';
 import { hp } from './units';
+import { num, t } from '../text/msg';
+import { perkName, perkRule, refusalText, skillGrows, skillName } from '../text/names';
 
 export class CharacterScreen {
   private root = panel('modal dialog');
@@ -35,18 +37,18 @@ export class CharacterScreen {
     const world = this.host.world();
     const p = world.player;
     this.root.replaceChildren(
-      el('button', { class: 'close', onclick: () => this.close() }, 'Close [C]'),
-      el('h3', {}, 'Character', el('span', { class: 'chips' },
-        el('span', { class: 'chip', title: 'Health' }, createIcon('driver'), `${hp(p.health)} / ${maxHealthOf(world)}`),
-        el('span', { class: 'chip', title: 'Knockouts' }, createIcon('damage'), `${p.knockouts} knockouts`),
-        el('span', { class: 'chip xp-pool', title: 'XP to spend on ranks' }, `${Math.floor(p.xp)} XP`),
+      el('button', { class: 'close', onclick: () => this.close() }, t('character.close')),
+      el('h3', {}, t('character.title'), el('span', { class: 'chips' },
+        el('span', { class: 'chip', title: t('character.health') }, createIcon('driver'), t('readout.ofMax', { n: hp(p.health), max: maxHealthOf(world) })),
+        el('span', { class: 'chip', title: t('character.knockoutsTitle') }, createIcon('damage'), t('character.knockouts', { n: p.knockouts })),
+        el('span', { class: 'chip xp-pool', title: t('character.xpPoolTitle') }, t('character.xpPool', { n: Math.floor(p.xp) })),
       )),
       el('div', { class: 'skill-table' },
         el('div', { class: 'skill-head' },
-          el('span', { class: 'skill-name-col' }, 'Skill'),
-          el('span', {}, 'Rank'),
-          ...PERK_LEVELS.map((level) => el('span', {}, `Rank ${level} perk`)),
-          el('span', {}, `Today, max ${XP_RULES.dailyCap} XP`),
+          el('span', { class: 'skill-name-col' }, t('character.colSkill')),
+          el('span', {}, t('character.colRank')),
+          ...PERK_LEVELS.map((level) => el('span', {}, t('character.colPerk', { rank: level }))),
+          el('span', {}, t('character.colToday', { cap: XP_RULES.dailyCap })),
           el('span', {}),
         ),
         ...SKILL_IDS.map((id) => this.row(world, id)),
@@ -59,40 +61,42 @@ export class CharacterScreen {
     const today = Math.floor(xpTodayOf(world, id));
     const open = pendingPerkPairs(world).filter((pair) => pair.skill === id);
     return el('div', { class: `skill-row${open.length > 0 ? ' pending' : ''}` },
-      el('span', { class: 'skill-name', title: `Earns XP from ${SKILL_INFO[id].grows}` }, createIcon(SKILL_ICON[id]), SKILL_INFO[id].name),
-      el('div', { class: 'skill-level', title: `Rank ${rank} of ${MAX_RANK}` },
+      el('span', { class: 'skill-name', title: t('character.grows', { what: skillGrows(id) }) }, createIcon(SKILL_ICON[id]), skillName(id)),
+      el('div', { class: 'skill-level', title: t('character.rankOf', { rank, max: MAX_RANK }) },
         ...Array.from({ length: MAX_RANK }, (_, i) => el('i', { class: i < rank ? 'on' : '' }))),
       ...PERK_LEVELS.map((level) => this.perkCell(world, perkPair(id, level), open.some((o) => o.level === level))),
       el('div', { class: 'skill-today' },
         el('div', { class: 'meter progress' }, el('div', { style: `width:${Math.min(today / XP_RULES.dailyCap, 1) * 100}%` })),
-        el('span', { class: `num${today === 0 ? ' dim' : ''}` }, String(today))),
+        el('span', { class: `num${today === 0 ? ' dim' : ''}` }, num(today, 'int'))),
       this.buy(world, id, rank),
     );
   }
 
   private buy(world: World, skill: SkillId, rank: number): HTMLElement {
-    if (rank >= MAX_RANK) return el('span', { class: 'skill-buy dim' }, 'Max');
+    if (rank >= MAX_RANK) return el('span', { class: 'skill-buy dim' }, t('character.maxRank'));
     const blocked = canBuyRank(world, skill);
+    const next = { rank: rank + 1, cost: rankCost(rank + 1) };
     return el('button', {
       class: 'btn-s skill-buy buy-rank',
-      ...disabledWith(blocked, () => this.host.announce(buyRank(this.host.world(), skill))),
-    }, `Buy ${rankCost(rank + 1)} XP`);
+      ...disabledWith(blocked && refusalText(world, blocked), () => this.host.announce(buyRank(this.host.world(), skill))),
+    }, t('character.buyShort', { cost: next.cost }));
   }
 
   private perkCell(world: World, pair: PerkPair, isOpen: boolean): HTMLElement {
     const picked = pair.perks.find((id) => hasPerk(world, id));
-    if (picked) return el('div', { class: 'perk-cell picked', title: PERKS[picked].rule }, PERKS[picked].name);
+    if (picked) return el('div', { class: 'perk-cell picked', title: perkRule(picked) }, perkName(picked));
     if (isOpen) return this.choice(world, pair);
     return el('div', { class: 'perk-cell locked' },
-      ...pair.perks.map((id) => el('span', { title: PERKS[id].rule }, PERKS[id].name)));
+      ...pair.perks.map((id) => el('span', { title: perkRule(id) }, perkName(id))));
   }
 
   private choice(world: World, pair: PerkPair): HTMLElement {
-    const reason = world.player.state === 'active' ? null : `You are ${world.player.state === 'dead' ? 'dead' : 'knocked out'}`;
+    const state = world.player.state;
+    const reason = state === 'active' ? null : refusalText(world, { id: 'notActive', state });
     const button = (id: PerkId) => el('button', {
       class: 'perk',
       ...disabledWith(reason, () => this.host.apply(choosePerk(this.host.world(), id))),
-    }, el('b', {}, PERKS[id].name), el('span', {}, PERKS[id].rule));
+    }, el('b', {}, perkName(id)), el('span', {}, perkRule(id)));
     return el('div', { class: 'perk-cell perk-choice' }, ...pair.perks.map(button));
   }
 }

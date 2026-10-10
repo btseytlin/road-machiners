@@ -2,6 +2,7 @@
 import { PHYSICS } from '../data/physics';
 import { RULES } from '../data/rules';
 import { UNITS } from '../data/units';
+import { concat, MINUS_SIGN, num, SPACE, t, type Msg } from '../text/msg';
 import { el } from './dom';
 
 const MS_TO_KPH = 3.6;
@@ -30,8 +31,8 @@ export function celsius(heat: number): number {
   return Math.round(UNITS.shadeCelsius + (heat - 1) * UNITS.celsiusPerHeat);
 }
 
-export function kg(mass: number): string {
-  return `${Math.round(mass).toLocaleString('en-US')} kg`;
+export function kg(mass: number): Msg {
+  return t('units.kg', { n: Math.round(mass) });
 }
 
 export function engineCelsius(engineHeat: number): number {
@@ -50,11 +51,17 @@ const WHOLE_M = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 });
 
 export const MINUS = '\u2212';
 
-export function moneyAmount(cents: number): string {
+export function moneyM(cents: number): number {
   const whole = Math.round(cents);
-  if (whole === 0) return '0';
-  const m = WHOLE_M.format(Math.ceil(Math.abs(whole) / UNITS.centsPerM));
-  return whole < 0 ? `${MINUS}${m}` : m;
+  if (whole === 0) return 0;
+  return Math.sign(whole) * Math.ceil(Math.abs(whole) / UNITS.centsPerM);
+}
+
+export function moneyAmount(cents: number): string {
+  const m = moneyM(cents);
+  if (m === 0) return '0';
+  const text = WHOLE_M.format(Math.abs(m));
+  return m < 0 ? `${MINUS}${text}` : text;
 }
 
 export function moneyText(cents: number): string {
@@ -77,12 +84,12 @@ export function coinEl(): HTMLElement {
 }
 
 export function moneyEl(cents: number): HTMLElement {
-  const text = moneyText(cents);
-  return el('span', { class: `amount${cents < 0 ? ' bad' : ''}`, title: text, 'aria-label': text }, coinEl(), moneyNumber(cents));
+  const text = moneyMsg(cents);
+  return el('span', { class: `amount${cents < 0 ? ' bad' : ''}`, title: text, 'aria-label': text }, coinEl(), moneyNum(cents));
 }
 
-export function pricedEl(action: string, cents: number): HTMLElement {
-  return el('span', { class: 'priced' }, `${action} `, moneyEl(cents));
+export function pricedEl(action: Msg, cents: number): HTMLElement {
+  return el('span', { class: 'priced' }, action, SPACE, moneyEl(cents));
 }
 
 export function moneyDelta(cents: number): string {
@@ -92,4 +99,14 @@ export function moneyDelta(cents: number): string {
 
 export function turnsText(turns: number): string {
   return `${turns} ${turns === 1 ? 'turn' : 'turns'}`;
+}
+
+export function moneyNum(cents: number): Msg {
+  const m = moneyM(cents);
+  return m < 0 ? concat([MINUS_SIGN, num(-m, 'int')]) : num(m, 'int');
+}
+
+export function moneyMsg(cents: number): Msg {
+  const m = moneyM(cents);
+  return m < 0 ? t('money.minus', { n: -m }) : t('money.m', { n: m });
 }

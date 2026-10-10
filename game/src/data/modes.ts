@@ -4,16 +4,16 @@
 
 import type { GameModeId, WorldSettings } from '../sim/types';
 
-export type GameMode = { name: string; description: string };
+export type GameMode = Record<never, never>;
 
 export const GAME_MODES: Record<GameModeId, GameMode> = {
-  roaming: { name: 'Roaming', description: 'The open wasteland. Drive, trade, scavenge and fight as you like.' },
+  roaming: {},
 };
 
-export type WorldSettingDef = { name: string; description: string; default: number; min: number; max: number; step: number };
+export type WorldSettingDef = { default: number; min: number; max: number; step: number };
 
 export const WORLD_SETTINGS: Record<keyof WorldSettings, WorldSettingDef> = {
-  damage: { name: 'Damage', description: 'Damage of every gun and crash, for every truck.', default: 1, min: 0.5, max: 2, step: 0.25 },
-  fuelUse: { name: 'Fuel use', description: 'Fuel every truck burns per tile driven.', default: 1, min: 0.5, max: 2, step: 0.25 },
-  supplyUse: { name: 'Supply use', description: 'Supplies every crew eats per turn.', default: 1, min: 0.5, max: 2, step: 0.25 },
+  damage: { default: 1, min: 0.5, max: 2, step: 0.25 },
+  fuelUse: { default: 1, min: 0.5, max: 2, step: 0.25 },
+  supplyUse: { default: 1, min: 0.5, max: 2, step: 0.25 },
 };
