@@ -3,7 +3,7 @@
    docs/ui.md explains each group and ui.html shows them. src/ui/tokens.ts reads this file for Three.js overlays. */
 :root {
   /* Type */
-  --font-ui: "Barlow Semi Condensed", sans-serif;
+  --font-ui: "Barlow Semi Condensed", "Fira Sans Condensed", sans-serif;
   --font-mono: "IBM Plex Mono", monospace;
   --text-caption: 10px;
   --text-dense: 12px;
@@ -201,6 +201,10 @@
   --modal-width: 1360px;
   --modal-height: 760px;
   --modal-reserve: 250px;
+  --talk-width: 640px;
+  --quest-page-width: 1160px;
+  --quest-page-height: 650px;
+  --quest-page-clearance: 80px;
   --modal-close-gutter: 120px;
   --tab-min-width: 85px;
   --tip-left: 457px;

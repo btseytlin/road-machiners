@@ -8,7 +8,7 @@ import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
 import { canStowPart, moveItem, storePart, stowPart, stowSpot, takeFromStorage } from '../sim/inventory';
 import { buyStockPart } from '../sim/economy';
 import { makePart } from '../sim/factory';
-import type { GridItem } from '../sim/types';
+import type { GridItem, World } from '../sim/types';
 import { advanceContracts, siteOf, type Contract } from '../sim/market';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
@@ -18,14 +18,15 @@ import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
 import { TEST_MAP } from '../test/map';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
-import { breakProp } from '../sim/salvage';
+import { breakProp, oldSpotOf, oldSpotPicks, oldStockId } from '../sim/salvage';
 import { sunAt } from '../sim/sun';
 import { practiceContacts, refreshVision } from '../sim/vision';
 import { TIME } from '../data/time';
 import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR } from './save-migrations';
 import SAVED_SHAPE from './save-shape.json';
 import { allSlots, type SlotId } from './save-slots';
-import { newGameShape } from '../test/save-shape';
+import { lostQuestNames, newGameShape, questNames } from '../test/save-shape';
+import { chooseQuestOption, QUESTS, questView, startQuest } from '../sim/quests';
 import { defaultSetup, parseSetup } from '../sim/settings';
 
 const SLOTS = allSlots(3);
@@ -69,10 +70,11 @@ describe('game save', () => {
     const storage = makeStorage();
     writeSave(slots, 'auto', newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')), RUN, 1000);
     storage.setItem('roam.tips', JSON.stringify(['waypoint']));
+    storage.setItem('roam.tipsOff', '1');
     storage.setItem('roam-sound', '{}');
     clearGame(slots, storage);
     expect(slots.has('auto')).toBe(false);
-    expect([storage.getItem('roam.tips'), storage.getItem('roam-sound')]).toEqual([null, '{}']);
+    expect([storage.getItem('roam.tips'), storage.getItem('roam.tipsOff'), storage.getItem('roam-sound')]).toEqual([null, null, '{}']);
   });
 
   it('saves a command on a town pad at once, and not out in the open', () => {
@@ -124,7 +126,7 @@ describe('game save', () => {
     const world = emptyWorld();
     const raider = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 }, Math.PI);
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
-    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1, fulfilled: false };
+    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', reward: 100, deadline: 900, window: 900, tier: 1, fulfilled: false };
     world.player.contracts = [bounty];
     writeSave(slots, 'auto', world, RUN, 1000);
     const loaded = loadWorld(slots, 'auto', TEST_MAP);
@@ -145,7 +147,7 @@ describe('game save', () => {
     const world = emptyWorld();
     const weapon = world.vehicles[0].items.find((item) => item.kind === 'part' && item.part.defId === 'mg');
     if (!weapon) throw new Error('Expected weapon');
-    const to = { x: 1, y: CHASSIS.scout.layout.length, rot: 0 as const };
+    const to = { x: 3, y: CHASSIS.scout.layout.length, rot: 1 as const };
     const next = moveItem(world, weapon.id, to);
     advanceJobs(next);
     writeSave(slots, 'auto', next, RUN, 1000);
@@ -180,6 +182,20 @@ describe('game save', () => {
     }
     const back = takeFromStorage(freed, part.id, spot);
     expect(back.vehicles[0].items.some((it) => it.kind === 'part' && it.part.id === part.id)).toBe(true);
+  });
+
+  it.each(['dustwell', 'green-pit'])('keeps the shop of the outpost %s across a save and a load and awards nothing', (id) => {
+    const slots = makeSlots();
+    const world = emptyWorld(sitePads(siteOf(id))[0]);
+    world.player.money = 100000;
+    const bought = buyStockPart(world, world.shops[id].stock[0].id);
+    const xp = structuredClone(bought.player.xp);
+    writeSave(slots, 'auto', bought, RUN, 1000);
+    const loaded = loadWorld(slots, 'auto', TEST_MAP)!;
+    expect(loaded.shops[id]).toEqual(bought.shops[id]);
+    expect(loaded.player.money).toBe(bought.player.money);
+    expect(loaded.player.xp).toEqual(xp);
+    expect(loaded.events).toEqual([]);
   });
 
   it('stores explored as a string', () => {
@@ -221,11 +237,11 @@ describe('game save', () => {
     const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     const saved = saveOf(world).world;
     const cases = [
-      [{ major: SAVE_MAJOR - 1, minor: 0 }, saved, /new game/],
-      [{ major: SAVE_MAJOR + 1, minor: 0 }, saved, /new game/],
+      [{ major: SAVE_MAJOR - 1, minor: 0 }, saved, /incompatible/],
+      [{ major: SAVE_MAJOR + 1, minor: 0 }, saved, /incompatible/],
       [{ major: SAVE_MAJOR, minor: MIGRATIONS.length + 1 }, saved, /newer/],
-      [{ major: SAVE_MAJOR, minor: -1 }, saved, /format/],
-      [SAVE_FORMAT, { turn: 21 }, /world/],
+      [{ major: SAVE_MAJOR, minor: -1 }, saved, /noFormat/],
+      [SAVE_FORMAT, { turn: 21 }, /invalidWorld/],
     ] as const;
     for (const [format, savedWorld, error] of cases) {
       slots.put('auto', { format, world: savedWorld });
@@ -234,10 +250,78 @@ describe('game save', () => {
     }
   });
 
+  it('stocks every old-world loot spot of a save from before them, once', () => {
+    const slots = makeSlots();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
+    const ids = oldSpotPicks(TEST_MAP).map(oldStockId);
+    const saved = JSON.parse(JSON.stringify(saveOf(world))).world;
+    saved.salvage = saved.salvage.filter((stock: { id: string }) => !oldSpotOf(stock));
+    slots.put('auto', { format: { major: SAVE_MAJOR, minor: MIGRATIONS.length - 1 }, world: saved, savedAt: 1000, runId: RUN });
+    const loaded = loadWorld(slots, 'auto', TEST_MAP)!;
+    const oldIds = (w: World): string[] => w.salvage.filter((stock) => oldSpotOf(stock)).map((stock) => stock.id);
+    expect(oldIds(loaded)).toEqual(ids);
+    expect(loaded.salvage).toHaveLength(world.salvage.length);
+    writeSave(slots, 'auto', loaded, RUN, 1000);
+    expect(loadWorld(slots, 'auto', TEST_MAP)).toEqual(loaded);
+  });
+
+  it('refuses a save holding only some old-world loot spots', () => {
+    const slots = makeSlots();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
+    const saved = JSON.parse(JSON.stringify(saveOf(world))).world;
+    const first = oldStockId(oldSpotPicks(TEST_MAP)[0]);
+    saved.salvage = saved.salvage.filter((stock: { id: string }) => stock.id !== first);
+    slots.put('auto', { format: SAVE_FORMAT, world: saved, savedAt: 1000, runId: RUN });
+    expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(SaveError);
+    expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(/partial/);
+  });
+
   it('records the saved shape of the current format', () => {
     const format = `${SAVE_FORMAT.major}.${SAVE_FORMAT.minor}`;
     expect(SAVED_SHAPE.format, 'Run npm run save:shape after a new save format').toBe(format);
     expect(newGameShape(), 'The saved shape changed. Add a migration step in src/three/save-migrations.ts, then run npm run save:shape').toEqual(SAVED_SHAPE.shape);
+  });
+
+  it('records the saved quest names, so a lost name needs a new format', () => {
+    expect(questNames(QUESTS), 'Saved quest names changed. A removed, renamed or retyped name needs a migration step. Then run npm run save:shape').toEqual(SAVED_SHAPE.quests);
+  });
+
+  it('finds a removed, retyped or lost checkpoint name against the recorded names', () => {
+    const recorded = { world: { heard: 'boolean' as const }, local: { bowl: { trust: 'number' as const } }, checkpoints: { bowl: ['start', 'start.talk'] } };
+    const current = { world: {}, local: { bowl: { trust: 'string' as const } }, checkpoints: { bowl: ['start'] } };
+    expect(lostQuestNames(recorded, current)).toEqual(['World variable heard (boolean)', 'Quest bowl variable trust (number)', 'Quest bowl checkpoint start.talk']);
+  });
+
+  it('saves quest variables and the checkpoint but never ink state, and resumes there on load', () => {
+    const slots = makeSlots();
+    const start = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
+    const mid = chooseQuestOption(startQuest(start, QUESTS, 'bowl_hattie', 'start'), QUESTS, 0);
+    writeSave(slots, 'auto', mid, 'run', 1);
+    const stored = JSON.stringify(slots.get('auto'));
+    expect(stored).not.toContain('"live"');
+    expect(stored).not.toContain('inkVersion');
+    const loaded = loadWorld(slots, 'auto', TEST_MAP);
+    expect(loaded?.player.quests.session).toEqual(mid.player.quests.session);
+    expect(loaded?.player.notes).toEqual(mid.player.notes);
+    expect(loaded && questView(loaded, QUESTS).choices).toEqual(questView(mid, QUESTS).choices);
+    expect(loaded?.player.money).toBe(mid.player.money);
+    expect(loaded?.events).toEqual([]);
+  });
+
+  it('rejects a save holding a quest variable or checkpoint this version does not know', () => {
+    const slots = makeSlots();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
+    const cases = [
+      [{ world: { gone: true }, local: {}, session: null }, /badQuests: World variable gone is not declared/],
+      [{ world: {}, local: {}, session: { quest: 'bowl_hattie', checkpoint: 'nowhere', seed: 1 } }, /badQuests: Quest bowl_hattie has no checkpoint nowhere/],
+      [{ world: {}, local: [], session: null }, /badQuests/],
+    ] as const;
+    for (const [quests, error] of cases) {
+      const saved = saveOf(world).world as { player: Record<string, unknown> };
+      slots.put('auto', { format: SAVE_FORMAT, world: { ...saved, player: { ...saved.player, quests } } });
+      expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(SaveError);
+      expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(error);
+    }
   });
 
   it('rejects a save missing a field required for future turns', () => {
@@ -247,7 +331,7 @@ describe('game save', () => {
       const saved = { ...saveOf(world).world } as Record<string, unknown>;
       delete saved[field];
       slots.put('auto', { format: SAVE_FORMAT, world: saved });
-      expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(/world/);
+      expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(/invalidWorld/);
     }
   });
 
@@ -498,7 +582,7 @@ describe('saved world settings', () => {
     ['no setup at the current format', undefined],
   ])('rejects a save with %s as a save error', (_, setup) => {
     expect(() => loadWorld(storedWith(setup), 'auto', TEST_MAP)).toThrow(SaveError);
-    expect(() => loadWorld(storedWith(setup), 'auto', TEST_MAP)).toThrow(/Invalid world settings/);
+    expect(() => loadWorld(storedWith(setup), 'auto', TEST_MAP)).toThrow(/badSetup/);
   });
 });
 

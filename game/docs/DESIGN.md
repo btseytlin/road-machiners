@@ -40,6 +40,10 @@ The player is not a Chosen one, gets no plot armor or special treatment. It's do
 
 The lore and atmosphere is based on contrasts between the pre-apocalypse Old World and the currently living New World. Armed trucks are riding around crashed spaceships on what used to be farming fields.
 
+9. Show, don't tell
+
+The game shows how things are through the world and the screen, not through words. A gun's reach is a drawn arc, a hurt truck looks more worn as it takes damage, a driver's nature shows in how it drives and fights. Text explains only what nothing else can show, and never repeats what the player already sees.
+
 # Core systems
 
 Each section states what a system is for and the rules it must keep. The detailed rules live in [docs/wiki/mechanics/](wiki/mechanics/), and the numbers and content tables in [docs/wiki/](wiki/README.md).
@@ -52,7 +56,7 @@ Details: [character](wiki/mechanics/character.md), [skills tables](wiki/skills.m
 
 ## Truck
 
-The truck is equipment, not the character. It can be changed, upgraded, stripped and lost. The inventory grid is a top view of the truck where every cell is a tradeoff: a deck cell holds a gun, a scanner or cargo, never all three. Mass and engine power are soft limits: each kilogram and each gun costs speed, so no truck is best at everything. Every part has one job and one weakness, and no part beats another of its kind at everything but price. Parts wear, break down on the road and finally turn to junk, so a loadout never settles for good and old trucks give way to new ones.
+The truck is equipment, not the character. It can be changed, upgraded, stripped and lost. The inventory grid is a top view of the truck where every cell is a tradeoff: a deck cell holds a gun, a scanner or cargo, never all three. Mass and engine power are soft limits: each kilogram and each gun costs speed, so no truck is best at everything. Every part has one job and one weakness, and no part beats another of its kind at everything but price. Parts wear, break down on the road and finally turn to junk, so a loadout never settles for good and old trucks give way to new ones. Most trucks run on rebuilt parts and pristine ones are rare. Better gear tilts a fight but does not decide it: of two like trucks, the one with parts two wear steps less worn wins about two fights in three.
 
 Details: [truck](wiki/mechanics/truck.md), [items tables](wiki/items.md).
 
@@ -94,7 +98,7 @@ Details: [NPCs](wiki/mechanics/npcs.md), [NPC tables](wiki/npcs.md).
 
 ## Social
 
-Every truck has a radio, as in Space Rangers 2. Talk is the main way the wasteland resolves things: directions, trade, tows, patches, aid, demands, truces and mercy. Most fights can end in a deal instead of a wreck. Helping others pays in experience and in goodwill. Robbing pays in cargo and in feuds. A driver's traits decide its voice and what it will talk about.
+Every truck has a radio, as in Space Rangers 2. Talk is the main way the wasteland resolves things: directions, trade, tows, patches, aid, demands, truces and mercy. Most fights can end in a deal instead of a wreck. Drivers argue over loot, and anyone can warn anyone off a wreck. Helping others pays in experience and in goodwill. Robbing pays in cargo and in feuds. A driver's traits decide its voice and what it will talk about.
 
 Details: [social](wiki/mechanics/social.md).
 

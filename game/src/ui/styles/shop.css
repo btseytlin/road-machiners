@@ -25,6 +25,284 @@
   font-family: var(--font-mono);
 }
 
+/* People tab: the town's locals as buttons. */
+.people {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+#ui .people .person {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  text-align: left;
+}
+.people .person .icon,
+.quest-screen .talk-head .icon {
+  width: var(--icon-l);
+  height: var(--icon-l);
+}
+
+/* Talk window: over every other screen while a quest is live. Older exchanges stay above, fully shown. */
+#ui .modal.quest-screen {
+  z-index: var(--z-log-open);
+  top: 64px;
+  width: min(var(--talk-width), calc(100vw - var(--space-10)));
+  height: auto;
+  max-height: calc(100dvh - var(--modal-reserve));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  overflow: hidden;
+  border-left: 4px solid var(--line);
+}
+.quest-screen .talk-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.quest-screen .quest-log {
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  scrollbar-width: thin;
+}
+.quest-screen .qt-line {
+  line-height: 1.45;
+  margin-bottom: var(--space-2);
+}
+.quest-screen .qt-speaker {
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+.quest-screen .talk-ask {
+  color: var(--ink-muted);
+  margin-bottom: var(--space-2);
+}
+.quest-screen .talk-ask::before {
+  content: "> ";
+}
+.quest-screen .talk-offer {
+  margin: var(--space-2) 0 var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  background: var(--surface-raised);
+}
+.quest-screen .quest-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+#ui .quest-screen .quest-choice {
+  text-align: left;
+  padding: var(--space-2) var(--space-5);
+  min-height: 0;
+}
+.quest-screen .error:empty {
+  display: none;
+}
+#ui .quest-screen .quest-choice:disabled {
+  color: var(--ink-muted);
+  opacity: 0.6;
+  cursor: default;
+}
+.quest-screen .quest-held {
+  float: right;
+}
+.quest-screen .qt-table {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--text-dense);
+  margin: var(--space-1) 0 var(--space-5);
+}
+.quest-screen .qt-table th,
+.quest-screen .qt-table td {
+  padding: var(--space-1) var(--space-8) var(--space-1) 0;
+  text-align: left;
+  font-weight: 400;
+}
+.quest-screen .qt-table th {
+  color: var(--ink-muted);
+  border-bottom: 1px solid var(--line);
+}
+.quest-screen .qt-img {
+  display: block;
+  max-width: var(--panel-s);
+  margin: var(--space-2) 0 var(--space-4);
+  border: 1px solid var(--line);
+}
+
+/* Page view: art, one page of text with its choices, and the quest's numbers and facts. */
+#ui .modal.quest-screen.quest-page {
+  top: 40px;
+  width: min(var(--quest-page-width), calc(100vw - var(--space-10) * 2));
+  height: min(var(--quest-page-height), calc(100dvh - var(--quest-page-clearance)));
+  max-height: none;
+  display: grid;
+  grid-template-columns: minmax(0, 33%) minmax(0, 1fr) 230px;
+  gap: 0;
+  padding: 0;
+  border-left: 2px solid var(--line);
+  box-shadow: 0 0 0 100vmax var(--scrim);
+}
+.quest-page .quest-art {
+  padding: var(--space-7);
+  border-right: 1px solid var(--surface-raised);
+}
+.quest-page .quest-frame {
+  height: 100%;
+  border: 1px solid var(--surface-raised);
+  background: repeating-linear-gradient(135deg, var(--surface-raised) 0 var(--space-5), var(--surface-highlight) var(--space-5) var(--space-8));
+}
+.quest-page .quest-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.quest-page .quest-text {
+  padding: var(--space-9) var(--space-10) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.quest-page .quest-place {
+  margin: 0 0 var(--space-6);
+  font-size: var(--text-heading);
+  font-weight: 600;
+}
+.quest-page .qt-line {
+  margin-bottom: var(--space-5);
+}
+.quest-page .quest-choices {
+  margin-top: auto;
+  padding-top: var(--space-6);
+}
+#ui .quest-page .quest-choice {
+  padding: var(--space-3) var(--space-6);
+}
+#ui .quest-page .quest-next {
+  margin-top: auto;
+  align-self: flex-start;
+  padding: var(--space-3) var(--space-9);
+}
+.quest-page .quest-side {
+  padding: var(--space-8) var(--space-7);
+  border-left: 1px solid var(--surface-raised);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+#ui .quest-page .quest-side .close {
+  position: static;
+  align-self: flex-end;
+}
+.quest-page .quest-stat {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: var(--text-dense);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--surface-raised);
+}
+.quest-page .quest-stat b {
+  font-weight: 400;
+  color: var(--ink-label);
+}
+.quest-page .quest-fact {
+  font-size: var(--text-dense);
+  color: var(--ink-muted);
+  padding: var(--space-2) 0 var(--space-2) var(--space-5);
+  margin-bottom: var(--space-4);
+  border-left: 2px solid var(--line);
+}
+.quest-page .quest-fact .qt-line {
+  margin: 0;
+}
+.quest-page .quest-fact.new {
+  color: var(--ink);
+  border-left-color: var(--ink-label);
+}
+
+/* Quest text: each word or letter fades in after its delay. Marks add a look or a motion. */
+.qt-unit {
+  opacity: 0;
+  animation: qt-in 140ms ease-out forwards;
+}
+.qt-done .qt-unit {
+  animation: none;
+  opacity: 1;
+}
+.qt-b {
+  font-weight: 700;
+  color: var(--ink-bright);
+}
+.qt-i {
+  font-style: italic;
+}
+.qt-shake,
+.qt-pop {
+  display: inline-block;
+  white-space: pre;
+}
+.qt-shake {
+  animation:
+    qt-in 140ms ease-out forwards,
+    qt-shake 90ms linear 6 alternate;
+}
+.qt-pop {
+  animation: qt-pop 260ms ease-out forwards;
+}
+.qt-color-rust { color: var(--danger); }
+.qt-color-sand { color: var(--ink-label); }
+.qt-color-blood { color: var(--danger-deep); }
+.qt-color-sky { color: var(--ink-title); }
+.qt-color-ash { color: var(--ink-muted); }
+@keyframes qt-in {
+  to { opacity: 1; }
+}
+@keyframes qt-shake {
+  from { opacity: 1; transform: translateX(-1px); }
+  to { opacity: 1; transform: translateX(1px); }
+}
+@keyframes qt-pop {
+  0% { opacity: 0; transform: scale(1.6); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qt-unit {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* Journal: one card per note, newest first. */
+#ui .modal.journal-screen {
+  max-width: var(--talk-width);
+}
+.journal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  margin-top: var(--space-4);
+}
+.journal-note {
+  padding: var(--space-4) var(--space-6);
+  background: var(--surface-raised);
+  border-left: 4px solid var(--line);
+  line-height: 1.4;
+}
+.journal-note .journal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-bottom: var(--space-2);
+}
+
 /* Shop tabs carry an icon beside the label. */
 .town-shop > .tabs .icon {
   width: var(--icon-m);
@@ -578,11 +856,15 @@
 
 /* Trucks: the layout map beside the stats. */
 .cards.trucks {
-  grid-template-columns: repeat(auto-fill, minmax(var(--card-truck-min), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--card-truck-min)), 1fr));
 }
 .truck-card {
   flex-direction: row;
+  flex-wrap: wrap;
   gap: var(--space-6);
+}
+.truck-card .card-foot {
+  flex-wrap: wrap;
 }
 .tile.on,
 .truck-card.own {
@@ -603,7 +885,7 @@
   gap: var(--space-4);
 }
 .truck-body {
-  flex: 1;
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -616,6 +898,7 @@
   display: flex;
   gap: var(--space-3);
   align-self: flex-start;
+  flex: none;
 }
 .chassis-portrait {
   display: block;

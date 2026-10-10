@@ -34,10 +34,8 @@ export function headShape(head: THREE.Object3D, muzzleX: number): HeadShape {
   return shape;
 }
 
-const AHEAD: readonly FireSpan[] = [{ from: 0, to: 0 }];
-
-export function sweepOf(spans: readonly FireSpan[], turns: boolean): readonly FireSpan[] {
-  return turns && spans.length > 0 ? spans : AHEAD;
+export function sweepOf(spans: readonly FireSpan[], turns: boolean, facing = 0): readonly FireSpan[] {
+  return turns && spans.length > 0 ? spans : [{ from: facing, to: facing }];
 }
 
 export function swept(p: Flat, pivot: Flat, shape: HeadShape, sweep: readonly FireSpan[]): boolean {

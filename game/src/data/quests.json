@@ -1,0 +1,220 @@
+{
+ "world": {
+  "depot_thief": {
+   "type": "string",
+   "init": "none"
+  }
+ },
+ "externals": [
+  "begin",
+  "board_full",
+  "found",
+  "give_money",
+  "has_note",
+  "has_offers",
+  "has_work",
+  "money",
+  "note",
+  "pay",
+  "searched",
+  "take_work"
+ ],
+ "quests": {
+  "bowl_dag": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"^Dag, Farmers patrol. Keep your guns cold inside the gates and we will get along fine.\",\"\\n\",{\"->\":\".^.hub\"},{\"hub\":[[\"#\",\"^checkpoint: start.hub\",\"/#\",\"ev\",\"str\",\"^Any trouble around here?\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^What about the raiders?\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^What do you make of Nose?\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},\"ev\",\"str\",\"^Any work?\",\"/str\",\"/ev\",{\"*\":\".^.c-3\",\"flg\":4},\"ev\",\"str\",\"^Goodbye.\",\"/str\",\"/ev\",{\"*\":\".^.c-4\",\"flg\":4},{\"c-0\":[\"\\n\",\"^Raiders sniffing at the roads again. Nothing we cannot run off. The dust is worse. A truck that breaks down out there waits a long while for a friendly face.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-1\":[\"\\n\",\"^Kiln Camp sits out east, south of the crater. Scrapjaw is far up north, beyond Dustwell. Most days they would rather rob you than kill you. Pay them or outrun them, but <b>do not shoot first</b> if you want to grow old.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-2\":[\"\\n\",\"^The Army is all right on the road. Off it, they act like the basin is theirs and we are only borrowing it. Bowl was feeding people long before Nose put up its first fence.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-3\":[\"\\n\",[\"ev\",{\"x()\":\"board_full\"},\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"\\n\",\"^You are carrying enough promises already. Finish a few first.\",\"\\n\",{\"->\":\"start.hub\"},{\"->\":\".^.^.^.4\"},null]}],[\"ev\",{\"x()\":\"has_work\"},\"!\",{\"x()\":\"has_offers\"},\"&&\",\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"\\n\",\"^Nothing on the board you could take on right now. Make some room and ask again.\",\"\\n\",{\"->\":\"start.hub\"},{\"->\":\".^.^.^.4\"},null]}],[\"ev\",{\"x()\":\"has_work\"},\"!\",\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"\\n\",\"^Nothing on the board today. Come back in a couple of days.\",\"\\n\",{\"->\":\"start.hub\"},{\"->\":\".^.^.^.4\"},null]}],\"nop\",\"\\n\",\"^Could be. Interested? \",\"#\",\"^work_offer\",\"/#\",\"\\n\",[\"ev\",\"str\",\"^I will take it.\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^Not now.\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},{\"c-0\":[\"\\n\",\"ev\",{\"x()\":\"take_work\"},\"pop\",\"/ev\",\"\\n\",\"^Good. Bowl remembers who delivers.\",\"\\n\",{\"->\":\"start.hub\"},null],\"c-1\":[\"\\n\",{\"->\":\"start.hub\"},null]}],null],\"c-4\":[\"\\n\",\"end\",null]}],null]}],\"global decl\":[\"ev\",\"str\",\"^none\",\"/str\",{\"VAR=\":\"depot_thief\"},\"/ev\",\"end\",null]}],\"listDefs\":{}}",
+   "vars": {},
+   "checkpoints": [
+    "start",
+    "start.hub"
+   ],
+   "view": "transcript",
+   "stats": [],
+   "facts": []
+  },
+  "bowl_hattie": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"^Water is for paying folk, but talk is free. I am Hattie. Bucket down, ears open.\",\"\\n\",{\"->\":\".^.hub\"},{\"hub\":[[\"#\",\"^checkpoint: start.hub\",\"/#\",\"ev\",\"str\",\"^Heard any rumors?\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^Seen any strangers come through?\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^Any local legends?\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},\"ev\",\"str\",\"^What do you make of Nose?\",\"/str\",\"/ev\",{\"*\":\".^.c-3\",\"flg\":4},\"ev\",\"str\",\"^Goodbye.\",\"/str\",\"/ev\",{\"*\":\".^.c-4\",\"flg\":4},{\"c-0\":[\"\\n\",\"^Funny you ask. A scavenger came through a few days back, trying to sell a <b>Nose Army radio</b>. Said he pulled it off an Army wagon sitting dead in the hills north-east of here. When the Farmers asked him where, exactly, he filled his tank and left for Nose in a hurry.\",\"\\n\",\"ev\",\"str\",\"^wagonBowl\",\"/str\",{\"x()\":\"note\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-1\":[\"\\n\",\"^Every day. Traders, couriers, folk with a tank of fuel and a story. The ones that worry me are the quiet ones who ask where the seed stores are.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-2\":[\"\\n\",\"^You know Glass Flats, out east? There is an Old World tank out there that <shake>still runs</shake>. Rolls out at night with its lights off. My cousin saw it. Well. Heard it.\",\"\\n\",\"ev\",\"str\",\"^glassTank\",\"/str\",{\"x()\":\"note\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-3\":[\"\\n\",\"^Soldiers playing at a town. They eat our grain and send us orders back. Polite enough, mind you, whenever they want something.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-4\":[\"\\n\",\"end\",null]}],null]}],\"global decl\":[\"ev\",\"str\",\"^none\",\"/str\",{\"VAR=\":\"depot_thief\"},\"/ev\",\"end\",null]}],\"listDefs\":{}}",
+   "vars": {},
+   "checkpoints": [
+    "start",
+    "start.hub"
+   ],
+   "view": "transcript",
+   "stats": [],
+   "facts": []
+  },
+  "bowl_ruben": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"^Sit a while, the shade is free. I am Ruben. I keep the canal gates. What is on your mind?\",\"\\n\",{\"->\":\".^.hub\"},{\"hub\":[[\"#\",\"^checkpoint: start.hub\",\"/#\",\"ev\",\"str\",\"^What is this place?\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^Who runs Bowl?\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^Tell me about the Old World.\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},\"ev\",\"str\",\"^What about the Fallen Sun?\",\"/str\",\"/ev\",{\"*\":\".^.c-3\",\"flg\":4},\"ev\",\"str\",\"^What is the Fallen Sun really?\",\"/str\",\"str\",\"^fallen-sun\",\"/str\",{\"x()\":\"found\",\"exArgs\":1},\"/ev\",{\"*\":\".^.c-4\",\"flg\":5},\"ev\",\"str\",\"^Goodbye.\",\"/str\",\"/ev\",{\"*\":\".^.c-5\",\"flg\":4},{\"c-0\":[\"\\n\",\"^Bowl sits at the low end of the basin, where the old canals still carry water. Water runs downhill, and so do people. Folk came for the canals and stayed for the seed.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-1\":[\"\\n\",\"^The canal families. Every gate has a family, and every family has a say. It is a slow way to decide things, but nobody ever starved waiting on a quick answer. The Farmers keep the roads for us.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-2\":[\"\\n\",\"^My grandmother said the whole basin was orchards, wall to wall, and the canals ran full in every season. Then the sky fell and the fruit went with it. She never could agree with herself on which came first.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-3\":[\"\\n\",\"^A ship, they say, bigger than Bowl. It came down <color=rust>burning</color> and dug that crater. Some say it brought the end with it. I say the end was already here, and the ship just landed on top of it.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-4\":[\"\\n\",\"^You have stood in that crater, then. You tell me. Nose calls it a warship. Hattie calls it a seed ship that lost its way. I only know <i>nothing grows near it</i>, and that is the worst thing I can say of any place.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-5\":[\"\\n\",\"end\",null]}],null]}],\"global decl\":[\"ev\",\"str\",\"^none\",\"/str\",{\"VAR=\":\"depot_thief\"},\"/ev\",\"end\",null]}],\"listDefs\":{}}",
+   "vars": {},
+   "checkpoints": [
+    "start",
+    "start.hub"
+   ],
+   "view": "transcript",
+   "stats": [],
+   "facts": []
+  },
+  "nose_depot_leak": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"#\",\"^view: page\",\"/#\",\"#\",\"^stat: watches Watches\",\"/#\",\"#\",\"^stat: money Money\",\"/#\",\"#\",\"^stat: alarm Talk: quiet, talking, loud\",\"/#\",\"#\",\"^fact: ledger_read Ledger: cans went missing on the third, seventh and eleventh nights. Pell was on duty each time.\",\"/#\",\"#\",\"^fact: gate_checked Gate log: Corporal Vance signed out late on the third, seventh and eleventh nights, alone, with an empty truck bed.\",\"/#\",\"#\",\"^fact: saw_swap Fuel shed: Vance asked Pell to swap shifts tonight. Pell agreed without looking up. Vance has a scar across his chin.\",\"/#\",\"#\",\"^fact: knows_scar Sabine: a corporal brings her the cans. Big hands, a scar across the chin. Never a name.\",\"/#\",\"#\",\"^fact: found_seals Barracks: a tin of Army fuel seals under Vance's cot, cut clean.\",\"/#\",\"#\",\"^fact: saw_handoff Back fence: at dawn Vance passed cans over the wire to a truck with Sabine's mark.\",\"/#\",\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"facts_held\":[\"ev\",{\"VAR?\":\"ledger_read\"},{\"VAR?\":\"gate_checked\"},\"+\",{\"VAR?\":\"saw_swap\"},\"+\",{\"VAR?\":\"knows_scar\"},\"+\",{\"VAR?\":\"found_seals\"},\"+\",{\"VAR?\":\"saw_handoff\"},\"+\",\"/ev\",\"~ret\",null],\"knows_whom\":[\"ev\",{\"VAR?\":\"gate_checked\"},{\"VAR?\":\"saw_swap\"},\"||\",{\"VAR?\":\"knows_scar\"},\"||\",\"/ev\",\"~ret\",null],\"start\":[[\"#\",\"^checkpoint: start\",\"/#\",\"ev\",{\"VAR?\":\"depot_thief\"},\"str\",\"^open\",\"/str\",\"==\",\"/ev\",[{\"->\":\".^.b\",\"c\":true},{\"b\":[\"^ \",{\"->\":\"desk\"},{\"->\":\".^.^.^.11\"},null]}],\"nop\",\"\\n\",\"^Kovac shuts the dispatch door before he speaks. \",\"#\",\"^place: Dispatch office\",\"/#\",\"\\n\",\"^On his desk lies a fuel can, empty, its Army seal cut clean through.\",\"\\n\",\"^Fuel is walking out of my depot. A can here, a can there, never enough to miss in a day. \",\"#\",\"^speaker: Kovac\",\"/#\",\"\\n\",\"^A shipment leaves for the north road soon. Find who sells it before it rolls. Quietly. \",\"#\",\"^speaker: Kovac\",\"/#\",\"\\n\",\"ev\",\"str\",\"^I will look into it.\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^Not my business.\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},{\"c-0\":[\"\\n\",\"ev\",\"str\",\"^open\",\"/str\",\"/ev\",{\"VAR=\":\"depot_thief\",\"re\":true},\"^Good. Do not spook anyone. A thief who hears footsteps buries the evidence. \",\"#\",\"^speaker: Kovac\",\"/#\",\"\\n\",{\"->\":\"desk\"},null],\"c-1\":[\"\\n\",\"^Then forget we talked. \",\"#\",\"^speaker: Kovac\",\"/#\",\"\\n\",\"end\",null]}],null],\"desk\":[[\"#\",\"^checkpoint: desk\",\"/#\",\"^The yard lies under dust. The shipment trucks stand fuelled by the gate. \",\"#\",\"^page \",\"/#\",\"#\",\"^place: Dispatch office\",\"/#\",\"\\n\",\"ev\",{\"VAR?\":\"alarm\"},0,\">\",\"/ev\",[{\"->\":\".^.b\",\"c\":true},{\"b\":[\"^ Two loaders stop talking as you pass. \",{\"->\":\"desk.0.17\"},null]}],\"nop\",\"\\n\",\"ev\",\"str\",\"^Read the depot ledgers.\",\"/str\",{\"VAR?\":\"ledger_read\"},\"!\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":5},\"ev\",\"str\",\"^Check the gate log for the same nights.\",\"/str\",{\"VAR?\":\"ledger_read\"},{\"VAR?\":\"gate_checked\"},\"!\",\"&&\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":5},\"ev\",\"str\",\"^Talk to Pell, the fuel clerk.\",\"/str\",{\"VAR?\":\"pell_talked\"},\"!\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":5},\"ev\",\"str\",\"^Talk to the trader by the gate.\",\"/str\",{\"VAR?\":\"sabine_talked\"},\"!\",\"/ev\",{\"*\":\".^.c-3\",\"flg\":5},\"ev\",\"str\",\"^Search Vance's bunk.\",\"/str\",{\"VAR?\":\"gate_checked\"},{\"VAR?\":\"saw_swap\"},\"||\",{\"VAR?\":\"bunk_searched\"},\"!\",\"&&\",\"/ev\",{\"*\":\".^.c-4\",\"flg\":5},\"ev\",\"str\",\"^Watch the depot all night.\",\"/str\",{\"VAR?\":\"stakeout_done\"},\"!\",\"/ev\",{\"*\":\".^.c-5\",\"flg\":5},\"ev\",\"str\",\"^Go to Kovac with a name.\",\"/str\",\"/ev\",{\"*\":\".^.c-6\",\"flg\":4},\"ev\",\"str\",\"^Let it go.\",\"/str\",\"/ev\",{\"*\":\".^.c-7\",\"flg\":4},{\"c-0\":[\"\\n\",{\"->\":\"ledger\"},null],\"c-1\":[\"\\n\",{\"->\":\"gate\"},null],\"c-2\":[\"\\n\",{\"->\":\"pell\"},null],\"c-3\":[\"\\n\",{\"->\":\"sabine\"},null],\"c-4\":[\"\\n\",{\"->\":\"bunk\"},null],\"c-5\":[\"\\n\",{\"->\":\"stakeout\"},null],\"c-6\":[\"\\n\",{\"->\":\"accuse\"},null],\"c-7\":[\"\\n\",{\"->\":\"let_go\"},null]}],null],\"after\":[[\"ev\",{\"VAR?\":\"alarm\"},2,\">=\",\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"\\n\",{\"->\":\"trail_lost\"},{\"->\":\"after.3\"},null]}],[\"ev\",{\"VAR?\":\"watches\"},0,\"<=\",\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"\\n\",{\"->\":\"last_call\"},{\"->\":\"after.3\"},null]}],[{\"->\":\".^.b\"},{\"b\":[\"\\n\",{\"->\":\"desk\"},{\"->\":\"after.3\"},null]}],\"nop\",\"\\n\",null],\"ledger\":[\"ev\",true,\"/ev\",{\"VAR=\":\"ledger_read\",\"re\":true},\"ev\",{\"VAR?\":\"watches\"},1,\"-\",{\"VAR=\":\"watches\",\"re\":true},\"/ev\",\"^The ledger lies open on Pell's desk. Each loss is written in the same careful hand. \",\"#\",\"^place: Dispatch office\",\"/#\",\"\\n\",\"^Night; Missing; On duty \",\"#\",\"^head\",\"/#\",\"\\n\",\"^3rd; 2 cans; Pell \",\"#\",\"^row\",\"/#\",\"\\n\",\"^7th; 3 cans; Pell \",\"#\",\"^row\",\"/#\",\"\\n\",\"^11th; 2 cans; Pell \",\"#\",\"^row\",\"/#\",\"\\n\",\"^The ink on the last line is still wet.\",\"\\n\",{\"->\":\"after\"},null],\"gate\":[\"ev\",true,\"/ev\",{\"VAR=\":\"gate_checked\",\"re\":true},\"ev\",{\"VAR?\":\"watches\"},1,\"-\",{\"VAR=\":\"watches\",\"re\":true},\"/ev\",\"^The gate sentry hands over the log without a word. \",\"#\",\"^place: Gatehouse\",\"/#\",\"\\n\",\"^Night; Signed out late; Truck bed \",\"#\",\"^head\",\"/#\",\"\\n\",\"^3rd; Ostrow; water drums \",\"#\",\"^row\",\"/#\",\"\\n\",\"^3rd; Vance; empty \",\"#\",\"^row\",\"/#\",\"\\n\",\"^7th; Vance; empty \",\"#\",\"^row\",\"/#\",\"\\n\",\"^11th; Ruiz; scrap \",\"#\",\"^row\",\"/#\",\"\\n\",\"^11th; Vance; empty \",\"#\",\"^row\",\"/#\",\"\\n\",\"^Every one of Vance's lines ends the same way: <i>back before dawn</i>.\",\"\\n\",{\"->\":\"after\"},null],\"pell\":[\"ev\",true,\"/ev\",{\"VAR=\":\"pell_talked\",\"re\":true},\"ev\",{\"VAR?\":\"watches\"},1,\"-\",{\"VAR=\":\"watches\",\"re\":true},\"/ev\",\"ev\",{\"VAR?\":\"ledger_read\"},\"/ev\",[{\"->\":\".^.b\",\"c\":true},{\"b\":[\"^ \",{\"->\":\"pell.swap\"},{\"->\":\"pell.14\"},null]}],\"nop\",\"\\n\",\"^Pell talks about the dust, his bad back and the food. He never looks at the ledger on his desk. \",\"#\",\"^place: Fuel shed\",\"/#\",\"\\n\",{\"->\":\"after\"},{\"swap\":[\"^You mention the ledger. Pell's pen stops. \",\"#\",\"^place: Fuel shed\",\"/#\",\"\\n\",\"^The door bangs open. A corporal fills it, big hands, a scar across the chin.\",\"\\n\",\"^Pell. Tonight again. Swap with me. \",\"#\",\"^speaker: Vance\",\"/#\",\"\\n\",\"^Pell nods at his desk.\",\"\\n\",\"^Vance looks at you a moment longer than he needs to. Then he is gone.\",\"\\n\",\"ev\",true,\"/ev\",{\"VAR=\":\"saw_swap\",\"re\":true},{\"->\":\"after\"},null]}],\"sabine\":[\"ev\",true,\"/ev\",{\"VAR=\":\"sabine_talked\",\"re\":true},\"ev\",{\"VAR?\":\"watches\"},1,\"-\",{\"VAR=\":\"watches\",\"re\":true},\"/ev\",{\"->\":\".^.haggle\"},{\"haggle\":[[\"#\",\"^checkpoint: sabine.haggle\",\"/#\",\"^Sabine's stall leans on the depot fence. Her board is chalked in a neat hand. \",\"#\",\"^place: The gate\",\"/#\",\"\\n\",\"^; Sabine; Depot pump \",\"#\",\"^head\",\"/#\",\"\\n\",\"^Diesel, per can; 9 M; 16 M \",\"#\",\"^row\",\"/#\",\"\\n\",\"^Her cans are Army green. The stencils have been scraped off.\",\"\\n\",\"^Buying, or looking? \",\"#\",\"^speaker: Sabine\",\"/#\",\"\\n\",\"ev\",\"str\",\"^Pay her \",\"ev\",{\"VAR?\":\"sabine_price\"},\"out\",\"/ev\",\"^ M to talk. \",\"#\",\"^cost: \",\"ev\",{\"VAR?\":\"sabine_price\"},\"out\",\"/ev\",\"/#\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^Lean on her.\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^Let her see what you know.\",\"/str\",{\"f()\":\"facts_held\"},2,\">=\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":5},\"ev\",\"str\",\"^Leave her be.\",\"/str\",\"/ev\",{\"*\":\".^.c-3\",\"flg\":4},{\"c-0\":[\"\\n\",\"ev\",true,\"/ev\",{\"VAR=\":\"knows_scar\",\"re\":true},\"^She counts the money twice.\",\"\\n\",\"^A corporal brings the cans. Big hands, a scar across the chin. Never says his name, and I never ask. \",\"#\",\"^speaker: Sabine\",\"/#\",\"\\n\",{\"->\":\"after\"},null],\"c-1\":[\"\\n\",\"ev\",{\"VAR?\":\"alarm\"},1,\"+\",{\"VAR=\":\"alarm\",\"re\":true},\"/ev\",\"^She laughs and waves the next customer up. By nightfall half the depot knows someone is asking about fuel.\",\"\\n\",{\"->\":\"after\"},null],\"c-2\":[\"\\n\",\"^Sabine looks at you a long while. Then she slides an envelope across the counter.\",\"\\n\",\"^Forget the fuel. Everybody eats. \",\"#\",\"^speaker: Sabine\",\"/#\",\"\\n\",[\"ev\",\"str\",\"^Take the envelope.\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^Push it back.\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},{\"c-0\":[\"\\n\",{\"->\":\"sold\"},null],\"c-1\":[\"\\n\",\"ev\",{\"VAR?\":\"alarm\"},1,\"+\",{\"VAR=\":\"alarm\",\"re\":true},\"/ev\",\"^She shrugs and looks past you, at the sentry by the gate.\",\"\\n\",{\"->\":\"after\"},null]}],null],\"c-3\":[\"\\n\",{\"->\":\"after\"},null]}],null]}],\"bunk\":[\"ev\",true,\"/ev\",{\"VAR=\":\"bunk_searched\",\"re\":true},\"ev\",true,\"/ev\",{\"VAR=\":\"found_seals\",\"re\":true},\"ev\",{\"VAR?\":\"alarm\"},1,\"+\",{\"VAR=\":\"alarm\",\"re\":true},\"/ev\",\"ev\",{\"VAR?\":\"watches\"},1,\"-\",{\"VAR=\":\"watches\",\"re\":true},\"/ev\",\"^The barracks are empty at noon. Vance's cot is made tight, Army style. \",\"#\",\"^place: Barracks\",\"/#\",\"\\n\",\"^Under it sits a tin of Army fuel seals, every one cut clean.\",\"\\n\",\"^His boots stand by the door, still wet from the wash trough. Footsteps sound on the boards outside, and you slip out the back.\",\"\\n\",{\"->\":\"after\"},null],\"stakeout\":[\"ev\",true,\"/ev\",{\"VAR=\":\"stakeout_done\",\"re\":true},\"ev\",{\"VAR?\":\"watches\"},1,\"-\",{\"VAR=\":\"watches\",\"re\":true},\"/ev\",\"ev\",{\"f()\":\"knows_whom\"},\"/ev\",[{\"->\":\".^.b\",\"c\":true},{\"b\":[\"^ \",{\"->\":\".^.^.^.seen\"},{\"->\":\".^.^.^.14\"},null]}],\"nop\",\"\\n\",\"^You do not know whom to watch. The night passes cold and empty. \",\"#\",\"^place: Back fence, night\",\"/#\",\"\\n\",\"^At dawn a sentry finds you behind the fuel shed and asks what you are waiting for.\",\"\\n\",\"ev\",{\"VAR?\":\"alarm\"},1,\"+\",{\"VAR=\":\"alarm\",\"re\":true},\"/ev\",{\"->\":\"after\"},{\"seen\":[\"^Near dawn a truck stops at the back fence, lights off. Its door carries Sabine's mark. \",\"#\",\"^place: Back fence, night\",\"/#\",\"\\n\",\"^A corporal with a scar across his chin passes cans over the wire, one by one. <pop>You count every one.</pop>\",\"\\n\",\"ev\",true,\"/ev\",{\"VAR=\":\"saw_handoff\",\"re\":true},{\"->\":\"after\"},null]}],\"vance_proof\":[\"ev\",{\"VAR?\":\"gate_checked\"},{\"VAR?\":\"saw_swap\"},\"+\",{\"VAR?\":\"knows_scar\"},\"+\",{\"VAR?\":\"found_seals\"},\"+\",2,{\"VAR?\":\"saw_handoff\"},\"*\",\"+\",\"/ev\",\"~ret\",null],\"accuse\":[[\"^Kovac looks up from the duty roster. \",\"#\",\"^place: Dispatch office\",\"/#\",\"\\n\",\"^Who? \",\"#\",\"^speaker: Kovac\",\"/#\",\"\\n\",\"ev\",\"str\",\"^Corporal Vance.\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^Pell, the clerk.\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^Not yet.\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},{\"c-0\":[\"\\n\",{\"->\":\"name_vance\"},null],\"c-1\":[\"\\n\",{\"->\":\"name_pell\"},null],\"c-2\":[\"\\n\",{\"->\":\"desk\"},null]}],null],\"last_call\":[[\"#\",\"^checkpoint: last_call\",\"/#\",\"^The shipment rolls at dawn. Kovac waits at his desk with the duty roster. \",\"#\",\"^page \",\"/#\",\"#\",\"^place: Dispatch office\",\"/#\",\"\\n\",\"ev\",\"str\",\"^Name Corporal Vance.\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^Name Pell, the clerk.\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^Let it go.\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},{\"c-0\":[\"\\n\",{\"->\":\"name_vance\"},null],\"c-1\":[\"\\n\",{\"->\":\"name_pell\"},null],\"c-2\":[\"\\n\",{\"->\":\"too_late\"},null]}],null],\"name_vance\":[\"^You lay out what you have.\",\"\\n\",\"ev\",{\"VAR?\":\"gate_checked\"},\"/ev\",[{\"->\":\".^.b\",\"c\":true},{\"b\":[\"^ Kovac reads the late passes twice. His jaw sets. \",{\"->\":\".^.^.^.6\"},null]}],\"nop\",\"\\n\",\"ev\",{\"VAR?\":\"saw_swap\"},\"/ev\",[{\"->\":\".^.b\",\"c\":true},{\"b\":[\"\\n\",\"^So he picks his own nights. \",\"#\",\"^speaker: Kovac\",\"/#\",\"\\n\",{\"->\":\".^.^.^.12\"},null]}],\"nop\",\"\\n\",\"ev\",{\"VAR?\":\"knows_scar\"},\"/ev\",[{\"->\":\".^.b\",\"c\":true},{\"b\":[\"^ At the word scar, Kovac touches his own chin and says nothing. \",{\"->\":\".^.^.^.18\"},null]}],\"nop\",\"\\n\",\"ev\",{\"VAR?\":\"found_seals\"},\"/ev\",[{\"->\":\".^.b\",\"c\":true},{\"b\":[\"^ Kovac picks up the cut seal on his desk and rolls it between his fingers. \",{\"->\":\".^.^.^.24\"},null]}],\"nop\",\"\\n\",\"ev\",{\"VAR?\":\"saw_handoff\"},\"/ev\",[{\"->\":\".^.b\",\"c\":true},{\"b\":[\"^ Kovac asks if you saw the cans pass the wire yourself. You nod. He is quiet a long time. \",{\"->\":\".^.^.^.30\"},null]}],\"nop\",\"\\n\",\"ev\",{\"f()\":\"vance_proof\"},3,\">=\",\"/ev\",[{\"->\":\".^.b\",\"c\":true},{\"b\":[\"^ \",{\"->\":\"caught\"},{\"->\":\".^.^.^.38\"},null]}],\"nop\",\"\\n\",{\"->\":\"no_proof\"},null],\"name_pell\":[\"ev\",{\"VAR?\":\"ledger_read\"},\"!\",\"/ev\",[{\"->\":\".^.b\",\"c\":true},{\"b\":[\"^ \",{\"->\":\"no_proof\"},{\"->\":\".^.^.^.5\"},null]}],\"nop\",\"\\n\",\"^Kovac runs a finger down the ledger. Pell, Pell, Pell.\",\"\\n\",\"^That is plain enough. \",\"#\",\"^speaker: Kovac\",\"/#\",\"\\n\",{\"->\":\"wrong_man\"},null],\"no_proof\":[\"ev\",{\"VAR?\":\"alarm\"},1,\"+\",{\"VAR=\":\"alarm\",\"re\":true},\"/ev\",\"^A name with nothing behind it. Bring me proof, or bring me nothing. \",\"#\",\"^speaker: Kovac\",\"/#\",\"\\n\",\"^By evening the whole depot knows who you asked about.\",\"\\n\",{\"->\":\"after\"},null],\"caught\":[\"ev\",\"str\",\"^vance\",\"/str\",\"/ev\",{\"VAR=\":\"depot_thief\",\"re\":true},\"ev\",{\"VAR?\":\"reward\"},{\"x()\":\"give_money\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",\"^Kovac sends a pair of soldiers to the barracks. \",\"#\",\"^page \",\"/#\",\"#\",\"^place: Dispatch office\",\"/#\",\"\\n\",\"^They come back with the cans, dug out from under the floor of Vance's bunk, wrapped in Army canvas.\",\"\\n\",\"^Vance. I shared my water with that man. \",\"#\",\"^speaker: Kovac\",\"/#\",\"\\n\",\"^The Army pays its debts. Take this, and keep it quiet. \",\"#\",\"^speaker: Kovac\",\"/#\",\"\\n\",\"^Kovac counts <b>\",\"ev\",{\"VAR?\":\"reward\"},\"out\",\"/ev\",\"^ M</b> into your hand. \",\"#\",\"^reveal: all\",\"/#\",\"\\n\",\"end\",null],\"wrong_man\":[\"ev\",\"str\",\"^pell\",\"/str\",\"/ev\",{\"VAR=\":\"depot_thief\",\"re\":true},\"^Pell sits in the cell by noon, crying into his sleeve. \",\"#\",\"^page \",\"/#\",\"#\",\"^place: Dispatch office\",\"/#\",\"\\n\",\"^The shipment rolls out light anyway. <color=blood>The cans kept walking.</color>\",\"\\n\",\"end\",null],\"sold\":[\"ev\",\"str\",\"^bought\",\"/str\",\"/ev\",{\"VAR=\":\"depot_thief\",\"re\":true},\"ev\",{\"VAR?\":\"envelope\"},{\"x()\":\"give_money\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",\"^The envelope holds <b>\",\"ev\",{\"VAR?\":\"envelope\"},\"out\",\"/ev\",\"^ M</b>. You tell Kovac the depot is clean. \",\"#\",\"^reveal: all \",\"/#\",\"#\",\"^page \",\"/#\",\"#\",\"^place: Dispatch office\",\"/#\",\"\\n\",\"^He believes you. For now.\",\"\\n\",\"end\",null],\"trail_lost\":[\"ev\",\"str\",\"^lost\",\"/str\",\"/ev\",{\"VAR=\":\"depot_thief\",\"re\":true},\"^By morning the depot is spotless. \",\"#\",\"^page \",\"/#\",\"#\",\"^place: Dispatch office\",\"/#\",\"\\n\",\"^The ledger has a new page. The gate log has no late passes. Sabine's stall stands empty.\",\"\\n\",\"end\",null],\"too_late\":[\"ev\",\"str\",\"^lost\",\"/str\",\"/ev\",{\"VAR=\":\"depot_thief\",\"re\":true},\"^The shipment rolls out at dawn, light by a few cans. \",\"#\",\"^page \",\"/#\",\"#\",\"^place: The gate\",\"/#\",\"\\n\",\"^Vance waves it through the gate himself.\",\"\\n\",\"end\",null],\"let_go\":[\"ev\",\"str\",\"^lost\",\"/str\",\"/ev\",{\"VAR=\":\"depot_thief\",\"re\":true},\"^Your call. \",\"#\",\"^speaker: Kovac \",\"/#\",\"#\",\"^place: Dispatch office\",\"/#\",\"\\n\",\"end\",null],\"global decl\":[\"ev\",\"str\",\"^none\",\"/str\",{\"VAR=\":\"depot_thief\"},5,{\"VAR=\":\"watches\"},0,{\"VAR=\":\"alarm\"},false,{\"VAR=\":\"ledger_read\"},false,{\"VAR=\":\"gate_checked\"},false,{\"VAR=\":\"pell_talked\"},false,{\"VAR=\":\"sabine_talked\"},false,{\"VAR=\":\"bunk_searched\"},false,{\"VAR=\":\"stakeout_done\"},false,{\"VAR=\":\"saw_swap\"},false,{\"VAR=\":\"knows_scar\"},false,{\"VAR=\":\"found_seals\"},false,{\"VAR=\":\"saw_handoff\"},20,{\"VAR=\":\"sabine_price\"},150,{\"VAR=\":\"reward\"},60,{\"VAR=\":\"envelope\"},\"/ev\",\"end\",null]}],\"listDefs\":{}}",
+   "vars": {
+    "alarm": {
+     "type": "number",
+     "init": 0
+    },
+    "bunk_searched": {
+     "type": "boolean",
+     "init": false
+    },
+    "envelope": {
+     "type": "number",
+     "init": 60
+    },
+    "found_seals": {
+     "type": "boolean",
+     "init": false
+    },
+    "gate_checked": {
+     "type": "boolean",
+     "init": false
+    },
+    "knows_scar": {
+     "type": "boolean",
+     "init": false
+    },
+    "ledger_read": {
+     "type": "boolean",
+     "init": false
+    },
+    "pell_talked": {
+     "type": "boolean",
+     "init": false
+    },
+    "reward": {
+     "type": "number",
+     "init": 150
+    },
+    "sabine_price": {
+     "type": "number",
+     "init": 20
+    },
+    "sabine_talked": {
+     "type": "boolean",
+     "init": false
+    },
+    "saw_handoff": {
+     "type": "boolean",
+     "init": false
+    },
+    "saw_swap": {
+     "type": "boolean",
+     "init": false
+    },
+    "stakeout_done": {
+     "type": "boolean",
+     "init": false
+    },
+    "watches": {
+     "type": "number",
+     "init": 5
+    }
+   },
+   "checkpoints": [
+    "start",
+    "desk",
+    "sabine.haggle",
+    "last_call"
+   ],
+   "view": "page",
+   "stats": [
+    {
+     "name": "watches",
+     "label": "Watches",
+     "words": null
+    },
+    {
+     "name": "money",
+     "label": "Money",
+     "words": null
+    },
+    {
+     "name": "alarm",
+     "label": "Talk",
+     "words": [
+      "quiet",
+      "talking",
+      "loud"
+     ]
+    }
+   ],
+   "facts": [
+    {
+     "name": "ledger_read",
+     "text": "Ledger: cans went missing on the third, seventh and eleventh nights. Pell was on duty each time."
+    },
+    {
+     "name": "gate_checked",
+     "text": "Gate log: Corporal Vance signed out late on the third, seventh and eleventh nights, alone, with an empty truck bed."
+    },
+    {
+     "name": "saw_swap",
+     "text": "Fuel shed: Vance asked Pell to swap shifts tonight. Pell agreed without looking up. Vance has a scar across his chin."
+    },
+    {
+     "name": "knows_scar",
+     "text": "Sabine: a corporal brings her the cans. Big hands, a scar across the chin. Never a name."
+    },
+    {
+     "name": "found_seals",
+     "text": "Barracks: a tin of Army fuel seals under Vance's cot, cut clean."
+    },
+    {
+     "name": "saw_handoff",
+     "text": "Back fence: at dawn Vance passed cans over the wire to a truck with Sabine's mark."
+    }
+   ]
+  },
+  "nose_ibo": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"^Eh? Pull up a crate. Ibo. I listen to the air for the Army, and to everything else for myself.\",\"\\n\",{\"->\":\".^.hub\"},{\"hub\":[[\"#\",\"^checkpoint: start.hub\",\"/#\",\"ev\",\"str\",\"^Tell me about the Old World.\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^Where does J.J. broadcast from?\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^What do you make of Bowl?\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},\"ev\",\"str\",\"^Heard anything on the air?\",\"/str\",\"/ev\",{\"*\":\".^.c-3\",\"flg\":4},\"ev\",\"str\",\"^Heard about the depot business?\",\"/str\",{\"VAR?\":\"depot_thief\"},\"str\",\"^none\",\"/str\",\"!=\",{\"VAR?\":\"depot_thief\"},\"str\",\"^open\",\"/str\",\"!=\",\"&&\",\"/ev\",{\"*\":\".^.c-4\",\"flg\":5},\"ev\",\"str\",\"^Goodbye.\",\"/str\",\"/ev\",{\"*\":\".^.c-5\",\"flg\":4},{\"c-0\":[\"\\n\",\"^Bowl folk will tell you it was all orchards. Rubbish. There were highways, power lines, towns bigger than both of ours put together. The orchards were only what they could see from the canals.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-1\":[\"\\n\",\"^Jill Jane's mast? Everybody wants to know. Her signal is strongest at night and <i>drifts like it is on wheels</i>. I would wager she moves it. Do not tell the Sergeant I listen.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-2\":[\"\\n\",\"^Good people, slow talkers. They would hold a meeting to decide whether to hold a meeting. Their grain keeps us fed, so the Army minds its manners.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-3\":[\"\\n\",\"^Scavengers chatter about Burnt Convoy now and then. Picked clean, they say. Nothing left there but ash and bent rims. Not worth the fuel.\",\"\\n\",\"ev\",\"str\",\"^burntConvoy\",\"/str\",{\"x()\":\"note\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-4\":[\"\\n\",\"ev\",{\"VAR?\":\"depot_thief\"},\"/ev\",[\"du\",\"ev\",\"str\",\"^vance\",\"/str\",\"==\",\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"pop\",\"\\n\",\"^Vance! He sat at my table on cold nights. You never know a man until he sells you out.\",\"\\n\",{\"->\":\".^.^.^.8\"},null]}],[\"du\",\"ev\",\"str\",\"^pell\",\"/str\",\"==\",\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"pop\",\"\\n\",\"^Pell? Pell cannot steal a biscuit without saying sorry to it. Somebody else is laughing tonight.\",\"\\n\",{\"->\":\".^.^.^.8\"},null]}],[\"du\",\"ev\",\"str\",\"^bought\",\"/str\",\"==\",\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"pop\",\"\\n\",\"^The depot is clean, they say. Funny. The trader by the gate still sells fuel cheap.\",\"\\n\",{\"->\":\".^.^.^.8\"},null]}],[{\"->\":\".^.b\"},{\"b\":[\"pop\",\"\\n\",\"^Fuel still goes missing, they say. Not my business. Not yours either, now.\",\"\\n\",{\"->\":\".^.^.^.8\"},null]}],\"nop\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-5\":[\"\\n\",\"end\",null]}],null]}],\"global decl\":[\"ev\",\"str\",\"^none\",\"/str\",{\"VAR=\":\"depot_thief\"},\"/ev\",\"end\",null]}],\"listDefs\":{}}",
+   "vars": {},
+   "checkpoints": [
+    "start",
+    "start.hub"
+   ],
+   "view": "transcript",
+   "stats": [],
+   "facts": []
+  },
+  "nose_kovac": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"ev\",{\"VAR?\":\"depot_thief\"},\"/ev\",[\"du\",\"ev\",\"str\",\"^vance\",\"/str\",\"==\",\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"pop\",\"\\n\",\"^Kovac. The depot is quiet these days. Good. <b>Be brief</b> anyway.\",\"\\n\",{\"->\":\"start.9\"},null]}],[\"du\",\"ev\",\"str\",\"^pell\",\"/str\",\"==\",\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"pop\",\"\\n\",\"^Kovac. Fuel still walks out of my depot. <b>Be brief.</b>\",\"\\n\",{\"->\":\"start.9\"},null]}],[{\"->\":\".^.b\"},{\"b\":[\"pop\",\"\\n\",\"^Sergeant Kovac, dispatch. <b>Be brief.</b>\",\"\\n\",{\"->\":\"start.9\"},null]}],\"nop\",\"\\n\",{\"->\":\".^.hub\"},{\"hub\":[[\"#\",\"^checkpoint: start.hub\",\"/#\",\"ev\",\"str\",\"^What is this place?\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^Who runs Nose?\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^Any work?\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},\"ev\",\"str\",\"^Anything off the books?\",\"/str\",{\"VAR?\":\"depot_thief\"},\"str\",\"^none\",\"/str\",\"==\",\"/ev\",{\"*\":\".^.c-3\",\"flg\":5},\"ev\",\"str\",\"^About the depot.\",\"/str\",{\"VAR?\":\"depot_thief\"},\"str\",\"^open\",\"/str\",\"==\",\"/ev\",{\"*\":\".^.c-4\",\"flg\":5},\"ev\",\"str\",\"^About that scavenger with the Army radio.\",\"/str\",\"str\",\"^wagonBowl\",\"/str\",{\"x()\":\"has_note\",\"exArgs\":1},\"/ev\",{\"*\":\".^.c-5\",\"flg\":5},\"ev\",\"str\",\"^We found wagon Seven.\",\"/str\",\"str\",\"^story-wagon-seven\",\"/str\",{\"x()\":\"searched\",\"exArgs\":1},\"/ev\",{\"*\":\".^.c-6\",\"flg\":5},\"ev\",\"str\",\"^Goodbye.\",\"/str\",\"/ev\",{\"*\":\".^.c-7\",\"flg\":4},{\"c-0\":[\"\\n\",\"^Nose. Army post, now a town. We hold the north-east road and the canyon crossing. Anyone moves freight through here, we know.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-1\":[\"\\n\",\"^The Army. Command gives orders, dispatch hands them out, everyone else follows. Simple. Works.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-2\":[\"\\n\",[\"ev\",{\"x()\":\"board_full\"},\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"\\n\",\"^You are overcommitted. Clear your sheet first.\",\"\\n\",{\"->\":\"start.hub\"},{\"->\":\".^.^.^.4\"},null]}],[\"ev\",{\"x()\":\"has_work\"},\"!\",{\"x()\":\"has_offers\"},\"&&\",\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"\\n\",\"^Nothing on the board fits you right now.\",\"\\n\",{\"->\":\"start.hub\"},{\"->\":\".^.^.^.4\"},null]}],[\"ev\",{\"x()\":\"has_work\"},\"!\",\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"\\n\",\"^Board is empty. Try tomorrow.\",\"\\n\",{\"->\":\"start.hub\"},{\"->\":\".^.^.^.4\"},null]}],\"nop\",\"\\n\",\"^Board has this. Yes or no? \",\"#\",\"^work_offer\",\"/#\",\"\\n\",[\"ev\",\"str\",\"^Yes.\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^No.\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},{\"c-0\":[\"\\n\",\"ev\",{\"x()\":\"take_work\"},\"pop\",\"/ev\",\"\\n\",\"^Logged. Do not be late.\",\"\\n\",{\"->\":\"start.hub\"},null],\"c-1\":[\"\\n\",{\"->\":\"start.hub\"},null]}],null],\"c-3\":[\"\\n\",\"ev\",\"str\",\"^nose_depot_leak\",\"/str\",{\"x()\":\"begin\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",\"end\",null],\"c-4\":[\"\\n\",\"ev\",\"str\",\"^nose_depot_leak\",\"/str\",{\"x()\":\"begin\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",\"end\",null],\"c-5\":[\"\\n\",\"^Him. Sold us our own radio back, the nerve. That set came off <b>wagon Seven</b>. She went dark on the Pump Station run down to Bowl. Crew walked in with raiders on their heels, no wagon. The scavenger swore she sits a short hop off the track. Nobody went to look. Too far off our road to spare a truck.\",\"\\n\",\"ev\",\"str\",\"^wagonNose\",\"/str\",{\"x()\":\"note\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-6\":[\"\\n\",\"^Heard. Wagon Seven is written off. Whatever was left on her is yours. Do not make a habit of picking over Army property.\",\"\\n\",\"ev\",\"str\",\"^wagonFound\",\"/str\",{\"x()\":\"note\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-7\":[\"\\n\",\"end\",null]}],null]}],\"global decl\":[\"ev\",\"str\",\"^none\",\"/str\",{\"VAR=\":\"depot_thief\"},\"/ev\",\"end\",null]}],\"listDefs\":{}}",
+   "vars": {},
+   "checkpoints": [
+    "start",
+    "start.hub"
+   ],
+   "view": "transcript",
+   "stats": [],
+   "facts": []
+  },
+  "nose_lena": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"^Lena. If it is broken, put it on the bench. If it is talk, keep it quick. My hands are busy.\",\"\\n\",{\"->\":\".^.hub\"},{\"hub\":[[\"#\",\"^checkpoint: start.hub\",\"/#\",\"ev\",\"str\",\"^Tell me about trucks and parts.\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^What is at the Salvage Yard?\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^Heard any rumors?\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},\"ev\",\"str\",\"^What about the Fallen Sun?\",\"/str\",\"/ev\",{\"*\":\".^.c-3\",\"flg\":4},\"ev\",\"str\",\"^Goodbye.\",\"/str\",\"/ev\",{\"*\":\".^.c-4\",\"flg\":4},{\"c-0\":[\"\\n\",\"^Every part does one job and fails at another. Heavy plate stops rounds and kills your speed. Big guns eat your deck. Pick what you need, not what shines.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-1\":[\"\\n\",\"^South down the road from Broken Wing. Scrappers strip whatever gets towed in. Good place for a cheap part, if you can stand the smell of burnt oil.\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-2\":[\"\\n\",\"^One worth knowing. The water at Green Pit runs <color=sky>clean</color>, and nobody guards it. Fill your cans if you are out that way.\",\"\\n\",\"ev\",\"str\",\"^greenPit\",\"/str\",{\"x()\":\"note\",\"exArgs\":1},\"pop\",\"/ev\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-3\":[\"\\n\",\"^Best metal in the basin and the worst place to get it. That hull is no warship, whatever the brass says. No gun mounts anywhere. <b>Cargo holds, all of it.</b>\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-4\":[\"\\n\",\"end\",null]}],null]}],\"global decl\":[\"ev\",\"str\",\"^none\",\"/str\",{\"VAR=\":\"depot_thief\"},\"/ev\",\"end\",null]}],\"listDefs\":{}}",
+   "vars": {},
+   "checkpoints": [
+    "start",
+    "start.hub"
+   ],
+   "view": "transcript",
+   "stats": [],
+   "facts": []
+  },
+  "radio_wagon_driver": {
+   "story": "{\"inkVersion\":21,\"root\":[[\"\\n\",[\"done\",{\"#n\":\"g-0\"}],null],\"done\",{\"start\":[\"#\",\"^checkpoint: start\",\"/#\",\"^Not much more. Talk fast, I am burning daylight. \",\"#\",\"^speaker: Driver \",\"/#\",\"#\",\"^reveal: char \",\"/#\",\"#\",\"^speed: fast\",\"/#\",\"\\n\",{\"->\":\".^.ask\"},{\"ask\":[[\"#\",\"^checkpoint: start.ask\",\"/#\",\"ev\",\"str\",\"^Anyone still around the wreck?\",\"/str\",\"/ev\",{\"*\":\".^.c-0\",\"flg\":4},\"ev\",\"str\",\"^What happened to the crew?\",\"/str\",\"/ev\",{\"*\":\".^.c-1\",\"flg\":4},\"ev\",\"str\",\"^Is anything left on it?\",\"/str\",\"/ev\",{\"*\":\".^.c-2\",\"flg\":4},\"ev\",\"str\",\"^Over and out.\",\"/str\",\"/ev\",{\"*\":\".^.c-3\",\"flg\":4},{\"c-0\":[\"\\n\",\"^Tracks all over the hollow. <b>Raider tracks</b>, the wide kind with chains on. Old, though. Rain came through since. \",\"#\",\"^speaker: Driver\",\"/#\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-1\":[\"\\n\",\"^Walked to Nose, the way I heard it. Lucky. Whoever ran that wagon down was not out for prisoners. \",\"#\",\"^speaker: Driver\",\"/#\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-2\":[\"\\n\",[\"ev\",\"str\",\"^story-wagon-seven\",\"/str\",{\"x()\":\"searched\",\"exArgs\":1},\"/ev\",{\"->\":\".^.b\",\"c\":true},{\"b\":[\"\\n\",\"^You tell me. Sounds like you got there first. \",\"#\",\"^speaker: Driver\",\"/#\",\"\\n\",{\"->\":\".^.^.^.3\"},null]}],[{\"->\":\".^.b\"},{\"b\":[\"\\n\",\"^Could be. Raiders strip what they can lift, and an Army gun is <shake>heavy</shake>. \",\"#\",\"^speaker: Driver\",\"/#\",\"\\n\",{\"->\":\".^.^.^.3\"},null]}],\"nop\",\"\\n\",{\"->\":\".^.^.^\"},null],\"c-3\":[\"\\n\",\"^Over and out. <color=sand>Watch the hollows.</color> \",\"#\",\"^speaker: Driver\",\"/#\",\"\\n\",\"end\",null]}],null]}],\"global decl\":[\"ev\",\"str\",\"^none\",\"/str\",{\"VAR=\":\"depot_thief\"},\"/ev\",\"end\",null]}],\"listDefs\":{}}",
+   "vars": {},
+   "checkpoints": [
+    "start",
+    "start.ask"
+   ],
+   "view": "transcript",
+   "stats": [],
+   "facts": []
+  }
+ }
+}

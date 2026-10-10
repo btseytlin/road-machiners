@@ -170,19 +170,19 @@ describe('market', () => {
     expect(goodBasePrice('bowl', 'fuelDrums')).toBeCloseTo(expected, 9);
   });
 
-  it('prices water by the nearer of its two oases', () => {
+  it('prices water by the nearer of its two outposts', () => {
     const toOasis = Math.min(...['dustwell', 'green-pit'].map((id) => dist(siteOf('nose').pos, siteOf(id).pos)));
     const expected = GOODS.water.value * (PRICE_FACTOR.make + DISTANCE_PREMIUM.perTile * toOasis);
     expect(goodBasePrice('nose', 'water')).toBeCloseTo(expected, 9);
   });
 
   it('throws pricing a good with neither a maker nor a source site', () => {
-    const sources = GOOD_SOURCES.water;
-    delete GOOD_SOURCES.water;
+    const sources = GOOD_SOURCES.fuelDrums;
+    delete GOOD_SOURCES.fuelDrums;
     try {
-      expect(() => goodBasePrice('bowl', 'water')).toThrow('No shop or source site makes water');
+      expect(() => goodBasePrice('bowl', 'fuelDrums')).toThrow('No shop or source site makes fuelDrums');
     } finally {
-      GOOD_SOURCES.water = sources;
+      GOOD_SOURCES.fuelDrums = sources;
     }
   });
 
@@ -215,7 +215,7 @@ describe('market', () => {
 });
 
 describe('creditBounty', () => {
-  const bounty = (id: string, template: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template, targetName: 'Target', reward: 10000, deadline: 900, window: 900, tier: 2, fulfilled: false });
+  const bounty = (id: string, template: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template, reward: 10000, deadline: 900, window: 900, tier: 2, fulfilled: false });
 
   function withTarget(): { w: World; npc: Vehicle } {
     const w = emptyWorld();

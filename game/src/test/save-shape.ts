@@ -10,11 +10,12 @@ import { saveOf } from '../three/save';
 import { shapeOf, type Shape } from '../three/save-shape';
 import { TEST_MAP } from './map';
 import { defaultSetup } from '../sim/settings';
+import type { QuestBundle, QuestValueType, QuestVarDecl } from '../data/quests';
 
 const CONTRACT_KINDS: Contract[] = [
   { id: 'c', shop: 's', kind: 'haul', good: 'g', units: 1, to: 't', reward: 1, deadline: 1, window: 1, rush: false, tier: 1 },
   { id: 'c', shop: 's', kind: 'fetch', defId: 'p', reward: 1, deadline: 1, window: 1, tier: 1 },
-  { id: 'c', shop: 's', kind: 'bounty', template: 't', targetName: 'n', reward: 1, deadline: 1, window: 1, tier: 1, fulfilled: false },
+  { id: 'c', shop: 's', kind: 'bounty', template: 't', reward: 1, deadline: 1, window: 1, tier: 1, fulfilled: false },
 ];
 
 const WEAPON_ID = Object.keys(PARTS).find((id) => PARTS[id].kind === 'weapon');
@@ -41,7 +42,30 @@ export function newGameShape(): Shape {
       { id: 'i-plain', x: 0, y: 0, rot: 0, kind: 'part', part: makePart(world, PLAIN_ID, 0) },
     ];
   }
+  world.player.quests.session = { quest: 'q', checkpoint: 'c', seed: 1 };
   return shapeOf(JSON.parse(JSON.stringify(saveOf(world).world)));
+}
+
+export type QuestNames = { world: Record<string, QuestValueType>; local: Record<string, Record<string, QuestValueType>>; checkpoints: Record<string, string[]> };
+
+export function questNames(bundle: QuestBundle): QuestNames {
+  const types = (vars: Record<string, QuestVarDecl>) => Object.fromEntries(Object.entries(vars).map(([name, decl]) => [name, decl.type]));
+  const quests = Object.entries(bundle.quests);
+  return {
+    world: types(bundle.world),
+    local: Object.fromEntries(quests.map(([id, quest]) => [id, types(quest.vars)])),
+    checkpoints: Object.fromEntries(quests.map(([id, quest]) => [id, quest.checkpoints])),
+  };
+}
+
+export function lostQuestNames(recorded: QuestNames, current: QuestNames): string[] {
+  const lostVars = (owner: string, was: Record<string, QuestValueType>, now: Record<string, QuestValueType> | undefined) =>
+    Object.entries(was).filter(([name, type]) => now?.[name] !== type).map(([name, type]) => `${owner} variable ${name} (${type})`);
+  return [
+    ...lostVars('World', recorded.world, current.world),
+    ...Object.entries(recorded.local).flatMap(([id, vars]) => lostVars(`Quest ${id}`, vars, current.local[id])),
+    ...Object.entries(recorded.checkpoints).flatMap(([id, names]) => names.filter((n) => !current.checkpoints[id]?.includes(n)).map((n) => `Quest ${id} checkpoint ${n}`)),
+  ];
 }
 
 function lootGoods(stock: SalvageStock): Record<string, number> {

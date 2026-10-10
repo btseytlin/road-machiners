@@ -99,6 +99,8 @@ export class Travel {
   private pressedAt: number | null = null;
   private requested = false;
   private autoHalted = false;
+  private autoPress = false;
+  private tapHalts = false;
   private remainder = 0;
   private readonly turns = new TurnPreparation();
 
@@ -107,7 +109,7 @@ export class Travel {
   pause(): void {
     this.automatic = false;
     this.requested = false;
-    this.release();
+    this.dropPress();
   }
 
   press(now: number, playing: boolean, followWaypoint: boolean): boolean {
@@ -121,17 +123,16 @@ export class Travel {
 
   pressTurn(playing: boolean, world: World): boolean {
     if (autoRuns(world)) {
-      this.toggleAutoHalt();
+      if (this.pressedAt !== null) return false;
+      this.tapHalts = !this.autoHalted;
+      this.autoHalted = false;
+      this.autoPress = true;
+      this.pressedAt = performance.now();
       return false;
     }
     const order = playerVehicle(world).order;
     const follow = canTravel(world) && order !== null && order.kind !== "brake";
     return this.press(performance.now(), playing, follow);
-  }
-
-  private toggleAutoHalt(): void {
-    this.autoHalted = !this.autoHalted;
-    if (!this.autoHalted) this.pressedAt = performance.now();
   }
 
   autoAllowed(world: World): boolean {
@@ -155,8 +156,19 @@ export class Travel {
     this.pause();
   }
 
-  release(): void {
+  release(now = performance.now()): void {
+    if (this.autoPress && this.tapHalts && !this.isFast(now)) this.autoHalted = true;
+    this.dropPress();
+  }
+
+  private dropPress(): void {
     this.pressedAt = null;
+    this.autoPress = false;
+    this.tapHalts = false;
+  }
+
+  private deciding(now: number): boolean {
+    return this.autoPress && this.tapHalts && this.pressedAt !== null && !this.isFast(now);
   }
 
   isFast(now: number): boolean {
@@ -168,6 +180,7 @@ export class Travel {
   }
 
   updateWorld(world: World, visibleHostile: boolean): void {
+    if (this.autoPress && !autoRuns(world)) this.dropPress();
     const order = playerVehicle(world).order;
     this.update(
       canTravel(world) && !visibleHostile,
@@ -194,20 +207,20 @@ export class Travel {
     this.turns.prepare(world, drive);
   }
 
-  private onRope(world: World): boolean {
-    return isTowed(world) && this.autoAllowed(world);
+  private runsOnItsOwn(world: World, now: number): boolean {
+    return this.autoAllowed(world) && !this.deciding(now);
   }
 
   private wantsTurn(world: World, now: number): boolean {
-    return this.isAdvancing(null, now) || this.onRope(world);
+    return this.isAdvancing(null, now) || this.runsOnItsOwn(world, now);
   }
 
-  takeReady(world: World, drive: Drive, now: number): PreparedTurn | null {
+  takeReady(world: World, drive: Drive, now: number, held = false): PreparedTurn | null {
     if (world.player.state === "dead") {
       this.pause();
       return null;
     }
-    if (!this.wantsTurn(world, now)) return null;
+    if (held || this.deciding(now) || !this.wantsTurn(world, now)) return null;
     this.turns.prepare(world, drive);
     const prepared = this.turns.take(world);
     if (!prepared) return null;
@@ -221,7 +234,7 @@ export class Travel {
   }
 
   prepareNext(world: World, playback: Playback | null, now: number): void {
-    if (playback && (this.shouldAdvance(now) || this.onRope(world)))
+    if (playback && (this.shouldAdvance(now) || this.runsOnItsOwn(world, now)))
       this.turns.prepareFrom(world, playback.nextSnapshot);
   }
 
@@ -236,7 +249,11 @@ export class Travel {
     addRopeFrames(before, world, prepared.result.frames, shown);
     const nextSnapshot = prepared.result.next;
     const result: TurnResult = { ...prepared.result, next: restoreDrive(nextSnapshot) };
-    if (!playerCanAct(world)) this.pause();
+    if (playerCanAct(before) && !playerCanAct(world)) this.pause();
+    else if (!playerCanAct(world)) {
+      this.automatic = false;
+      this.requested = false;
+    }
     const towed = isTowed(before) || isTowed(world);
     const playback: Playback = {
       result,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { fireSpans } from '../../sim/armor';
+import { gunSpans } from '../../sim/armor';
 import { gunOf } from '../../sim/combat';
+import { mountedItems } from '../../sim/grid';
 import { vehicleStats } from '../../sim/stats';
 import { addVehicle, emptyWorld } from '../../sim/testkit';
 import { hoverArcs, iconSpot } from './weaponRange';
@@ -19,7 +20,7 @@ describe('hoverArcs', () => {
     const arcs = hoverArcs(world, raider, weapons);
 
     expect(arcs).toHaveLength(weapons.length);
-    expect(arcs[0].spans).toEqual(fireSpans(weapons[0].def.arc, weapons[0].sides));
+    expect(arcs[0].spans).toEqual(gunSpans(raider, mountedItems(raider, 'weapon')[0]));
     expect(arcs[0].spent).toBe(false);
   });
 

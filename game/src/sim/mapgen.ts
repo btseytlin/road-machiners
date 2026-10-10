@@ -1,4 +1,4 @@
-// Obstacle placement: the baked map's props, then seeded site props and road wrecks.
+// Obstacle placement: the baked map's props, then seeded site props and road wrecks, then the fixed story wrecks.
 
 import { FORTRESS } from '../data/fortress';
 import { FORT_MODELS, type FortModel } from './fortress';
@@ -6,8 +6,9 @@ import { PHYSICS } from '../data/physics';
 import SHAPES from '../data/prop-shapes.json';
 import { REGION } from '../data/region';
 import { BREAKABLE } from '../data/rules';
+import { STORY_WRECKS } from '../data/salvage';
 import { PROP_KINDS, type BakedMap, type BakedProp, type PropKind, type Terrain } from './terrain';
-import { isFortress, siteGap } from './sites';
+import { siteGap } from './sites';
 import { TERRAIN } from '../data/terrain';
 import { randInt, randRange } from './rng';
 import { hulkBoxes } from './body';
@@ -18,14 +19,14 @@ import { dist, segmentDist, type Vec } from './vec';
 const O = REGION.obstacles;
 export function generateObstacles(world: World, map: BakedMap, fixed: Obstacle[]): Obstacle[] {
   const baked = mapObstacles(map);
-  const sites = placeSites();
-  const out = [...baked, ...sites];
+  const out = [...baked];
   for (const o of fixed) {
     if (overlapsAny(out, o.pos, o.r) || !clearOfSites(o.pos, o.r) || !clearOfDecks(o.pos, o.r))
       throw new Error(`Obstacle ${o.id} at ${o.pos.x.toFixed(1)}, ${o.pos.y.toFixed(1)} overlaps a prop, a site or a deck`);
     out.push(o);
   }
   placeRoadWrecks(world, out);
+  for (const w of STORY_WRECKS) out.push({ id: w.id, pos: { ...w.pos }, r: w.r, kind: 'wreck', hulk: { chassisId: w.chassisId, yaw: w.yaw } });
   return out;
 }
 
@@ -49,17 +50,6 @@ const BAKED_ID = new RegExp(`^(rock\\d+|pole-\\d+-\\d+|(${PROP_KINDS.filter((k) 
 
 export function isBakedObstacle(o: Obstacle): boolean {
   return BAKED_ID.test(o.id);
-}
-
-function placeSites(): Obstacle[] {
-  const S = REGION.sites;
-  const out: Obstacle[] = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')].filter((s) => !isFortress(s)).map((s) => ({ id: `site-${s.id}`, pos: { ...s.pos }, r: s.radius, kind: 'site' }));
-  for (const loc of REGION.locations) {
-    if (loc.kind === 'oasis' && !isFortress(loc)) out.push({ id: `pond-${loc.id}`, pos: { ...loc.pos }, r: S.pondRadius, kind: 'water' });
-    if (loc.kind === 'convoy' && !isFortress(loc))
-      S.convoyWrecks.forEach((o, i) => out.push({ id: `cw-${loc.id}-${i}`, pos: { x: loc.pos.x + o.x, y: loc.pos.y + o.y }, r: 0.65, kind: 'wreck' }));
-  }
-  return out;
 }
 
 function placeRoadWrecks(world: World, out: Obstacle[]): void {
@@ -235,6 +225,7 @@ export function propPose(o: Obstacle): PropPose {
   throw new Error(`Obstacle ${o.id} of kind ${o.kind} has no prop model`);
 }
 
+// A kill wreck or story wreck with a hulk lies as its dead truck did. Any other wreck is the generic model, turned by its id.
 function wreckPose(o: Exclude<Obstacle, Landmark>, pos: Vec): PropPose {
   if (o.hulk) return { model: 'hulk', chassisId: o.hulk.chassisId, pos, yaw: o.hulk.yaw, scale: even(1) };
   return { model: 'wreck', pos, yaw: idHash(o.id) * TURN, scale: even(o.r / WRECK_RADIUS) };

@@ -21,6 +21,7 @@ import { planNpcOrders } from './ai';
 import { assignUtilityOrders } from './npc-utility';
 import { applyGodMode, freezeDriving, freezeFire } from './cheats';
 import { assignAutoOrders, dropMagazine, fireWeapons, isHostile, noteEngagements, resolveDestroyed, settleAims } from './combat';
+import { cutLine } from './harpoon';
 import { advanceKnockout, advanceNpcKnockouts, checkDeath, checkKnockout } from './defeat';
 import { healPlayer } from './health';
 import { discoverSites } from './locations';
@@ -28,7 +29,7 @@ import { applyHazards } from './hazard';
 import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
 import { scrapPatch } from './economy';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
-import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
+import { clearPiles, initializeSalvage, renewSalvage, stockOldSpots } from './salvage';
 import { spillDeadRows } from './spill';
 import { fadeCraters } from './craters';
 import { timed } from '../perf';
@@ -40,8 +41,9 @@ import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from
 import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
 import { advanceAid, readyAid } from './aid';
-import type { GridItem, MoveOrder, PartInstance, UtilityOrder, Vehicle, WeaponOrder, World, WorldSettings, WorldSetup, XpSource } from './types';
+import type { GridItem, MoveOrder, PartInstance, Refusal, Rot, UtilityOrder, Vehicle, WeaponOrder, World, WorldSettings, WorldSetup, XpSource } from './types';
 import { defaultSetup, parseSetup, repairSetup } from './settings';
+import { fittingQuestVars, QUESTS, type CarriedQuestVars } from './quests';
 import { canOverdrive, vehicleStats } from './stats';
 import { playerSees, practiceContacts, refreshVision } from './vision';
 import { noteEscape } from './escape';
@@ -99,6 +101,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
       perks: [],
       marked: [],
       rumored: [],
+      notes: [],
       health: RULES.maxHealth,
       fuel: kit.fuel,
       supplies: kit.supplies,
@@ -119,6 +122,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
       beacon: false,
       call: null,
       talked: {},
+      quests: { world: {}, local: {}, session: null, live: null },
       god: false,
       fullLog: false,
       frozen: false,
@@ -141,10 +145,9 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
   };
   world.obstacles = generateObstacles(world, map, openingObstacles(kit.opening, start));
   const truck = makeVehicle(world, {
-    name: kit.name,
     faction: "player",
     chassisId: kit.chassis,
-    parts: kit.parts.map((defId) => ({ defId, wear: 0 })),
+    parts: kit.parts.map((defId) => ({ defId, wear: kit.wear })),
     spares: [],
     cargo: kit.cargo,
     pos: start.pos,
@@ -158,16 +161,22 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
     throw new Error(
       `Player start overlaps ${blocked.map((o) => o.id).join(", ")}`,
     );
+  wearCoreParts(world, truck, kit.wear);
   world.vehicles.push(truck);
   world.player.vehicleId = truck.id;
   initializeSalvage(world);
   setUpOpening(world, truck, kit.opening);
-  world.player.storage = kit.storage.map((defId) => makePart(world, defId, 0));
+  world.player.storage = kit.storage.map((defId) => makePart(world, defId, kit.wear));
   if (populate) spawnInitial(world);
   initializeShops(world);
+  stockOldSpots(world, map);
   refreshVision(world);
   world.events = [];
   return world;
+}
+
+function wearCoreParts(world: World, truck: Vehicle, wear: number): void {
+  for (const item of truck.items) if (item.kind === "part" && partDef(item.part.defId).kind === "core") item.part = makePart(world, item.part.defId, wear);
 }
 
 export function startPose(): { pos: Vec; heading: number } {
@@ -218,13 +227,15 @@ export function update(world: World, fn: (draft: World) => void): World {
 function settleOverdrive(w: World): void {
   if (!w.player.overdrive || canOverdrive(playerVehicle(w))) return;
   w.player.overdrive = false;
-  w.events.push({ t: 'info', text: 'Overdrive cut out: the engine is too worn.' });
+  w.events.push({ t: 'info', note: { id: 'overdriveCutOut' } });
 }
 
-export function actBlock(world: World): string | null {
-  if (world.player.state !== 'active') return 'Knocked out';
-  if (isTowed(world)) return 'Under tow';
-  if (world.player.call) return 'On the radio';
+export type ActBlock = 'knockedOut' | 'towed' | 'onRadio';
+
+export function actBlock(world: World): ActBlock | null {
+  if (world.player.state !== 'active') return 'knockedOut';
+  if (isTowed(world)) return 'towed';
+  if (world.player.call) return 'onRadio';
   return null;
 }
 
@@ -256,6 +267,15 @@ function waitsOnBeacon(world: World): boolean {
   return p.state === 'active' && p.beacon && isAtRest(me) && playerTow(world) === null;
 }
 
+// A player command the sim turns down for a reason the player can fix. The UI shows the refusal in words. Any other
+// error from a command is a bug.
+export class Refused extends Error {
+  constructor(readonly refusal: Refusal) {
+    super(`Refused: ${refusal.id}`);
+  }
+}
+
+// A player command: rejected unless the player is active and not towed, then applied like any update.
 export function playerCommand(world: World, fn: (draft: World) => void): World {
   requireActivePlayer(world);
   return update(world, fn);
@@ -379,7 +399,7 @@ export function setUtilityOrder(world: World, partId: string, order: UtilityOrde
       return;
     }
     const error = utilityOrderError(w, me, partId, order);
-    if (error) throw new Error(error);
+    if (error) throw new Refused(error);
     me.utilityOrders[partId] = order;
   });
 }
@@ -389,6 +409,12 @@ export function reloadWeapon(world: World, weaponId: string): World {
     const mw = vehicleStats(w, playerVehicle(w)).weapons.find((m) => m.part.id === weaponId);
     if (!mw) throw new Error(`Player has no weapon ${weaponId}`);
     dropMagazine(mw.part);
+  });
+}
+
+export function cutPlayerLine(world: World, harpoonId: string): World {
+  return playerCommand(world, (w) => {
+    cutLine(w, playerVehicle(w), harpoonId);
   });
 }
 
@@ -428,7 +454,7 @@ export function hostileToPlayer(world: World, v: Vehicle): boolean {
 }
 
 export type CarriedPart = { defId: string; wear: number; hp: number; rebuilt: boolean };
-export type CarriedItem = ({ kind: 'part'; part: CarriedPart } | { kind: 'good'; good: string }) & { x: number; y: number; rot: 0 | 1 };
+export type CarriedItem = ({ kind: 'part'; part: CarriedPart } | { kind: 'good'; good: string }) & { x: number; y: number; rot: Rot };
 
 export type Carried = {
   seed: number | null;
@@ -444,9 +470,10 @@ export type Carried = {
   fuel: number | null;
   supplies: number | null;
   costBasis: Record<string, number>;
-  truck: { chassisId: string; name: string | null; items: CarriedItem[] } | null;
+  truck: { chassisId: string; items: CarriedItem[] } | null;
   storage: CarriedPart[];
   setup: unknown;
+  quests: CarriedQuestVars;
 };
 
 export type CarryReport = {
@@ -464,6 +491,7 @@ export function carriedWorld(carried: Carried, kit: StartKit, map: BakedMap, fre
   const truckKit = carriedKit(carried, kit, report);
   const world = newWorld(pick(carried.seed, freshSeed()), { ...truckKit, opening: null, autoRepair: true }, map, setup, true, townStart());
   carryPlayer(world, carried);
+  carryQuests(world, carried.quests, report);
   carryTruck(world, carried, carried.truck !== null && truckKit !== kit, report);
   world.player.costBasis = heldBasis(playerVehicle(world), carried.costBasis);
   fitStores(world, playerVehicle(world));
@@ -483,7 +511,7 @@ function carriedKit(carried: Carried, kit: StartKit, report: CarryReport): Start
     report.lost.push(saved.chassisId);
     return kit;
   }
-  return { ...kit, chassis: saved.chassisId, name: pick(saved.name, kit.name), parts: [], storage: [], cargo: {}, costBasis: {} };
+  return { ...kit, chassis: saved.chassisId, parts: [], storage: [], cargo: {}, costBasis: {} };
 }
 
 function pick<T>(value: T | null | undefined, fallback: T): T {
@@ -505,6 +533,12 @@ function carryPlayer(world: World, c: Carried): void {
   for (const skill of SKILL_IDS) p.ranks[skill] = Math.min(MAX_RANK, Math.max(0, Math.floor(pick(c.ranks[skill], 0))));
   for (const source of Object.keys(XP_SOURCES) as XpSource[]) p.xpBySource[source] = pick(c.xpBySource[source], 0);
   carryPerks(world, c.perks);
+}
+
+function carryQuests(world: World, carried: CarriedQuestVars, report: CarryReport): void {
+  const { world: shared, local, lost } = fittingQuestVars(carried, QUESTS);
+  world.player.quests = { world: shared, local, session: null, live: null };
+  report.lost.push(...lost);
 }
 
 function carryPerks(world: World, perks: string[]): void {

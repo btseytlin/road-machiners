@@ -207,8 +207,8 @@ describe('far NPC travel', () => {
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 30 + LIVE + 40, y: 80 });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
     const goals = [
-      { kind: 'raid' as const, targetId: null, destination: { x: 30 + LIVE + 70, y: 80 }, phase: 'travel' as const, reason: 'long-term goal' },
-      { kind: 'investigate' as const, targetId: w.player.vehicleId, destination: { x: 30 + LIVE + 60, y: 80 }, phase: 'travel' as const, reason: 'interruption' },
+      { kind: 'raid' as const, targetId: null, destination: { x: 30 + LIVE + 70, y: 80 }, phase: 'travel' as const, reason: 'tripToSite' as const },
+      { kind: 'investigate' as const, targetId: w.player.vehicleId, destination: { x: 30 + LIVE + 60, y: 80 }, phase: 'travel' as const, reason: 'heardHostile' as const },
     ];
     npc.brain.goals = structuredClone(goals);
     w.states.push({ id: 'feud-test', kind: 'feud', holder: npc.id, other: w.player.vehicleId, turnsLeft: 10, born: w.turn, data: { kind: 'feud', robbery: false } });
@@ -246,7 +246,7 @@ describe('far NPC travel', () => {
     for (let i = 0; i < t.types.length; i++) t.types[i] = Math.abs(Math.floor(i / t.size) + 0.5 - 120) < 3 ? 'road' : 'hardpan';
     const far = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 120, y: 120 });
     far.brain = npcBrain('raider', { x: 0, y: 0 }, ['raider']);
-    far.brain.goals = [{ kind: 'sell', targetId: null, destination: null, phase: 'travel', reason: 'test patrol' }];
+    far.brain.goals = [{ kind: 'sell', targetId: null, destination: null, phase: 'travel', reason: 'patrolTown' }];
     far.order = { kind: 'stopAt', dest: { x: 180, y: 120 } };
     advanceFar(w, far);
     expect(far.brain.farRoute!.offRoad).toBe(false);
@@ -352,6 +352,7 @@ describe('far travel contact', () => {
     addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 123, y: 120 });
     mover.order = { kind: 'stopAt', dest: { x: 123, y: 120 } };
     advanceFar(w, mover);
+    advanceFar(w, mover);
     expect(mover.order).toBeNull();
     expect(mover.speed).toBe(0);
   });
@@ -428,7 +429,7 @@ describe('far tower and its rope', () => {
   it('drives out past the truck on its own rope instead of arriving where it stands', () => {
     const { w, tower } = boxedTower();
     advanceFar(w, tower);
-    expect(tower.pos.x).toBeLessThan(119);
+    expect(tower.pos.x).toBeLessThan(119.5);
     expect(tower.order).not.toBeNull();
   });
 

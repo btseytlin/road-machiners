@@ -18,14 +18,14 @@ export type ClaymoreCrash = { impact: number; own: CrashContact; theirs: CrashCo
 
 export function claymoreOf(part: PartInstance): ClaymoreDef {
   const def = partDef(part.defId);
-  if (def.kind !== 'armor' || !def.claymore) throw new Error(`${def.name} is not a claymore ram`);
+  if (def.kind !== 'armor' || !def.claymore) throw new Error(`${def.id} is not a claymore ram`);
   return def.claymore;
 }
 
 export function armClaymore(v: Vehicle, part: PartInstance): void {
   claymoreOf(part);
   const charge = chargeOf(part);
-  if (charge.armed || charge.reload > 0 || part.hp <= 0) throw new Error(`${v.name} cannot arm claymore ram ${part.id}`);
+  if (charge.armed || charge.reload > 0 || part.hp <= 0) throw new Error(`${v.id} cannot arm claymore ram ${part.id}`);
   charge.armed = true;
 }
 

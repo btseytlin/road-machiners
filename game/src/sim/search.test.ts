@@ -1,27 +1,40 @@
 import { NPCS } from '../data/npcs';
 import { describe, expect, it } from 'vitest';
-import { REGION } from '../data/region';
 import { SALVAGE } from '../data/salvage';
 import { RULES } from '../data/rules';
 import { PERK_NUMBERS, SKILL_EFFECTS } from '../data/skills';
 import { beginSearch, startSearch } from './search';
-import { addVehicle, emptyWorld, npcBrain, practiceOf, testDrive } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, practiceOf, spotWorld, testDrive } from './testkit';
+import { propReach } from './mapgen';
+import { spotTable } from './territory';
 import { goodsCount } from './grid';
+import { suppliesCap } from './stats';
 import { canLoot, canScavenge, lootBlockerHere, salvageListNear, scavenge, takeAllLoot, takeLoot, takeStores } from './locations';
 import { resolveNpcActivities } from './npc-activities';
-import { sitePads } from './sites';
 import { refreshVision } from './vision';
 import { findSpot, gridOf } from './grid';
 import { endTurn, setMoveOrder } from './world';
 import { advanceJobs, isBusy, startAutoRepair } from './jobs';
 import { addGoods } from './inventory';
-import { canTakeAny, collectSalvage, createWreckSalvage, dumpOnPile, emptyHidden, hiddenUnits, isRoadWreck, isSiteStock, renewSalvage, revealTurn, siteLootTable, wreckStockId } from './salvage';
+import { canTakeAny, collectSalvage, createWreckSalvage, dumpOnPile, emptyHidden, hiddenUnits, isRoadWreck, renewSalvage, revealTurn, wreckStockId } from './salvage';
 import { SEARCH, WORK } from '../data/utilities';
 import { TIME } from '../data/time';
 import { cloneWorld } from './world';
 import type { HiddenLoot, Job, SalvageStock, Vehicle, World } from './types';
 import type { Vec } from './vec';
 import { mountedParts } from './grid';
+import { Refused } from './world';
+
+// The refusal a command throws, so a test can check what it names.
+function refusalOf(command: () => unknown): unknown {
+  try {
+    command();
+  } catch (err) {
+    if (err instanceof Refused) return err.refusal;
+    throw err;
+  }
+  throw new Error('The command was not refused');
+}
 
 describe('timed scavenging search', () => {
   it('replaces a running auto patch', () => {
@@ -142,12 +155,12 @@ describe('timed scavenging search', () => {
   });
 
   it('lets an NPC scavenger finish a search job', () => {
-    const w = emptyWorld({ x: 60, y: 60 });
+    const { w, spot } = spotWorld();
+    w.vehicles[0].pos = { x: 60, y: 60 };
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
     for (const key of Object.keys(NPCS)) w.spawnTimer[key] = Number.MAX_SAFE_INTEGER;
-    const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
-    npc.pos = { x: convoy.pos.x + convoy.radius + 1, y: convoy.pos.y };
+    npc.pos = { x: spot.pos.x + propReach(spot) + 1, y: spot.pos.y };
     npc.heading = Math.PI;
     npc.resources!.fuel = 20;
     let cur = w;
@@ -237,18 +250,19 @@ describe('one looter per wreck, for the player', () => {
     beginSearch(w, npc, wreck.id);
     expect(canScavenge(w, wreck.id)).toBe(false);
     expect(lootBlockerHere(w, wreck.id)).toBe(npc);
-    expect(() => scavenge(w, wreck.id)).toThrow(`${npc.name} is looting this wreck`);
-    expect(() => startSearch(w, wreck.id)).toThrow(`${npc.name} is looting this wreck`);
+    const looting = { id: 'looting', by: npc.id, place: 'wreck' };
+    expect(refusalOf(() => scavenge(w, wreck.id))).toEqual(looting);
+    expect(refusalOf(() => startSearch(w, wreck.id))).toEqual(looting);
   });
 
   it('refuses to take from a searched wreck while another driver searches it', () => {
     const { w, wreck, npc } = sharedWreck();
     w.player.scavenged.push(wreck.id);
     beginSearch(w, npc, wreck.id);
-    const error = `${npc.name} is looting this wreck`;
-    expect(() => takeLoot(w, wreck.id, { kind: 'good', good: 'scrap' }, scrapSpot(w))).toThrow(error);
-    expect(() => takeAllLoot(w, wreck.id)).toThrow(error);
-    expect(() => takeStores(w, wreck.id)).toThrow(error);
+    const looting = { id: 'looting', by: npc.id, place: 'wreck' };
+    expect(refusalOf(() => takeLoot(w, wreck.id, { kind: 'good', good: 'scrap' }, scrapSpot(w)))).toEqual(looting);
+    expect(refusalOf(() => takeAllLoot(w, wreck.id))).toEqual(looting);
+    expect(refusalOf(() => takeStores(w, wreck.id))).toEqual(looting);
     expect(wreck.goods.scrap).toBe(SALVAGE.unitsPerTurn * 3);
     expect(wreck.fuel).toBe(2);
   });
@@ -276,7 +290,7 @@ describe('one looter per wreck, for the player', () => {
 
   it('keeps an arriving driver from starting at a wreck the parked player holds', () => {
     const { w, wreck, npc } = sharedWreck();
-    npc.brain!.goals = [{ kind: 'loot', targetId: wreck.id, destination: { ...wreck.pos }, phase: 'travel', reason: 'test loot' }];
+    npc.brain!.goals = [{ kind: 'loot', targetId: wreck.id, destination: { ...wreck.pos }, phase: 'travel', reason: 'lootDowned' }];
     refreshVision(w);
     resolveNpcActivities(w);
     expect(npc.job).toBeNull();
@@ -284,14 +298,14 @@ describe('one looter per wreck, for the player', () => {
     expect(canScavenge(w, wreck.id)).toBe(true);
   });
 
-  it('shares a salvage site with other searchers', () => {
-    const site = REGION.locations.find((l) => l.id === 'podfield')!;
-    const w = emptyWorld({ ...sitePads(site)[0] });
-    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 4 }, parts: [], hidden: emptyHidden() }];
+  it('lets one truck at a time search a loot spot', () => {
+    const { w, spot } = spotWorld();
+    const site = { id: spot.id, pos: spot.pos };
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: propReach(spot), goods: { scrap: 4 }, parts: [], hidden: emptyHidden() }];
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { ...site.pos });
     beginSearch(w, npc, site.id);
-    expect(lootBlockerHere(w, site.id)).toBeNull();
-    expect(canScavenge(w, site.id)).toBe(true);
+    expect(lootBlockerHere(w, site.id)?.id).toBe(npc.id);
+    expect(canScavenge(w, site.id)).toBe(false);
   });
 });
 
@@ -312,9 +326,9 @@ function searchJob(v: Vehicle): Extract<Job, { kind: 'search' }> {
 }
 
 describe('finite hidden salvage', () => {
-  it('rolls site, spot and road wreck stock into hidden, and leaves the revealed loot empty', () => {
-    const w = emptyWorld();
-    const rolled = w.salvage.filter((s) => isSiteStock(s) || isRoadWreck(s));
+  it('rolls spot and road wreck stock into hidden, and leaves the revealed loot empty', () => {
+    const { w, stock } = spotWorld();
+    const rolled = [stock, ...w.salvage.filter((s) => isRoadWreck(s))];
     expect(rolled.length).toBeGreaterThan(0);
     for (const s of rolled) {
       expect(s.goods).toEqual({});
@@ -436,12 +450,12 @@ describe('finite hidden salvage', () => {
   });
 
   it('two searchers on one shared site never take more than its total', () => {
-    const site = REGION.locations.find((l) => l.id === 'podfield')!;
-    const w = emptyWorld({ ...sitePads(site)[0] });
-    w.salvage = [{ ...hiddenStock(site.id, site.pos, { goods: { scrap: 30 }, fuel: 4 }), radius: site.radius }];
+    const { w, spot } = spotWorld();
+    const site = { id: spot.id, pos: spot.pos };
+    w.salvage = [{ ...hiddenStock(site.id, site.pos, { goods: { scrap: 30 }, fuel: 4 }), radius: propReach(spot) }];
     const me = w.vehicles[0];
     me.items = me.items.filter((item) => item.kind === 'part');
-    const npc = addVehicle(w, 'scavengers', 'hauler', ['stockEngine'], { ...sitePads(site)[0] });
+    const npc = addVehicle(w, 'scavengers', 'hauler', ['stockEngine'], { ...me.pos });
     for (let round = 0; round < 40 && hiddenUnits(w.salvage[0]) > 0; round++) {
       if (!me.job) beginSearch(w, me, site.id);
       if (!npc.job) beginSearch(w, npc, site.id);
@@ -476,7 +490,7 @@ describe('finite hidden salvage', () => {
     const s = hiddenStock('wreck950', npc.pos, { goods: { scrap: 6 } });
     w.salvage.push(s);
     expect(canTakeAny(w, npc, s)).toBe(true);
-    npc.brain.goals = [{ kind: 'loot', targetId: s.id, destination: { ...s.pos }, phase: 'travel', reason: 'test loot' }];
+    npc.brain.goals = [{ kind: 'loot', targetId: s.id, destination: { ...s.pos }, phase: 'travel', reason: 'lootOnTheWay' }];
     refreshVision(w);
     resolveNpcActivities(w);
     expect(npc.job).toMatchObject({ kind: 'search', stockId: s.id });
@@ -484,22 +498,23 @@ describe('finite hidden salvage', () => {
     s.hidden = emptyHidden();
     resolveNpcActivities(w);
     expect(npc.brain.goals).toEqual([]);
-    expect(w.events).toContainEqual(expect.objectContaining({ t: 'activity', vehicle: npc.id, reason: 'salvage exhausted' }));
+    expect(w.events).toContainEqual(expect.objectContaining({ t: 'activity', vehicle: npc.id, reason: 'salvageExhausted' }));
   });
 
-  it('restocks a site into hidden, capped against hidden plus revealed', () => {
-    const w = emptyWorld();
-    for (const s of w.salvage) { s.hidden = emptyHidden(); s.goods = {}; s.parts = []; s.fuel = 0; s.supplies = 0; }
+  it('restocks a spot into hidden, capped against hidden plus revealed', () => {
+    const { w, spot } = spotWorld();
+    const full = w.salvage[0];
+    full.hidden = emptyHidden();
+    full.goods = {};
+    full.parts = [];
+    full.fuel = 0;
+    full.supplies = 0;
     w.turn = TIME.turnsPerDay;
     renewSalvage(w);
-    const sites = w.salvage.filter(isSiteStock);
-    expect(sites.some((s) => hiddenUnits(s) > 0)).toBe(true);
-    for (const s of sites) {
-      expect(s.goods).toEqual({});
-      expect(s.parts).toEqual([]);
-    }
-    const full = sites[0];
-    const table = siteLootTable(REGION.locations.find((l) => l.id === full.id)!)!;
+    expect(hiddenUnits(full) > 0).toBe(true);
+    expect(full.goods).toEqual({});
+    expect(full.parts).toEqual([]);
+    const table = spotTable(spot);
     full.hidden = emptyHidden();
     full.goods = { parts: table.parts[1] };
     w.turn = TIME.turnsPerDay * 2;
@@ -530,5 +545,28 @@ describe('finite hidden salvage', () => {
     for (let turn = 0; turn < 10; turn++) { a = endTurn(a, testDrive); b = endTurn(b, testDrive); }
     expect(b.salvage).toEqual(a.salvage);
     expect(b.searchRng).toEqual(a.searchRng);
+  });
+
+  it('searches again past revealed supplies the full tank cannot take', () => {
+    const w = emptyWorld({ x: 30, y: 30 });
+    const me = w.vehicles[0];
+    me.speed = 0;
+    w.player.supplies = suppliesCap(me);
+    const stock = hiddenStock('rich', { x: 30, y: 30 }, { goods: { scrap: SALVAGE.unitsPerTurn * 2 } });
+    stock.supplies = 20;
+    w.salvage.push(stock);
+    w.player.scavenged.push('rich');
+    expect(canScavenge(w, 'rich')).toBe(true);
+    const before = stockTotal(stock) + (goodsCount(me).scrap ?? 0);
+    let next = scavenge(w, 'rich');
+    expect(next.vehicles[0].job).toEqual(expect.objectContaining({ kind: 'search' }));
+    for (let turns = 0; next.vehicles[0].job; turns++) {
+      next = endTurn(next, testDrive);
+      if (turns > 20) throw new Error('search never finished');
+    }
+    const after = next.salvage.find((entry) => entry.id === 'rich')!;
+    expect(after.supplies).toBe(20);
+    expect(next.player.supplies).toBeLessThanOrEqual(suppliesCap(next.vehicles[0]));
+    expect(stockTotal(after) + (goodsCount(next.vehicles[0]).scrap ?? 0)).toBe(before);
   });
 });

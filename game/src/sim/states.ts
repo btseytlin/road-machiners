@@ -9,13 +9,13 @@ import { newId } from './factory';
 import { lootRobbed } from './defeat';
 import { checkPatch, isPatching, breakPatch, lapsePatch, patchWork, settlePatch } from './patch';
 import { practice } from './progress';
+import { checkLootWarning, defendWarned, lapseLootWarning } from './loot-warning';
 import { checkEscort, checkPlayerTow, checkTowPromise, lapseClaim, payEscort } from './tow';
 import { checkTrade, isMeeting } from './economy';
 import { inCombat, isHostile } from './combat';
 import { getResources } from './resources';
 import type { Job, NpcState, StateData, StateEnding, StateKindId, Vehicle, World } from './types';
 import { canVehicleSee } from './vision';
-import { npcName } from './spawn';
 
 export type WorkLeft = { turnsLeft: number; total: number };
 export type Work = WorkLeft & ({ from: 'job'; job: Job } | { from: 'state'; state: NpcState });
@@ -83,6 +83,7 @@ export const STATE_KINDS: Record<StateKindId, StateKind> = {
   strayFire: { refresh: never, check: noCheck, hooks: {}, work: noWork, binds: false },
   aid: { refresh: refreshAid, check: checkAid, hooks: { fulfilled: settleAid }, work: aidWork, binds: true },
   combat: { refresh: never, check: checkCombat, hooks: {}, work: noWork, binds: false },
+  lootWarning: { refresh: never, check: checkLootWarning, hooks: { expired: lapseLootWarning, broken: defendWarned }, work: noWork, binds: false },
 };
 
 function checkCombat(w: World, s: NpcState): StateEnding | null {
@@ -113,7 +114,7 @@ function turnsOf(kind: StateKindId): number | null {
   return STATE_TURNS[kind];
 }
 
-const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea', trade: 'none', revenge: 'none', escort: 'escort', strayFire: 'strayFire', aid: 'aid', combat: 'none' };
+const DATA_KIND: Record<StateKindId, StateData['kind']> = { feud: 'feud', backedOff: 'none', tow: 'tow', turnedDown: 'none', towPromise: 'towPromise', answering: 'none', patch: 'patch', truce: 'none', grievance: 'none', plea: 'plea', trade: 'none', revenge: 'none', escort: 'escort', strayFire: 'strayFire', aid: 'aid', combat: 'none', lootWarning: 'lootWarning' };
 
 export function addState(w: World, kind: StateKindId, holder: string, other: string, data: StateData): NpcState {
   kindOf(kind);
@@ -221,6 +222,11 @@ export function aidData(s: NpcState): Extract<StateData, { kind: 'aid' }> {
   return s.data;
 }
 
+export function lootWarningData(s: NpcState): Extract<StateData, { kind: 'lootWarning' }> {
+  if (s.data.kind !== 'lootWarning') throw new Error(`State ${s.id} holds no loot warning`);
+  return s.data;
+}
+
 export function strayData(s: NpcState): Extract<StateData, { kind: 'strayFire' }> {
   if (s.data.kind !== 'strayFire') throw new Error(`State ${s.id} holds no stray fire`);
   return s.data;
@@ -235,7 +241,7 @@ function payTow(w: World, s: NpcState): void {
   if (towed.brain) forgetClient(tower, s.other);
   towed.speed = 0;
   towed.order = null;
-  if (s.holder === w.player.vehicleId) w.events.push({ t: 'money', amount: tow.fee, reason: `towing ${npcName(towed)}` });
+  if (s.holder === w.player.vehicleId) w.events.push({ t: 'money', amount: tow.fee, reason: { kind: 'towing', vehicle: towed.id } });
   if (s.holder === w.player.vehicleId && tow.waived > 0) practice(w, 'freeTow', tow.waived, null, s.other);
   else w.events.push({ t: 'towDone', by: s.holder, client: s.other, fee: tow.fee });
 }

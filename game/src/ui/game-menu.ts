@@ -1,81 +1,92 @@
-// The Menu button. Its dropdown offers New Game, Save, Load and Help. Save and Load open the slot panels, New Game opens the
-// setup screen, and Help shows the controls. While the dropdown is open it owns the keys and the pointer.
+// The Menu button. Its dropdown offers New Game, Save, Load, Options and Help. Save and Load open the slot panels, New Game
+// opens the setup screen, Options opens the settings with the language, and Help shows the controls. While the dropdown
+// or a panel it opened is up, it owns the keys and the pointer.
 
 import { ERROR_REPORT_URL } from "../config";
+import { bindAttr, setText, unbindAttr } from "../text/language";
+import { t, verbatim, type Msg } from "../text/msg";
 import { el, isBrowserChord, panel, topRight } from "./dom";
 import { versionLabel } from "./hud-readout";
 import { isNewGameOpen, openNewGame, type NewGameActions } from "./new-game";
+import { OptionsPanel } from "./options";
 import { SavePanel, type SavePanelActions } from "./save-panel";
+import type { TipSwitch } from "./tips";
 
 export type GameMenuActions = SavePanelActions & {
   hasSave: () => boolean;
   newGame: NewGameActions;
 };
 
-export type MenuEntry = "new" | "save" | "load" | "help";
+export type MenuEntry = "new" | "save" | "load" | "options" | "tips" | "help";
 
-const ENTRIES: { entry: MenuEntry; label: string }[] = [
-  { entry: "new", label: "New Game" },
-  { entry: "save", label: "Save" },
-  { entry: "load", label: "Load" },
-  { entry: "help", label: "Help" },
+const ENTRIES: { entry: MenuEntry; label: Msg }[] = [
+  { entry: "new", label: t("menu.newGame") },
+  { entry: "save", label: t("menu.save") },
+  { entry: "load", label: t("menu.load") },
+  { entry: "options", label: t("menu.options") },
+  { entry: "tips", label: t("menu.showTips") },
+  { entry: "help", label: t("menu.help") },
 ];
 
-type Control = { keys: string[]; on?: string; does: string };
-type ControlGroup = { title: string; controls: Control[] };
+type KeyCap = string | Msg;
+type Control = { keys: KeyCap[]; on?: Msg; does: Msg };
+type ControlGroup = { title: Msg; controls: Control[] };
+
+const click = t("help.key.click");
 
 export const CONTROLS: ControlGroup[] = [
   {
-    title: "Drive",
+    title: t("help.group.drive"),
     controls: [
-      { keys: ["Click"], on: "ground", does: "Drive by road" },
-      { keys: ["Shift", "Click"], on: "ground", does: "Stop there" },
-      { keys: ["Space"], does: "Drive or pause" },
-      { keys: ["Hold Space"], does: "Fast-forward" },
-      { keys: ["Click"], on: "your truck", does: "Brake" },
-      { keys: ["R"], does: "Manual driving" },
-      { keys: ["P"], does: "Auto patch" },
+      { keys: [click], on: t("help.on.ground"), does: t("help.does.driveByRoad") },
+      { keys: [t("help.key.shift"), click], on: t("help.on.ground"), does: t("help.does.stopThere") },
+      { keys: [t("help.key.space")], does: t("help.does.driveOrPause") },
+      { keys: [t("help.key.holdSpace")], does: t("help.does.fastForward") },
+      { keys: [click], on: t("help.on.yourTruck"), does: t("help.does.brake") },
+      { keys: ["R"], does: t("help.does.manual") },
+      { keys: ["P"], does: t("help.does.autoPatch") },
     ],
   },
   {
-    title: "Places and talk",
+    title: t("help.group.places"),
     controls: [
-      { keys: ["Click"], on: "town or site", does: "Stop at its pad" },
-      { keys: ["E"], on: "pad", does: "Trade, repair or loot" },
-      { keys: ["T"], does: "Radio the inspected truck" },
-      { keys: ["1", "9"], does: "Reply" },
-      { keys: ["H"], does: "Honk" },
+      { keys: [click], on: t("help.on.townOrSite"), does: t("help.does.stopAtPad") },
+      { keys: ["E"], on: t("help.on.pad"), does: t("help.does.padWork") },
+      { keys: ["T"], does: t("help.does.radio") },
+      { keys: ["1", "9"], does: t("help.does.reply") },
+      { keys: ["H"], does: t("help.does.honk") },
     ],
   },
   {
-    title: "Fight",
+    title: t("help.group.fight"),
     controls: [
-      { keys: ["Click"], on: "truck", does: "Inspect or aim" },
-      { keys: ["1", "4"], does: "Pick a weapon" },
-      { keys: ["0"], does: "All weapons" },
-      { keys: ["Q"], does: "Auto fire" },
-      { keys: ["X"], does: "Show weapons" },
+      { keys: [click], on: t("help.on.truck"), does: t("help.does.inspectOrAim") },
+      { keys: ["1", "4"], does: t("help.does.pickWeapon") },
+      { keys: ["0"], does: t("help.does.allWeapons") },
+      { keys: ["Q"], does: t("help.does.autoFire") },
+      { keys: ["X"], does: t("help.does.showWeapons") },
     ],
   },
   {
-    title: "View",
+    title: t("help.group.view"),
     controls: [
-      { keys: ["W", "A", "S", "D"], does: "Pan" },
-      { keys: ["Right drag"], does: "Pan" },
-      { keys: ["Wheel"], does: "Zoom" },
-      { keys: ["F"], does: "Center" },
-      { keys: ["V"], does: "Camera" },
-      { keys: ["M"], does: "Mute" },
-      { keys: ["I"], does: "Inventory" },
-      { keys: ["C"], does: "Character" },
+      { keys: ["W", "A", "S", "D"], does: t("help.does.pan") },
+      { keys: [t("help.key.rightDrag")], does: t("help.does.pan") },
+      { keys: [t("help.key.wheel")], does: t("help.does.zoom") },
+      { keys: ["F"], does: t("help.does.center") },
+      { keys: ["V"], does: t("help.does.camera") },
+      { keys: ["M"], does: t("help.does.mute") },
+      { keys: ["I"], does: t("help.does.inventory") },
+      { keys: ["C"], does: t("help.does.character") },
+      { keys: ["J"], does: t("help.does.journal") },
     ],
   },
 ];
 
 function controlKeys(c: Control): HTMLElement {
-  const range = c.keys.length === 2 && /^\d$/.test(c.keys[0]!) && /^\d$/.test(c.keys[1]!);
-  const cap = (k: string) => el("kbd", { class: "key" }, k);
-  const caps = range ? [cap(c.keys[0]!), el("span", { class: "help-on" }, "to"), cap(c.keys[1]!)] : c.keys.map(cap);
+  const range = c.keys.length === 2 && c.keys.every((k) => typeof k === "string" && /^\d$/.test(k));
+  const cap = (k: KeyCap) => el("kbd", { class: "key" }, typeof k === "string" ? verbatim(k) : k);
+  const caps = range ? [cap(c.keys[0]!), el("span", { class: "help-on" }, t("help.to")), cap(c.keys[1]!)] : c.keys.map(cap);
   return el("span", { class: "help-keys" }, ...caps, ...(c.on ? [el("span", { class: "help-on" }, c.on)] : []));
 }
 
@@ -89,14 +100,14 @@ function controlGroup(group: ControlGroup): HTMLElement {
 }
 
 export function entryEnabled(entry: MenuEntry, busy: boolean, hasSave: boolean): boolean {
-  if (entry === "help") return true;
+  if (entry === "help" || entry === "tips" || entry === "options") return true;
   if (entry === "load") return !busy && hasSave;
   return !busy;
 }
 
-export function entryReason(entry: MenuEntry, busy: boolean, hasSave: boolean): string | null {
+export function entryReason(entry: MenuEntry, busy: boolean, hasSave: boolean): Msg | null {
   if (entryEnabled(entry, busy, hasSave)) return null;
-  return busy ? "Wait for the turn" : "No saves yet";
+  return busy ? t("menu.waitForTurn") : t("save.none");
 }
 
 export class HelpPanel {
@@ -114,10 +125,10 @@ export class HelpPanel {
   open(): void {
     if (this.root) return;
     const root = panel("help dialog");
-    root.setAttribute("aria-label", "Controls");
-    const notes = [versionLabel(), this.setup(), ...(ERROR_REPORT_URL ? ["Game errors are sent to the developers with your save."] : [])];
+    bindAttr(root, "aria-label", t("help.title"));
+    const notes = [verbatim(versionLabel()), verbatim(this.setup()), ...(ERROR_REPORT_URL ? [t("help.errorsSent")] : [])];
     root.append(
-      el("button", { class: "close btn-s", onclick: () => this.close() }, "Close [Esc]"),
+      el("button", { class: "close btn-s", onclick: () => this.close() }, t("menu.closeEsc")),
       el("div", { class: "help-groups" }, ...CONTROLS.map(controlGroup)),
       el("div", { class: "help-notes" }, ...notes.map((note) => el("div", {}, note))),
     );
@@ -143,12 +154,13 @@ export class GameMenu {
   private button = el(
     "button",
     { class: "menu-button", "aria-haspopup": "menu", "aria-expanded": "false", "aria-controls": "game-menu-list", onclick: () => this.toggle() },
-    "Menu",
+    t("menu.menu"),
   ) as HTMLButtonElement;
-  private list = el("div", { id: "game-menu-list", role: "menu", "aria-label": "Menu", hidden: true });
+  private list = el("div", { id: "game-menu-list", role: "menu", "aria-label": t("menu.menu"), hidden: true });
   private items = {} as Record<MenuEntry, HTMLButtonElement>;
   private savePanel: SavePanel;
   private help: HelpPanel;
+  private options = new OptionsPanel(() => this.button.focus());
 
   private readonly onKey = (e: KeyboardEvent) => {
     if (e.code === "Escape") {
@@ -176,11 +188,12 @@ export class GameMenu {
     if (e.relatedTarget instanceof Node && !this.root.contains(e.relatedTarget)) this.closeList(false);
   };
 
-  constructor(private actions: GameMenuActions, private isBusy: () => boolean, setup: () => string) {
+  constructor(private actions: GameMenuActions, private isBusy: () => boolean, setup: () => string, private tips: TipSwitch) {
     this.help = new HelpPanel(setup);
     this.savePanel = new SavePanel(actions);
     for (const { entry, label } of ENTRIES) {
-      const item = el("button", { role: "menuitem", onclick: () => this.choose(entry) }, label) as HTMLButtonElement;
+      const role = entry === "tips" ? "menuitemcheckbox" : "menuitem";
+      const item = el("button", { role, "data-entry": entry, onclick: () => this.choose(entry) }, label) as HTMLButtonElement;
       this.items[entry] = item;
       this.list.append(item);
     }
@@ -189,23 +202,26 @@ export class GameMenu {
   }
 
   isOpen(): boolean {
-    return !this.list.hidden || this.savePanel.isOpen() || isNewGameOpen();
+    return !this.list.hidden || this.savePanel.isOpen() || this.options.isOpen() || isNewGameOpen();
   }
 
   refresh(): void {
     const busy = this.isBusy();
     const saved = this.actions.hasSave();
     for (const { entry } of ENTRIES) this.setReason(this.items[entry], entryReason(entry, busy, saved));
+    const on = this.tips.isOn();
+    this.items.tips.setAttribute("aria-checked", String(on));
+    setText(this.items.tips, t(on ? "menu.showTipsOn" : "menu.showTips"));
   }
 
-  private setReason(item: HTMLButtonElement, reason: string | null): void {
+  private setReason(item: HTMLButtonElement, reason: Msg | null): void {
     if (reason === null) {
       item.removeAttribute("aria-disabled");
-      item.removeAttribute("data-reason");
+      unbindAttr(item, "data-reason");
       return;
     }
     item.setAttribute("aria-disabled", "true");
-    item.setAttribute("data-reason", reason);
+    bindAttr(item, "data-reason", reason);
   }
 
   toggle(): void {
@@ -253,7 +269,11 @@ export class GameMenu {
     this.closeList(false);
     if (entry === "save") this.savePanel.openSave();
     else if (entry === "load") this.savePanel.openLoad();
-    else if (entry === "help") this.help.toggle();
+    else if (entry === "options") this.options.open();
+    else if (entry === "tips") {
+      this.tips.setOn(!this.tips.isOn());
+      this.refresh();
+    } else if (entry === "help") this.help.toggle();
     else this.newGame();
   }
 

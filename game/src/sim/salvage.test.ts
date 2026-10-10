@@ -4,7 +4,7 @@ import { SALVAGE, type LootTable } from '../data/salvage';
 import { TERRITORIES } from '../data/territory';
 import { GOODS } from '../data/goods';
 import { TIME } from '../data/time';
-import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
+import { addVehicle, emptyWorld, npcBrain, spotWorld, testDrive } from './testkit';
 import { resolveDestroyed, wreckVehicle } from './combat';
 import { addGoods, dumpItem, removeGoods } from './inventory';
 import { corePart, findSpot, goodsCount, gridOf, mountedParts } from './grid';
@@ -14,17 +14,20 @@ import { BREAKABLE, RULES } from '../data/rules';
 import { takeAllLoot, takeLoot, takeStores, canScavenge, scavenge } from './locations';
 import {
   breakProp, canTakeAny, claimPile, claimantOf, clearPiles, collectSalvage, createCargoSalvage, hasSalvage, initializeSalvage, isLootTarget, isRoadWreck, lootBlockedError, lootBlocker,
-  isSiteStock, lootClaimedBy, looterOf, renewSalvage, salvageInRange, salvagePlace, salvageUnits, siteLootTable,
+  lootClaimedBy, looterOf, removeStocks, renewSalvage, rollStock, salvageInRange, salvagePlace, salvageUnits, stockOldSpots, oldSpotOf, oldSpotPicks, oldStockId,
   emptyHidden,
 } from './salvage';
+import { FIELD_SPARE_WEAR, OLD_TABLES } from '../data/salvage';
+import { chance, randInt } from './rng';
+import { sampleWeighted } from './npc-loadout';
+import { makePart } from './factory';
 import { knockOutNpc } from './defeat';
-import { SHOPS } from '../data/market';
 import type { NpcActivity, Obstacle, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { propReach } from './mapgen';
 import { dist, type Vec } from './vec';
 import { maxHp } from './wear';
 import { canVehicleSee, grayRadius } from './vision';
-import { siteGap, sitePads } from './sites';
+import { siteGap } from './sites';
 import { isLootSpot, spotTable, territoryAt, territoryOfStock } from './territory';
 import { freeCells } from './grid';
 import { endTurn } from './world';
@@ -112,13 +115,6 @@ describe('player piles', () => {
 });
 
 describe('finite salvage', () => {
-  it('gives a site with a shop no salvage stock', () => {
-    const shopSites = REGION.locations.filter((site) => site.id in SHOPS);
-    expect(shopSites.length).toBeGreaterThan(0);
-    for (const site of shopSites) expect(siteLootTable(site), site.id).toBeNull();
-    expect(REGION.locations.some((site) => siteLootTable(site) !== null)).toBe(true);
-  });
-
   it('leaves overflow for another collector and never duplicates it', () => {
     const w = emptyWorld();
     const a = addVehicle(w, 'scavengers', 'scout', [], { x: 10, y: 10 });
@@ -192,8 +188,7 @@ describe('finite salvage', () => {
     expect(collectSalvage(w, w.vehicles[0], 'test-stock', 100)).toBe(0);
   });
 
-  it('cannot recreate convoy loot by clearing player discovery state', () => {
-    describe('pile claims', () => {
+  describe('pile claims', () => {
   function claimed() {
     const w = emptyWorld({ x: 30, y: 30 });
     w.salvage = [];
@@ -202,7 +197,7 @@ describe('finite salvage', () => {
     const claimant = addVehicle(w, 'raiders', 'scout', [], { x: 34, y: 30 });
     claimant.brain = npcBrain('buggy', claimant.pos, []);
     const pile = createCargoSalvage(w, victim, 1);
-    claimant.brain.goals.push({ kind: 'loot', targetId: pile.id, destination: { ...pile.pos }, phase: 'travel', reason: 'test' });
+    claimant.brain.goals.push({ kind: 'loot', targetId: pile.id, destination: { ...pile.pos }, phase: 'travel', reason: 'tripToSite' });
     claimPile(w, pile, claimant);
     return { w, pile, claimant };
   }
@@ -245,32 +240,29 @@ describe('finite salvage', () => {
   });
 });
 
-const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
-    const w = emptyWorld({ ...sitePads(convoy)[0] });
+  it('cannot recreate spot loot by clearing player discovery state', () => {
+    const { w, spot } = spotWorld();
     w.vehicles[0].items = w.vehicles[0].items.filter((item) => item.kind === 'part' && partDef(item.part.defId).kind === 'core');
     w.player.fuel = 0;
     w.player.supplies = 0;
-    const totalScrap = w.salvage.find((s) => s.id === convoy.id)!.hidden.goods.scrap;
+    const totalScrap = stockOf(w, spot.id).hidden.goods.scrap;
     let next = w;
     let turns = 0;
-    while (canScavenge(next, convoy.id)) {
-      next = scavenge(next, convoy.id);
+    while (canScavenge(next, spot.id)) {
+      next = scavenge(next, spot.id);
       while (next.vehicles[0].job) {
         next = endTurn(next, testDrive);
         if (++turns > 200) throw new Error('search never finished');
       }
-      next = takeAllLoot(next, convoy.id);
+      next = takeAllLoot(next, spot.id);
     }
     next.player.scavenged = [];
-    expect(canScavenge(next, convoy.id)).toBe(false);
+    expect(canScavenge(next, spot.id)).toBe(false);
     expect(goodsCount(next.vehicles[0]).scrap).toBe(totalScrap);
   });
 
-  it('fills a landmark site with loot at world creation', () => {
-    const landmark = REGION.locations.find((site) => siteLootTable(site) === SALVAGE.landmark)!;
-    expect(landmark.kind).toBe('landmark');
-    const w = emptyWorld();
-    const stock = w.salvage.find((s) => s.id === landmark.id)!;
+  it('fills a loot spot with loot at world creation', () => {
+    const { stock } = spotWorld();
     expect(hasSalvage(stock)).toBe(true);
     expect(stock.hidden.goods.parts).toBeGreaterThan(0);
     expect(stock.hidden.fuel).toBeGreaterThanOrEqual(SALVAGE.landmark.fuel[0]);
@@ -319,12 +311,11 @@ const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
 describe('field spare parts', () => {
   it('are mostly worn, so a pristine find is rare', () => {
     const wears: number[] = [];
-    for (let seed = 1; seed <= 40; seed++) {
+    for (let seed = 1; seed <= 400; seed++) {
       const w = emptyWorld();
       w.rngState = seed;
       w.marketRng.rngState = seed * 7919;
-      initializeSalvage(w);
-      for (const stock of w.salvage) wears.push(...stock.hidden.parts.map((p) => p.wear));
+      wears.push(...rollStock(w, SALVAGE.landmark, 'spot', { x: 1, y: 1 }, 1).hidden.parts.map((p) => p.wear));
     }
     const pristine = wears.filter((wear) => wear === 0).length;
     expect(wears.length).toBeGreaterThan(50);
@@ -394,8 +385,6 @@ describe('loot piles', () => {
   });
 });
 
-const convoy = REGION.locations.find((site) => site.kind === 'convoy')!;
-
 function stockOf(w: World, id: string): SalvageStock {
   return w.salvage.find((stock) => stock.id === id)!;
 }
@@ -423,23 +412,21 @@ function runDays(w: World, days: number): void {
   }
 }
 
-describe('site restock', () => {
-  it('refills an emptied site a share at a time, up to the table highs', () => {
-    const w = emptyWorld();
-    const stock = stockOf(w, convoy.id);
+describe('spot restock', () => {
+  it('refills an emptied spot a share at a time, up to the table highs', () => {
+    const { w, stock } = spotWorld();
     emptyStock(stock);
     runDays(w, 1);
     const firstDay = stock.hidden.goods.scrap;
     runDays(w, 365);
-    expect(firstDay).toBeLessThan(SALVAGE.convoy.goods.scrap[1]);
-    expect(stock.hidden.goods.scrap).toBe(SALVAGE.convoy.goods.scrap[1]);
-    expect(stock.hidden.goods.parts).toBe(SALVAGE.convoy.parts[1]);
-    expect(stock.hidden.fuel).toBe(SALVAGE.convoy.fuel[1]);
+    expect(firstDay).toBeLessThan(SALVAGE.landmark.goods.scrap[1]);
+    expect(stock.hidden.goods.scrap).toBe(SALVAGE.landmark.goods.scrap[1]);
+    expect(stock.hidden.goods.parts).toBe(SALVAGE.landmark.parts[1]);
+    expect(stock.hidden.fuel).toBe(SALVAGE.landmark.fuel[1]);
   });
 
   it('refills an emptied spare part slot with one part at a small daily chance', () => {
-    const w = emptyWorld();
-    const stock = stockOf(w, convoy.id);
+    const { w, stock } = spotWorld();
     emptyStock(stock);
     let days = 0;
     while (stock.hidden.parts.length === 0 && days < 1000) {
@@ -451,8 +438,7 @@ describe('site restock', () => {
   });
 
   it('restocks only on the last turn of a day', () => {
-    const w = emptyWorld();
-    const stock = stockOf(w, convoy.id);
+    const { w, stock } = spotWorld();
     emptyStock(stock);
     for (let turn = 1; turn < TIME.turnsPerDay; turn++) {
       w.turn = turn;
@@ -463,11 +449,10 @@ describe('site restock', () => {
   });
 
   it('keeps a count above the table high', () => {
-    const w = emptyWorld();
-    const stock = stockOf(w, convoy.id);
-    stock.goods.parts = SALVAGE.convoy.parts[1] + 5;
+    const { w, stock } = spotWorld();
+    stock.goods.parts = SALVAGE.landmark.parts[1] + 5;
     runDays(w, 1);
-    expect(stock.goods.parts).toBe(SALVAGE.convoy.parts[1] + 5);
+    expect(stock.goods.parts).toBe(SALVAGE.landmark.parts[1] + 5);
   });
 });
 
@@ -642,13 +627,12 @@ describe('who loots a target', () => {
   }
 
   const pickupJob = (pickup: RefitPickup): Vehicle['job'] => ({ kind: 'refit', moves: [], pickup, turnsLeft: 2, total: 2 });
-  const lootGoal = (targetId: string, phase: NpcActivity['phase']): NpcActivity => ({ kind: 'loot', targetId, destination: null, phase, reason: 'test' });
+  const lootGoal = (targetId: string, phase: NpcActivity['phase']): NpcActivity => ({ kind: 'loot', targetId, destination: null, phase, reason: 'tripToSite' });
 
-  it('counts wrecks, piles and knocked-out trucks as loot targets, and never a site or a running truck', () => {
+  it('counts wrecks, piles and knocked-out trucks as loot targets, and never a running truck', () => {
     const { w, stock } = wreckWorld();
     const running = scavenger(w);
     expect(isLootTarget(w, stock.id)).toBe(true);
-    expect(isLootTarget(w, convoy.id)).toBe(false);
     expect(isLootTarget(w, running.id)).toBe(false);
     const { w: dw, buggy } = downedWorld();
     expect(isLootTarget(dw, buggy.id)).toBe(true);
@@ -708,20 +692,12 @@ describe('who loots a target', () => {
     expect(lootBlocker(w, npc, stock.id)).toBeNull();
   });
 
-  it('never gives a site stock a looter', () => {
-    const w = emptyWorld({ ...sitePads(convoy)[0] });
-    const npc = scavenger(w, { ...sitePads(convoy)[0] });
-    npc.job = { kind: 'search', stockId: convoy.id, turnsLeft: 3, total: 3 };
-    expect(looterOf(w, convoy.id)).toBeNull();
-    expect(lootBlocker(w, w.vehicles[0], convoy.id)).toBeNull();
-  });
-
   it('names the looter and what it loots in the error', () => {
     const { w, stock } = wreckWorld();
     const npc = scavenger(w);
-    expect(lootBlockedError(w, npc, stock.id)).toBe(`${npc.name} is looting this wreck`);
+    expect(lootBlockedError(w, npc, stock.id)).toEqual({ id: 'looting', by: npc.id, place: 'wreck' });
     const { w: dw, buggy } = downedWorld();
-    expect(lootBlockedError(dw, npc, buggy.id)).toBe(`${npc.name} is looting this truck`);
+    expect(lootBlockedError(dw, npc, buggy.id)).toEqual({ id: 'looting', by: npc.id, place: 'truck' });
     expect(() => lootBlockedError(w, npc, 'nothing')).toThrow(/nothing/);
   });
 
@@ -801,10 +777,11 @@ describe('territory loot spots', () => {
     expect(w.salvage.some((s) => s.id === 'glass-flats')).toBe(false);
   }, budget(30_000));
 
-  it('keeps the stock of every other site: the landmarks and convoys without a shop (IV6)', async () => {
+  it('keeps no stock under a location id, and renews a day without a throw (IV2)', async () => {
     const w = await realWorld();
-    const sites = w.salvage.filter((s) => isSiteStock(s)).map((s) => s.id);
-    expect(sites.sort()).toEqual(['broken-wing', 'burnt-convoy', 'canyon-bridge', 'podfield', 'ridge-wrecks', 'south-lock']);
+    const ids = new Set(REGION.locations.map((site) => site.id));
+    expect(w.salvage.filter((s) => ids.has(s.id))).toEqual([]);
+    expect(() => runDays(w, 1)).not.toThrow();
   }, budget(30_000));
 
   it('refills an emptied Glass Flats compound over days and never past its table', async () => {
@@ -847,10 +824,9 @@ describe('territory loot spots', () => {
     expect(canScavenge(w, o.id)).toBe(false);
   }, budget(30_000));
 
-  it('leaves road wreck and site stock alone', async () => {
+  it('leaves road wreck stock alone', async () => {
     const w = await realWorld();
-    expect(w.salvage.filter((s) => isSiteStock(s)).length).toBeGreaterThan(0);
-    for (const o of spotsOf(w)) expect(isSiteStock(stockOf(w, o.id))).toBe(false);
+    for (const o of spotsOf(w)) expect(isRoadWreck(stockOf(w, o.id))).toBe(false);
   }, budget(30_000));
 });
 
@@ -872,11 +848,6 @@ describe('salvage place', () => {
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
     addGoods(w, npc, 'scrap', 3);
     expect(salvagePlace(createCargoSalvage(w, npc, 1))).toBe('pile');
-  });
-
-  it('calls a site stock a site', () => {
-    const site = REGION.locations.find((l) => l.id === 'podfield')!;
-    expect(salvagePlace({ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: {}, parts: [], hidden: emptyHidden() })).toBe('site');
   });
 
   it('calls road wrecks and destroyed trucks wrecks', async () => {
@@ -908,7 +879,117 @@ describe('salvage place', () => {
   it('says a looter is looting here at a spot that is no wreck', async () => {
     const w = await realWorld();
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
-    expect(lootBlockedError(w, npc, spotStock(w, 'orchard', 'farmhouse').id)).toBe(`${npc.name} is looting here`);
-    expect(lootBlockedError(w, npc, spotStock(w, 'orchard', 'armyTruck').id)).toBe(`${npc.name} is looting this wreck`);
+    expect(lootBlockedError(w, npc, spotStock(w, 'orchard', 'farmhouse').id)).toEqual({ id: 'looting', by: npc.id, place: 'here' });
+    expect(lootBlockedError(w, npc, spotStock(w, 'orchard', 'armyTruck').id)).toEqual({ id: 'looting', by: npc.id, place: 'wreck' });
   }, 30_000);
 });
+
+describe('old-world loot spots', () => {
+  const picks = oldSpotPicks(TEST_MAP);
+  const oldStocks = (w: World): SalvageStock[] => w.salvage.filter((stock) => oldSpotOf(stock));
+
+  it('gives every pick of the map one stock from its place type table', () => {
+    const w = emptyWorld();
+    expect(oldStocks(w).map((stock) => stock.id)).toEqual(picks.map(oldStockId));
+    for (const p of picks) {
+      const stock = stockOf(w, oldStockId(p));
+      expect(stock.pos).toEqual(p.pos);
+      expect(stock.radius).toBe(p.reach);
+      for (const [good, [, hi]] of Object.entries(OLD_TABLES[p.type].goods)) expect(stock.hidden.goods[good], `${stock.id} ${good}`).toBeLessThanOrEqual(hi);
+    }
+  });
+
+  it('reads a building as a loot spot and a tank hulk as a wreck', () => {
+    const stock = (id: string): SalvageStock => ({ id, pos: { x: 0, y: 0 }, radius: 1, goods: {}, parts: [], hidden: emptyHidden() });
+    expect(salvagePlace(stock('old-hamlet-ruin-12'))).toBe('spot');
+    expect(salvagePlace(stock('old-homestead-silo-3'))).toBe('spot');
+    expect(salvagePlace(stock('old-hulks-tank-40'))).toBe('wreck');
+  });
+
+  it('rolls a rare low-wear car part at the table odds', () => {
+    const table = OLD_TABLES.hulks;
+    const rare = table.rare!;
+    const w = emptyWorld();
+    let rares = 0;
+    const rolls = 2000;
+    for (let k = 0; k < rolls; k++) {
+      const parts = rollStock(w, table, `t${k}`, { x: 0, y: 0 }, 1).hidden.parts.filter((part) => rare.parts.includes(part.defId));
+      rares += parts.length;
+      for (const part of parts) expect(part.wear).toBeLessThanOrEqual(1);
+    }
+    expect(table.spareParts.some((id) => rare.parts.includes(id))).toBe(false);
+    expect(Math.abs(rares / rolls - table.sparePartChance * rare.share)).toBeLessThan(0.015);
+  });
+
+  it('makes the same draws as before for a table with no rare pool', () => {
+    const table: LootTable = { ...SALVAGE.landmark, sparePartChance: 0.5 };
+    for (let k = 0; k < 20; k++) {
+      const a = emptyWorld();
+      a.rngState = 1000 + k;
+      const b = cloneSeeds(a);
+      const rolled = rollStock(a, table, 's', { x: 0, y: 0 }, 1);
+      expect(rolled.hidden).toEqual(rollWithoutRare(b, table).hidden);
+      expect(a.rngState).toBe(b.rngState);
+      expect(a.marketRng.rngState).toBe(b.marketRng.rngState);
+    }
+  });
+
+  it('refills an emptied old spot daily, up to its table highs', () => {
+    const w = emptyWorld();
+    const p = picks.find((pick) => pick.type === 'hulks')!;
+    const stock = stockOf(w, oldStockId(p));
+    emptyStock(stock);
+    runDays(w, 1);
+    const firstDay = stock.hidden.goods.scrap;
+    runDays(w, 365);
+    expect(firstDay).toBeLessThan(OLD_TABLES.hulks.goods.scrap[1]);
+    expect(stock.hidden.goods.scrap).toBe(OLD_TABLES.hulks.goods.scrap[1]);
+    expect(stock.hidden.parts.length).toBeLessThanOrEqual(1);
+    for (const [good, [, hi]] of Object.entries(OLD_TABLES.hulks.goods)) expect(stock.hidden.goods[good]).toBeLessThanOrEqual(hi);
+    expect(stock.hidden.fuel).toBeLessThanOrEqual(OLD_TABLES.hulks.fuel[1]);
+  });
+
+  it('never removes an old spot stock', () => {
+    const w = emptyWorld();
+    expect(() => removeStocks(w, new Set([oldStockId(picks[0])]))).toThrow(/never leaves/);
+    expect(oldStocks(w)).toHaveLength(picks.length);
+  });
+
+  it('stocks a world with none once, and refuses a partial or stray set', () => {
+    const w = emptyWorld();
+    const held = oldStocks(w).map((stock) => structuredClone(stock));
+    stockOldSpots(w, TEST_MAP);
+    expect(oldStocks(w)).toEqual(held);
+    w.salvage = w.salvage.filter((stock) => !oldSpotOf(stock));
+    stockOldSpots(w, TEST_MAP);
+    expect(oldStocks(w).map((stock) => stock.id)).toEqual(picks.map(oldStockId));
+    w.salvage = w.salvage.filter((stock) => stock.id !== oldStockId(picks[0]));
+    expect(() => stockOldSpots(w, TEST_MAP)).toThrow(/partial/);
+    const stray = emptyWorld();
+    stray.salvage.push({ id: 'old-hamlet-ruin-999999', pos: { x: 0, y: 0 }, radius: 1, goods: {}, parts: [], hidden: emptyHidden() });
+    expect(() => stockOldSpots(stray, TEST_MAP)).toThrow(/no old spot/);
+  });
+});
+
+// A world with the same rng streams, for replaying draws.
+function cloneSeeds(w: World): World {
+  const copy = emptyWorld();
+  copy.rngState = w.rngState;
+  copy.marketRng = { ...w.marketRng };
+  copy.nextId = w.nextId;
+  return copy;
+}
+
+// A stock roll as it was before rare pools: goods, the parts good, then one spare part with field wear.
+function rollWithoutRare(w: World, table: LootTable): SalvageStock {
+  const goods: Record<string, number> = {};
+  for (const [good, [lo, hi]] of Object.entries(table.goods)) goods[good] = randInt(w, lo, hi);
+  goods.parts = randInt(w, table.parts[0], table.parts[1]);
+  const parts = [];
+  if (chance(w, table.sparePartChance)) {
+    const defId = table.spareParts[randInt(w, 0, table.spareParts.length - 1)];
+    parts.push(makePart(w, defId, sampleWeighted(w.marketRng, FIELD_SPARE_WEAR)));
+  }
+  const hidden = { goods, parts, fuel: randInt(w, ...table.fuel), supplies: randInt(w, ...table.supplies) };
+  return { id: 's', pos: { x: 0, y: 0 }, radius: 1, goods: {}, parts: [], fuel: 0, supplies: 0, hidden };
+}

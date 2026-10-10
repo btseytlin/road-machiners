@@ -1,3 +1,5 @@
+import { setText } from '../../text/language';
+import type { Msg } from '../../text/msg';
 import * as THREE from 'three';
 import { PHYSICS } from '../../data/physics';
 import { TERRAIN_TYPES, type TerrainType } from '../../data/terrain';
@@ -218,7 +220,7 @@ export class Fx3D {
     this.emissions.missile(p);
   }
 
-  label(p: V3, text: string, color: string, row: number, delayMs: number, readMs: number): void {
+  label(p: V3, text: Msg, color: string, row: number, delayMs: number, readMs: number): void {
     this.pending.push({ left: delayMs / 1000, run: () => this.floatText(p, text, color, readMs, row * LABEL_ROW_PX) });
   }
 
@@ -307,14 +309,14 @@ export class Fx3D {
     this.emissions.breakdown(p, motion);
   }
 
-  floatText(p: V3, text: string, color: string, durationMs: number, rowPx = 0): void {
+  floatText(p: V3, text: Msg, color: string, durationMs: number, rowPx = 0): void {
     const slot = this.texts.find((x) => !x.used) ?? this.texts.reduce((a, b) => (a.age > b.age ? a : b));
     slot.used = true;
     slot.age = 0;
     slot.life = durationMs / 1000;
     slot.rowPx = rowPx;
     slot.pos = { x: p.x, y: p.y, z: p.z };
-    slot.el.textContent = text;
+    setText(slot.el, text);
     slot.el.style.color = color;
     slot.el.style.display = 'block';
     slot.el.style.opacity = '1';

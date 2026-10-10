@@ -1,4 +1,5 @@
 import { CONFIG } from "../config";
+import type { Msg } from '../text/msg';
 import type { UtilityEffectType } from "../data/parts";
 import type { CueId } from "../data/sounds";
 import { PAL } from "../render/palette";
@@ -73,7 +74,7 @@ function showDamage(host: VolleyHost, r: ShotRound, landMs: number, rows: Map<st
   for (const dealt of [...struck, ...r.blast]) damageLabel(host, dealt.vehicle, roundLabel(host.world, dealt.vehicle, dealt.hits, r.crit), rows, landMs);
 }
 
-function damageLabel(host: VolleyHost, vehicleId: string, label: string | null, rows: Map<string, number>, atMs: number): void {
+function damageLabel(host: VolleyHost, vehicleId: string, label: Msg | null, rows: Map<string, number>, atMs: number): void {
   const p = host.eventPoint(vehicleId);
   if (!label || !p) return;
   const row = rows.get(vehicleId) ?? 0;

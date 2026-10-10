@@ -4,8 +4,8 @@ import { REGION } from '../data/region';
 import { corePart } from './grid';
 import { noteHurt, popGoal, pushGoal, replaceBase, resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { sitePads } from './sites';
-import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls } from './testkit';
-import type { NpcActivity, World } from './types';
+import { addLootSpot, addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls } from './testkit';
+import type { NpcActivity, World, GoalReason } from './types';
 
 function scavengerWorld() {
   const w = emptyWorld({ x: 80, y: 80 });
@@ -14,15 +14,15 @@ function scavengerWorld() {
   return { w, npc };
 }
 
-const goal = (kind: NpcActivity['kind'], targetId: string | null, reason = 'test goal'): NpcActivity => ({ kind, targetId, destination: null, phase: 'act', reason });
+const goal = (kind: NpcActivity['kind'], targetId: string | null, reason: GoalReason = 'tripToSite'): NpcActivity => ({ kind, targetId, destination: null, phase: 'act', reason });
 const activityEvents = (w: World) => w.events.filter((e) => e.t === 'activity');
 
 describe('goal stack', () => {
   it('a goal change cancels a job that does not belong to the new top goal', () => {
     const { w, npc } = scavengerWorld();
-    pushGoal(w, npc, goal('scavenge', 'podfield'));
-    npc.job = { kind: 'search', stockId: 'podfield', turnsLeft: 3, total: 3 };
-    pushGoal(w, npc, goal('loot', 'podfield'));
+    pushGoal(w, npc, goal('scavenge', 'farmhouse-1'));
+    npc.job = { kind: 'search', stockId: 'farmhouse-1', turnsLeft: 3, total: 3 };
+    pushGoal(w, npc, goal('loot', 'farmhouse-1'));
     expect(npc.job).not.toBeNull();
     pushGoal(w, npc, goal('resupply', 'bowl'));
     expect(npc.job).toBeNull();
@@ -32,14 +32,14 @@ describe('goal stack', () => {
 
   it('pushes on top, replaces a goal of the same kind, and pops back to the one below', () => {
     const { w, npc } = scavengerWorld();
-    pushGoal(w, npc, goal('scavenge', 'podfield'));
+    pushGoal(w, npc, goal('scavenge', 'farmhouse-1'));
     pushGoal(w, npc, goal('flee', 'a'));
     pushGoal(w, npc, goal('resupply', 'bowl'));
     pushGoal(w, npc, goal('flee', 'b'));
-    expect(npc.brain!.goals.map((g) => `${g.kind}:${g.targetId}`)).toEqual(['scavenge:podfield', 'resupply:bowl', 'flee:b']);
-    expect(popGoal(w, npc, 'safe').kind).toBe('flee');
+    expect(npc.brain!.goals.map((g) => `${g.kind}:${g.targetId}`)).toEqual(['scavenge:farmhouse-1', 'resupply:bowl', 'flee:b']);
+    expect(popGoal(w, npc, 'noHostile').kind).toBe('flee');
     expect(topGoal(npc)?.kind).toBe('resupply');
-    expect(activityEvents(w).at(-1)).toMatchObject({ previous: 'flee', activity: 'resupply', reason: 'safe' });
+    expect(activityEvents(w).at(-1)).toMatchObject({ previous: 'flee', activity: 'resupply', reason: 'noHostile' });
     expect(activityEvents(w)).toHaveLength(5);
   });
 
@@ -52,7 +52,7 @@ describe('goal stack', () => {
 
   it('throws on a missing stack, and on popping an empty one', () => {
     const { w, npc } = scavengerWorld();
-    expect(() => popGoal(w, npc, 'nothing')).toThrow(/no goal/);
+    expect(() => popGoal(w, npc, 'choseNew')).toThrow(/no goal/);
     delete (npc.brain as { goals?: NpcActivity[] }).goals;
     expect(() => topGoal(npc)).toThrow(/goals/);
   });
@@ -62,8 +62,9 @@ describe('goal stack', () => {
     w.vehicles[0].pos = { x: 50, y: 50 };
     forceOption('hostileSeen', 'flee');
     forceOption('resume', 'resume');
-    const site = REGION.locations.find((l) => l.id === 'podfield')!;
-    pushGoal(w, npc, { kind: 'scavenge', targetId: site.id, destination: { ...site.pos }, phase: 'travel', reason: 'search a known salvage site' });
+    const { spot } = addLootSpot(w);
+    const site = { id: spot.id, pos: spot.pos };
+    pushGoal(w, npc, { kind: 'scavenge', targetId: site.id, destination: { ...site.pos }, phase: 'travel', reason: 'searchSite' });
     addVehicle(w, 'raiders', 'buggy', ['mg'], { x: 14, y: 10 });
     corePart(npc, 'cab').hp = 1;
     thinkNpc(w, npc);

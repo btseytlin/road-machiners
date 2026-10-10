@@ -11,7 +11,36 @@ import type { UiHost } from "./host";
 import { makePart } from "../sim/factory";
 import { mountPart } from "../sim/inventory";
 import { wornReload } from "../sim/utility";
-import { HoverHold, UtilityRow, WeaponPanel, aimAtPart, aimMarks, aimsBody, bodyMarks, InspectPin, gunsLabel, aimName, ammoCells, canForceReload, reloadBlock, getWeaponReadout, toggleBodyAim, vehicleMarks, shortStatus, weaponGrid, BLOCK_SHORT, utilityKey, utilitySlots, utilityStatus } from "./weapons";
+import { HoverHold, UtilityRow, WeaponPanel, aimAtPart, aimMarks, aimsBody, bodyMarks, InspectPin, gunsLabel, aimName, ammoCells, canForceReload, reloadBlock, getWeaponReadout, toggleBodyAim, vehicleMarks, shortStatus, weaponGrid, utilityKey, utilitySlots, utilityStatus } from "./weapons";
+import { EN } from "../text/en";
+import type { Msg } from "../text/msg";
+import { partName } from "../text/names";
+import { entryText, resolve } from "../text/resolve";
+
+// The weapon readout with its status in English.
+function readout(world: World, gun: Parameters<typeof getWeaponReadout>[1]) {
+  const r = getWeaponReadout(world, gun);
+  return { ...r, status: en(r.status) };
+}
+
+function utilityEn(...args: Parameters<typeof utilityStatus>) {
+  const s = utilityStatus(...args);
+  return { ...s, text: en(s.text) };
+}
+
+// A vehicle's marks with their words in English.
+function marksEn(world: World, id: string) {
+  const mark = vehicleMarks(world, null).get(id);
+  return mark && { ...mark, weapons: mark.weapons.map((w) => ({ ...w, status: en(w.status) })), job: mark.job && { ...mark.job, label: en(mark.job.label) } };
+}
+
+const jobEn = (world: World, id: string) => marksEn(world, id)?.job;
+
+function en(msg: Msg): string;
+function en(msg: Msg | null | undefined): string | null;
+function en(msg: Msg | null | undefined): string | null {
+  return msg ? resolve(msg, "en") : null;
+}
 
 function createDuel() {
   const world = emptyWorld();
@@ -29,7 +58,7 @@ function createDuel() {
 describe("weapon readout at current positions", () => {
   it("shows the simulation hit chance for a ready weapon", () => {
     const { world, me, target, gun } = createDuel();
-    expect(getWeaponReadout(world, gun)).toEqual({
+    expect(readout(world, gun)).toEqual({
       target,
       status: "ready",
       chance: hitOdds(world, me, gun, target, "body").damageChance,
@@ -41,7 +70,7 @@ describe("weapon readout at current positions", () => {
   it("labels hold fire without a hit chance", () => {
     const { world, me, gun } = createDuel();
     me.weaponOrders = {};
-    expect(getWeaponReadout(world, gun)).toEqual({
+    expect(readout(world, gun)).toEqual({
       target: null,
       status: "hold fire",
       chance: null,
@@ -53,7 +82,7 @@ describe("weapon readout at current positions", () => {
   it("shows remaining cooldown turns without implying a shot can fire", () => {
     const { world, gun } = createDuel();
     gun.part.gun = { cooldown: 2, ammo: 1, reloadWork: 0 };
-    expect(getWeaponReadout(world, gun)).toMatchObject({
+    expect(readout(world, gun)).toMatchObject({
       status: "ready in 2 turns",
       chance: null,
       canFire: false,
@@ -63,7 +92,7 @@ describe("weapon readout at current positions", () => {
   it("shows remaining reload turns for an empty gun", () => {
     const { world, gun } = createDuel();
     gun.part.gun = { cooldown: 0, ammo: 0, reloadWork: 1 };
-    expect(getWeaponReadout(world, gun)).toMatchObject({
+    expect(readout(world, gun)).toMatchObject({
       status: `reloading ${gun.def.reload - 1} ${gun.def.reload - 1 === 1 ? "turn" : "turns"}`,
       chance: null,
       canFire: false,
@@ -74,7 +103,7 @@ describe("weapon readout at current positions", () => {
     const { world, target, gun } = createDuel();
     target.pos.x = 30 + gun.def.range + 1;
     refreshVision(world);
-    expect(getWeaponReadout(world, gun)).toEqual({
+    expect(readout(world, gun)).toEqual({
       target,
       status: "out of range",
       chance: null,
@@ -88,7 +117,7 @@ describe("weapon readout at current positions", () => {
     const forward = { ...gun, def: { ...gun.def, arc: 60 } };
     target.pos = { x: 30, y: 33 };
     refreshVision(world);
-    expect(getWeaponReadout(world, forward)).toMatchObject({
+    expect(readout(world, forward)).toMatchObject({
       status: "out of arc",
       chance: null,
       canFire: false,
@@ -101,7 +130,7 @@ describe("weapon readout at current positions", () => {
       { id: "rock", kind: "rock", pos: { x: 31.5, y: 30 }, r: 0.8 },
     ];
     refreshVision(world);
-    expect(getWeaponReadout(world, gun)).toEqual({
+    expect(readout(world, gun)).toEqual({
       target: null,
       status: "not in sight",
       chance: null,
@@ -124,7 +153,7 @@ describe("weapon readout at current positions", () => {
     const { world, gun } = createDuel();
     gun.part.hp = 0;
     gun.part.gun = { cooldown: 2, ammo: 1, reloadWork: 0 };
-    expect(getWeaponReadout(world, gun)).toMatchObject({
+    expect(readout(world, gun)).toMatchObject({
       status: "disabled",
       chance: null,
       canFire: false,
@@ -134,7 +163,7 @@ describe("weapon readout at current positions", () => {
   it("handles a removed target as hold fire", () => {
     const { world, target, gun } = createDuel();
     world.vehicles = world.vehicles.filter((v) => v !== target);
-    expect(getWeaponReadout(world, gun)).toEqual({
+    expect(readout(world, gun)).toEqual({
       target: null,
       status: "hold fire",
       chance: null,
@@ -171,8 +200,8 @@ describe("aim query", () => {
     const aimed = toggleBodyAim(world, [gun], target);
     expect(aimsBody(aimed, [gun], target.id)).toBe(true);
     expect(bodyMarks(aimed, target.id)).toEqual([1]);
-    expect(gunsLabel(world, null)).toBe("all guns");
-    expect(gunsLabel(world, gun.part.id)).toBe("gun 1");
+    expect(en(gunsLabel(world, null))).toBe("all guns");
+    expect(en(gunsLabel(world, gun.part.id))).toBe("gun 1");
   });
 
   it("moves a part aim to the body, and a second toggle clears it", () => {
@@ -190,7 +219,7 @@ describe("aim query", () => {
 describe("vehicle marks", () => {
   it("shows each aimed weapon on its target with slot, look and status", () => {
     const { world, target, gun } = createDuel();
-    expect(vehicleMarks(world, null).get(target.id)).toEqual({
+    expect(marksEn(world, target.id)).toEqual({
       weapons: [{ slot: 1, look: gun.def.look, status: "ready", ready: true }],
       radio: false,
       job: null,
@@ -214,7 +243,7 @@ describe("vehicle marks", () => {
     const { world, target } = createDuel();
     target.brain = npcBrain("scavenger", target.pos, ["scavenger"]);
     target.job = { kind: "search", stockId: "wreck-1", turnsLeft: 3, total: 4 };
-    expect(vehicleMarks(world, null).get(target.id)?.job).toEqual({ label: "Search", progress: 0.25 });
+    expect(jobEn(world, target.id)).toEqual({ label: "Search", progress: 0.25 });
   });
 
   it("shows the patch a seen NPC does with its progress", () => {
@@ -224,7 +253,7 @@ describe("vehicle marks", () => {
     target.speed = 0;
     me.speed = 0;
     addState(world, "patch", target.id, me.id, { kind: "patch", deal: "free", parts: 1, partIds: [], price: 0, work: 4, workLeft: 3 });
-    expect(vehicleMarks(world, null).get(target.id)?.job).toEqual({ label: `Patch ${me.name}`, progress: 0.25 });
+    expect(jobEn(world, target.id)).toEqual({ label: 'Patch Your truck', progress: 0.25 });
   });
 
   it("shows the patch a seen NPC gets with its patcher", () => {
@@ -234,7 +263,7 @@ describe("vehicle marks", () => {
     target.speed = 0;
     me.speed = 0;
     addState(world, "patch", me.id, target.id, { kind: "patch", deal: "free", parts: 1, partIds: [], price: 0, work: 4, workLeft: 1 });
-    expect(vehicleMarks(world, null).get(target.id)?.job).toEqual({ label: `Patched by ${me.name}`, progress: 0.75 });
+    expect(jobEn(world, target.id)).toEqual({ label: 'Patched by Your truck', progress: 0.75 });
   });
 
   it("marks a seen knocked-out NPC and offers no radio key on it", () => {
@@ -305,8 +334,8 @@ describe("aiming at parts", () => {
 
   it("names the aimed part or a body shot", () => {
     const { target } = createDuel();
-    expect(aimName(target, "body")).toBe("body shot");
-    expect(aimName(target, wheelOf(target).id)).toBe("Wheel");
+    expect(en(aimName(target, "body"))).toBe("body shot");
+    expect(en(aimName(target, wheelOf(target).id))).toBe("Wheel");
   });
 
   it("rejects a part the target does not have", () => {
@@ -397,7 +426,7 @@ describe("weapon panel keys and the turn button", () => {
   function build(auto = false, setup: (w: World) => void = () => {}) {
     ui.children = [];
     win.listeners.clear();
-    vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t), createElementNS: (_ns: string, t: string) => new FakeNode(t), getElementById: () => ui });
+    vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t), createElementNS: (_ns: string, t: string) => new FakeNode(t), createTextNode: (text: string) => Object.assign(new FakeNode("#text"), { children: [text] }), getElementById: () => ui });
     vi.stubGlobal("window", win);
     const { world, gun } = createDuel();
     setup(world);
@@ -412,6 +441,7 @@ describe("weapon panel keys and the turn button", () => {
       pressTurn: vi.fn(),
       releaseTurn: vi.fn(),
       runKey: vi.fn(),
+      searchStock: vi.fn(),
       autoTravel: () => auto,
       getTurnPhase: () => null,
     } satisfies UiHost;
@@ -470,6 +500,29 @@ describe("weapon panel keys and the turn button", () => {
     const applied = host.apply.mock.calls[0][0] as World;
     expect(applied.player.autoFire).toBe(false);
     expect(Object.keys(playerVehicle(applied).weaponOrders)).toHaveLength(0);
+  });
+
+  it("a harpoon shows the cut button in place of reload, enabled only with its line out, and cutting drops the line", () => {
+    let harpoonId = "";
+    const withHarpoon = (out: boolean) => build(false, (w) => {
+      const me = playerVehicle(w);
+      const harpoon = makePart(w, "harpoon", 0);
+      if (!mountPart(w, me, harpoon)) throw new Error("No deck room for the harpoon");
+      harpoonId = harpoon.id;
+      const other = w.vehicles.find((v) => v !== me)!;
+      if (out) w.lines = [{ id: "l1", from: me.id, fromPart: harpoon.id, to: other.id, toPart: mountedParts(other, "engine")[0].id, length: 10, turnsLeft: 5 }];
+    });
+    const cutIn = (b: ReturnType<typeof build>) => b.card(harpoonId).find((n) => n.className === "weapon-cut")!;
+
+    const slack = withHarpoon(false);
+    expect(slack.card(harpoonId).find((n) => n.className === "weapon-reload")).toBeUndefined();
+    expect(cutIn(slack).attrs.has("aria-disabled")).toBe(true);
+
+    const out = withHarpoon(true);
+    expect(cutIn(out).attrs.has("aria-disabled")).toBe(false);
+    cutIn(out).fire("click");
+    const applied = out.host.apply.mock.calls[0][0] as World;
+    expect(applied.lines).toEqual([]);
   });
 
   it("the turn button presses on pointerdown and releases on pointerup of that press", () => {
@@ -554,15 +607,15 @@ describe("disabled reasons on the weapon bar", () => {
 
   afterEach(() => vi.unstubAllGlobals());
 
-  function build(phase: "Moving" | null, setup: (w: World) => void = () => {}) {
+  function build(phase: "moving" | null, setup: (w: World) => void = () => {}) {
     ui.children = [];
-    vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t), createElementNS: (_ns: string, t: string) => new FakeNode(t), getElementById: () => ui });
+    vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t), createTextNode: (text: string) => Object.assign(new FakeNode("#text"), { children: [text] }), createElementNS: (_ns: string, t: string) => new FakeNode(t), getElementById: () => ui });
     vi.stubGlobal("window", new FakeNode("window"));
     const { world } = createDuel();
     setup(world);
     const host = {
       world: () => world, apply: vi.fn(), announce: vi.fn(), selectedWeapon: () => null, selectWeapon: vi.fn(), selectedUtility: () => null, selectUtility: vi.fn(),
-      pressTurn: vi.fn(), releaseTurn: vi.fn(), runKey: vi.fn(), autoTravel: () => false, getTurnPhase: () => phase,
+      searchStock: vi.fn(), pressTurn: vi.fn(), releaseTurn: vi.fn(), runKey: vi.fn(), autoTravel: () => false, getTurnPhase: () => phase,
     } satisfies UiHost;
     new WeaponPanel(host).render();
     const find = (text: string) => (ui.children as FakeNode[]).map((n) => n.find((b) => b.tag === "button" && b.text().includes(text))).find(Boolean)!;
@@ -570,7 +623,7 @@ describe("disabled reasons on the weapon bar", () => {
   }
 
   it("names the turn while it plays on every control", () => {
-    const { host, find } = build("Moving");
+    const { host, find } = build("moving");
     for (const text of ["Auto fire", "All", "Hold"]) {
       expect(find(text).attrs.get("aria-disabled")).toBe("true");
       expect(find(text).attrs.get("title")).toBe("Turn playing");
@@ -586,13 +639,13 @@ describe("disabled reasons on the weapon bar", () => {
 
   it("says why Reload does nothing", () => {
     const { gun } = createDuel();
-    expect(reloadBlock(gun)).toBe("Magazine full");
+    expect(en(reloadBlock(gun))).toBe("Magazine full");
     gun.part.gun = { cooldown: 0, ammo: 0, reloadWork: 0 };
-    expect(reloadBlock(gun)).toBe("Reloading");
+    expect(en(reloadBlock(gun))).toBe("Reloading");
     gun.part.gun = { cooldown: 0, ammo: 1, reloadWork: 0 };
     expect(reloadBlock(gun)).toBeNull();
     gun.part.hp = 0;
-    expect(reloadBlock(gun)).toBe("Broken");
+    expect(en(reloadBlock(gun))).toBe("Broken");
   });
 });
 
@@ -614,8 +667,9 @@ describe("the utility row", () => {
       pressTurn: vi.fn(),
       releaseTurn: vi.fn(),
       runKey: vi.fn(),
+      searchStock: vi.fn(),
       autoTravel: () => false,
-      getTurnPhase: vi.fn<() => "Moving" | null>(() => null),
+      getTurnPhase: vi.fn<() => "moving" | null>(() => null),
     } satisfies UiHost;
     return { world, host, row: new UtilityRow(host), sprout, mortar };
   }
@@ -631,7 +685,7 @@ describe("the utility row", () => {
     const { world, row, sprout } = build();
     row.selectUtility(0);
     expect(world.w.vehicles[0].utilityOrders).toEqual({ [sprout.id]: { kind: "self" } });
-    expect(utilityStatus(world.w, sprout, false)).toEqual({ state: "set", text: "fires this turn" });
+    expect(utilityEn(world.w, sprout, false)).toEqual({ state: "set", text: "fires this turn" });
     row.selectUtility(0);
     expect(world.w.vehicles[0].utilityOrders).toEqual({});
   });
@@ -653,29 +707,29 @@ describe("the utility row", () => {
     row.selectUtility(1);
     expect(host.apply).not.toHaveBeenCalled();
     expect(host.selectUtility).toHaveBeenLastCalledWith(null);
-    expect(utilityStatus(world.w, sprout, false)).toEqual({ state: "recharging", text: "recharging 3 turns", reload: { left: 3, total: wornReload(sprout) } });
-    expect(utilityStatus(world.w, mortar, true)).toEqual({ state: "recharging", text: "recharging 1 turn", reload: { left: 1, total: wornReload(mortar) } });
+    expect(utilityEn(world.w, sprout, false)).toEqual({ state: "recharging", text: "recharging 3 turns", reload: { left: 3, total: wornReload(sprout) } });
+    expect(utilityEn(world.w, mortar, true)).toEqual({ state: "recharging", text: "recharging 1 turn", reload: { left: 1, total: wornReload(mortar) } });
   });
 
   it("shows a broken utility, a ready one, a selected point utility, a set point and an armed claymore", () => {
     const { world, sprout, mortar } = build();
     sprout.hp = 0;
-    expect(utilityStatus(world.w, sprout, false)).toEqual({ state: "blocked", text: "broken" });
-    expect(utilityStatus(world.w, mortar, false)).toEqual({ state: "ready", text: "ready" });
-    expect(utilityStatus(world.w, mortar, true)).toEqual({ state: "aiming", text: "aiming" });
+    expect(utilityEn(world.w, sprout, false)).toEqual({ state: "blocked", text: "broken" });
+    expect(utilityEn(world.w, mortar, false)).toEqual({ state: "ready", text: "ready" });
+    expect(utilityEn(world.w, mortar, true)).toEqual({ state: "aiming", text: "aiming" });
     world.w.vehicles[0].utilityOrders[mortar.id] = { kind: "point", pos: { x: 40, y: 30 } };
-    expect(utilityStatus(world.w, mortar, true)).toEqual({ state: "set", text: "fires this turn" });
+    expect(utilityEn(world.w, mortar, true)).toEqual({ state: "set", text: "fires this turn" });
     const claymore = makePart(world.w, "claymoreRam", 0);
     claymore.charge = { reload: 0, armed: true };
-    expect(utilityStatus(world.w, claymore, false)).toEqual({ state: "armed", text: "armed" });
+    expect(utilityEn(world.w, claymore, false)).toEqual({ state: "armed", text: "armed" });
   });
 
   it("blocks an oil spiller with too little fuel to spill", () => {
-    const { world } = build();
-    const spiller = makePart(world.w, "oilSpiller", 0);
-    mountPart(world.w, world.w.vehicles[0], spiller);
-    world.w.player.fuel = 0;
-    expect(utilityStatus(world.w, spiller, false)).toEqual({ state: "blocked", text: "no fuel" });
+    const w = emptyWorld();
+    const spiller = makePart(w, "oilSpiller", 0);
+    if (!mountPart(w, w.vehicles[0], spiller)) throw new Error("No room for the oil spiller");
+    w.player.fuel = 0;
+    expect(utilityEn(w, spiller, false)).toEqual({ state: "blocked", text: "no fuel" });
   });
 
   it("throws for a passive utility, which has no slot", () => {
@@ -687,7 +741,7 @@ describe("the utility row", () => {
   it("ignores presses while a turn plays and on an empty slot", () => {
     const { host, row } = build();
     row.selectUtility(3);
-    host.getTurnPhase.mockReturnValue("Moving");
+    host.getTurnPhase.mockReturnValue("moving");
     row.selectUtility(0);
     expect(host.apply).not.toHaveBeenCalled();
     expect(host.selectUtility).not.toHaveBeenCalled();
@@ -699,7 +753,7 @@ function harpoonDuel(gap = 5) {
   const me = w.vehicles[0];
   const harpoon = makePart(w, "harpoon", 0);
   if (!mountPart(w, me, harpoon)) throw new Error("No deck room for the harpoon");
-  const target = addVehicle(w, "traders", "hauler", ["stockEngine"], { x: me.pos.x + gap, y: me.pos.y }, Math.PI / 2);
+  const target = addVehicle(w, "traders", "hauler", ["stockEngine"], { x: me.pos.x - gap, y: me.pos.y }, Math.PI / 2);
   refreshVision(w);
   return { w, me, harpoon, target };
 }
@@ -739,23 +793,23 @@ describe("the harpoon on the weapon panel", () => {
 
   it("is a gun slot and not a utility slot", () => {
     const s = harpoonDuel();
-    expect(harpoonGun(s).def.name).toBe("Harpoon");
+    expect(en(partName(s.harpoon.defId))).toBe("Harpoon");
     expect(utilitySlots(s.w)).not.toContain(s.harpoon);
   });
 
   it("reads ready only with its round loaded, and reloading with the turns left after a shot", () => {
     const s = harpoonDuel();
     s.me.weaponOrders[s.harpoon.id] = { targetId: s.target.id, aim: "body" };
-    expect(getWeaponReadout(s.w, harpoonGun(s))).toMatchObject({ status: "ready", canFire: true });
+    expect(readout(s.w, harpoonGun(s))).toMatchObject({ status: "ready", canFire: true });
     s.harpoon.gun = { cooldown: 0, ammo: 0, reloadWork: 1 };
-    expect(getWeaponReadout(s.w, harpoonGun(s))).toMatchObject({ status: "reloading 4 turns", canFire: false, chance: null });
+    expect(readout(s.w, harpoonGun(s))).toMatchObject({ status: "reloading 4 turns", canFire: false, chance: null });
   });
 
   it("marks its target like a gun, with why it waits", () => {
     const far = harpoonDuel(9);
     far.me.weaponOrders[far.harpoon.id] = { targetId: far.target.id, aim: "body" };
     const slot = vehicleStats(far.w, far.me).weapons.findIndex((m) => m.part.id === far.harpoon.id) + 1;
-    expect(vehicleMarks(far.w, null).get(far.target.id)?.weapons).toEqual([{ slot, look: "cannon", status: "out of range", ready: false }]);
+    expect(marksEn(far.w, far.target.id)?.weapons).toEqual([{ slot, look: "cannon", status: "out of range", ready: false }]);
   });
 });
 
@@ -763,7 +817,7 @@ describe("a utility slot's look", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   function renderRow(edit: (w: World, parts: { sprout: string; mortar: string }) => void) {
-    vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t) });
+    vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t), createTextNode: (text: string) => Object.assign(new FakeNode("#text"), { children: [text] }) });
     const w = emptyWorld();
     const me = w.vehicles[0];
     const sprout = makePart(w, "sprout", 0);
@@ -824,17 +878,17 @@ describe("compact gun grid", () => {
 
   it("gives a short state: nothing without an order, a chance, or a short reason", () => {
     const { world, me, gun } = createDuel();
-    expect(shortStatus(gun, getWeaponReadout(world, gun))).toMatch(/^\d+%$/);
+    expect(en(shortStatus(gun, getWeaponReadout(world, gun))) ?? "").toMatch(/^\d+%$/);
     gun.part.gun = { cooldown: 2, ammo: 1, reloadWork: 0 };
-    expect(shortStatus(gun, getWeaponReadout(world, gun))).toBe("wait 2");
+    expect(en(shortStatus(gun, getWeaponReadout(world, gun))) ?? "").toBe("wait 2");
     gun.part.gun = { cooldown: 0, ammo: 0, reloadWork: 1 };
-    expect(shortStatus(gun, getWeaponReadout(world, gun))).toBe(`load ${gun.def.reload - 1}`);
+    expect(en(shortStatus(gun, getWeaponReadout(world, gun))) ?? "").toBe(`load ${gun.def.reload - 1}`);
     gun.part.gun = { cooldown: 0, ammo: 1, reloadWork: 0 };
     gun.part.hp = 0;
-    expect(shortStatus(gun, getWeaponReadout(world, gun))).toBe("broken");
+    expect(en(shortStatus(gun, getWeaponReadout(world, gun))) ?? "").toBe("broken");
     gun.part.hp = 10;
     me.weaponOrders = {};
-    expect(shortStatus(gun, getWeaponReadout(world, gun))).toBe("");
-    for (const word of Object.values(BLOCK_SHORT)) expect(word.length).toBeLessThanOrEqual(7);
+    expect(en(shortStatus(gun, getWeaponReadout(world, gun))) ?? "").toBe("");
+    for (const key of Object.keys(EN).filter((k) => k.startsWith('blockShort.') && !k.endsWith('In'))) expect(entryText('en', key).length).toBeLessThanOrEqual(7);
   });
 });

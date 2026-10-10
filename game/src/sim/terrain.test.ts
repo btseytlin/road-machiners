@@ -1,6 +1,8 @@
 import { START_KITS } from "../data/start";
 import { describe, expect, it } from "vitest";
 import { REGION } from "../data/region";
+import { siteName } from "../text/names";
+import { resolve } from "../text/resolve";
 import { TERRAIN, TERRAIN_TYPES, type DeckSpec, type TerrainTypeId } from "../data/terrain";
 import { route } from "./path";
 import { PHYSICS } from "../data/physics";
@@ -17,6 +19,7 @@ import {
 } from "./terrain";
 import { emptyWorld } from "./testkit";
 import { FORTRESS_SITES } from "../data/fortress";
+import { SHOPS } from "../data/market";
 import { pitDepth } from "./fortress";
 import { ROAD_INDEX } from "./road-index";
 import { dist, polylineDist, type Vec } from "./vec";
@@ -90,19 +93,18 @@ describe('terrain variety', () => {
 });
 
 describe("terrain grid", () => {
-  it('has seventeen distinct Icarus destinations with road access', () => {
+  it('has twelve distinct Icarus destinations with road access', () => {
     const w = worldOnMap();
     expect(w.size).toBe(600);
     expect(w.terrain.heights).toHaveLength(601 * 601);
     expect(REGION.name).toBe('Icarus');
-    expect(REGION.towns.map((town) => town.name)).toEqual(['Bowl', 'Nose']);
-    expect(REGION.locations.map((site) => site.name)).toEqual([
-      'Old Orchard', 'Dustwell', 'The Granary', 'Burnt Convoy', 'Podfield',
-      'Canyon Bridge', 'Glass Flats', 'Green Pit', 'South Lock', 'Ridge Wrecks',
-      'Pump Station', 'Fallen Sun', 'Salvage Yard', 'Broken Wing', 'Scrapjaw Camp', 'Kiln Camp',
+    expect(REGION.towns.map((town) => resolve(siteName(town.id), 'en'))).toEqual(['Bowl', 'Nose']);
+    expect(REGION.locations.map((site) => resolve(siteName(site.id), 'en'))).toEqual([
+      'Old Orchard', 'Dustwell', 'The Granary', 'Glass Flats', 'Green Pit',
+      'Pump Station', 'Fallen Sun', 'Salvage Yard', 'Scrapjaw Camp', 'Kiln Camp',
     ]);
     const sites = [...REGION.towns, ...REGION.locations];
-    expect(new Set(sites.map((site) => site.id)).size).toBe(18);
+    expect(new Set(sites.map((site) => site.id)).size).toBe(12);
     for (const site of sites) {
       expect(site.pos.x).toBeGreaterThan(site.radius);
       expect(site.pos.y).toBeGreaterThan(site.radius);
@@ -111,6 +113,13 @@ describe("terrain grid", () => {
       expect(REGION.roads.some((road) => road.some((p) => dist(p, site.pos) <= ('kind' in site && site.kind === 'territory' ? site.radius : 0.01)))).toBe(true);
     }
     for (let i = 0; i < sites.length; i++) for (let j = i + 1; j < sites.length; j++) expect(dist(sites[i].pos, sites[j].pos)).toBeGreaterThan(60);
+  });
+
+  it('keeps no loot site: every location is a territory, a camp or a shop outpost, and every non-territory one is a fortress (IV1)', () => {
+    const retired = ['burnt-convoy', 'podfield', 'ridge-wrecks', 'canyon-bridge', 'south-lock', 'broken-wing'];
+    for (const id of retired) expect(REGION.locations.some((site) => site.id === id), id).toBe(false);
+    for (const site of REGION.locations.filter((l) => l.kind !== 'territory')) expect(site.id in FORTRESS_SITES, site.id).toBe(true);
+    for (const id of ['dustwell', 'green-pit']) expect(SHOPS[id].kind).toBe('stall');
   });
 
   it('links both towns by northern and southern canyon crossings', () => {
@@ -127,11 +136,10 @@ describe("terrain grid", () => {
       return REGION.roads.some((road) => passes(road, p) && (passes(road, q) || REGION.roads.some((other) => passes(other, q) && road.some((point) => passes(other, point)))));
     };
     for (const [a, b] of [
-      ['bowl', 'orchard'], ['orchard', 'dustwell'], ['dustwell', 'granary'], ['granary', 'burnt-convoy'],
-      ['burnt-convoy', 'podfield'], ['podfield', 'nose'], ['bowl', 'ridge-wrecks'], ['ridge-wrecks', 'south-lock'],
-      ['south-lock', 'green-pit'], ['green-pit', 'glass-flats'], ['glass-flats', 'canyon-bridge'], ['canyon-bridge', 'nose'],
-      ['orchard', 'pump-station'], ['pump-station', 'salvage-yard'], ['salvage-yard', 'podfield'],
-      ['granary', 'pump-station'], ['south-lock', 'pump-station'], ['salvage-yard', 'glass-flats'],
+      ['bowl', 'orchard'], ['orchard', 'dustwell'], ['dustwell', 'granary'], ['granary', 'nose'],
+      ['bowl', 'green-pit'], ['green-pit', 'glass-flats'], ['glass-flats', 'nose'],
+      ['orchard', 'pump-station'], ['pump-station', 'salvage-yard'], ['salvage-yard', 'nose'],
+      ['granary', 'pump-station'], ['green-pit', 'pump-station'], ['salvage-yard', 'glass-flats'],
     ]) expect(connects(a, b), `${a} to ${b}`).toBe(true);
   });
 

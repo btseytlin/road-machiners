@@ -4,9 +4,9 @@ import { REGION } from '../data/region';
 import { START_KITS } from '../data/start';
 import { playerVehicle } from './damage';
 import { siteGap, siteGates, sitePads } from './sites';
-import { isFree, npcName, spawnNpcs } from './spawn';
+import { isFree, spawnNpcs } from './spawn';
 import { territoryPieces } from './territory';
-import { addVehicle, emptyWorld, npcBrain, testDrive } from './testkit';
+import { emptyWorld, testDrive } from './testkit';
 import { dist } from './vec';
 import { endTurn, newWorld } from './world';
 import { TEST_MAP } from '../test/map';
@@ -37,9 +37,10 @@ describe('NPC spawns', () => {
     expect(spots(1337)).not.toEqual(spots(42));
   }, budget(15_000));
 
-  it('starts the whole roster on every seed, with at most one dealt neutral driver per site', () => {
+  it('starts the whole roster on every seed, with the dealt neutral drivers spread evenly over the sites', () => {
     const guards = SPAWN.initial.filter((id) => id === 'convoy').map(() => 'convoyGuard');
     const roster = [...SPAWN.initial, ...SPAWN.startTraffic.templates, ...guards].sort();
+    const neutralSites = REGION.towns.length + REGION.locations.filter((l) => l.kind !== 'camp' && l.kind !== 'territory').length;
     for (let seed = 1; seed <= 20; seed++) {
       const npcs = newWorld(seed * 7919, START_KITS.standard, TEST_MAP, defaultSetup('roaming')).vehicles.filter((v) => v.brain);
       expect(npcs.map((v) => v.brain!.templateId).sort()).toEqual(roster);
@@ -48,9 +49,11 @@ describe('NPC spawns', () => {
         const id = nearestSite(v.pos).id;
         perSite.set(id, (perSite.get(id) ?? 0) + 1);
       }
+      const dealt = [...perSite.values()].reduce((sum, n) => sum + n, 0) - SPAWN.startTraffic.templates.length;
+      const share = Math.ceil(dealt / neutralSites);
       for (const [id, count] of perSite) {
         const traffic = id === SPAWN.startTraffic.town ? SPAWN.startTraffic.templates.length : 0;
-        expect(count).toBeLessThanOrEqual(1 + traffic);
+        expect(count).toBeLessThanOrEqual(share + traffic);
       }
     }
   }, budget(60_000));
@@ -84,28 +87,6 @@ describe('NPC spawns', () => {
       for (const v of spawned) expect(dist(v.pos, playerVehicle(w).pos)).toBeGreaterThanOrEqual(SPAWN.minPlayerDist);
       w.vehicles = w.vehicles.filter((v) => !v.brain);
     }
-  });
-});
-
-describe('npcName', () => {
-  function npcOf(templateId: string, driver: string) {
-    const v = addVehicle(emptyWorld(), 'roamers', 'buggy', ['mg', 'stockEngine'], { x: 5, y: 5 });
-    v.brain = { ...npcBrain(templateId, v.pos, []), driver };
-    return v;
-  }
-
-  it('reads profession and driver name', () => {
-    expect(npcName(npcOf('trader', 'Silas Kane'))).toBe('Trader Silas Kane');
-    expect(npcName(npcOf('roamer', 'Ada Voss'))).toBe('Roamer Ada Voss');
-  });
-
-  it('reads the vehicle name without a brain', () => {
-    const v = addVehicle(emptyWorld(), 'roamers', 'buggy', ['mg', 'stockEngine'], { x: 5, y: 5 });
-    expect(npcName(v)).toBe(v.name);
-  });
-
-  it('throws for an unknown template', () => {
-    expect(() => npcName(npcOf('nope', 'Silas Kane'))).toThrow('Unknown NPC template nope');
   });
 });
 

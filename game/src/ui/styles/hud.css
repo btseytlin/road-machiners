@@ -239,17 +239,20 @@
   gap: var(--space-1);
 }
 #ui .weapon-hold,
-#ui .weapon-reload {
+#ui .weapon-reload,
+#ui .weapon-cut {
   padding: 0;
   font-size: var(--text-caption);
   height: var(--icon-s);
 }
 .weapon-slots.two-rows .weapon-hold,
-.weapon-slots.two-rows .weapon-reload {
+.weapon-slots.two-rows .weapon-reload,
+.weapon-slots.two-rows .weapon-cut {
   height: var(--icon-xs);
   font-size: var(--text-caption);
 }
-.weapon-reload .icon {
+.weapon-reload .icon,
+.weapon-cut .icon {
   width: var(--icon-xs);
   height: var(--icon-xs);
 }

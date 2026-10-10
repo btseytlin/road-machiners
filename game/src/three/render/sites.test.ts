@@ -10,7 +10,7 @@ import { fortressGates, insideCurtain, onFortressRock, pitDepth } from '../../si
 import { GATE_CLEAR, riseFront } from './interiors/nose';
 import { boxDistance, propBoxes, propObstacle, propShape } from '../../sim/mapgen';
 import { noseRocks } from '../../sim/nose';
-import { isFortress, siteGates } from '../../sim/sites';
+import { isFortress } from '../../sim/sites';
 import { deckAt, deckById } from '../../sim/bridge';
 import { heightAt, type Terrain } from '../../sim/terrain';
 import { TEST_MAP } from '../../test/map';
@@ -25,17 +25,11 @@ const { root: sites, movers } = buildSites({ size: 1, heights: [0, 0, 0, 0], typ
 
 const FORTRESS_WALL_TILES = 4;
 const ALL = [...REGION.towns, ...REGION.locations.filter((l) => l.kind !== 'territory')];
-const ABANDONED = ALL.filter((s) => !isFortress(s));
 
 function measureSite(id: string): Vector3 {
   const site = sites.getObjectByName(`landmark-${id}`);
   if (!site) throw new Error(`Missing site ${id}`);
   return new Box3().setFromObject(site).getSize(new Vector3());
-}
-
-function outsideEdge(o: Object3D): boolean {
-  for (let p: Object3D | null = o; p; p = p.parent) if (p.userData.outsideEdge) return true;
-  return false;
 }
 
 describe('landmark scale', () => {
@@ -58,7 +52,8 @@ describe('landmark scale', () => {
     expect(group.userData.homes).toBe(shelters);
   });
 
-  it('draws no edge for a fortress site, whose curtain is baked (IV7)', () => {
+  it('draws no edge for a fortress site, whose curtain is baked, and leaves no site without one (IV7)', () => {
+    expect(ALL.every(isFortress)).toBe(true);
     for (const site of ALL.filter(isFortress)) {
       const group = sites.getObjectByName(`landmark-${site.id}`)!;
       expect(group.userData.wallSections, site.id).toBeUndefined();
@@ -66,33 +61,10 @@ describe('landmark scale', () => {
     }
   });
 
-  it('keeps the edge of every abandoned site', () => {
-    expect(ABANDONED.length).toBeGreaterThan(0);
-    for (const site of ABANDONED) expect(sites.getObjectByName(`landmark-${site.id}`)!.userData.wallSections, site.id).toBeGreaterThan(0);
-  });
-
-  it('closes every abandoned site with shut doors at each gate', () => {
-    for (const site of ABANDONED) {
-      const group = sites.getObjectByName(`landmark-${site.id}`)!;
-      expect(group.userData.wallSections, site.id).toBeGreaterThan(5);
-      expect(group.userData.gates, site.id).toBe(siteGates(site).length);
-      expect(group.userData.doors, site.id).toBe(2 * siteGates(site).length);
-    }
-  });
-
   it('builds no site model for a territory, whose props are baked', () => {
     const territories = REGION.locations.filter((l) => l.kind === 'territory');
     expect(territories.map((l) => l.id)).toContain('glass-flats');
     for (const site of territories) expect(sites.getObjectByName(`landmark-${site.id}`), site.id).toBeUndefined();
-  });
-
-  it('draws each abandoned edge on the collision edge, at most 1.5 tiles thick', () => {
-    for (const site of ABANDONED) {
-      const group = sites.getObjectByName(`landmark-${site.id}`)!;
-      const reach = group.userData.edgeReach as [number, number];
-      expect(reach[0], site.id).toBeGreaterThan(site.radius - 1.5);
-      expect(reach[1], site.id).toBeLessThanOrEqual(site.radius + 0.01);
-    }
   });
 
   it('keeps every pulled-in interior piece at its height over the ground on a slope', () => {
@@ -146,7 +118,7 @@ describe('landmark scale', () => {
       sites.getObjectByName(`landmark-${site.id}`)!.traverse((o) => {
         if (o instanceof Mesh && (o.material as MeshLambertMaterial).color.getHex() === PAL.lamp.on) lit.push(o.position.clone());
       });
-      const faces = isFortress(site) ? fortressGates(site).map((g) => ({ at: g.face, width: g.width })) : siteGates(site).map((g) => ({ at: g, width: REGION.settlement.gateWidth }));
+      const faces = fortressGates(site).map((g) => ({ at: g.face, width: g.width }));
       for (const face of faces) {
         const near = lit.filter((p) => Math.hypot(p.x / S - face.at.x, p.z / S - face.at.y) <= face.width);
         expect(near.length, `${site.id} gate at ${face.at.x.toFixed(0)},${face.at.y.toFixed(0)}`).toBeGreaterThanOrEqual(2);
@@ -559,31 +531,6 @@ describe('landmark scale', () => {
     expect(cockpit).toContain(PAL.lamp.on);
   });
 
-  it('keeps everything a truck could touch inside the edge of an abandoned site', () => {
-    const S = PHYSICS.metersPerTile;
-    const reach = 1;
-    const v = new Vector3();
-    const m = new Matrix4();
-    for (const site of ABANDONED) {
-      let worst = 0;
-      sites.getObjectByName(`landmark-${site.id}`)!.traverse((o) => {
-        if (!(o instanceof Mesh) || outsideEdge(o)) return;
-        o.updateWorldMatrix(true, false);
-        const pos = o.geometry.getAttribute('position');
-        const copies = o instanceof InstancedMesh ? o.count : 1;
-        for (let k = 0; k < copies; k++) {
-          const at = o.matrixWorld.clone();
-          if (o instanceof InstancedMesh) at.multiply(o.getMatrixAt(k, m));
-          for (let i = 0; i < pos.count; i++) {
-            v.fromBufferAttribute(pos, i).applyMatrix4(at);
-            if (v.y > reach * S) continue;
-            worst = Math.max(worst, Math.hypot(v.x / S - site.pos.x, v.z / S - site.pos.y) - site.radius);
-          }
-        }
-      });
-      expect.soft(worst, site.id).toBeLessThanOrEqual(0.05);
-    }
-  });
 });
 
 describe('deck models', () => {

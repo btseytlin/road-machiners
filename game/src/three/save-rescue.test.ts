@@ -138,7 +138,7 @@ describe('rescueSave', () => {
     const save = currentSave() as ReturnType<typeof currentSave> & { world: { setup: unknown } };
     save.world.setup = { mode: 'roaming', settings: { damage: null, fuelUse: 1.5, supplyUse: 40 } };
     slots.put('auto', save);
-    expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(/Invalid world settings/);
+    expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(/badSetup/);
     const rescued = rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 1000)!;
 
     expect(rescued.report.settingsReset).toEqual(['damage', 'supplyUse']);
@@ -152,6 +152,22 @@ describe('rescueSave', () => {
 
     expect(rescued.world.setup).toEqual(defaultSetup('roaming'));
     expect(rescued.report.settingsReset).toEqual([]);
+  });
+
+  it('lists quest variables this version does not declare as lost and closes any open quest', () => {
+    const slots = makeSlots();
+    const save = currentSave() as unknown as { format: unknown; world: SavedWorld & { player: { quests: unknown } } };
+    save.world.mapHash = 'old-map';
+    save.world.player.quests = {
+      world: { retired_flag: true },
+      local: { bowl_hattie: { paid: 'yes' }, gone_quest: { n: 1 } },
+      session: { quest: 'bowl_hattie', checkpoint: 'start.hub', seed: 3 },
+    };
+    slots.put('auto', save);
+    const rescued = rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 2000);
+    expect(rescued?.world.player.quests).toEqual({ world: {}, local: {}, session: null, live: null });
+    expect(rescued?.report.lost).toEqual(expect.arrayContaining(['retired_flag', 'bowl_hattie.paid', 'gone_quest.n']));
+    expect(loadWorld(slots, 'auto', TEST_MAP)?.player.quests.session).toBeNull();
   });
 
   it('gives nothing for an unparsable or non-object save', () => {

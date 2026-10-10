@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { chassisDef, PLAYER_CHASSIS } from '../data/chassis';
-import { openSides, reachedSides } from './armor';
+import { gunSpans } from './armor';
 import { mountedItems } from './grid';
 import { generateNpcLoadout } from './npc-loadout';
-import type { WeaponDef } from '../data/parts';
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
 import { WEATHER } from '../data/weather';
@@ -19,8 +18,9 @@ import { maxHealthOf } from './health';
 import { corePart, goodsCount, gridOf, mountedParts } from './grid';
 import { installSpot, removeAllGoods, spareParts, stowSpot } from './inventory';
 import { clockOf } from './sun';
+import { maxHp } from './wear';
 import { addState, stateOf } from './states';
-import { addVehicle, emptyWorld, npcBrain, startCombat, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls, startCombat, testDrive } from './testkit';
 import type { World } from './types';
 import { dist } from './vec';
 import { stormStrength } from './weather';
@@ -105,7 +105,7 @@ describe('part cheats', () => {
     const w = emptyWorld();
     for (const p of mountedParts(playerVehicle(w))) p.hp = 0;
     const fixed = repairAll(w);
-    for (const p of mountedParts(playerVehicle(fixed))) expect(p.hp).toBe(partDef(p.defId).hp);
+    for (const p of mountedParts(playerVehicle(fixed))) expect(p.hp).toBe(maxHp(p));
   });
 
   it('damages the first mounted part with a def', () => {
@@ -172,7 +172,7 @@ describe('god mode', () => {
     corePart(me, 'cab').hp = 0;
     Object.assign(w.player, { health: 1, fuel: 0, supplies: 0 });
     applyGodMode(w);
-    expect(corePart(me, 'cab').hp).toBe(partDef(corePart(me, 'cab').defId).hp);
+    expect(corePart(me, 'cab').hp).toBe(maxHp(corePart(me, 'cab')));
     expect(w.player).toMatchObject({ health: RULES.maxHealth, fuel: chassisDef(me.chassisId).fuelCap, supplies: RULES.baseSupplies });
   });
 
@@ -216,9 +216,12 @@ describe('frozen NPCs', () => {
   });
 
   it('keeps a hostile NPC from raising a radio call', () => {
+    forceOption('attacked', 'fightBack');
+    forceOption('mugging', 'demand');
     const called = (frozen: boolean): boolean => {
       const start = frozen ? toggleFrozen(emptyWorld()) : emptyWorld();
       const { w } = withSpawned(start, 'gunwagon', true);
+      w.rngState = rngStateForForcedRolls(1);
       return endTurn(w, testDrive).player.call !== null;
     };
     expect(called(false)).toBe(true);
@@ -287,7 +290,7 @@ describe('noclipMove', () => {
 
   it('names an open radio call as what blocks the flight', () => {
     const w = emptyWorld();
-    w.player.call = { with: 'v9', topic: null, node: 'demand', vars: {}, line: { text: 'Dump your cargo.', vars: {} } };
+    w.player.call = { with: 'v9', topic: null, node: 'demand', vars: {}, line: { line: 'demandCargo', vars: {} } };
     expect(() => noclipMove(w, { x: 80, y: 90 })).toThrow('Cannot fly while a radio call is open');
   });
 });
@@ -502,7 +505,7 @@ describe('vehicle cheats', () => {
     hunter.brain = npcBrain('scavenger', hunter.pos, ['scavenger']);
     const prey = addVehicle(w, 'traders', 'scout', ['stockEngine'], { x: 45, y: 30 });
     addState(w, 'feud', hunter.id, prey.id, { kind: 'feud', robbery: false });
-    hunter.brain.goals.push({ kind: 'fight', targetId: prey.id, destination: { ...prey.pos }, phase: 'travel', reason: 'test', worn: { turn: w.turn, condition: 1 } });
+    hunter.brain.goals.push({ kind: 'fight', targetId: prey.id, destination: { ...prey.pos }, phase: 'travel', reason: 'tripToSite', worn: { turn: w.turn, condition: 1 } });
     const next = killVehicles(w, prey.id);
     expect(next.states).toEqual([]);
     const after = endTurn(next, testDrive).vehicles.find((v) => v.id === hunter.id)!;
@@ -515,8 +518,8 @@ describe('vehicle cheats', () => {
     const near = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 35, y: 30 });
     addState(w, 'feud', near.id, w.player.vehicleId, { kind: 'feud', robbery: false });
     expect(nearbyVehicles(w)).toEqual([
-      { id: near.id, name: near.name, templateId: null, faction: 'raiders', distance: 5, hostile: true },
-      { id: far.id, name: far.name, templateId: null, faction: 'traders', distance: 20, hostile: false },
+      { id: near.id, driver: null, templateId: null, faction: 'raiders', distance: 5, hostile: true },
+      { id: far.id, driver: null, templateId: null, faction: 'traders', distance: 20, hostile: false },
     ]);
   });
 });
@@ -552,10 +555,7 @@ describe('randomkit', () => {
       expect(PLAYER_CHASSIS).toContain(me.chassisId);
       const guns = mountedItems(me, 'weapon');
       expect(guns.length).toBeGreaterThan(0);
-      for (const item of guns) {
-        const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
-        expect(openSides(me, item).some((side) => reach.includes(side))).toBe(true);
-      }
+      for (const item of guns) expect(gunSpans(me, item).length).toBeGreaterThan(0);
     }
     expect(chassis.size).toBeGreaterThan(2);
   });

@@ -26,7 +26,7 @@ class FakeNode {
 const ui = new FakeNode("div");
 
 function stubDom(): void {
-  vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t), getElementById: () => ui });
+  vi.stubGlobal("document", { createElement: (t: string) => new FakeNode(t), createTextNode: (text: string) => Object.assign(new FakeNode("#text"), { children: [text] }), getElementById: () => ui });
   vi.stubGlobal("window", { addEventListener: () => {} });
 }
 

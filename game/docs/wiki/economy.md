@@ -26,11 +26,13 @@ A shop holds a finite, random stock of parts and restocks every so many turns. O
 | salvage-yard | stall | scrap, parts | tools | scrap, parts, tools | fuel, supplies | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
 | granary | stall | grain | salt, textiles | grain, salt, textiles | fuel, supplies | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
 | pump-station | stall | batteries | scrap, parts | batteries, scrap, parts | fuel, supplies | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
+| dustwell | stall | water | tools, meds | water, scrap, tools, meds | fuel, supplies | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
+| green-pit | stall | water | salt, textiles | water, grain, salt, textiles | fuel, supplies | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
 <!-- /wiki:shops -->
 
 ## Repair and wear
 
-Repair costs `ECONOMY.repairShare` of a part's value per share of HP restored. A part gains a wear step each time it drops to 0 HP, up to `CONDITION.maxWear`, and each step costs `CONDITION.hpLoss` of its max HP. Wear hits come at `WEAR.chancePerTile` per part per tile driven. A field repair never lifts a part above `REPAIR.fieldCapShare` of its max HP and takes `REPAIR.turnsPerPart` turns per unit of parts. A roadside patch gives `PATCH.share` of max HP.
+Repair costs `ECONOMY.repairShare` of a part's value per share of HP restored. A part gains a wear step each time it drops to 0 HP, up to `CONDITION.maxWear`, and each step costs `CONDITION.stepLoss` of its max HP and of its job stats. Wear hits come at `WEAR.chancePerTile` per part per tile driven. A field repair never lifts a part above `REPAIR.fieldCapShare` of its max HP and takes `REPAIR.turnsPerPart` turns per unit of parts. A roadside patch gives `PATCH.share` of max HP.
 
 ## Contracts
 
@@ -57,7 +59,7 @@ The player's truck pays no upkeep. NPC drivers pay under `NPC_UPKEEP`.
 | `ECONOMY.supplyPrice.supplies` | 167 |
 | `ECONOMY.repairShare` | 0.85 |
 | `CONDITION.maxWear` | 4 |
-| `CONDITION.hpLoss` | 0.1 |
+| `CONDITION.stepLoss` | 0.027 |
 | `WEAR.chancePerTile` | 0.00055 |
 | `REPAIR.fieldCapShare` | 0.7 |
 | `REPAIR.turnsPerPart` | 2 |

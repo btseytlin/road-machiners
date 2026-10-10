@@ -1,11 +1,12 @@
 // The player's truck switches (manual driving, auto patch, overdrive, headlights, dousing the engine) and the E-key context action.
 
+import type { Msg } from '../text/msg';
 import { readyAid, startAid } from "../sim/aid";
 import { playerVehicle } from "../sim/damage";
 import { canDouse, douseEngine } from "../sim/engine-heat";
 import { isBusy } from "../sim/jobs";
 import { canOverdrive, inOverdrive } from "../sim/stats";
-import { canLoot, canScavenge, canUseOasis, scavenge, useOasis } from "../sim/locations";
+import { canLoot, canScavenge, scavenge } from "../sim/locations";
 import { shopAt } from "../sim/market";
 import type { World } from "../sim/types";
 import { playerCanAct, setAutoRepair, setDirect, setHeadlights, setOverdrive } from "../sim/world";
@@ -65,7 +66,7 @@ export type ContextHost = {
   playing: () => boolean;
   apply: (next: World) => void;
   pushEvents: () => void;
-  note: (text: string) => void;
+  note: (text: Msg) => void;
   openTrade: (npcId: string) => void;
   openTown: () => void;
   openDowned: (vehicleId: string) => void;
@@ -102,7 +103,6 @@ export class TruckContext {
       trade: () => 'id' in target && h.openTrade(target.id),
       shop: () => shopAt(h.world()) && h.openTown(),
       downed: () => 'id' in target && h.openDowned(target.id),
-      oasis: () => this.refill(),
       stock: () => 'id' in target && this.searchStock(target.id, action.combat),
       loot: () => 'id' in target && this.lootStock(target.id),
       empty: () => undefined,
@@ -117,14 +117,7 @@ export class TruckContext {
     this.host.pushEvents();
   }
 
-  private refill(): void {
-    const w = this.host.world();
-    if (isBusy(playerVehicle(w)) || !canUseOasis(w)) return;
-    this.host.apply(useOasis(w));
-    this.host.pushEvents();
-  }
-
-  private searchStock(stockId: string, combat: number | undefined): void {
+  searchStock(stockId: string, combat?: number): void {
     const w = this.host.world();
     if (isBusy(playerVehicle(w))) return;
     if (combat !== undefined) return;
