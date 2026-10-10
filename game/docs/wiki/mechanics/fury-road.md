@@ -21,7 +21,7 @@ A mode that turns on `traffic` or `rescue` needs a map with towns, so a new worl
 
 Fury Road plays on its own generated map, never on Icarus. The world seed builds the land. North in this mode is map north, which the fixed camera draws from the bottom left of the screen toward the top right, about 27° above the horizontal. The road's height rises and falls under the road grade.
 
-Each stretch bends once. The road runs straight for 60 tiles after each outpost and before the next one, so the forts, closures and window overlaps stand on straight road. Between them it swings to one side and back: 16 to 36 tiles off its line, to a side drawn from the seed, over two cosine ramps of about 95 tiles each. One stretch in five stays straight. The heading stays within 35° of north, so on screen the road always climbs to the right, between about 8° and 60° above the horizontal, and no bend is tighter than a radius of 40 tiles. The numbers live in `HIGHWAY.road.bend`.
+Each stretch bends once. The road runs straight for 60 tiles after each outpost and before the next one, so the forts, closures and window overlaps stand on straight road. Between them it swings to one side and back: 16 to 36 tiles off its line, to a side drawn from the seed, over two cosine ramps of about 95 tiles each. One stretch in five stays straight. The heading stays within 35° of north, so on screen the road always climbs to the right, between about 8° and 60° above the horizontal, and no bend is tighter than a radius of 40 tiles. The bend numbers live in `HIGHWAY`.
 
 - The road is one carriageway of four northbound lanes, 2 tiles (8 m) each, with centers 1 and 3 tiles each side of the middle and a 1-tile shoulder, 10 tiles (40 m) of asphalt in all. Three dashed dividers and two solid edge lines mark it, with no middle line.
 - A flat verge of hardpan and sand runs 13 tiles beside the asphalt on each side, so the drivable corridor is 36 tiles (144 m) wide: room for a full-speed U-turn and for a fight at gun range. Hardpan is barely slower than asphalt, so a route through a bend takes the racing line on the inside verge. Only poles, the odd ditched car and billboards stand near it. Past the verge come badlands of gravel, scrub and scree with rocks, crags and dead trees, then a ridge too steep to climb.
@@ -77,7 +77,7 @@ Each stretch plans its groups: their sizes and gear level from its wave, each tr
 
 Every stretch past 8 repeats stretch 8, so danger rises for 8 stretches and then holds.
 
-The pool holds every NPC template, so a group mixes every kind of vehicle and driver. Stretches 1 and 2 draw buggies, couriers, scavengers, roamers and traders. Stretches 3 to 5 add gunwagons, vultures, mercs and Bowl farmers, and from stretch 6 Nose army trucks, convoys and convoy guards join. Each truck takes its own template's loadout at the group's gear level. A new template must join `FURY_ROAD.pool`, and a test fails until it does.
+The pool holds every NPC template, so a group mixes every kind of vehicle and driver. Stretches 1 and 2 draw buggies, couriers, scavengers, roamers and traders. Stretches 3 to 5 add gunwagons, vultures, mercs and Bowl farmers, and from stretch 6 Nose army trucks, convoys and convoy guards join. Each truck takes its own template's loadout at the group's gear level. A new template must join the pool in `FURY_ROAD`, and a test fails until it does.
 
 A group comes from ahead, behind, the left or the right, never from the side of the group before it:
 
