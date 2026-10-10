@@ -13,14 +13,17 @@ const CHANGE = 'CHANGE:';
 const PROPOSAL_HEADING = '## Proposed change';
 const PREVIOUS_HEADING = '## Previous period';
 export const reviewPendingPath = (factoryHome: string): string => join(factoryHome, 'review-pending');
+export const reviewPublishPath = (factoryHome: string): string => join(factoryHome, 'waste-review-publish.json');
 
 export type Brief = { bottleneck: string; change: string | null };
+type Publishing = { from: string; to: string; issue: number; bottleneck: string; proposal: string };
 
 export async function runStage(ctx: Ctx): Promise<void> {
   const to = ctx.now();
   const from = periodStart(ctx, to);
+  const publishing = readPublishing(ctx.cfg.home, from);
+  if (publishing !== null) return finishPublish(ctx, publishing);
   const before = new Date(from.getTime() - (to.getTime() - from.getTime()));
-  updateState(ctx.statePath, (state) => ({ ...state, lastWasteReview: to.toISOString() }));
   const lines = readLedger(ctx.cfg.home, before);
   const computed = wasteNumbers(lines, from, to);
   const numbers = `${formatNumbers(computed)}\n\n${PREVIOUS_HEADING}\n\n${formatNumbers(wasteNumbers(lines, before, from))}`;
@@ -34,7 +37,7 @@ export async function runStage(ctx: Ctx): Promise<void> {
   await writeInputs(ctx, home, computed.issues.map((item) => item.issue));
   await runReviewAgent(ctx, dir);
   const brief = parseBrief(readOutput(home, 'brief.md'));
-  await publish(ctx, to, numbers, brief);
+  await publish(ctx, from, to, numbers, brief);
   rmSync(dir, { recursive: true, force: true });
 }
 
@@ -82,12 +85,29 @@ function parseChange(lines: string[]): string {
   return change;
 }
 
-async function publish(ctx: Ctx, to: Date, numbers: string, brief: Brief): Promise<void> {
-  const day = to.toISOString().slice(0, 10);
+function readPublishing(factoryHome: string, from: Date): Publishing | null {
+  const path = reviewPublishPath(factoryHome);
+  if (!existsSync(path)) return null;
+  const publishing = JSON.parse(readFileSync(path, 'utf8')) as Publishing;
+  if (publishing.from === from.toISOString()) return publishing;
+  rmSync(path);
+  return null;
+}
+
+async function publish(ctx: Ctx, from: Date, to: Date, numbers: string, brief: Brief): Promise<void> {
   const proposal = brief.change === null ? 'No change proposed.' : brief.change;
   const body = `${numbers}\n\n## Bottleneck\n\n${brief.bottleneck}\n\n${PROPOSAL_HEADING}\n\n${proposal}`;
-  const issue = await ctx.github.createIssue(`Factory review ${day}`, body, [WASTE_LABEL]);
+  const issue = await ctx.github.createIssue(`Factory review ${to.toISOString().slice(0, 10)}`, body, [WASTE_LABEL]);
+  const publishing: Publishing = { from: from.toISOString(), to: to.toISOString(), issue, bottleneck: brief.bottleneck, proposal };
+  writeFileSync(reviewPublishPath(ctx.cfg.home), `${JSON.stringify(publishing)}\n`);
+  await finishPublish(ctx, publishing);
+}
+
+async function finishPublish(ctx: Ctx, { to, issue, bottleneck, proposal }: Publishing): Promise<void> {
   await ctx.github.close(issue, 'completed');
-  appendFileSync(reviewsPath(ctx.cfg.home), `## ${day}, #${issue}\n\nBottleneck: ${brief.bottleneck}\n\nProposed change: ${proposal}\n\n`);
+  const heading = `## ${to.slice(0, 10)}, #${issue}\n`;
+  if (!earlierReviews(ctx.cfg.home).includes(heading)) appendFileSync(reviewsPath(ctx.cfg.home), `${heading}\nBottleneck: ${bottleneck}\n\nProposed change: ${proposal}\n\n`);
   writeFileSync(reviewPendingPath(ctx.cfg.home), `#${issue} https://github.com/${ctx.cfg.repo}/issues/${issue}\n`);
+  updateState(ctx.statePath, (state) => ({ ...state, lastWasteReview: to }));
+  rmSync(reviewPublishPath(ctx.cfg.home), { force: true });
 }
