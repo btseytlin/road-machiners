@@ -69,7 +69,7 @@ All of them run in `npm test` and `npm run typecheck`. Together the text tests t
 
 ### The layout check
 
-`npm run layout` runs `scripts/layout-check.mjs` against the dev server. It boots one new game on seed 4242 through `?seed=` on the GPU, switches the language live, and in English, Russian and pseudo at 1280×720 and 700×800 it opens twelve screens: the menu, the log with forty long lines, the inventory with an item card, the shop, the market, the trucks tab, a radio call on the hub and on a deal, the help guide, the character sheet, the save panel and the Options panel. `src/ui/dom.ts` measures each one and reports:
+`npm run layout` runs `scripts/layout-check.mjs` against the dev server. It boots one new game on seed 4242 through `?seed=` on the GPU, switches the language live, and in English, Russian and pseudo at 1280×720 and 700×800 it opens fourteen screens: the menu, the log with forty long lines, the inventory with an item card, the shop, the market, the trucks tab, a radio call on the hub and on a deal, the help guide, the character sheet, the save panel, the Options panel and the inspector on an armed and on an unarmed NPC. The inspector is also checked at 1440×900, where its panel is tall and stacks. `src/ui/dom.ts` measures each one and reports:
 
 - `page-overflow`: the page scrolls sideways.
 - `clipped-text`: text overflows a box that clips it. Ellipsis passes only with the full text in a title.

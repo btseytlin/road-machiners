@@ -257,11 +257,11 @@ Use a shared piece before writing a new rule. A screen may add its own layout to
 1. Decision: fight, talk or leave, and if I fight, where do I aim.
 2. Key facts: who it is and its stance, my chance on it, its chance on me, and the drawing for aiming. Supporting facts: truck type, faction, motion, activity and states. Reference: the causes of each chance, in the tooltip on the chance. Distance is left out, because it changes no choice here and range already shows in the chances and their causes.
 3. Surface: the cursor card, in the right column. It has the radio's width and right edge, and fills the space between the system row and the radio with one HUD gap to each.
-4. Grid: the head row holds the name, the truck type and faction in muted ink, and the stance tag at the right edge. The state line under it starts with Parked or Moving and the speed, then the activity and the states. Below, the drawing takes the left 3/5 and the two lists the right 2/5.
+4. Grid: the head row holds the name, the truck type and faction in muted ink, and the stance tag at the right edge. The state line under it starts with Parked or Moving and the speed, then the activity and the states. Below, a short panel puts the drawing in the left 3/5 and the two lists in the right 2/5. A tall panel (aspect ratio 7/10 or narrower and 300 px or more of content height) stacks them: the drawing at full width on top, then You and Them side by side in a strip below. The panel's own shape picks the layout, so every truck gets the same column edges.
 5. Lists: the drawing is the main content, so it takes the wide column. The chances are supporting, so they take the narrow one. You sits in a well with a neutral edge, and Them in a well with a danger edge. One line per gun: your key for the gun, the gun's name in caption size, then the chance. A long name ends in "…" and shows in full on hover.
 6. Color: hostility only in the tag. Chances by value: 50% and up brighter, 0% faint, the enemy's in danger ink. Healthy parts stay neutral, and only damage takes color.
 7. Type: four roles. Title for the name, body for words, caption for list heads, keys and gun names, mono for chances.
-8. Tooltip: hovering a chance opens Base, then one row per cause in percent, so the rows add up to the chance. It opens over the drawing, never over the lists.
+8. Tooltip: hovering a chance opens Base, then one row per cause in percent, so the rows add up to the chance. It opens over the drawing in both layouts, never over the lists.
 
 ### Worked example: the help panel
 
