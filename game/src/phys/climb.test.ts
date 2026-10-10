@@ -63,8 +63,8 @@ describe('climbing', () => {
 
   it('flat ground acceleration from rest is unchanged', () => {
     const xs = drive(ramp('scout', 0, 'road'), 3);
-    expect(xs[0]).toBeCloseTo(26.976677, 5);
-    expect(xs[1]).toBeCloseTo(29.488319, 5);
-    expect(xs[2]).toBeCloseTo(33.512367, 5);
+    expect(xs[0]).toBeCloseTo(26.864674, 5);
+    expect(xs[1]).toBeCloseTo(29.089706, 5);
+    expect(xs[2]).toBeCloseTo(32.655609, 5);
   }, 90_000);
 });

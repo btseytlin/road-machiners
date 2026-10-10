@@ -20,7 +20,7 @@ import { installSpot, removeAllGoods, spareParts, stowSpot } from './inventory';
 import { clockOf } from './sun';
 import { maxHp } from './wear';
 import { addState, stateOf } from './states';
-import { addVehicle, emptyWorld, forceOption, npcBrain, startCombat, testDrive } from './testkit';
+import { addVehicle, emptyWorld, forceOption, npcBrain, rngStateForForcedRolls, startCombat, testDrive } from './testkit';
 import type { World } from './types';
 import { dist } from './vec';
 import { stormStrength } from './weather';
@@ -221,6 +221,7 @@ describe('frozen NPCs', () => {
     const called = (frozen: boolean): boolean => {
       const start = frozen ? toggleFrozen(emptyWorld()) : emptyWorld();
       const { w } = withSpawned(start, 'gunwagon', true);
+      w.rngState = rngStateForForcedRolls(1);
       return endTurn(w, testDrive).player.call !== null;
     };
     expect(called(false)).toBe(true);
