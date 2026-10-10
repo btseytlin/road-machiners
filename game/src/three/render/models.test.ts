@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Mesh, type MeshLambertMaterial } from 'three';
-import { loadModels, model, socket } from './models';
+import { loadModels, model, MODEL_GLOW, socket } from './models';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
 const progress: [number, number][] = [];
@@ -31,10 +31,10 @@ function materialsOf(name: Parameters<typeof model>[0]): MeshLambertMaterial[] {
 }
 
 describe('model materials', () => {
-  it('lights a glow material with its own color (IV21)', () => {
+  it('lights a glow material with the dim model glow (IV21)', () => {
     const glow = materialsOf('fort_patchwork_tower').filter((m) => m.name === 'glow');
     expect(glow.length).toBeGreaterThan(0);
-    for (const m of glow) expect(m.emissive.getHex()).toBe(m.color.getHex());
+    for (const m of glow) expect([m.color.getHex(), m.emissive.getHex()]).toEqual([MODEL_GLOW.color, MODEL_GLOW.emissive]);
   });
 
   it('leaves every other material unlit', () => {
