@@ -4,11 +4,12 @@ An endless highway combat run north, with outposts as milestones, picked at New 
 
 ## Mode rules
 
-Each mode is a row of `GAME_MODES` in `src/data/modes.ts`: its rule flags, its start kit and the map a new world of it is laid on, `icarus` or `highway`. `src/sim/settings.ts` is the only reader: `modeRules()` for a world, and `modeRulesOf()` and `modeMap()` for a setup with no world yet. Each gate reads one flag, and no code outside the mode table and the mode picker tests a mode's id. Roaming sets every flag on but `run`. Fury Road sets only `run`:
+Each mode is a row of `GAME_MODES` in `src/data/modes.ts`: its rule flags, its start kit and the map a new world of it is laid on, `icarus` or `highway`. `src/sim/settings.ts` is the only reader: `modeRules()` for a world, and `modeRulesOf()` and `modeMap()` for a setup with no world yet. Each gate reads one flag, and no code outside the mode table and the mode picker tests a mode's id. Roaming sets every flag on but `run`. Fury Road sets only `run` and `npcKnockouts`:
 
 - `traffic`: no starting traffic, no spawn timers and no shops.
 - `looting`: no salvage at start or on renewal, no old-world loot spots, no salvage on a wreck, no story wrecks, no cargo handovers, and spilled or dumped cargo is gone.
-- `knockouts`: a beaten NPC is wrecked, and a player knockout ends the run.
+- `npcKnockouts` stays on: a beaten NPC is knocked out or wrecked by the same roll as in Roaming.
+- `playerKnockouts`: a player knockout ends the run.
 - `yielding`: no NPC flees, offers or takes a truce, begs, spares, offers or takes surrender, complies, gives up a fight, backs off or leaves a fight for service. A truck with no gun keeps its fight and rams.
 - `radio`: no calls, hails, horn or pleas.
 - `rescue`: no beacon, tows or scrap patches. A stranded truck waits for good.
@@ -53,11 +54,17 @@ The land is generated as you go, in windows of 410 by 410 tiles (1.64 km), each 
 
 ## Outposts
 
-An outpost stands at each milestone from 1 on: a walled fort with the Salvage Yard's walls, corner towers, gate and yard, set beside the road on a side drawn from the seed, with its gate facing the road. A concrete spur runs from the asphalt across the town pad, 5 by 7 tiles, to the gate. Its label shows `???` until the player sees it, then "Outpost N", and discovering it gives the discovery line and XP as any site does. It holds 2 parts from the garage table, plus 1 for every 2 milestones, up to 6, rolled when its window opens.
+An outpost stands at each milestone from 1 on: a walled fort with the Salvage Yard's walls, corner towers, gate and yard, set beside the road on a side drawn from the seed, with its gate facing the road. A concrete spur runs from the asphalt across the town pad, 5 by 7 tiles, to the gate. Its label shows `???` until the player sees it, then "Outpost N", and discovering it gives XP as any site does. The log shows no discovery line for it, since the label and the pay line already name it. It holds 2 parts from the garage table, plus 1 for every 2 milestones, up to 6, rolled when its window opens.
 
-Parking on the pad of the next outpost wins the level in that turn, in combat or out. It pays 300 M's for stretch 1, 150 M's more for each later stretch, up to 1,200 M's, plus 60 M's for each wrecked truck of its groups, 15 M's more each stretch, up to 150 M's. The outpost is marked paid, so it never pays again, even after a reload. The surviving trucks of the stretch leave the road and their fights end, so the player is out of combat at once. Their wrecks give no pay.
+Parking on the pad of the next outpost wins the level in that turn, in combat or out. It pays 300 M's for stretch 1, 150 M's more for each later stretch, up to 1,200 M's, plus 60 M's for each beaten truck of its groups, 15 M's more each stretch, up to 150 M's. A truck is beaten when it is knocked out or wrecked, and each truck counts once: a knocked-out truck shot to a wreck later adds nothing. The group keeps the ids it counted in the save. The outpost is marked paid, so it never pays again, even after a reload. The other trucks of the stretch, standing or knocked out, leave the road and their fights end, so the player is out of combat at once. Their wrecks give no pay.
 
-Between levels nothing spawns, even if the player drives off the pad and back. At a paid outpost the player can repair all or the basics at the garage price, buy fuel and supplies at the town price, buy a stock part onto the truck and buy parts for field patching at 1.5 times their value. Each outpost stocks exactly two parts of every part type, rolled from the seed when the outpost is made and kept in the save. Outposts buy nothing. The next level starts only when the player, parked on the pad, presses Wait for the road on the outpost screen.
+Between levels nothing spawns, even if the player drives off the pad and back. A paid outpost is a garage, as a town garage is: `atGarage()` in `src/sim/garage.ts` says yes on its pad. Every install, removal and swap on the truck grid, and every move to or from garage storage, applies at once with no refit timer, and the screen shows the storage list beside the grid. Storage is the player's one garage storage, shared with every garage and carried from window to window. The outpost screen has three tabs:
+
+- Market: repair all or the basics at the garage price, fuel and supplies at the town price, and parts for field patching at 1.5 times their value.
+- Buy parts: each outpost stocks exactly two parts of every part type, rolled from the seed when the outpost is made and kept in the save. Any part the player can afford can be bought, armor too. It goes onto the truck's cargo cells if it fits, and into storage if not. Buying never fits it.
+- Trucks: three chassis, drawn without repeats from every player chassis but the scout, from the stretch's own `trucks` stream. The offer is a pure function of the seed and the milestone, so only the bought ones are saved, in the outpost's `trucksSold`, and a bought truck leaves the offer. The price is the town's: the chassis value less the trade-in of the truck the player drives, or a payout when the trade-in is worth more. The swap is the town's, `swapChassis()`: the new chassis brings its own built-in parts, every fitted part is fitted again where it fits, then stowed, then stored, and the goods go back in cargo. Swap is disabled with the reason when the money is short or the goods would not fit the new truck. Fuel and supplies clamp to the new tanks.
+
+Outposts buy nothing. The next level starts only when the player, parked on the pad, presses Wait for the road on the outpost screen.
 
 The run has no end. The HUD's run readout shows the stretch and the distance to its outpost, like `3: 640 m`, and its tooltip reads "Stretch 3: 640 m to Outpost 3". Between levels it shows the next stretch at its full length.
 
@@ -87,13 +94,13 @@ A group comes from ahead, behind, the left or the right, never from the side of 
 
 Every spot is inside the window and between its two milestones. No more than 8 group trucks are on the road at once, and a group waits until it fits. A group with no free spot tries again each turn and fails loudly after 20 turns.
 
-Encounters are paced in time. An encounter is on while a live group truck is within 30 tiles of the player. The next group spawns after 20 quiet turns, about 20 seconds of driving, and a level's first group 20 turns after the level starts. Groups spawn in plan order, where the player is, so a fight may meet a scene.
+Encounters are paced in time. An encounter is on while a group truck that is not beaten is within 30 tiles of the player. The next group spawns after 20 quiet turns, about 20 seconds of driving, and a level's first group 20 turns after the level starts. Groups spawn in plan order, where the player is, so a fight may meet a scene.
 
 Group trucks spawn with full tanks and no cargo. Each holds a feud on the player and hunts the player's position every turn until the level ends. A group truck races in under overdrive, the same 1.33 boost as the player's, until it first comes within 12 tiles of the player or fights it. From then on it drives at its normal speed for good. An NPC's overdrive costs no engine heat, since only the player's engine heats. A truck with no gun rams.
 
 ## Defeat
 
-A player knockout ends the run as Wrecked. A stranded player can end the run from the stranded panel, which is the only way out of an empty tank or a broken drive with no parts to patch. The death screen names the mode, the last outpost reached and how far north the truck got, and offers Load save, Restart run with the same settings and a new seed, and New game.
+A beaten group truck is knocked out or wrecked by the normal rules. A knocked-out one stops, holds no encounter on, frees its place under the cap of 8 and is never hunted back into the fight. Nobody can loot it. When it wakes, it leaves the road that turn, since the highway has no home to retreat to. A player knockout ends the run as Wrecked. A stranded player can end the run from the stranded panel, which is the only way out of an empty tank or a broken drive with no parts to patch. The death screen names the mode, the last outpost reached and how far north the truck got, and offers Load save, Restart run with the same settings and a new seed, and New game.
 
 A carried-over Fury Road save starts a fresh run at stretch 1 with its truck. So does a save from a build whose highway rules changed.
 
