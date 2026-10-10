@@ -13,7 +13,7 @@ import { callVehicle, chooseOption, currentOptions, hangUp, honk } from '../sim/
 import type { CallVar, CallVars, GameEvent, World } from '../sim/types';
 import { playerSees } from '../sim/vision';
 import { playerCanAct } from '../sim/world';
-import { el, isBrowserChord, panel } from './dom';
+import { el, isBrowserChord, panel, topCenter } from './dom';
 import { fuelLiters, meters, moneyText } from './units';
 import { npcName } from '../sim/spawn';
 
@@ -91,6 +91,7 @@ const VAR_TEXT: VarText = {
   aid: aidText,
   haul: haulText,
   tip: tipText,
+  line: (v) => v.text,
   answer: () => { throw new Error('A rolled answer is never shown in a line'); },
 };
 
@@ -117,12 +118,12 @@ export function canCall(w: World, id: string): boolean {
 
 export type DialogueHost = {
   world(): World;
-  talk(next: World): void; // apply a dialogue command and log its lines
-  inspected(): string | null; // the pinned vehicle, else the one under the cursor
-  busy(): boolean; // a turn plays
-  commit(next: World): void; // take a honked world without pausing travel
-  log(next: World): void; // log the events of a command
-  playHorn(vehicleId: string, delayMs: number): void; // sound one truck's horn where it is drawn
+  talk(next: World): void;
+  inspected(): string | null;
+  busy(): boolean;
+  commit(next: World): void;
+  log(next: World): void;
+  playHorn(vehicleId: string, delayMs: number): void;
 };
 
 const HONK_REPLY_MS = 500;
@@ -160,7 +161,7 @@ class Horn {
 const KEY_DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9'];
 
 export class DialoguePanel {
-  private readonly root = panel('dialogue');
+  private readonly root = panel('dialogue notice', topCenter());
   private readonly horn: Horn;
 
   constructor(private readonly host: DialogueHost) {
@@ -179,7 +180,7 @@ export class DialoguePanel {
       el('button', { class: 'dialogue-option', onclick: () => this.choose(i) }, `${i + 1}. ${o.text}`),
     );
     this.root.replaceChildren(
-      el('div', { class: 'dialogue-speaker' }, `Radio: ${npcName(npc)}`),
+      el('div', { class: 'dialogue-speaker' }, npcName(npc)),
       el('div', { class: 'dialogue-line' }, `“${fillLine(call.line.text, call.line.vars)}”`),
       el('div', { class: 'dialogue-options' }, ...options),
     );

@@ -32,6 +32,7 @@ import { skillEffect } from './progress';
 import { randRange } from './rng';
 import { recall, remember } from './memory';
 import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, CANNOT_HOLD, hasCargo, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable, STRIPPED } from './salvage';
+import { passesUpLoot } from './loot-warning';
 import { canUseSite, isTerritory, siteGap, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { territoryAt, territoryGrounds } from './territory';
 import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
@@ -273,7 +274,8 @@ function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock, stripp
 
 export function lootTaken(world: World, vehicle: Vehicle, targetId: string | null): string | null {
   if (targetId === null || worksOnLoot(vehicle, targetId)) return null;
-  return lootBlocker(world, vehicle, targetId) ? 'someone else is looting it' : null;
+  const looter = lootBlocker(world, vehicle, targetId);
+  return looter && passesUpLoot(world, vehicle, looter, targetId) ? 'someone else is looting it' : null;
 }
 
 export function worksOnLoot(vehicle: Vehicle, targetId: string): boolean {
@@ -650,6 +652,8 @@ const AVAILABLE: Record<OptionName, Availability> = {
   decline: always,
   give: canSpareSubject,
   aid: canSpareSubject,
+  warn: always,
+  leave: always,
 };
 
 type SituationFactor = (world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null) => number;
@@ -787,6 +791,10 @@ export function holdsOffRobbery(world: World, vehicle: Vehicle, target: Vehicle)
   return isStranded(world, vehicle) && robbedFor(world, vehicle, target) && !fightsAgainst(world, target, vehicle);
 }
 
+function leaveFactor(_world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
+  return danger !== null && !isManageable(vehicle, danger) ? NPC_BEHAVIOR.threatLeave : 1;
+}
+
 function complyFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
   const threat = danger !== null && !isManageable(vehicle, danger) ? NPC_BEHAVIOR.threatComply : 1;
   return guardedNow(world, vehicle) ? threat * NPC_BEHAVIOR.guardedComply : threat;
@@ -871,6 +879,8 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   decline: (world, vehicle) => declineFactor(world, vehicle),
   give: neutral,
   aid: neutral,
+  warn: neutral,
+  leave: leaveFactor,
 };
 
 function changeTables(world: World, vehicle: Vehicle, subject: string | null): TraitWeights[] {
@@ -946,6 +956,8 @@ const DECISION_KINDS: Record<DecisionId, 'venture' | 'response'> = {
   mercyBegged: 'response',
   threatened: 'response',
   warnedOff: 'response',
+  lootContested: 'response',
+  warnRefused: 'response',
   mugging: 'response',
   strandedFoe: 'response',
   surrenderOffered: 'response',

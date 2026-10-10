@@ -58,7 +58,7 @@ export function spotTable(o: Obstacle): LootTable {
   return SALVAGE[table];
 }
 
-export function spotLookOf(stock: SalvageStock): PropKind | null {
+export function spotLookOf(stock: { id: string }): PropKind | null {
   const kind = stock.id.slice(0, stock.id.lastIndexOf('-'));
   return PROP_KINDS.find((k) => k === kind) ?? null;
 }

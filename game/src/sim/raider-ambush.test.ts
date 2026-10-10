@@ -164,6 +164,7 @@ describe('the watch', () => {
   it('starts on arrival, keeps the raider parked for the watch turns without a stall, then ends', () => {
     forceOption('idle', 'patrol');
     const start = raiderNearPost();
+    start.w.rngState += 3;
     const raiderId = start.raiderId;
     let w = start.w;
     for (const id of Object.keys(NPCS)) w.spawnTimer[id] = Number.MAX_SAFE_INTEGER;

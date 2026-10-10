@@ -12,7 +12,7 @@ function doRectsOverlap(a, b) {
 }
 
 async function checkVisibleReadouts(page) {
-  for (const label of ['Money', 'Fuel', 'Supplies', 'Driver']) {
+  for (const label of ["M's", 'Fuel', 'Supplies', 'Driver']) {
     assert(await page.locator(`[data-resource="${label}"]`).isVisible(), `${label} must remain visible`);
   }
   assert(await page.locator('.log').isVisible(), 'Event log must remain visible');
@@ -23,6 +23,73 @@ async function checkVisibleReadouts(page) {
   for (const box of boxes.filter(box => box !== modal)) {
     assert(!doRectsOverlap(modal.rect, box.rect), `${box.name} must not cover the modal: ${JSON.stringify([modal.rect, box.rect])}`);
   }
+}
+
+async function checkCoins(page, where) {
+  const result = await page.evaluate(where => {
+    const titlePattern = /^−?\d{1,3}(,\d{3})* M('s)?$/;
+    const coinSizeProblem = (text, coin, amount) => {
+      if (!coin) return [`${text}: no coin`];
+      const size = parseFloat(getComputedStyle(amount).fontSize);
+      const height = coin.getBoundingClientRect().height;
+      const sized = Math.abs(height / size - 1.15) <= 0.02;
+      const fits = height <= amount.getBoundingClientRect().height + 1;
+      return [sized ? '' : `${text}: coin ${height}px beside ${size}px text`, fits ? '' : `${text}: coin taller than its line`];
+    };
+    const titleProblems = (text, amount) => [
+      amount.querySelector('[title]') ? `${text}: a nested title shadows the amount` : '',
+      titlePattern.test(amount.title) ? '' : `${text}: bad title "${amount.title}"`,
+      amount.getAttribute('aria-label') === amount.title ? '' : `${text}: aria-label differs from title`,
+    ];
+    const letterProblem = (text, coin) => {
+      if (!coin) return [];
+      const ratio = coin.querySelector('path').getBBox().height / coin.querySelector('circle').getBBox().height;
+      return [ratio >= 0.25 && ratio <= 0.32 ? '' : `${text}: M is ${ratio.toFixed(2)} of the coin`];
+    };
+    const hsl = hex => {
+      const [r, g, b] = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      const l = (max + min) / 2;
+      const s = max === min ? 0 : (max - min) / (1 - Math.abs(2 * l - 1));
+      return { s, l };
+    };
+    const colourProblems = (text, coin) => {
+      if (!coin) return [];
+      return ['circle', 'path'].map(tag => {
+        const colour = coin.querySelector(tag).getAttribute('stroke');
+        const { s, l } = hsl(colour);
+        return s <= 0.45 && l <= 0.7 ? '' : `${text}: ${tag} colour ${colour} is too vivid`;
+      });
+    };
+    const amountProblems = amount => {
+      const text = amount.innerText.trim();
+      const coin = [...amount.children].find(child => child.classList.contains('coin'));
+      return [...coinSizeProblem(text, coin, amount), ...letterProblem(text, coin), ...colourProblems(text, coin), ...titleProblems(text, amount)];
+    };
+    const hudProblems = where === 'HUD' ? (() => {
+      const balance = document.querySelector('[data-resource="M\'s"]');
+      if (!balance) return ['HUD: no balance readout'];
+      return [
+        balance.querySelector('small') ? 'HUD balance shows a label' : '',
+        balance.innerText.includes("M's") ? 'HUD balance shows the word M\'s' : '',
+        (balance.getAttribute('aria-label') ?? '').startsWith("M's: ") ? '' : 'HUD balance lost its aria-label',
+      ];
+    })() : [];
+    const shown = [...document.querySelectorAll('.amount')].filter(node => node.offsetParent !== null);
+    const icons = [...document.querySelectorAll('.icon[title="M\'s"]')].map(icon => `icon says M's: ${icon.outerHTML.slice(0, 60)}`);
+    return { problems: [...shown.flatMap(amountProblems), ...hudProblems, ...icons].filter(Boolean), count: shown.length };
+  }, where);
+  assert.deepEqual(result.problems, [], `Coin check failed (${where})`);
+  return result.count;
+}
+
+async function checkCoinSizes(page, where) {
+  const heights = await page.evaluate(() => {
+    const height = selector => document.querySelector(selector)?.getBoundingClientRect().height;
+    return { hud: height('.resource .amount > .coin'), market: height('.town-shop .trade .amount > .coin') };
+  });
+  assert(heights.hud && heights.market, `Coin sizes (${where}) need a HUD and a market coin`);
+  assert(Math.abs(heights.hud - heights.market) <= 2, `HUD coin ${heights.hud}px and market coin ${heights.market}px differ (${where})`);
 }
 
 // The max-speed tooltip opens on keyboard focus and holds only short signed lines, never a table or a paragraph.
@@ -554,6 +621,7 @@ try {
   assert.deepEqual(await page.locator('.modal:visible').boundingBox(), inventoryFrame, 'Character and inventory must share one frame');
   await page.keyboard.press('Escape');
   await page.keyboard.press('e');
+  await checkCoins(page, 'HUD');
   if (await page.locator('.modal:visible').count()) {
     await checkVisibleReadouts(page);
     assert.deepEqual(await page.locator('.modal:visible').boundingBox(), inventoryFrame, 'Town and inventory must share one frame');
@@ -561,6 +629,23 @@ try {
     await page.keyboard.press('i');
     await checkVisibleReadouts(page);
   }
+  await page.keyboard.press('Escape');
+  await page.evaluate(async () => {
+    const g = window.__ROAM__;
+    const c = await import('/src/sim/cheats.ts');
+    g.apply(c.teleport(g.state, c.placeSpot(g.state, 'bowl')));
+    g.town.open();
+  });
+  await page.waitForSelector('.town-shop .tabs button', { timeout: 90000 });
+  assert((await checkCoins(page, 'town market')) > 1, 'The town market must show amounts');
+  await checkCoinSizes(page, 'market 1600');
+  const before = page.viewportSize();
+  await page.setViewportSize({ width: 1024, height: 640 });
+  await checkCoins(page, 'town market 1024');
+  await checkCoinSizes(page, 'market 1024');
+  await page.setViewportSize(before);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('i');
   for (const width of [1024, 800, 700]) {
     await page.setViewportSize({ width, height: 800 });
     await checkVisibleReadouts(page);
@@ -588,7 +673,7 @@ try {
   for (const viewport of [{ width: 1280, height: 720 }, { width: 700, height: 800 }]) await checkKnobs(url, viewport);
   assert.deepEqual(errors, [], 'No uncaught page errors');
   await page.screenshot({ path: '.playtest/ui-regression.png' });
-  console.log('PASS: weapon icons without a tile, hover names, flat surfaces, persistent resources/log, the radio above the log and contracts and clear of the hover panel, the contracts in their old spot, stable modal frames, movable-item inspection, and laptop/narrow layouts, clock strip, speedometer and action row, and the four radio knobs turned by a real mouse drag, wheel and keys');
+  console.log('PASS: hover names, coins sized by their text with one hover amount, flat surfaces, persistent resources/log, the radio above the log and contracts and clear of the hover panel, the contracts in their old spot, stable modal frames, movable-item inspection, and laptop/narrow layouts, clock strip, speedometer and action row, and the four radio knobs turned by a real mouse drag, wheel and keys');
 } finally {
   await browser.close();
 }

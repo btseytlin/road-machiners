@@ -248,7 +248,7 @@ export type Obstacle =
 
 export type BrokenProp = { obstacle: Obstacle; turn: number };
 
-export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea' | 'trade' | 'revenge' | 'escort' | 'strayFire' | 'aid' | 'combat';
+export type StateKindId = 'feud' | 'backedOff' | 'tow' | 'turnedDown' | 'towPromise' | 'answering' | 'patch' | 'truce' | 'grievance' | 'plea' | 'trade' | 'revenge' | 'escort' | 'strayFire' | 'aid' | 'combat' | 'lootWarning';
 export type StateEnding = 'expired' | 'fulfilled' | 'broken';
 export type Plea = 'truce' | 'mercy';
 export type StateData =
@@ -260,7 +260,9 @@ export type StateData =
   | { kind: 'patch'; deal: PatchDeal; parts: number; partIds: string[]; price: number; work: number; workLeft: number }
   | { kind: 'strayFire'; damage: number }
   | { kind: 'aid'; giver: 'player' | 'npc'; fuel: number; supplies: number; price: number; free: boolean; agreed: boolean; started: boolean; work: number; workLeft: number }
+  | { kind: 'lootWarning'; targetId: string; answer: LootWarnAnswer | null }
   | { kind: 'none' };
+export type LootWarnAnswer = 'comply' | 'refuse' | 'fightBack';
 export type NpcState = {
   id: string;
   kind: StateKindId;
@@ -283,7 +285,8 @@ export type CallVar =
   | { kind: "aid"; fuel: number; supplies: number }
   | { kind: "prices"; town: string; goods: { good: string; buy: number; sell: number }[] }
   | { kind: "tip"; tip: { shop: string; good: string; dear: boolean } | null }
-  | { kind: "answer"; option: string };
+  | { kind: "answer"; option: string }
+  | { kind: "line"; text: string };
 export type CallVars = Record<string, CallVar>;
 
 export type Repeat = { count: number; turn: number };
@@ -390,6 +393,7 @@ export type GameEvent =
   | { t: 'patch'; patcher: string; client: string; outcome: 'done'; price: number }
   | { t: 'aid'; giver: string; receiver: string; fuel: number; supplies: number; paid: number }
   | { t: 'plea'; from: string; to: string; plea: Plea; accepted: boolean | null }
+  | { t: 'lootArgument'; warner: string; looter: string; place: 'wreck' | 'pile' | 'spot' | 'truck'; end: 'yielded' | 'backedOff' | 'fight' }
   | { t: 'info'; text: string; debug?: true }
   | { t: 'utility'; vehicle: string; part: string; effect: UtilityEffectType | 'claymore'; point: Vec | null }
   | { t: 'lineTorn'; line: string; vehicle: string; part: string; damage: number }

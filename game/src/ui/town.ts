@@ -39,8 +39,7 @@ import {
   type Supply,
 } from "../sim/economy";
 import { freeCells, goodsCount, MOUNT_CELLS, mountedParts } from "../sim/grid";
-import { moneyLabel } from "./hud-readout";
-import { canStowPart, spareParts } from "../sim/inventory";
+import { canStowPart, cargoRoom, spareParts } from "../sim/inventory";
 import { acceptContract, deliverContract, fitsFetch, shopAt, shopState, type Contract, type ShopState } from "../sim/market";
 import { REGION } from "../data/region";
 import type { PartInstance, Vehicle, World } from "../sim/types";
@@ -50,7 +49,7 @@ import { el, panel } from "./dom";
 import { contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, heldContractDue, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
 import { InventoryView, truckChips } from "./inventory";
 import type { UiHost } from "./host";
-import { fuelLiters, moneyAmount, moneyText } from "./units";
+import { coinEl, fuelLiters, moneyEl, moneyNumber, moneyText } from "./units";
 import { fuelCap, suppliesCap } from "../sim/stats";
 import { npcName } from "../sim/spawn";
 import { vehicleHasPerk } from "../sim/progress";
@@ -66,7 +65,7 @@ const GARAGE_ONLY: Tab[] = ["trucks"];
 const PRESSURE_HINT_AT = 0.2;
 
 export class TownScreen {
-  private root = panel("modal");
+  private root = panel("modal dialog");
   private tab: Tab = "market";
   private stockFilter: StockFilter = "all";
   private error = "";
@@ -179,8 +178,13 @@ export class TownScreen {
     });
   }
 
-  private button(label: string, cmd: (w: World) => World, disabled = false, title = "", key = ""): HTMLElement {
-    return el("button", { disabled, title, "data-key": key || undefined, onclick: () => this.run(cmd) }, label);
+  private button(label: string, cmd: (w: World) => World, reason = "", key = "", title = ""): HTMLElement {
+    return reasonButton([label], () => this.run(cmd), reason, key, title);
+  }
+
+  private priceButton(w: World, verb: string, price: number, cmd: (w: World) => World, reason = "", key = ""): HTMLElement {
+    const short = shortBy(w.player.money, price);
+    return reasonButton([verb, " ", priceSpan(price, short === "")], () => this.run(cmd), reason || short, key);
   }
 
   private hintMounts(kind: PartKind): (on: boolean) => void {
@@ -192,45 +196,51 @@ export class TownScreen {
     return el(
       "div",
       {},
-      def.supplies.length ? el("div", { class: "services" }, ...def.supplies.map((k) => this.supplyRow(w, k))) : null,
       el(
         "div",
         { class: "goods" },
         goodsHead(false),
+        ...def.supplies.map((k) => this.supplyRow(w, k)),
         ...def.goods.map((g) => this.goodRow(w, shopId, def, state, g)),
       ),
     );
   }
 
   private goodRow(w: World, shopId: string, def: ShopDef, state: ShopState, g: string): HTMLElement {
-    const held = goodsCount(playerVehicle(w))[g] ?? 0;
+    const me = playerVehicle(w);
+    const held = goodsCount(me)[g] ?? 0;
+    const buy = buyPrice(w, shopId, g);
     const sell = sellPrice(w, shopId, g);
     const hint = pressureHint(def, state, g);
+    const buyReason = (n: number) => {
+      const lot = getLotTradePrice(w, me, shopId, g, n, "buy");
+      return shortBy(w.player.money, lot) || (cargoRoom(me, g) < n ? "No room" : "");
+    };
+    const sellReason = held === 0 ? "Nothing to sell" : "";
     return el(
       "div",
-      { class: "good-row" },
+      { class: "good-row row" },
       el(
         "div",
         { class: "good-name" },
         createItemIcon(g),
         el("b", {}, GOODS[g].name),
-        hint ? el("span", { class: `tag ${hint.cls}` }, hint.text) : null,
       ),
       el(
         "div",
         { class: "trade buy" },
-        caption(GOODS_COLUMNS.buy),
-        priceEl(buyPrice(w, shopId, g)),
-        this.button("+1", (x) => buyGood(x, g, 1), false, "", `${g}:buy1`),
-        this.button("+5", (x) => buyGood(x, g, 5), false, lotTitle("buy", 5, getLotTradePrice(w, playerVehicle(w), shopId, g, 5, "buy")), `${g}:buy5`),
+        caption(GOODS_COLUMNS.buy, true),
+        priceEl(buy, shortBy(w.player.money, buy) === "", hint),
+        this.button("+1", (x) => buyGood(x, g, 1), buyReason(1), `${g}:buy1`),
+        this.button("+5", (x) => buyGood(x, g, 5), buyReason(5), `${g}:buy5`, lotTitle("buy", 5, getLotTradePrice(w, me, shopId, g, 5, "buy"))),
       ),
       el(
         "div",
         { class: "trade sell" },
-        caption(GOODS_COLUMNS.sell),
+        caption(GOODS_COLUMNS.sell, true),
         priceEl(sell),
-        this.button("−1", (x) => sellGood(x, g, 1), held === 0, "", `${g}:sell1`),
-        this.button("All", (x) => sellGood(x, g, held), held === 0, held ? lotTitle("sell", held, getLotTradePrice(w, playerVehicle(w), shopId, g, held, "sell")) : "", `${g}:sellAll`),
+        this.button("−1", (x) => sellGood(x, g, 1), sellReason, `${g}:sell1`),
+        this.button("All", (x) => sellGood(x, g, held), sellReason, `${g}:sellAll`, held ? lotTitle("sell", held, getLotTradePrice(w, me, shopId, g, held, "sell")) : ""),
       ),
       countCell("held", held),
       profitCell(saleEstimate(held, sell, w.player.costBasis[g])),
@@ -241,101 +251,91 @@ export class TownScreen {
     const me = playerVehicle(w);
     const stock = shopState(w, shopId).stock;
     const shown = stock.filter((p) => this.stockFilter === "all" || partDef(p.defId).kind === this.stockFilter);
-    const payable = (price: number) => w.player.money >= price;
     const rows = shown.map((p) => {
       const price = partTradePrice(w, me, p, "buy");
-      return this.partRow(w, p, price, payable(price), "Not enough money", "Buy", (x) => buyStockPart(x, p.id), !canStowPart(me, p));
+      const short = shortBy(w.player.money, price);
+      return this.partRow(w, p, price, short === "", this.button("Buy", (x) => buyStockPart(x, p.id), short));
     });
     return el(
       "div",
       {},
       el("div", { class: "tabs sub" }, ...this.stockFilterButtons(stock)),
-      rows.length
-        ? this.rows.list(rows)
-        : el("div", { class: "dim" }, stock.length ? "No parts of this kind in stock." : "No parts in stock."),
+      rows.length ? this.rows.list(rows) : el("div", { class: "dim" }, "Nothing in stock"),
     );
   }
 
-  private partRow(w: World, p: PartInstance, price: number, payable: boolean, unpaidTitle: string, verb: string, cmd: (w: World) => World, stored = false): PartRow {
-    const button = this.button(`${verb} ${moneyText(price)}`, cmd, !payable);
+  private partRow(w: World, p: PartInstance, price: number, payable: boolean, action: HTMLElement): PartRow {
     return {
       world: w,
       part: p,
       base: compareBase(this.inventory.selectedPart(), p),
       price,
       payable,
-      unpaidTitle,
-      action: stored ? el("div", { class: "buy-stored" }, button, el("div", { class: "dim" }, "No room: goes to storage")) : button,
+      action,
       onHover: this.hintMounts(partDef(p.defId).kind),
     };
   }
 
   private stockFilterButtons(stock: PartInstance[]): HTMLElement[] {
-    return STOCK_FILTERS.map((f) => {
-      const count = f === "all" ? stock.length : stock.filter((p) => partDef(p.defId).kind === f).length;
-      return el(
-        "button",
-        {
-          class: this.stockFilter === f ? "on" : "",
-          disabled: count === 0 && f !== "all",
-          title: STOCK_FILTER_LABEL[f],
-          onclick: () => {
-            this.stockFilter = f;
-            this.showList();
-          },
+    return STOCK_FILTERS.map((f) => this.stockFilterButton(f, stockCount(stock, f)));
+  }
+
+  private stockFilterButton(f: StockFilter, count: number): HTMLElement {
+    const empty = count === 0 && f !== "all";
+    const button = el(
+      "button",
+      {
+        class: this.stockFilter === f ? "on" : "",
+        title: empty ? `No ${STOCK_FILTER_LABEL[f].toLowerCase()} in stock` : STOCK_FILTER_LABEL[f],
+        onclick: () => {
+          if (empty) return;
+          this.stockFilter = f;
+          this.showList();
         },
-        f === "all" ? "All" : createIcon(FILTER_ICON[f]),
-        el("span", { class: "count" }, `${count}`),
-      );
-    });
+      },
+      f === "all" ? "All" : createIcon(FILTER_ICON[f]),
+      el("span", { class: "count" }, `${count}`),
+    );
+    setIf(button, "aria-disabled", empty && "true");
+    return button;
   }
 
   private sellParts(w: World): HTMLElement {
     const me = playerVehicle(w);
     const sellable: PartInstance[] = [...w.player.storage, ...spareParts(me)];
     const rows = sellable.map((p) =>
-      this.partRow(w, p, partTradePrice(w, me, p, "sell"), true, "", "Sell", (x) => sellPart(x, p.id)),
+      this.partRow(w, p, partTradePrice(w, me, p, "sell"), true, this.button("Sell", (x) => sellPart(x, p.id))),
     );
-    return el(
-      "div",
-      {},
-      el("h3", {}, "Sell spare and stored parts"),
-      rows.length
-        ? this.rows.list(rows)
-        : el("div", { class: "dim" }, "No spare or stored parts."),
-    );
+    return el("div", {}, rows.length ? this.rows.list(rows) : el("div", { class: "dim" }, "Nothing to sell"));
   }
 
   private supplyRow(w: World, k: Supply): HTMLElement {
     const room = supplyRoom(w, k);
     const price = ECONOMY.supplyPrice[k];
     const afford = Math.min(room, Math.floor(w.player.money / price));
-    const fuel = k === "fuel";
     const have = w.player[k];
-    const cap = fuel ? fuelCap(playerVehicle(w)) : suppliesCap(playerVehicle(w));
-    const amount = (n: number) => (fuel ? `${fuelLiters(n)} L` : `${Math.round(n * 10) / 10}`);
-    return el(
-      "div",
-      { class: "service" },
-      createIcon(k),
-      el("div", { class: "service-meter" }, el("span", {}, `${amount(have)} / ${amount(cap)}`), bar(have / cap)),
-      el("span", { class: "dim" }, fuel ? `${moneyAmount(price)} per ${amount(1)}` : `${moneyAmount(price)} each`),
-      this.button(`+${amount(1)}`, (x) => buySupply(x, k, 1), afford < 1),
-      this.button(`Fill ${amount(afford)}`, (x) => buySupply(x, k, afford), afford < 1),
-    );
+    const cap = supplyCap(w, k);
+    const amount = supplyAmount(k);
+    const reason = room < 1 ? "Full" : shortBy(w.player.money, price);
+    return supplyLine(k, have, cap, null, price, shortBy(w.player.money, price) === "", [
+      this.button(`+${amount(1)}`, (x) => buySupply(x, k, 1), reason),
+      this.button(afford > 0 ? `Fill ${amount(afford)}` : "Fill", (x) => buySupply(x, k, afford), reason),
+    ]);
   }
 
   private repairBar(w: World): HTMLElement {
     const broken = mountedParts(playerVehicle(w)).filter((p) => p.hp === 0).length;
     const basics = basicsRepairCost(w);
     const all = repairCost(w);
+    const repair = (verb: string, cost: number, cmd: (w: World) => World) =>
+      cost === 0 ? this.button(verb, cmd, NOTHING_TO_REPAIR) : this.priceButton(w, verb, cost, cmd);
     return el(
       "div",
       { class: "town-repair" },
       createIcon("tools"),
       broken ? el("span", { class: "bad" }, `${broken} broken`) : null,
-      this.button(basics === 0 ? "Basics fine" : `Repair basics ${moneyText(basics)}`, repairBasics, basics === 0),
-      this.button(all === 0 ? "No repairs" : `Repair all ${moneyText(all)}`, repairAll, all === 0),
+      repair("Repair basics", basics, repairBasics),
+      repair("Repair all", all, repairAll),
     );
   }
 
@@ -348,51 +348,49 @@ export class TownScreen {
       const own = me.chassisId === id;
       return el(
         "div",
-        { class: `card truck-card${own ? " own" : ""}` },
+        { class: `card tile truck-card${own ? " own" : ""}` },
         el("div", { class: "truck-pics" }, chassisPortrait(id), chassisMap(id)),
         el(
           "div",
           { class: "truck-body" },
-          el("div", { class: "card-name" }, el("b", {}, chassisDef(id).name)),
-          statGrid(diffStats(chassisStats(id), own ? null : mine)),
           el(
             "div",
-            { class: "card-foot" },
-            el("span", { class: "dim" }, own ? "Your truck" : `vs ${chassisDef(me.chassisId).name}`),
-            own ? null : this.button(cost >= 0 ? `Swap ${moneyText(cost)}` : `Swap, get ${moneyText(-cost)} back`, (x) => buyChassis(x, id), w.player.money < cost),
+            { class: "truck-head" },
+            el("div", { class: "card-name" }, el("b", {}, chassisDef(id).name)),
+            own ? el("span", { class: "dim" }, "Your truck") : this.swapButton(w, id, cost, tradeIn),
           ),
+          statGrid(diffStats(chassisStats(id), own ? null : mine)),
         ),
       );
     });
-    return el(
-      "div",
-      {},
-      el(
-        "div",
-        { class: "note" },
-        createIcon("money"),
-        `Your truck trades in for ${moneyText(tradeIn)}.`,
-      ),
-      el("div", { class: "cards trucks" }, ...cards),
-    );
+    return el("div", { class: "cards trucks" }, ...cards);
+  }
+
+  private swapButton(w: World, id: string, cost: number, tradeIn: number): HTMLElement {
+    const gain = cost < 0;
+    const short = gain ? "" : shortBy(w.player.money, cost);
+    const price = gain ? el("span", { class: "good" }, "+", moneyEl(-cost)) : priceSpan(cost, short === "");
+    const button = reasonButton(["Swap", " ", price], () => this.run((x) => buyChassis(x, id)), short);
+    if (!short) button.title = `Includes ${moneyText(tradeIn)} for your truck`;
+    return button;
   }
 
   private contracts(w: World, shopId: string): HTMLElement {
     const board = shopState(w, shopId).contracts;
     const full = w.player.contracts.length >= CONTRACTS.maxActive;
     const accept = (c: Contract) =>
-      this.button("Accept", (x) => acceptContract(x, c.id), full, full ? `You already hold ${CONTRACTS.maxActive} contracts` : "");
+      this.button("Accept", (x) => acceptContract(x, c.id), full ? `Holding ${CONTRACTS.maxActive} already` : "");
     return el(
       "div",
       {},
-      el("h3", {}, "Contract board"),
+      el("h3", {}, "Offers"),
       board.length
         ? el("div", { class: "jobs" }, ...board.map((c) => contractRow(w, c, accept(c), true)))
-        : el("div", { class: "dim" }, "No offers."),
-      el("h3", {}, `Your contracts ${w.player.contracts.length} / ${CONTRACTS.maxActive}`),
+        : el("div", { class: "dim" }, "None"),
+      el("h3", {}, `Yours ${w.player.contracts.length} / ${CONTRACTS.maxActive}`),
       w.player.contracts.length
         ? el("div", { class: "jobs" }, ...w.player.contracts.map((c) => contractRow(w, c, this.deliverCell(w, shopId, c))))
-        : el("div", { class: "dim" }, "You hold no contracts."),
+        : null,
     );
   }
 
@@ -400,12 +398,13 @@ export class TownScreen {
     const destination = c.kind === "haul" ? c.to : c.shop;
     const verb = c.kind === "bounty" ? "Claim" : "Deliver";
     if (destination !== shopId) return el("span", { class: "dim" }, `${verb} at ${siteName(destination)}`);
-    if (!canDeliver(w, c)) return el("span", { class: "dim" }, c.kind === "bounty" ? bountyPays(w) : NOT_READY[c.kind]);
-    return this.button(verb, (x) => deliverContract(x, c.id));
+    return this.button(verb, (x) => deliverContract(x, c.id), canDeliver(w, c) ? "" : notReady(w, c));
   }
 }
 
-function bountyPays(w: World): string {
+function notReady(w: World, c: Contract): string {
+  if (c.kind === "haul") return `Need ${c.units - (goodsCount(playerVehicle(w))[c.good] ?? 0)} more ${GOODS[c.good].name}`;
+  if (c.kind === "fetch") return "No matching part";
   return vehicleHasPerk(w, playerVehicle(w), "bountyTalk") ? "Pays on knockout, wreck or give-up" : "Pays on knockout or wreck";
 }
 
@@ -441,16 +440,74 @@ const TAB_LABEL: Record<Tab, string> = {
 const TAB_ICON: Record<Tab, IconName> = {
   market: "salt",
   buyParts: "parts",
-  sellParts: "money",
+  sellParts: "trade",
   trucks: "truck",
   contracts: "clock",
 };
 
-const NOT_READY: Record<Contract["kind"], string> = {
-  haul: "Not enough cargo yet",
-  fetch: "Needs the part",
-  bounty: "Not met yet",
-};
+const NOTHING_TO_REPAIR = "Nothing to repair";
+
+export function shortBy(have: number, price: number): string {
+  return have >= price ? "" : `Need ${moneyText(price - have)} more`;
+}
+
+function theyHave(have: number, n: number, amount: (n: number) => string): string {
+  if (have >= n) return "";
+  return have < 1 ? "They have none" : `They have ${amount(have)}`;
+}
+
+function supplyCap(w: World, k: Supply): number {
+  return k === "fuel" ? fuelCap(playerVehicle(w)) : suppliesCap(playerVehicle(w));
+}
+
+function supplyAmount(k: Supply): (n: number) => string {
+  return (n) => (k === "fuel" ? `${fuelLiters(n)} L` : `${Math.round(n * 10) / 10}`);
+}
+
+function supplyUnit(k: Supply): string {
+  return k === "fuel" ? `Per ${supplyAmount(k)(1)}` : "Each";
+}
+
+function supplyLine(k: Supply, have: number, cap: number, theirs: HTMLElement | null, price: number, payable: boolean, buttons: HTMLElement[]): HTMLElement {
+  const amount = supplyAmount(k);
+  return el(
+    "div",
+    { class: "good-row row" },
+    el(
+      "div",
+      { class: "good-name supply" },
+      createIcon(k),
+      el("div", { class: "service-meter" }, el("span", {}, `${amount(have)} / ${amount(cap)}`), bar(have / cap)),
+    ),
+    theirs,
+    el("div", { class: "trade buy wide" }, caption(GOODS_COLUMNS.buy, true), priceEl(price, payable, { tone: "", title: supplyUnit(k) }), ...buttons),
+  );
+}
+
+function theyLack(npc: Vehicle, price: number): string {
+  const money = npc.resources!.money;
+  return money >= price ? "" : `They lack ${moneyText(price - money)}`;
+}
+
+function priceSpan(price: number, payable: boolean): HTMLElement {
+  return el("span", { class: payable ? "" : "bad" }, moneyEl(price));
+}
+
+function stockCount(stock: PartInstance[], f: StockFilter): number {
+  return f === "all" ? stock.length : stock.filter((p) => partDef(p.defId).kind === f).length;
+}
+
+function setIf(node: HTMLElement, name: string, value: string | false): void {
+  if (value) node.setAttribute(name, value);
+}
+
+function reasonButton(label: (Node | string)[], click: () => void, reason: string, key = "", title = ""): HTMLElement {
+  const button = el("button", { class: "btn-s", onclick: () => reason || click() }, ...label);
+  setIf(button, "aria-disabled", reason && "true");
+  setIf(button, "title", reason || title);
+  setIf(button, "data-key", key);
+  return button;
+}
 
 const CONTRACT_ICON: Record<Contract["kind"], IconName> = {
   haul: "cargo",
@@ -458,38 +515,56 @@ const CONTRACT_ICON: Record<Contract["kind"], IconName> = {
   bounty: "cannon",
 };
 
-function priceEl(price: number): HTMLElement {
-  return el("span", { class: "price" }, createIcon("money"), moneyAmount(price));
+type PriceHint = { tone: "good" | "bad" | ""; title: string };
+
+function priceEl(price: number, payable = true, hint: PriceHint | null = null): HTMLElement {
+  return el("span", { class: `price ${priceTone(payable, hint)}`.trim(), title: hint?.title }, moneyNumber(price));
+}
+
+function priceTone(payable: boolean, hint: PriceHint | null): string {
+  return payable ? (hint?.tone ?? "") : "bad";
 }
 
 const PROFIT_TONE = { gain: "better", loss: "worse", even: "same" } as const;
 
-function caption(text: string): HTMLElement {
-  return el("span", { class: "cap" }, text);
+function caption(text: string, coin = false): HTMLElement {
+  return el("span", { class: "cap" }, text, coin ? coinEl() : null);
 }
 
 function goodsHead(withTheirs: boolean): HTMLElement {
   const c = GOODS_COLUMNS;
   return el(
     "div",
-    { class: "goods-head dim" },
+    { class: "goods-head row dim" },
     el("span", {}, c.good),
-    withTheirs ? el("span", {}, c.theirs) : null,
-    el("span", {}, c.buy),
-    el("span", {}, c.sell),
-    el("span", {}, c.held),
-    el("span", { title: PROFIT_HEAD_TITLE, "aria-label": PROFIT_HEAD_TITLE }, c.profit),
+    withTheirs ? theirsHead() : null,
+    priceHead(c.buy),
+    priceHead(c.sell),
+    el("span", { class: "end" }, c.held),
+    el("span", { class: "end", title: PROFIT_HEAD_TITLE, "aria-label": PROFIT_HEAD_TITLE }, c.profit, coinEl()),
   );
 }
 
-function countCell(cls: "theirs" | "held", n: number): HTMLElement {
-  return el("div", { class: `count ${cls}` }, caption(GOODS_COLUMNS[cls]), el("span", { class: n === 0 ? "num dim" : "num" }, `${n}`));
+function suppliesHead(): HTMLElement {
+  return el("div", { class: "goods-head row dim" }, el("span", {}), theirsHead(), priceHead(GOODS_COLUMNS.buy));
+}
+
+function theirsHead(): HTMLElement {
+  return el("span", { class: "end" }, GOODS_COLUMNS.theirs);
+}
+
+function priceHead(label: string): HTMLElement {
+  return el("span", { class: "price-head" }, label, coinEl());
+}
+
+function countCell(cls: "theirs" | "held", n: number, text = `${n}`): HTMLElement {
+  return el("div", { class: `count ${cls}` }, caption(GOODS_COLUMNS[cls]), el("span", { class: n === 0 ? "num dim" : "num" }, text));
 }
 
 function profitCell(e: SaleEstimate): HTMLElement {
   if (e.kind === "none") return el("div", { class: "profit" });
   const tone = e.kind === "unrecorded" ? "dim" : `delta ${PROFIT_TONE[e.kind]}`;
-  return el("div", { class: "profit", title: estimateTitle(e) }, caption(GOODS_COLUMNS.profit), el("span", { class: `num ${tone}` }, estimateText(e)));
+  return el("div", { class: "profit", title: estimateTitle(e) }, caption(GOODS_COLUMNS.profit, true), el("span", { class: `num ${tone}` }, estimateText(e)));
 }
 
 function keepFocus(root: HTMLElement, render: () => void): void {
@@ -513,18 +588,18 @@ function contractRow(w: World, c: Contract, action: HTMLElement, posted = false)
     { class: "job" },
     createIcon(CONTRACT_ICON[c.kind]),
     el("span", {}, contractSummary(c)),
-    el("span", { class: "price" }, createIcon("money"), moneyAmount(c.reward)),
+    el("span", { class: "price good" }, "+", moneyEl(c.reward)),
     clock,
     action,
   );
 }
 
-function pressureHint(def: ShopDef, state: ShopState, good: string): { text: string; cls: "buy" | "sell" } | null {
+export function pressureHint(def: ShopDef, state: ShopState, good: string): PriceHint | null {
   const pressure = state.pressure[good] ?? 0;
-  if (pressure >= PRESSURE_HINT_AT) return { text: "short", cls: "sell" };
-  if (pressure <= -PRESSURE_HINT_AT) return { text: "flooded", cls: "buy" };
-  if (def.makes.includes(good)) return { text: "cheap here", cls: "buy" };
-  if (def.needs.includes(good)) return { text: "dear here", cls: "sell" };
+  if (pressure >= PRESSURE_HINT_AT) return { tone: "bad", title: "Short here" };
+  if (pressure <= -PRESSURE_HINT_AT) return { tone: "good", title: "Flooded here" };
+  if (def.makes.includes(good)) return { tone: "good", title: "Cheap here" };
+  if (def.needs.includes(good)) return { tone: "bad", title: "Dear here" };
   return null;
 }
 
@@ -552,7 +627,7 @@ const TRADE_TAB_ICON: Record<TradeTab, IconName> = { goods: "salt", parts: "part
 const SUPPLY_STEP = 10;
 
 export class TruckTradeScreen {
-  private root = panel("modal");
+  private root = panel("modal dialog");
   private tab: TradeTab = "goods";
   private npcId: string | null = null;
   private error = "";
@@ -630,7 +705,7 @@ export class TruckTradeScreen {
   private tabBody(w: World, npc: Vehicle): HTMLElement {
     if (this.tab === "goods") return this.goods(w, npc);
     if (this.tab === "parts") return this.parts(w, npc);
-    return el("div", { class: "services" }, this.supplyRow(w, npc, "fuel"), this.supplyRow(w, npc, "supplies"));
+    return el("div", { class: "goods truck" }, suppliesHead(), this.supplyRow(w, npc, "fuel"), this.supplyRow(w, npc, "supplies"));
   }
 
   private run(cmd: (w: World) => World): void {
@@ -646,8 +721,8 @@ export class TruckTradeScreen {
     });
   }
 
-  private button(label: string, cmd: (w: World) => World, disabled = false, key = ""): HTMLElement {
-    return el("button", { disabled, "data-key": key || undefined, onclick: () => this.run(cmd) }, label);
+  private button(label: string, cmd: (w: World) => World, reason = "", key = ""): HTMLElement {
+    return reasonButton([label], () => this.run(cmd), reason, key);
   }
 
   private hintMounts(kind: PartKind): (on: boolean) => void {
@@ -657,16 +732,25 @@ export class TruckTradeScreen {
   private goods(w: World, npc: Vehicle): HTMLElement {
     const mine = goodsCount(playerVehicle(w));
     const listed = GOOD_IDS.filter((g) => truckGoodsForSale(npc, g) > 0 || (mine[g] ?? 0) > 0);
-    if (listed.length === 0) return el("div", { class: "dim" }, "Neither truck carries goods to trade.");
+    if (listed.length === 0) return el("div", { class: "dim" }, "No goods to trade");
     return el("div", { class: "goods truck" }, goodsHead(true), ...listed.map((g) => this.goodRow(w, npc, g, mine[g] ?? 0)));
   }
 
   private goodRow(w: World, npc: Vehicle, g: string, held: number): HTMLElement {
     const theirs = truckGoodsForSale(npc, g);
+    const me = playerVehicle(w);
+    const buy = truckGoodPrice(w, g, "buy");
     const sell = truckGoodPrice(w, g, "sell");
+    const buyReason = (n: number) =>
+      theyHave(theirs, n, String) || shortBy(w.player.money, buy * n) || (cargoRoom(me, g) < n ? "No room" : "");
+    const sellReason = (n: number) => {
+      if (held < Math.max(n, 1)) return "Nothing to sell";
+      if (cargoRoom(npc, g) < n) return "No room on their truck";
+      return theyLack(npc, sell * n);
+    };
     return el(
       "div",
-      { class: "good-row" },
+      { class: "good-row row" },
       el(
         "div",
         { class: "good-name" },
@@ -677,18 +761,18 @@ export class TruckTradeScreen {
       el(
         "div",
         { class: "trade buy" },
-        caption(GOODS_COLUMNS.buy),
-        priceEl(truckGoodPrice(w, g, "buy")),
-        this.button("+1", (x) => buyTruckGood(x, npc.id, g, 1), theirs < 1, `${g}:buy1`),
-        this.button("All", (x) => buyTruckGood(x, npc.id, g, theirs), theirs < 1, `${g}:buyAll`),
+        caption(GOODS_COLUMNS.buy, true),
+        priceEl(buy, shortBy(w.player.money, buy) === ""),
+        this.button("+1", (x) => buyTruckGood(x, npc.id, g, 1), buyReason(1), `${g}:buy1`),
+        this.button("All", (x) => buyTruckGood(x, npc.id, g, theirs), buyReason(Math.max(theirs, 1)), `${g}:buyAll`),
       ),
       el(
         "div",
         { class: "trade sell" },
-        caption(GOODS_COLUMNS.sell),
+        caption(GOODS_COLUMNS.sell, true),
         priceEl(sell),
-        this.button("−1", (x) => sellTruckGood(x, npc.id, g, 1), held === 0, `${g}:sell1`),
-        this.button("All", (x) => sellTruckGood(x, npc.id, g, held), held === 0, `${g}:sellAll`),
+        this.button("−1", (x) => sellTruckGood(x, npc.id, g, 1), sellReason(1), `${g}:sell1`),
+        this.button("All", (x) => sellTruckGood(x, npc.id, g, held), sellReason(held), `${g}:sellAll`),
       ),
       countCell("held", held),
       profitCell(saleEstimate(held, sell, w.player.costBasis[g])),
@@ -697,31 +781,31 @@ export class TruckTradeScreen {
 
   private parts(w: World, npc: Vehicle): HTMLElement {
     const me = playerVehicle(w);
-    const row = (p: PartInstance, price: number, payable: boolean, unpaidTitle: string, verb: string, cmd: (w: World) => World): PartRow => ({
+    const row = (p: PartInstance, price: number, reason: string, verb: string, cmd: (w: World) => World): PartRow => ({
       part: p,
       base: compareBase(this.inventory.selectedPart(), p),
       price,
       world: w,
-      payable,
-      unpaidTitle,
-      action: this.button(`${verb} ${moneyText(price)}`, cmd, !payable),
+      payable: reason === "",
+      action: this.button(verb, cmd, reason),
       onHover: this.hintMounts(partDef(p.defId).kind),
     });
     const theirs = spareParts(npc).map((p) => {
       const price = truckPartPrice(w, p, "buy");
-      return row(p, price, w.player.money >= price, "Not enough money", "Buy", (x) => buyTruckPart(x, npc.id, p.id));
+      const reason = shortBy(w.player.money, price) || (canStowPart(me, p) ? "" : "No room");
+      return row(p, price, reason, "Buy", (x) => buyTruckPart(x, npc.id, p.id));
     });
     const mine = spareParts(me).map((p) => {
       const price = truckPartPrice(w, p, "sell");
-      return row(p, price, npc.resources!.money >= price, "They can't pay that", "Sell", (x) => sellTruckPart(x, npc.id, p.id));
+      return row(p, price, theyLack(npc, price), "Sell", (x) => sellTruckPart(x, npc.id, p.id));
     });
     return el(
       "div",
       {},
-      el("h3", {}, "Their spare parts"),
-      theirs.length ? this.rows.list(theirs) : el("div", { class: "dim" }, "Nothing spare."),
-      el("h3", {}, "Your spare parts"),
-      mine.length ? this.rows.list(mine) : el("div", { class: "dim" }, "Nothing spare."),
+      el("h3", {}, "Them"),
+      theirs.length ? this.rows.list(theirs) : el("div", { class: "dim" }, "None"),
+      el("h3", {}, "You"),
+      mine.length ? this.rows.list(mine) : el("div", { class: "dim" }, "None"),
     );
   }
 
@@ -729,28 +813,25 @@ export class TruckTradeScreen {
     const price = truckSupplyPrice(w, k);
     const offer = truckSupplyForSale(npc, k);
     const most = Math.min(offer, supplyRoom(w, k), Math.floor(w.player.money / price));
-    const fuel = k === "fuel";
     const have = w.player[k];
-    const cap = fuel ? fuelCap(playerVehicle(w)) : suppliesCap(playerVehicle(w));
-    const amount = (n: number) => (fuel ? `${fuelLiters(n)} L` : `${Math.round(n * 10) / 10}`);
-    return el(
-      "div",
-      { class: "service" },
-      createIcon(k),
-      el("div", { class: "service-meter" }, el("span", {}, `${amount(have)} / ${amount(cap)}`), bar(have / cap)),
-      el("span", { class: "dim" }, `${fuel ? `${moneyAmount(price)} per ${amount(1)}` : `${moneyAmount(price)} each`}, ${amount(offer)} on offer`),
-      this.button(`+${amount(SUPPLY_STEP)}`, (x) => buyTruckSupply(x, npc.id, k, SUPPLY_STEP), most < SUPPLY_STEP),
-      this.button(`Fill ${amount(most)}`, (x) => buyTruckSupply(x, npc.id, k, most), most < 1),
-    );
+    const cap = supplyCap(w, k);
+    const amount = supplyAmount(k);
+    const reasonFor = (n: number) =>
+      theyHave(offer, n, amount) || (supplyRoom(w, k) < n ? "Full" : "") || shortBy(w.player.money, price * n);
+    return supplyLine(k, have, cap, countCell("theirs", offer, amount(offer)), price, shortBy(w.player.money, price) === "", [
+      this.button(`+${amount(SUPPLY_STEP)}`, (x) => buyTruckSupply(x, npc.id, k, SUPPLY_STEP), reasonFor(SUPPLY_STEP)),
+      this.button(most > 0 ? `Fill ${amount(most)}` : "Fill", (x) => buyTruckSupply(x, npc.id, k, most), reasonFor(1)),
+    ]);
   }
 }
 
 function partnerChips(npc: Vehicle): HTMLElement {
+  const money = npc.resources!.money;
   return el(
     "span",
     { class: "chips" },
     el("span", { class: "dim" }, "Them"),
-    el("span", { class: "chip", title: "Their money" }, createIcon("money"), moneyLabel(npc.resources!.money)),
+    el("span", { class: "chip", title: "Their money" }, moneyEl(money)),
     el("span", { class: "chip", title: "Their free cargo cells" }, createIcon("cells"), `${freeCells(npc)} free`),
   );
 }

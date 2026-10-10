@@ -186,7 +186,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [1.85, 2.85], armor: [0.2, 0.35] },
+    targets: { guns: [1.85, 2.85], armor: [0.2, 0.45] },
     haul: { kg: 200, cells: 3 },
     spares: null,
   },
@@ -343,7 +343,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 1 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [2, 3.1], armor: [0.2, 0.4] },
+    targets: { guns: [1.95, 3.1], armor: [0.2, 0.4] },
     haul: { kg: 0, cells: 0 },
     spares: null,
   },
@@ -421,7 +421,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 2 }, weight: 2 },
       { value: { good: "meds", count: 2 }, weight: 2 },
     ],
-    targets: { guns: [2.05, 3.1], armor: [0.15, 0.3] },
+    targets: { guns: [2.05, 3.1], armor: [0.15, 0.35] },
     haul: { kg: 0, cells: 0 },
     spares: null,
   },
@@ -467,7 +467,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "tools", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [2.05, 3.15], armor: [0.2, 0.35] },
+    targets: { guns: [2.05, 3.15], armor: [0.2, 0.42] },
     haul: { kg: 0, cells: 0 },
     spares: null,
   },
@@ -826,6 +826,8 @@ export type DecisionOptions = {
   surrenderOffered: 'accept' | 'refuse';
   threatened: 'comply' | 'fightBack' | 'flee';
   warnedOff: 'comply' | 'refuse' | 'fightBack';
+  lootContested: 'warn' | 'leave' | 'fight';
+  warnRefused: 'leave' | 'fight';
   mugging: 'demand' | 'attack';
   resume: 'resume' | 'new';
   idle: 'trade' | 'scavenge' | 'raid' | 'prowl' | 'wait' | 'patrol' | 'travel' | 'explore' | 'haul' | 'escort';
@@ -855,6 +857,8 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   strandedFoe: { offer: 9, spare: 1 },
   surrenderOffered: { accept: 3, refuse: 1 },
   threatened: { comply: 1, fightBack: 1, flee: 1 }, warnedOff: { comply: 1, refuse: 1, fightBack: 1 },
+  lootContested: { warn: 4, leave: 5.7, fight: 0.2 },
+  warnRefused: { leave: 3, fight: 1 },
   mugging: { demand: 3, attack: 2 },
   resume: { resume: 9, new: 1 },
   idle: { trade: 0, scavenge: 1, raid: 0, prowl: 0, wait: 0.1, patrol: 0, travel: 0, explore: 0, haul: 0, escort: 0 },
@@ -870,7 +874,7 @@ export type TraitWeights = { [D in DecisionId]?: Partial<Record<DecisionOptions[
 export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   feud: { hostileSeen: { fight: { add: 4 } } },
   backedOff: { preySeen: { rob: { mul: 0.005 } } },
-  tow: {}, patch: {}, trade: {}, aid: {}, combat: {},
+  tow: {}, patch: {}, trade: {}, aid: {}, combat: {}, lootWarning: {},
   truce: { preySeen: { rob: { mul: 0.005 } } },
   grievance: {},
   strayFire: {},
@@ -890,6 +894,7 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
     truceOffered: { refuse: { mul: 3 } },
     mercyBegged: { finish: { mul: 3 } },
     threatened: { fightBack: { mul: 2 } }, warnedOff: { fightBack: { mul: 2 } },
+    lootContested: { fight: { mul: 2 } }, warnRefused: { fight: { mul: 2 } },
   },
 };
 
@@ -910,6 +915,7 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   answering: 20,
   escort: null,
   combat: 10,
+  lootWarning: 30,
 };
 
 

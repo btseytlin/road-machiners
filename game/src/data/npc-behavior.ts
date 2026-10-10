@@ -34,6 +34,8 @@ export const NPC_BEHAVIOR = {
   hurtFullFlee: 0.1,
   missFlee: 0.5,
   manageableFight: 5,
+  threatLeave: 10,
+  warnAnswerTurns: 5,
   keepWork: 400,
   noticeMemory: 3,
   fleeMemory: 30,

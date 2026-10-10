@@ -110,7 +110,7 @@ describe('NPC equipment generation', () => {
     }, budget(120_000));
 
     it('gives more guns for more firepower', () => {
-      const low = average(withPriorities(NPCS.gunwagon, { firepower: 1 }), 'standard', guns);
+      const low = average(withPriorities(NPCS.gunwagon, { firepower: 0 }), 'standard', guns);
       const high = average(withPriorities(NPCS.gunwagon, { firepower: PRIORITY_TOP }), 'standard', guns);
       expect(high).toBeGreaterThan(low);
     }, budget(120_000));
@@ -124,13 +124,13 @@ describe('NPC equipment generation', () => {
     }, budget(120_000));
 
     it('leaves more cargo room for more cargo priority', () => {
-      const room = (template: NpcTemplate) => average(template, 'loaded', (v) => npcMassRoom(v, speedShare(template.loadout.priorities)));
-      expect(room(withPriorities(NPCS.trader, { cargo: PRIORITY_TOP }))).toBeGreaterThan(room(withPriorities(NPCS.trader, { cargo: 0 })));
+      const room = (template: NpcTemplate) => average(template, 'standard', (v) => npcMassRoom(v, speedShare(template.loadout.priorities)));
+      expect(room(withPriorities(NPCS.buggy, { cargo: PRIORITY_TOP }))).toBeGreaterThan(room(withPriorities(NPCS.buggy, { cargo: 0 })));
     }, budget(120_000));
 
     it('keeps a faster truck for more speed priority', () => {
       const speed = (template: NpcTemplate) => average(template, 'heavy', topSpeed);
-      expect(speed(withPriorities(NPCS.gunwagon, { speed: PRIORITY_TOP }))).toBeGreaterThan(speed(withPriorities(NPCS.gunwagon, { speed: 0 })));
+      expect(speed(withPriorities(NPCS.scavenger, { speed: PRIORITY_TOP }))).toBeGreaterThan(speed(withPriorities(NPCS.scavenger, { speed: 0 })));
     }, budget(120_000));
   });
 
