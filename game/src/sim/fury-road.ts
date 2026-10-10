@@ -3,7 +3,7 @@ import { GARAGE_STOCK } from '../data/market';
 import { NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { chassisDef } from '../data/chassis';
-import { inCombat, inCombatWith } from './combat';
+import { inCombatWith } from './combat';
 import { playerVehicle } from './damage';
 import { alongOf, highwayMap, milestoneAt, outpostFort, outpostId, outpostSite, roadPoint, stretchStream, toRoad, WINDOW_SHIFT } from './highway';
 import { canUseSite, sitePads } from './sites';
@@ -14,7 +14,7 @@ import { generateNpcLoadout } from './npc-loadout';
 import { nextRandom, randInt, type Rng } from './rng';
 import { modeRules } from './settings';
 import { isFree, spawnAt } from './spawn';
-import { declareFeud } from './states';
+import { declareFeud, settleStates } from './states';
 import { getResources } from './resources';
 import { fuelCap, isStranded } from './stats';
 import { refreshTrack } from './tracks';
@@ -129,7 +129,7 @@ function factsOf(run: FuryRoadRun, milestone: number): OutpostFacts {
 
 export function advanceFuryRoad(world: World): void {
   const run = world.furyRoad;
-  if (!run || world.player.state !== 'active') return;
+  if (!run || world.player.state !== 'active' || betweenLevels(world)) return;
   countWrecks(world, run);
   huntPlayer(world, run);
   noteEngaged(world, run);
@@ -280,7 +280,25 @@ function onOutpostPad(world: World, pos: Vec, milestone: number): boolean {
 }
 
 function arrivedAtNext(world: World, run: FuryRoadRun): boolean {
-  return parkedOnPad(world, run.window + 1) && !inCombat(world, playerVehicle(world));
+  return parkedOnPad(world, run.window + 1);
+}
+
+export function betweenLevels(world: World): boolean {
+  const run = world.furyRoad;
+  return run !== null && factsOf(run, run.window + 1).paid;
+}
+
+export function canWaitForRoad(world: World): boolean {
+  const run = world.furyRoad;
+  return run !== null && world.player.state === 'active' && betweenLevels(world) && parkedOnPad(world, run.window + 1);
+}
+
+export function waitForRoad(world: World): World {
+  return playerCommand(world, (w) => {
+    if (!canWaitForRoad(w)) throw new Error('Only a player parked on the pad of a paid outpost can wait for the road');
+    moveWindow(w);
+    w.events.push({ t: 'roadOpened', stretch: runOf(w).window + 1 });
+  });
 }
 
 function completeStretch(world: World, run: FuryRoadRun): void {
@@ -294,14 +312,15 @@ function completeStretch(world: World, run: FuryRoadRun): void {
   run.earned += pay;
   run.wrecks += wrecks;
   removeSurvivors(world, run.groups);
+  run.groups = [];
   world.events.push({ t: 'outpostReached', milestone: j, pay, wrecks });
-  moveWindow(world);
 }
 
 function removeSurvivors(world: World, groups: WaveGroup[]): void {
   const gone = new Set(groups.flatMap((g) => g.vehicles));
   world.removed.push(...world.vehicles.filter((v) => gone.has(v.id)));
   world.vehicles = world.vehicles.filter((v) => !gone.has(v.id));
+  settleStates(world);
 }
 
 type Move = 'shift' | 'rebuild' | 'drop' | 'keep';
@@ -350,6 +369,7 @@ const DROPPED: { [K in keyof World as (typeof WINDOW_MOVE)[K] extends 'drop' ? K
 };
 
 function requireMovable(world: World, run: FuryRoadRun): void {
+  if (!factsOf(run, run.window + 1).paid) throw new Error(`The window moves only once outpost ${run.window + 1} is paid`);
   if (aliveCount(world, run) > 0) throw new Error('The window cannot move while a group truck is alive');
   if (!parkedOnPad(world, run.window + 1)) throw new Error(`The window moves only with the player parked at outpost ${run.window + 1}`);
   if (world.salvage.length > 0 || Object.keys(world.shops).length > 0) throw new Error('A Fury Road window holds no salvage and no shops');
@@ -429,7 +449,7 @@ export function runEarnings(world: World): { pay: number; wrecks: number; reache
   return {
     pay: run.earned,
     wrecks: run.wrecks + run.groups.reduce((n, g) => n + g.wrecked, 0),
-    reached: run.window,
+    reached: run.window + (betweenLevels(world) ? 1 : 0),
     north: Math.max(0, playerProgress(world, run) - milestoneAt(0)),
   };
 }
@@ -455,6 +475,11 @@ export function outpostNear(world: World): Outpost | null {
 export function furyRoadReadout(world: World): FuryRoadReadout | null {
   const run = world.furyRoad;
   if (!run) return null;
+  if (betweenLevels(world)) return fullStretch(world, run.window + 2);
   const j = run.window + 1;
   return { stretch: j, toOutpost: Math.max(0, outpostSite(world.seed, j).n - playerProgress(world, run)), outpostId: outpostId(j) };
+}
+
+function fullStretch(world: World, j: number): FuryRoadReadout {
+  return { stretch: j, toOutpost: outpostSite(world.seed, j).n - outpostSite(world.seed, j - 1).n, outpostId: outpostId(j) };
 }

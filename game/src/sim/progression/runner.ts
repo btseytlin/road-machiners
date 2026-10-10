@@ -3,7 +3,7 @@ import { partDef } from '../../data/parts';
 import { inCombat } from '../combat';
 import { hostileToPlayer, playerCanAct, setAutoFire, setAutoRepair, setMoveOrder } from '../world';
 import { basicsRepairCost, repairCost, supplyRoom, type Supply } from '../economy';
-import { abandonRun, canAbandonRun, nextOutpost, payOf, reachedOutpostAt, type Outpost } from '../fury-road';
+import { abandonRun, canAbandonRun, canWaitForRoad, nextOutpost, payOf, reachedOutpostAt, waitForRoad, type Outpost } from '../fury-road';
 import { corePart, goodsCount, mountedParts } from '../grid';
 import { canStowPart, installSpot } from '../inventory';
 import { outpostBuyGood, outpostBuyPart, outpostBuySupply, outpostGoodPrice, outpostGoodRoom, outpostPartPrice, outpostRepairAll, outpostRepairBasics } from '../outposts';
@@ -29,6 +29,7 @@ function run(o: Orders): void {
   if (o.me.job) return;
   const post = reachedOutpostAt(o.world);
   if (post) restock(o, post);
+  if (canWaitForRoad(o.world)) o.run(waitForRoad);
   if (canAbandonRun(o.world) && !canPatchOn(o.world, o.me)) return o.run(abandonRun);
   drive(o);
 }

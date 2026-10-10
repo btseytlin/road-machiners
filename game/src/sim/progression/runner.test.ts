@@ -17,7 +17,7 @@ function atFirstOutpost(): World {
 }
 
 describe('the Fury Road runner bot', () => {
-  it('repairs, restocks patch parts and drives on to the next outpost', () => {
+  it('repairs, restocks patch parts, waits for the road and drives on to the next outpost', () => {
     const w = atFirstOutpost();
     for (const part of mountedParts(playerVehicle(w))) part.hp = Math.ceil(maxHp(part) * 0.6);
     const me = playerVehicle(w);
@@ -29,6 +29,8 @@ describe('the Fury Road runner bot', () => {
 
     expect(mountedParts(after).every((p) => p.hp === maxHp(p))).toBe(true);
     expect(goodsCount(after).parts).toBe(4);
+    expect(turn.events).toContainEqual({ t: 'roadOpened', stretch: 2 });
+    expect(turn.world.furyRoad?.window).toBe(1);
     expect(after.order).toEqual({ kind: 'stopAt', dest: outpostPad(turn.world, 2) });
     expect(turn.ledger.repairs).toBeLessThan(0);
   });

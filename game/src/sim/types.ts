@@ -506,6 +506,7 @@ export type GameEvent =
   | { t: 'caltrops'; vehicle: string; field: string; source: string; hits: PartHit[] }
   | { t: 'found'; vehicle: string; stock: string; goods: Record<string, number>; parts: string[]; fuel: number; supplies: number }
   | { t: 'outpostReached'; milestone: number; pay: number; wrecks: number }
+  | { t: 'roadOpened'; stretch: number }
   | { t: 'runLost'; stretch: number; cause: RunLossCause };
 
 export type GameModeId = 'roaming' | 'furyRoad';

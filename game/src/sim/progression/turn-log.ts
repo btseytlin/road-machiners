@@ -137,7 +137,7 @@ function foesSeen(world: World, me: Vehicle): SeenFoe[] {
     .map((v) => ({ id: v.id, who: `${v.brain?.templateId ?? v.faction}/${v.chassisId}`, dist: Math.round(dist(v.pos, me.pos)), odds: Math.round(100 * fightOddsAgainst(world, me, v).win), speed: Math.round(vehicleStats(world, v).maxSpeed * 10) / 10 }));
 }
 
-const OWN = new Set(['money', 'contract', 'death', 'knockout', 'wake', 'skillUp', 'supply', 'townPatch', 'scrapPatch', 'searched', 'discover', 'outpostReached', 'runLost']);
+const OWN = new Set(['money', 'contract', 'death', 'knockout', 'wake', 'skillUp', 'supply', 'townPatch', 'scrapPatch', 'searched', 'discover', 'outpostReached', 'roadOpened', 'runLost']);
 const QUIET = new Set(['practice', 'activity', 'arrived', 'spawn', 'despawn', 'info', 'weather']);
 
 export function touchesPlayer(e: GameEvent, me: string): boolean {
