@@ -408,7 +408,7 @@ describe('demand', () => {
   it('a raider with no room raises no demand', () => {
     const { w: start, raider } = ambush();
     const full = start.vehicles.find((v) => v.id === raider.id)!;
-    while (cargoRoom(full, 'scrap') > 0 || cargoRoom(full, 'electronics') > 0) {
+    while (cargoRoom(full) > 0 || cargoRoom(full) > 0) {
       if (addGoods(start, full, 'scrap', 1) + addGoods(start, full, 'electronics', 1) === 0) break;
     }
     const w = endTurn(start, testDrive);

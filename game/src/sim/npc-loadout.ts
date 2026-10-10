@@ -1,5 +1,5 @@
 import { chassisDef } from '../data/chassis';
-import { GOODS } from '../data/goods';
+import { CRATE_MASS, GOODS } from '../data/goods';
 import { GEAR_DRAWS, GEAR_LEVELS, GEAR_LEVEL_IDS, GEAR_WHIM, NPC_UPKEEP, PRIORITY_TOP, type CargoRoll, type GearLevel, type Load, type LoadoutPriorities, type NpcLoadoutTable, type NpcTemplate, type Weighted } from '../data/npcs';
 import { NPC_UTILITY_PARTS } from '../data/npc-utilities';
 import { PARTS, partDef, type PartKind } from '../data/parts';
@@ -311,11 +311,11 @@ function mountedNonCore(v: Vehicle): PartSpec[] {
 type Room = { cells: number; mass: number };
 
 function chooseGoods(rng: Rng, table: NpcLoadoutTable, level: Level, room: Room): CargoRoll | null {
-  const goods = table.goods.filter(({ value }) => value === null || (value.count <= room.cells && GOODS[value.good].mass * value.count <= room.mass));
+  const goods = table.goods.filter(({ value }) => value === null || (value.count <= room.cells && CRATE_MASS * value.count <= room.mass));
   if (!goods.length) throw new Error('No fitting cargo outcome for this NPC template');
   const roll = sampleWeighted(rng, goods);
   if (!roll) return null;
-  const count = Math.min(Math.max(1, Math.round(roll.count * level.cargo)), room.cells, Math.floor(room.mass / GOODS[roll.good].mass));
+  const count = Math.min(Math.max(1, Math.round(roll.count * level.cargo)), room.cells, Math.floor(room.mass / CRATE_MASS));
   return { good: roll.good, count };
 }
 
@@ -329,7 +329,7 @@ function chooseCargo(world: World, rng: Rng, wearRng: Rng, table: NpcLoadoutTabl
     const added = addGoods(world, load, good, n);
     if (added > 0) carried[good] = (carried[good] ?? 0) + added;
   };
-  addGood('parts', Math.min(NPC_UPKEEP.repairParts, Math.floor(massLeft() / GOODS.parts.mass), cellsLeft()));
+  addGood('parts', Math.min(NPC_UPKEEP.repairParts, Math.floor(massLeft() / CRATE_MASS), cellsLeft()));
   const cargo = chooseGoods(rng, table, level, { cells: cellsLeft(), mass: massLeft() });
   if (cargo) addGood(cargo.good, cargo.count);
   return { spares: addSpareParts(world, wearRng, table, level, load, { mass: massLeft, cells: cellsLeft }), carried };

@@ -574,7 +574,7 @@ export const SCREENS = {
   'cell.builtIn': 'built-in part',
   'item.title': m('{part}\n{state}', { part: 'text', state: 'text' }),
   'item.partTitle': m('{name} ({kind}) {wear}, {hp}/{max} HP, {w}x{h}', { name: 'text', kind: 'text', wear: 'text', hp: 'int', max: 'int', w: 'int', h: 'int' }),
-  'item.cargo': m('Cargo, {mass}', { mass: 'text' }),
+  'item.cargo': m('Crate, {mass}', { mass: 'text' }),
   'item.builtIn': 'Built in',
   'item.mounted': 'Mounted',
   'item.spare': 'Spare',

@@ -1,7 +1,8 @@
 import { START_KITS } from "../data/start";
 import { describe, expect, it } from "vitest";
 import { CHASSIS } from "../data/chassis";
-import { ECONOMY, GOOD_IDS } from "../data/goods";
+import { CRATE_MASS, ECONOMY, GOOD_IDS } from "../data/goods";
+import { vehicleMass } from "./mass";
 import { SHOPS } from "../data/market";
 import { goodBasePrice, lotPrice, shopState } from "./market";
 import { PARTS, partDef } from "../data/parts";
@@ -77,6 +78,19 @@ describe("trade", () => {
     const w = buyGood(start, "scrap", 3);
     expect(goodsCount(w.vehicles[0]).scrap).toBe(2 + 3);
     expect(w.player.money).toBe(start.player.money - price);
+  });
+
+  it("buying and selling crates of tools moves their lot price and one crate mass each", () => {
+    const start = startAtBowl();
+    start.player.money = 100000;
+    const price = getLotTradePrice(start, start.vehicles[0], "bowl", "tools", 3, "buy");
+    const bought = buyGood(start, "tools", 3);
+    expect(start.player.money - bought.player.money).toBe(price);
+    expect(vehicleMass(bought.vehicles[0]) - vehicleMass(start.vehicles[0])).toBe(3 * CRATE_MASS);
+    const value = getLotTradePrice(bought, bought.vehicles[0], "bowl", "tools", 3, "sell");
+    const sold = sellGood(bought, "tools", 3);
+    expect(sold.player.money - bought.player.money).toBe(value);
+    expect(vehicleMass(sold.vehicles[0])).toBe(vehicleMass(start.vehicles[0]));
   });
 
   it("enforces cargo capacity and money", () => {

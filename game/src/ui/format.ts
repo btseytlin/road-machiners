@@ -1,6 +1,7 @@
 // Event log lines and the words of jobs, contracts, parts and states. Every function returns a Msg, so its words
 // follow the active language.
 
+import { CRATE_MASS } from '../data/goods';
 import { CONTRACTS } from '../data/market';
 import { partDef } from '../data/parts';
 import type { Contract } from '../sim/market';
@@ -32,7 +33,7 @@ import { concat, list, t, verbatim, type Msg } from '../text/msg';
 import { goalText, goodName, moneyReasonText, noteText, noteTitle, partName as partNameOf, refusalText, siteName, skillName, templateName, traitName, vehicleTitle } from '../text/names';
 import { Refused } from '../sim/world';
 import { aidWords, lineText } from './dialogue';
-import { damage, fuelLiters, hp, kph, moneyM, moneyMsg } from './units';
+import { damage, fuelLiters, hp, kg, kph, moneyM, moneyMsg } from './units';
 
 // What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
 export function jobLabel(world: World, v: Vehicle, job: Job): Msg {
@@ -750,6 +751,8 @@ export type SaleEstimate =
 export const GOODS_COLUMNS = {
   good: t('goods.good'), theirs: t('goods.theirs'), buy: t('goods.buy'), sell: t('goods.sell'), held: t('goods.held'), profit: t('goods.profit'),
 } as const;
+
+export const CRATE_NOTE = t('goods.crateNote', { mass: kg(CRATE_MASS) });
 
 export const PROFIT_HEAD_TITLE = t('goods.profitTitle');
 

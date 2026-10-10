@@ -49,7 +49,7 @@ describe('a robbery from compliance to pickup', () => {
 
   it('a robber that can carry only part of the load leaves the rest with the victim', () => {
     const { w, robber, prey } = scene({ scrap: 6, electronics: 6 });
-    while (cargoRoom(robber, 'scrap') > 2) addGoods(w, robber, 'scrap', 1);
+    while (cargoRoom(robber) > 2) addGoods(w, robber, 'scrap', 1);
     const held = total(prey);
     const expected = cargoHaul(robber, prey).length;
     expect(expected).toBeLessThan(held);
@@ -62,7 +62,7 @@ describe('a robbery from compliance to pickup', () => {
 
   it('a robber with no room makes no demand', () => {
     const { w, robber, prey } = scene({ scrap: 2 });
-    while (cargoRoom(robber, 'electronics') > 0) addGoods(w, robber, 'electronics', 1);
+    while (cargoRoom(robber) > 0) addGoods(w, robber, 'electronics', 1);
     expect(() => answersHoldUp(w, prey, robber, 'comply')).toThrow(/does not hold up/);
     thinkNpc(w, robber);
     expect(total(prey)).toBe(2);
@@ -71,7 +71,7 @@ describe('a robbery from compliance to pickup', () => {
   it('a robber with no room strips nothing from a beaten truck', () => {
     const { w, robber, prey } = scene({ scrap: 2 });
     expect(hasStrippable(w, robber, prey)).toBe(true);
-    while (cargoRoom(robber, 'electronics') > 0) addGoods(w, robber, 'electronics', 1);
+    while (cargoRoom(robber) > 0) addGoods(w, robber, 'electronics', 1);
     const bare = hasStrippable(w, robber, prey);
     expect(surrenderHaul(robber, prey).length > 0).toBe(bare);
     expect(cargoHaul(robber, prey)).toEqual([]);

@@ -1,7 +1,7 @@
 // Vehicle mass in kilograms: chassis plus everything on board. Physics, stats, crashes and the UI read it here.
 
 import { chassisDef } from '../data/chassis';
-import { GOODS } from '../data/goods';
+import { CRATE_MASS, GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import type { GridItem, Vehicle } from './types';
@@ -24,7 +24,6 @@ export function itemMass(it: GridItem): number {
 }
 
 function goodMass(id: string): number {
-  const def = GOODS[id];
-  if (!def) throw new Error(`Unknown good ${id}`);
-  return def.mass;
+  if (!GOODS[id]) throw new Error(`Unknown good ${id}`);
+  return CRATE_MASS;
 }

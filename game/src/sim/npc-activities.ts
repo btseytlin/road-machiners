@@ -1133,7 +1133,7 @@ function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): vo
   if (!site) return;
   if (!activity.purchase) throw new Error('Trade activity missing purchase');
   noteShop(world, vehicle, site.id);
-  const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, cargoRoom(vehicle, activity.purchase.good), tradeSpend(world, vehicle));
+  const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, cargoRoom(vehicle), tradeSpend(world, vehicle));
   if (count > 0) {
     tradeGoods(world, vehicle, site.id, activity.purchase.good, count, 'buy');
     topUpAtPump(world, vehicle, site.id);
@@ -1149,7 +1149,7 @@ function resolveHaul(world: World, vehicle: Vehicle, activity: NpcActivity): voi
   const site = reachSite(vehicle, activity);
   if (!site) return;
   if (!activity.load) throw new Error('Haul activity missing load');
-  if (addGoods(world, vehicle, activity.load.good, cargoRoom(vehicle, activity.load.good)) === 0) {
+  if (addGoods(world, vehicle, activity.load.good, cargoRoom(vehicle)) === 0) {
     finishGoal(world, vehicle, 'cargoFullLoad');
     return;
   }

@@ -42,7 +42,7 @@ function fitsAll(winner: Vehicle, items: GridItem[]): boolean {
       probe.items.push({ ...item, ...spot });
       continue;
     }
-    if (cargoRoom(probe, item.good) < 1) return false;
+    if (cargoRoom(probe) < 1) return false;
     const spot = findSpot(gridOf(probe), probe.items, item, null, null);
     if (!spot) return false;
     probe.items.push({ ...item, ...spot });

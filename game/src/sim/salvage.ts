@@ -1,7 +1,7 @@
 import { FIELD_SPARE_WEAR, OLD_PLACES, OLD_PLACE_TYPES, OLD_TABLES, SALVAGE, STORY_WRECKS, type LootRange, type LootTable, type OldPlaceType, type StoryWreck } from '../data/salvage';
 import { REGION } from '../data/region';
 import OLD_SPOTS_FILE from '../data/old-spots.json';
-import { ECONOMY, GOODS } from '../data/goods';
+import { CRATE_MASS, ECONOMY, GOODS } from '../data/goods';
 import { BREAKABLE, RULES } from '../data/rules';
 import { WRECK_LOOKS } from '../data/territory';
 import { TIME } from '../data/time';
@@ -172,7 +172,7 @@ function canTakeRevealed(world: World, vehicle: Vehicle, stock: SalvageStock): b
   const grid = gridOf(vehicle);
   const good: GridItem = { id: 'fit-check', x: 0, y: 0, rot: 0, kind: 'good', good: 'scrap' };
   const massRoom = cargoMassRoom(vehicle);
-  if (Object.entries(stock.goods).some(([id, count]) => count > 0 && GOODS[id].mass <= massRoom) && findSpot(grid, vehicle.items, good, null, null)) return true;
+  if (Object.values(stock.goods).some((count) => count > 0 && CRATE_MASS <= massRoom) && findSpot(grid, vehicle.items, good, null, null)) return true;
   return stock.parts.some((part) => {
     const item: GridItem = { id: 'fit-check', x: 0, y: 0, rot: 0, kind: 'part', part };
     return itemMass(item) <= massRoom && findSpot(grid, vehicle.items, item, null, MOUNT_CELLS[partDef(part.defId).kind]) !== null;

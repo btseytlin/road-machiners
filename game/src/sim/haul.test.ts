@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { RULES } from '../data/rules';
 import { cargoHaul, haulVar, showsHaul, surrenderHaul } from './haul';
-import { GOODS } from '../data/goods';
+import { CRATE_MASS } from '../data/goods';
 import { addGoods, cargoMassRoom, cargoRoom, stowPart } from './inventory';
 import { goodsCount } from './grid';
 import { collectSalvage, dropHaul } from './salvage';
@@ -46,11 +46,11 @@ describe('the haul', () => {
     const w = emptyWorld({ x: 200, y: 200 });
     const r = robber(w);
     const v = victim(w, { scrap: 3, tools: 2 });
-    while (cargoRoom(r, 'scrap') > 1) addGoods(w, r, 'scrap', 1);
+    while (cargoRoom(r) > 1) addGoods(w, r, 'scrap', 1);
     const haul = cargoHaul(r, v);
     const kinds = haul.map((item) => (item.kind === 'good' ? item.good : 'part'));
     expect(kinds).toHaveLength(1);
-    expect(GOODS[kinds[0]].mass).toBeLessThanOrEqual(cargoMassRoom(r));
+    expect(CRATE_MASS).toBeLessThanOrEqual(cargoMassRoom(r));
     expect(v.items.filter((item) => item.kind === 'good')).toHaveLength(5);
     addGoods(w, r, 'scrap', 1);
     expect(cargoHaul(r, v)).toEqual([]);
