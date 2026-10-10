@@ -36,7 +36,7 @@ function loadedTrader(world: World, pos: { x: number; y: number }, parts = ['mg'
   return trader;
 }
 
-const scavengeGoal: NpcActivity = { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' };
+const scavengeGoal: NpcActivity = { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'searchSite' };
 
 function shareOfSeeds(world: World, npcId: string, check: (x: World, npc: Vehicle) => boolean, seeds = 200): number {
   let held = 0;
@@ -94,7 +94,7 @@ describe('NPC restraint', () => {
       assignAutoOrders(x);
       const fights = topGoal(me)?.kind === 'fight';
       if (fights) expect(Object.keys(me.weaponOrders)).toHaveLength(1);
-      const paid = topGoal(me)?.kind === 'loot' && topGoal(me)?.reason === 'take the handed-over cargo';
+      const paid = topGoal(me)?.kind === 'loot' && topGoal(me)?.reason === 'takeHandedCargo';
       return fights || paid;
     });
     expect(fought).toBeGreaterThan(0.9);
@@ -340,7 +340,7 @@ describe('NPC field repairs', () => {
     expect(thinkNpc(world, npc).kind).not.toBe('sell');
     addGoods(world, npc, 'scrap', 1);
     npc.pos = { ...sitePads(REGION.towns[0])[0] };
-    npc.brain!.goals = [{ kind: 'sell', targetId: REGION.towns[0].id, destination: REGION.towns[0].pos, phase: 'act', reason: 'sell loot' }];
+    npc.brain!.goals = [{ kind: 'sell', targetId: REGION.towns[0].id, destination: REGION.towns[0].pos, phase: 'act', reason: 'sellCargo' }];
     resolveNpcActivities(world);
     expect(goodsCount(npc).scrap ?? 0).toBe(0);
     expect(goodsCount(npc).parts).toBe(2);

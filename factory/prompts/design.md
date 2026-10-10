@@ -49,6 +49,11 @@ They come on top of the global principles of the up skills.
 For each project principle the change touches, answer its plan check in the task file's Principles section.
 A design that deviates from a project principle names it and says why.
 
+A change a player sees in the HTML UI or an overlay also follows docs/ui.md, the UI design system.
+Plan it with that document's "How to build a screen" steps.
+Write the answers in a UI section of the task file: the decision the screen serves, each fact with its tier, the zone, the shared pieces and formatters it uses, and the level of each event it raises.
+A design that breaks a ui.md principle names the principle and says why.
+
 Create or revise the task file {{taskFile}}.
 Set `Mode: hands-off` in it.
 Run up:udesign and then up:uplan in hands-off mode.

@@ -5,7 +5,7 @@ import { SPAWN } from '../data/npcs';
 import { REGION } from '../data/region';
 import { getResources } from './resources';
 import { siteGates } from './sites';
-import { autoOrders, beatenBy, fireWeapons, hitOdds, isHostile, laneOfOffset, missPoint, noteAttack, resolveDestroyed, wreckVehicle } from './combat';
+import { autoOrders, beatenBy, chanceSteps, fireWeapons, hitOdds, isHostile, laneOfOffset, missPoint, noteAttack, resolveDestroyed, wreckVehicle } from './combat';
 import { knockOutNpc } from './defeat';
 import { NPC_BEHAVIOR } from '../data/npc-behavior';
 import { thinkNpc, topGoal } from './npc-activities';
@@ -19,6 +19,11 @@ import { dist } from './vec';
 import { PHYSICS } from '../data/physics';
 import { endTurn, update } from './world';
 import { gunFor } from './factory';
+import { lineKey } from '../text/names';
+import { entryText } from '../text/resolve';
+
+// A line's English words, so the tests read like the talk they check.
+const en = (line: Parameters<typeof lineKey>[0]): string => entryText('en', lineKey(line));
 
 function duel(targetPos = { x: 33, y: 30 }) {
   const w = emptyWorld();
@@ -196,7 +201,8 @@ describe('combat', () => {
     let world = w;
     let shotAt = false;
     for (let i = 0; i < 6; i++) {
-      if (world.player.call) world = chooseOption(world, currentOptions(world).findIndex((o) => o.text === 'Come and get it.'));
+      // A raider radios its demand first. Refusing keeps the fight.
+      if (world.player.call) world = chooseOption(world, currentOptions(world).findIndex((o) => en(o.line) === 'Come and get it.'));
       world = endTurn(world, testDrive);
       if (world.events.some((e) => e.t === 'shot' && e.shooter === buggy.id && e.target === me.id)) shotAt = true;
     }
@@ -243,6 +249,28 @@ function expectShownChance(t: ReturnType<typeof aimTest> & { aim: string }) {
   }
   expect(Math.abs(reached / rounds - shown)).toBeLessThan(0.03);
 }
+
+describe('chance steps', () => {
+  it('start from the gun alone and end at the shown damage chance', () => {
+    const t = range(5, Math.PI / 2, 5);
+    t.me.speed = 4;
+    const odds = hitOdds(t.w, t.me, t.mg, t.buggy, 'body');
+    const steps = chanceSteps(t.w, t.me, t.mg, t.buggy, 'body');
+    expect(steps[0].cause).toBe('weapon');
+    expect(steps.at(-1)!.chance).toBeCloseTo(odds.damageChance, 12);
+    const shown = steps.slice(1).map((s) => s.cause);
+    const used = (Object.keys(odds.causes) as (keyof typeof odds.causes)[]).filter((k) => k !== 'weapon' && odds.causes[k] !== 0);
+    expect([...shown].sort()).toEqual([...used].sort());
+  });
+
+  it('add the causes that widen the scatter before those that narrow it, so a parked target never empties the scatter', () => {
+    const t = range(5, Math.PI / 2, 0);
+    const odds = hitOdds(t.w, t.me, t.mg, t.buggy, 'body');
+    expect(odds.causes.still).toBeLessThan(0);
+    const signs = chanceSteps(t.w, t.me, t.mg, t.buggy, 'body').slice(1).map((s) => Math.sign(odds.causes[s.cause]));
+    expect(signs).toEqual([...signs].sort((a, b) => b - a));
+  });
+});
 
 describe('towed trucks', () => {
   it('a truck on a tow rope is nobody\'s foe, but its tower stays one', () => {
@@ -592,7 +620,7 @@ describe('NPC attack records and defensive fire', () => {
     const aimed = () => Object.values(npc.weaponOrders).map((order) => order.targetId);
     autoOrders(w, npc);
     expect(aimed()).toEqual([]);
-    npc.brain.goals = [{ kind: 'fight', targetId: prey.id, destination: { ...prey.pos }, phase: 'travel', reason: 'test fight' }];
+    npc.brain.goals = [{ kind: 'fight', targetId: prey.id, destination: { ...prey.pos }, phase: 'travel', reason: 'fightHostile' }];
     autoOrders(w, npc);
     expect(aimed()).toEqual([prey.id]);
     const gate = siteGates(REGION.towns[0])[0];
@@ -600,7 +628,7 @@ describe('NPC attack records and defensive fire', () => {
     prey.pos = { ...gate };
     autoOrders(w, npc);
     expect(aimed()).toEqual([prey.id]);
-    npc.brain.goals = [{ kind: 'flee', targetId: prey.id, destination: { x: 100, y: 100 }, phase: 'travel', reason: 'test flee' }];
+    npc.brain.goals = [{ kind: 'flee', targetId: prey.id, destination: { x: 100, y: 100 }, phase: 'travel', reason: 'escapeAttacker' }];
     npc.brain.attackers = { [prey.id]: true };
     autoOrders(w, npc);
     expect(aimed()).toEqual([prey.id]);
@@ -804,7 +832,7 @@ describe('betrayal', () => {
   it('a betrayed partner drops the deal and fights back', () => {
     const { w, me, npc } = partners();
     addState(w, 'trade', npc.id, me.id, { kind: 'none' });
-    npc.brain!.goals = [{ kind: 'meet', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'pull over to trade' }];
+    npc.brain!.goals = [{ kind: 'meet', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'pullOver' }];
     noteAttack(w, me, npc, true);
     forceOption('attacked', 'fightBack');
     thinkNpc(w, npc);

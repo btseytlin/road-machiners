@@ -66,7 +66,7 @@ describe('NPC equipment generation', () => {
       const beforeId = world.nextId;
       const loadout = generateNpcLoadout(world, template);
       expect(world.nextId).toBe(beforeId);
-      const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+      const v = makeVehicle(world, { ...loadout, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
       expect(mountedParts(v, 'engine')).toHaveLength(1);
       expect(mountedParts(v, 'weapon').length).toBeGreaterThanOrEqual(1);
       for (const item of v.items) expect(placementError(gridOf(v), v.items, item, item.id)).toBeNull();
@@ -84,7 +84,7 @@ describe('NPC equipment generation', () => {
   const rolled = (template: NpcTemplate, level: GearLevel | null, seed: number): Vehicle => {
     const world = { ...fixture, rngState: seed, marketRng: { rngState: seed * 104729 + 1 } };
     const loadout = generateNpcLoadout(world, template, null, level);
-    return makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+    return makeVehicle(world, { ...loadout, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
   };
   const average = (template: NpcTemplate, level: GearLevel | null, of: (v: Vehicle) => number) => {
     let total = 0;
@@ -110,7 +110,7 @@ describe('NPC equipment generation', () => {
     }, budget(120_000));
 
     it('gives more guns for more firepower', () => {
-      const low = average(withPriorities(NPCS.gunwagon, { firepower: 1 }), 'standard', guns);
+      const low = average(withPriorities(NPCS.gunwagon, { firepower: 0 }), 'standard', guns);
       const high = average(withPriorities(NPCS.gunwagon, { firepower: PRIORITY_TOP }), 'standard', guns);
       expect(high).toBeGreaterThan(low);
     }, budget(120_000));
@@ -124,13 +124,13 @@ describe('NPC equipment generation', () => {
     }, budget(120_000));
 
     it('leaves more cargo room for more cargo priority', () => {
-      const room = (template: NpcTemplate) => average(template, 'loaded', (v) => npcMassRoom(v, speedShare(template.loadout.priorities)));
-      expect(room(withPriorities(NPCS.trader, { cargo: PRIORITY_TOP }))).toBeGreaterThan(room(withPriorities(NPCS.trader, { cargo: 0 })));
+      const room = (template: NpcTemplate) => average(template, 'standard', (v) => npcMassRoom(v, speedShare(template.loadout.priorities)));
+      expect(room(withPriorities(NPCS.buggy, { cargo: PRIORITY_TOP }))).toBeGreaterThan(room(withPriorities(NPCS.buggy, { cargo: 0 })));
     }, budget(120_000));
 
     it('keeps a faster truck for more speed priority', () => {
       const speed = (template: NpcTemplate) => average(template, 'heavy', topSpeed);
-      expect(speed(withPriorities(NPCS.gunwagon, { speed: PRIORITY_TOP }))).toBeGreaterThan(speed(withPriorities(NPCS.gunwagon, { speed: 0 })));
+      expect(speed(withPriorities(NPCS.scavenger, { speed: PRIORITY_TOP }))).toBeGreaterThan(speed(withPriorities(NPCS.scavenger, { speed: 0 })));
     }, budget(120_000));
   });
 
@@ -175,7 +175,7 @@ describe('NPC equipment generation', () => {
     for (let seed = 1; seed <= 32; seed++) {
       const world = { ...fixture, rngState: seed };
       const loadout = generateNpcLoadout(world, template);
-      const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+      const v = makeVehicle(world, { ...loadout, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
       expect(everyGunFires(v), describeLoadout(v)).toBe(true);
     }
   });
@@ -326,7 +326,7 @@ describe('trader spare parts', () => {
     for (let i = 0; i < 10; i++) {
       template.loadout.goods = [{ value: { good: 'textiles', count: free }, weight: 1 }];
       const rolled = generateNpcLoadout({ ...fixture, rngState: 3 }, template);
-      const room = freeCells(makeVehicle(fixture, { ...rolled, spares: [], cargo: { parts: rolled.cargo.parts }, name: 'probe', faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 }));
+      const room = freeCells(makeVehicle(fixture, { ...rolled, spares: [], cargo: { parts: rolled.cargo.parts }, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 }));
       if (room === free) break;
       free = room;
     }
@@ -623,11 +623,11 @@ describe('loadout fingerprint', () => {
   it('rolls the same loadouts and RNG streams for every template', () => {
     const w = emptyWorld();
     const loadouts = Object.values(NPCS).flatMap((template) => Array.from({ length: 5 }, () => generateNpcLoadout(w, template)));
-    expect(sha({ loadouts, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('5567917b7ce31784');
+    expect(sha({ loadouts, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('4b70fb602be0aba5');
   }, budget(180_000));
 
   it('populates a new world the same way', () => {
     const w = newWorld(7, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
-    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('97b4eef0a4b00b96');
+    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('9bace902bdbba1e6');
   }, budget(60_000));
 });

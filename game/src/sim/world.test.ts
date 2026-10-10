@@ -39,8 +39,7 @@ describe('townStart', () => {
 });
 
 describe('the overdrive cutoff', () => {
-  const CUT = 'Overdrive cut out: the engine is too worn.';
-  const cutEvents = (w: World) => w.events.filter((e) => e.t === 'info' && e.text === CUT).length;
+  const cutEvents = (w: World) => w.events.filter((e) => e.t === 'info' && e.note.id === 'overdriveCutOut').length;
   const engineOf = (w: World) => mountedParts(playerVehicle(w), 'engine')[0];
 
   function overdriving(hp: number): World {

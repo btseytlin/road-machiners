@@ -24,8 +24,8 @@ function createScenario(templateId = 'scavenger') {
 }
 
 function workGoal(templateId: string): NpcActivity {
-  if (templateId === 'trader') return { kind: 'sell', targetId: REGION.towns[0].id, destination: { ...REGION.towns[0].pos }, phase: 'travel', reason: 'deliver purchased cargo' };
-  return { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' };
+  if (templateId === 'trader') return { kind: 'sell', targetId: REGION.towns[0].id, destination: { ...REGION.towns[0].pos }, phase: 'travel', reason: 'deliverCargo' };
+  return { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'searchSite' };
 }
 
 function fireAt(world: World, shooter: Vehicle, target: Vehicle) {
@@ -124,7 +124,7 @@ describe('NPC gameplay recovery', () => {
     const { world, npc } = createScenario(template);
     const enemy = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
     fireAt(world, enemy, npc);
-    npc.brain!.goals = [{ kind: 'flee', targetId: enemy.id, destination: { x: 10, y: 30 }, phase: 'travel', reason: 'test flight', perceived: world.turn }];
+    npc.brain!.goals = [{ kind: 'flee', targetId: enemy.id, destination: { x: 10, y: 30 }, phase: 'travel', reason: 'escapeThreat', perceived: world.turn }];
     npc.brain!.attackers[enemy.id] = true;
     chooseOn(world, npc, enemy.id, enemy.pos, 'flee', true);
     npc.brain!.hurt = 0;
@@ -252,7 +252,7 @@ describe('NPC gameplay recovery', () => {
     corePart(npc, 'cab').hp = 1;
     const calm = cloneWorld(world);
     expect(thinkNpc(calm, byId(calm, npc.id)).kind).toBe('repair');
-    npc.brain!.goals.push({ kind: 'repair', targetId: null, destination: null, phase: 'act', reason: 'patch damaged parts' });
+    npc.brain!.goals.push({ kind: 'repair', targetId: null, destination: null, phase: 'act', reason: 'patchParts' });
     const raider = addVehicle(world, 'raiders', 'buggy', ['mg'], { x: 33, y: 30 });
     fireAt(world, raider, npc);
     const repairs = shareOfSeeds(world, npc.id, (x, me) => {
@@ -277,7 +277,7 @@ describe('NPC gameplay recovery', () => {
   it('keeps running from a threat out of sight until it has been calm a while', () => {
     const { world, npc } = createScenario('buggy');
     const shooter = addVehicle(world, 'vultures', 'van', ['mg', 'stockEngine'], { x: 190, y: 190 });
-    const flee: NpcActivity = { kind: 'flee', targetId: shooter.id, destination: { x: 5, y: 5 }, phase: 'travel', reason: 'escape an attacker', perceived: world.turn };
+    const flee: NpcActivity = { kind: 'flee', targetId: shooter.id, destination: { x: 5, y: 5 }, phase: 'travel', reason: 'escapeAttacker', perceived: world.turn };
     npc.brain!.goals = [workGoal('buggy'), flee];
 
     world.turn += NPC_BEHAVIOR.fleeCalmTurns;
@@ -300,7 +300,7 @@ describe('NPC gameplay recovery', () => {
     const { world, npc } = createScenario('scavenger');
     const enemy = addVehicle(world, 'raiders', 'wagon', ['heavyMg', 'mg', 'stockEngine'], { x: 36, y: 30 });
     enemy.brain = npcBrain('gunwagon', enemy.pos, ['raider']);
-    const look: NpcActivity = { kind: 'investigate', targetId: enemy.id, destination: { ...enemy.pos }, phase: 'travel', reason: 'heard a hostile beyond sight' };
+    const look: NpcActivity = { kind: 'investigate', targetId: enemy.id, destination: { ...enemy.pos }, phase: 'travel', reason: 'heardHostile' };
     npc.brain!.goals = [workGoal('scavenger'), look];
     fireAt(world, enemy, npc);
     let fled = 0;
@@ -318,7 +318,7 @@ describe('NPC gameplay recovery', () => {
     const { world, npc } = createScenario('buggy');
     const first = addVehicle(world, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 36, y: 30 });
     const second = addVehicle(world, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 30, y: 36 });
-    const fight: NpcActivity = { kind: 'fight', targetId: first.id, destination: { ...first.pos }, phase: 'travel', reason: 'fight a hostile in sight', worn: { turn: world.turn, condition: 1 } };
+    const fight: NpcActivity = { kind: 'fight', targetId: first.id, destination: { ...first.pos }, phase: 'travel', reason: 'fightHostile', worn: { turn: world.turn, condition: 1 } };
     npc.brain!.goals = [workGoal('buggy'), fight];
     chooseOn(world, npc, first.id, first.pos, 'fight', true);
     fireAt(world, second, npc);
@@ -334,7 +334,7 @@ describe('NPC gameplay recovery', () => {
       const { world, npc } = createScenario('buggy');
       const target = addVehicle(world, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 36, y: 30 });
       addState(world, 'feud', npc.id, target.id, { kind: 'feud', robbery: false });
-      const fight: NpcActivity = { kind: 'fight', targetId: target.id, destination: { ...target.pos }, phase: 'travel', reason: 'fight a hostile in sight', worn: { turn: world.turn, condition: worn } };
+      const fight: NpcActivity = { kind: 'fight', targetId: target.id, destination: { ...target.pos }, phase: 'travel', reason: 'fightHostile', worn: { turn: world.turn, condition: worn } };
       npc.brain!.goals = [workGoal('buggy'), fight];
       chooseOn(world, npc, target.id, target.pos, 'fight', true);
       world.turn += NPC_BEHAVIOR.fightStallTurns + 1;

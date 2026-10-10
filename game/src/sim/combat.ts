@@ -328,12 +328,32 @@ export function hitOdds(
   target: Vehicle,
   aim: Aim,
 ): HitOdds {
+  return oddsOf(world, shooter, src.def, target, aim, spreadCauses(world, shooter, src.def, target));
+}
+
+type Cause = keyof HitOdds["causes"];
+export type ChanceStep = { cause: Cause; chance: number };
+
+export function chanceSteps(world: World, shooter: Vehicle, src: ShotSource, target: Vehicle, aim: Aim): ChanceStep[] {
+  const full = spreadCauses(world, shooter, src.def, target);
+  const keys = Object.keys(full) as Cause[];
+  const bySize = (x: Cause, y: Cause) => Math.abs(full[y]) - Math.abs(full[x]);
+  const order = [...keys.filter((k) => full[k] > 0 && k !== "weapon").sort(bySize), ...keys.filter((k) => full[k] < 0).sort(bySize)];
+  const causes = { ...Object.fromEntries(keys.map((k) => [k, 0])), weapon: full.weapon } as HitOdds["causes"];
+  const step = (cause: Cause): ChanceStep => ({ cause, chance: oddsOf(world, shooter, src.def, target, aim, { ...causes }).damageChance });
+  const steps = [step("weapon")];
+  for (const k of order) {
+    causes[k] = full[k];
+    steps.push(step(k));
+  }
+  return steps;
+}
+
+function oddsOf(world: World, shooter: Vehicle, shot: WeaponDef, target: Vehicle, aim: Aim, causes: HitOdds["causes"]): HitOdds {
   const distance = shotDistance(shooter, target);
   const a = aiming(shooter, target, aim);
   const width = a.width;
   const halfAngle = width / (2 * distance);
-  const shot = src.def;
-  const causes = spreadCauses(world, shooter, shot, target);
   const spread = totalSpread(shot, causes);
   const chance = clamp(
     rawChance({ halfAngle, spread }),

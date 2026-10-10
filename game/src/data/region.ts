@@ -2,16 +2,19 @@
 
 import type { Vec } from "../sim/vec";
 
-export type TownDef = { id: string; name: string; pos: Vec; radius: number };
+export type TownDef = { id: string; pos: Vec; radius: number };
 export type SiteLocationDef = {
   id: string;
-  name: string;
   kind: "oasis" | "convoy" | "landmark" | "camp";
   pos: Vec;
   radius: number;
   edge?: SiteEdge;
 };
-export type TerritoryDef = { id: string; name: string; kind: "territory"; pos: Vec; radius: number; outline: Vec[] | null };
+// Open ground full of loot spots. It has no edge, gates or pads: trucks drive in. Its rules live in TERRITORIES.
+// outline is its edge as a polygon, in tiles from pos, or null when the edge is the circle of radius. For an outline,
+// radius is the outline's bounding radius, so code that only needs a reach can use it. siteGap() in src/sim/sites.ts
+// decides inside and outside.
+export type TerritoryDef = { id: string; kind: "territory"; pos: Vec; radius: number; outline: Vec[] | null };
 export type LocationDef = SiteLocationDef | TerritoryDef;
 export type SiteEdge = "fence" | "wrecks";
 export const MAP_SCALE = 5;
@@ -221,21 +224,19 @@ export const REGION = {
     roadShyBand: 10,
   },
   towns: [
-    { id: "bowl", name: "Bowl", pos: scalePoint({ x: 16, y: 94 }), radius: 28 },
-    { id: "nose", name: "Nose", pos: scalePoint({ x: 102, y: 35 }), radius: 32 },
+    { id: "bowl", pos: scalePoint({ x: 16, y: 94 }), radius: 28 },
+    { id: "nose", pos: scalePoint({ x: 102, y: 35 }), radius: 32 },
   ] as TownDef[],
   locations: [
-    { id: "orchard", name: "Old Orchard", kind: "territory", pos: ORCHARD_POS, radius: boundingRadius(ORCHARD_OUTLINE), outline: ORCHARD_OUTLINE },
+    { id: "orchard", kind: "territory", pos: ORCHARD_POS, radius: boundingRadius(ORCHARD_OUTLINE), outline: ORCHARD_OUTLINE },
     {
       id: "dustwell",
-      name: "Dustwell",
       kind: "oasis",
       pos: scalePoint({ x: 33.8, y: 32 }),
       radius: 6,
     },
     {
       id: "granary",
-      name: "The Granary",
       kind: "landmark",
       pos: scalePoint({ x: 50, y: 32.8 }),
       radius: 6,
@@ -243,7 +244,6 @@ export const REGION = {
     {
       id: "burnt-convoy",
       edge: "wrecks",
-      name: "Burnt Convoy",
       kind: "convoy",
       pos: scalePoint({ x: 60, y: 18.8 }),
       radius: 6,
@@ -251,7 +251,6 @@ export const REGION = {
     {
       id: "podfield",
       edge: "wrecks",
-      name: "Podfield",
       kind: "convoy",
       pos: scalePoint({ x: 78.2, y: 21 }),
       radius: 6,
@@ -259,14 +258,12 @@ export const REGION = {
     {
       id: "canyon-bridge",
       edge: "fence",
-      name: "Canyon Bridge",
       kind: "landmark",
       pos: scalePoint({ x: 106.2, y: 70 }),
       radius: 6,
     },
     {
       id: "glass-flats",
-      name: "Glass Flats",
       kind: "territory",
       pos: GLASS_FLATS_POS,
       radius: boundingRadius(GLASS_FLATS_OUTLINE),
@@ -274,14 +271,12 @@ export const REGION = {
     },
     {
       id: "green-pit",
-      name: "Green Pit",
       kind: "oasis",
       pos: scalePoint({ x: 71.8, y: 89 }),
       radius: 6,
     },
     {
       id: "south-lock",
-      name: "South Lock",
       kind: "landmark",
       pos: scalePoint({ x: 56.8, y: 94 }),
       radius: 6,
@@ -289,21 +284,18 @@ export const REGION = {
     {
       id: "ridge-wrecks",
       edge: "wrecks",
-      name: "Ridge Wrecks",
       kind: "convoy",
       pos: scalePoint({ x: 41, y: 90.2 }),
       radius: 6,
     },
     {
       id: "pump-station",
-      name: "Pump Station",
       kind: "landmark",
       pos: scalePoint({ x: 40.7, y: 51.7 }),
       radius: 6,
     },
     {
       id: "fallen-sun",
-      name: "Fallen Sun",
       kind: "territory",
       pos: FALLEN_SUN_POS,
       radius: boundingRadius(FALLEN_SUN_OUTLINE),
@@ -311,7 +303,6 @@ export const REGION = {
     },
     {
       id: "salvage-yard",
-      name: "Salvage Yard",
       kind: "convoy",
       pos: scalePoint({ x: 82, y: 52.2 }),
       radius: 6,
@@ -319,21 +310,18 @@ export const REGION = {
     {
       id: "broken-wing",
       edge: "wrecks",
-      name: "Broken Wing",
       kind: "landmark",
       pos: BROKEN_WING_SITE,
       radius: 6,
     },
     {
       id: "scrapjaw",
-      name: "Scrapjaw Camp",
       kind: "camp",
       pos: scalePoint({ x: 22, y: 14 }),
       radius: 6,
     },
     {
       id: "kiln",
-      name: "Kiln Camp",
       kind: "camp",
       pos: scalePoint({ x: 66, y: 76 }),
       radius: 6,

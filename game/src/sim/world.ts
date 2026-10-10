@@ -28,7 +28,7 @@ import { applyHazards } from './hazard';
 import { consumeSupplies, fitAllStores, leakFuel } from './supplies';
 import { scrapPatch } from './economy';
 import { nameStream, spawnInitial, spawnNpcs } from './spawn';
-import { clearPiles, initializeSalvage, renewSalvage } from './salvage';
+import { clearPiles, initializeSalvage, renewSalvage, stockOldSpots } from './salvage';
 import { spillDeadRows } from './spill';
 import { fadeCraters } from './craters';
 import { timed } from '../perf';
@@ -40,7 +40,7 @@ import { checkBeacon, dropStrandedTowers, followTower, isTowed, playerTow } from
 import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
 import { advanceAid, readyAid } from './aid';
-import type { GridItem, MoveOrder, PartInstance, UtilityOrder, Vehicle, WeaponOrder, World, WorldSettings, WorldSetup, XpSource } from './types';
+import type { GridItem, MoveOrder, PartInstance, Refusal, UtilityOrder, Vehicle, WeaponOrder, World, WorldSettings, WorldSetup, XpSource } from './types';
 import { defaultSetup, parseSetup, repairSetup } from './settings';
 import { canOverdrive, vehicleStats } from './stats';
 import { playerSees, practiceContacts, refreshVision } from './vision';
@@ -141,7 +141,6 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
   };
   world.obstacles = generateObstacles(world, map, openingObstacles(kit.opening, start));
   const truck = makeVehicle(world, {
-    name: kit.name,
     faction: "player",
     chassisId: kit.chassis,
     parts: kit.parts.map((defId) => ({ defId, wear: 0 })),
@@ -165,6 +164,7 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
   world.player.storage = kit.storage.map((defId) => makePart(world, defId, 0));
   if (populate) spawnInitial(world);
   initializeShops(world);
+  stockOldSpots(world, map);
   refreshVision(world);
   world.events = [];
   return world;
@@ -218,11 +218,20 @@ export function update(world: World, fn: (draft: World) => void): World {
 function settleOverdrive(w: World): void {
   if (!w.player.overdrive || canOverdrive(playerVehicle(w))) return;
   w.player.overdrive = false;
-  w.events.push({ t: 'info', text: 'Overdrive cut out: the engine is too worn.' });
+  w.events.push({ t: 'info', note: { id: 'overdriveCutOut' } });
+}
+
+export type ActBlock = 'knockedOut' | 'towed' | 'onRadio';
+
+export function actBlock(world: World): ActBlock | null {
+  if (world.player.state !== 'active') return 'knockedOut';
+  if (isTowed(world)) return 'towed';
+  if (world.player.call) return 'onRadio';
+  return null;
 }
 
 export function playerCanAct(world: World): boolean {
-  return world.player.state === 'active' && !isTowed(world) && !world.player.call;
+  return actBlock(world) === null;
 }
 
 export function requireActivePlayer(world: World): void {
@@ -249,6 +258,15 @@ function waitsOnBeacon(world: World): boolean {
   return p.state === 'active' && p.beacon && isAtRest(me) && playerTow(world) === null;
 }
 
+// A player command the sim turns down for a reason the player can fix. The UI shows the refusal in words. Any other
+// error from a command is a bug.
+export class Refused extends Error {
+  constructor(readonly refusal: Refusal) {
+    super(`Refused: ${refusal.id}`);
+  }
+}
+
+// A player command: rejected unless the player is active and not towed, then applied like any update.
 export function playerCommand(world: World, fn: (draft: World) => void): World {
   requireActivePlayer(world);
   return update(world, fn);
@@ -372,7 +390,7 @@ export function setUtilityOrder(world: World, partId: string, order: UtilityOrde
       return;
     }
     const error = utilityOrderError(w, me, partId, order);
-    if (error) throw new Error(error);
+    if (error) throw new Refused(error);
     me.utilityOrders[partId] = order;
   });
 }
@@ -437,7 +455,7 @@ export type Carried = {
   fuel: number | null;
   supplies: number | null;
   costBasis: Record<string, number>;
-  truck: { chassisId: string; name: string | null; items: CarriedItem[] } | null;
+  truck: { chassisId: string; items: CarriedItem[] } | null;
   storage: CarriedPart[];
   setup: unknown;
 };
@@ -476,7 +494,7 @@ function carriedKit(carried: Carried, kit: StartKit, report: CarryReport): Start
     report.lost.push(saved.chassisId);
     return kit;
   }
-  return { ...kit, chassis: saved.chassisId, name: pick(saved.name, kit.name), parts: [], storage: [], cargo: {}, costBasis: {} };
+  return { ...kit, chassis: saved.chassisId, parts: [], storage: [], cargo: {}, costBasis: {} };
 }
 
 function pick<T>(value: T | null | undefined, fallback: T): T {

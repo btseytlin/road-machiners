@@ -374,7 +374,7 @@ describe('routes prefer roads', () => {
       const v = addVehicle(w, faction, 'buggy', ['mg', 'stockEngine'], { x: 0, y: 0 });
       v.id = 'v7';
       v.brain = npcBrain('buggy', { x: 0, y: 0 }, traits);
-      v.brain.goals = [{ kind, targetId: null, destination: null, phase: 'travel', reason: 'test' }];
+      v.brain.goals = [{ kind, targetId: null, destination: null, phase: 'travel', reason: 'idle' }];
       return v;
     }
     function drivers(w: World) {
@@ -467,11 +467,11 @@ describe('raiders that keep off roads', () => {
   function raider(w: World, pos: Vec): Vehicle {
     const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], pos);
     v.brain = npcBrain('test', pos, []);
-    v.brain.goals = [{ kind: 'sell', targetId: null, destination: null, phase: 'travel', reason: 'test sell' }];
+    v.brain.goals = [{ kind: 'sell', targetId: null, destination: null, phase: 'travel', reason: 'patrolTown' }];
     return v;
   }
   function flee(v: Vehicle): void {
-    v.brain!.goals.push({ kind: 'flee', targetId: null, destination: null, phase: 'travel', reason: 'test flee' });
+    v.brain!.goals.push({ kind: 'flee', targetId: null, destination: null, phase: 'travel', reason: 'escapeAttacker' });
   }
 
   function roadRuns(w: World, from: Vec, points: Vec[]): number[] {
@@ -1103,7 +1103,7 @@ describe('raider hunting routes on the map', () => {
       w.terrain = { ...TEST_MAP.terrain };
       const driver = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 100, y: 100 });
       driver.brain = npcBrain('buggy', driver.pos, ['raider']);
-      driver.brain.goals = [{ kind: 'raid', targetId: null, destination: null, phase: 'travel', reason: 'test raid' }];
+      driver.brain.goals = [{ kind: 'raid', targetId: null, destination: null, phase: 'travel', reason: 'raid' }];
       let length = 0, road = 0, near6 = 0, near10 = 0, samples = 0;
       const legs = legsOf(w);
       for (const [from, to] of legs) {
@@ -1153,7 +1153,7 @@ describe('raider hunting routes on the map', () => {
     const w = newWorld(1, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const driver = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], side(-1));
     driver.brain = npcBrain('buggy', driver.pos, ['raider']);
-    driver.brain.goals = [{ kind: 'raid', targetId: null, destination: null, phase: 'travel', reason: 'test raid' }];
+    driver.brain.goals = [{ kind: 'raid', targetId: null, destination: null, phase: 'travel', reason: 'raid' }];
     const points = route(w, side(-1), side(1), 0.8, [], driver);
     expect(dist(points.at(-1)!, side(1))).toBeLessThanOrEqual(4);
     const across = (p: Vec): number => Math.sign((p.x - centre.x) * normal.x + (p.y - centre.y) * normal.y);

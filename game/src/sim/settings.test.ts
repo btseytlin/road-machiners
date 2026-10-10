@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { damageScale, defaultSetup, fuelUseScale, parseSetup, repairSetup, setupLabel, supplyUseScale } from './settings';
+import { damageScale, defaultSetup, fuelUseScale, parseSetup, repairSetup, supplyUseScale } from './settings';
 import { emptyWorld } from './testkit';
+import { setupText } from '../text/names';
+import { resolve } from '../text/resolve';
 
 const roaming = (settings: Record<string, unknown>) => ({ mode: 'roaming', settings: { damage: 1, fuelUse: 1, supplyUse: 1, ...settings } });
 
@@ -97,8 +99,8 @@ describe('scale queries', () => {
   });
 });
 
-describe('setupLabel', () => {
+describe('setupText', () => {
   it('names the mode and every setting as a percentage', () => {
-    expect(setupLabel(parseSetup(roaming({ damage: 1.5 })))).toBe('Roaming, Damage 150%, Fuel use 100%, Supply use 100%');
+    expect(resolve(setupText(parseSetup(roaming({ damage: 1.5 }))), 'en')).toBe('Roaming, Damage 150%, Fuel use 100%, Supply use 100%');
   });
 });

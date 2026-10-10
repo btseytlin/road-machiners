@@ -129,7 +129,7 @@ describe('field repair job', () => {
     const cage = armorPart(me);
     cage.hp = 1;
     addGoods(w, me, 'parts', 20);
-    expect(() => startRepair(w, cage.id)).toThrow('Stop the truck first');
+    expect(() => startRepair(w, cage.id)).toThrow('Refused: stopFirst');
   });
 
   it('a standing player truck drops its leftover drive order to start a job', () => {
@@ -503,7 +503,7 @@ describe('jobs in combat', () => {
 
   it('starts no job in combat', () => {
     const { w, me, cage } = underFire();
-    expect(() => startRepair(w, cage.id)).toThrow(/in combat/);
+    expect(() => startRepair(w, cage.id)).toThrow('Refused: inCombat');
     startAutoRepair(w);
     expect(me.job).toBeNull();
   });

@@ -2,7 +2,7 @@
 
 import { chassisDef } from '../data/chassis';
 import { partDef, type CoreDef, type PartKind } from '../data/parts';
-import type { GridItem, PartInstance, Vehicle } from './types';
+import type { GridItem, PartInstance, PlacementRefusal, Vehicle } from './types';
 
 export type SideLetter = 'F' | 'B' | 'L' | 'R';
 export type Cell = 'D' | 'E' | SideLetter | 'X' | '.';
@@ -117,6 +117,15 @@ export function gridOf(v: Vehicle): Grid {
   return grid;
 }
 
+// Net cells a working mounted cargo part adds on this chassis: its full-width rows, less the deck cells it sits on,
+// which would otherwise hold cargo. Throws for a part that is not cargo.
+export function cargoCellsGained(chassisId: string, defId: string): number {
+  const def = partDef(defId);
+  if (def.kind !== 'cargo') throw new Error(`${defId} is not a cargo part`);
+  return def.extraRows * baseGrid(chassisId).w - def.w * def.h;
+}
+
+// True when any cell of the item lies on a broken cargo part's dead row.
 export function onDeadRow(g: Grid, item: GridItem): boolean {
   return itemCells(item).some((c) => c.y >= g.deadFrom && c.y < g.h);
 }
@@ -171,12 +180,13 @@ export function freeCells(v: Vehicle): number {
   return cellCount(g) - used;
 }
 
-export function placementError(g: Grid, items: GridItem[], item: GridItem, ignoreId: string | null): string | null {
+// Why an item cannot sit at (x, y, rot), or null if it can. ignoreId skips the item being moved.
+export function placementError(g: Grid, items: GridItem[], item: GridItem, ignoreId: string | null): PlacementRefusal | null {
   const taken = takenCells(items, ignoreId);
   const cells = itemCells(item);
-  if (crossesChassisEnd(g, cells) || !cells.every((c) => onGrid(g, c))) return 'Does not fit there';
-  if (cells.some((c) => taken.has(cellKey(c.x, c.y)))) return 'Something is in the way';
-  if (!isArmorItem(item) && cells.some((c) => isSkin(g.cells[c.y][c.x]))) return 'Only armor fits on the sides';
+  if (crossesChassisEnd(g, cells) || !cells.every((c) => onGrid(g, c))) return { id: 'noFit' };
+  if (cells.some((c) => taken.has(cellKey(c.x, c.y)))) return { id: 'inTheWay' };
+  if (!isArmorItem(item) && cells.some((c) => isSkin(g.cells[c.y][c.x]))) return { id: 'armorOnly' };
   return null;
 }
 

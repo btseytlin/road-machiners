@@ -3,6 +3,11 @@ import { corePart, coreParts, mountedParts, mountedItems, itemSize } from "../si
 import { emptyWorld } from "../sim/testkit";
 import { addVehicle } from "../sim/testkit";
 import { conditionLabel, TruckConditionReadout } from "./hud-readout";
+import { partName } from "../text/names";
+import type { Msg } from "../text/msg";
+import { resolve } from "../text/resolve";
+
+const en = (msg: Msg): string => resolve(msg, "en");
 
 describe("truck condition", () => {
   it("keeps critical parts at their actual chassis positions", () => {
@@ -58,16 +63,16 @@ describe("truck condition", () => {
 
 describe("condition tooltip", () => {
   it("names the part with its condition", () => {
-    expect(conditionLabel({ name: "Stock engine", percent: 40 })).toBe("Stock engine: 40%");
+    expect(en(conditionLabel({ name: partName("stockEngine"), percent: 40 }))).toBe("Stock engine: 40%");
   });
 
   it("marks a broken part", () => {
-    expect(conditionLabel({ name: "Cab", percent: 0 })).toBe("Cab: broken");
+    expect(en(conditionLabel({ name: partName("cabPickup"), percent: 0 }))).toBe("Cab: broken");
   });
 
   it("gives every tile of a truck a name", () => {
     const parts = new TruckConditionReadout().update(emptyWorld().vehicles[0]);
-    for (const part of parts) expect(conditionLabel(part).startsWith(`${part.name}: `)).toBe(true);
+    for (const part of parts) expect(en(conditionLabel(part)).startsWith(`${en(part.name)}: `)).toBe(true);
   });
 });
 

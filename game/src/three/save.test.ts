@@ -8,7 +8,7 @@ import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
 import { canStowPart, moveItem, storePart, stowPart, stowSpot, takeFromStorage } from '../sim/inventory';
 import { buyStockPart } from '../sim/economy';
 import { makePart } from '../sim/factory';
-import type { GridItem } from '../sim/types';
+import type { GridItem, World } from '../sim/types';
 import { advanceContracts, siteOf, type Contract } from '../sim/market';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
@@ -18,7 +18,7 @@ import { REGION } from '../data/region';
 import { sitePads } from '../sim/sites';
 import { TEST_MAP } from '../test/map';
 import { isBakedObstacle, isBreakable, mapObstacles } from '../sim/mapgen';
-import { breakProp } from '../sim/salvage';
+import { breakProp, oldSpotOf, oldSpotPicks, oldStockId } from '../sim/salvage';
 import { sunAt } from '../sim/sun';
 import { practiceContacts, refreshVision } from '../sim/vision';
 import { TIME } from '../data/time';
@@ -69,10 +69,11 @@ describe('game save', () => {
     const storage = makeStorage();
     writeSave(slots, 'auto', newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming')), RUN, 1000);
     storage.setItem('roam.tips', JSON.stringify(['waypoint']));
+    storage.setItem('roam.tipsOff', '1');
     storage.setItem('roam-sound', '{}');
     clearGame(slots, storage);
     expect(slots.has('auto')).toBe(false);
-    expect([storage.getItem('roam.tips'), storage.getItem('roam-sound')]).toEqual([null, '{}']);
+    expect([storage.getItem('roam.tips'), storage.getItem('roam.tipsOff'), storage.getItem('roam-sound')]).toEqual([null, null, '{}']);
   });
 
   it('saves a command on a town pad at once, and not out in the open', () => {
@@ -124,7 +125,7 @@ describe('game save', () => {
     const world = emptyWorld();
     const raider = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 }, Math.PI);
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
-    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1, fulfilled: false };
+    const bounty: Contract = { id: 'ct-b', shop: 'bowl', kind: 'bounty', template: 'buggy', reward: 100, deadline: 900, window: 900, tier: 1, fulfilled: false };
     world.player.contracts = [bounty];
     writeSave(slots, 'auto', world, RUN, 1000);
     const loaded = loadWorld(slots, 'auto', TEST_MAP);
@@ -221,17 +222,43 @@ describe('game save', () => {
     const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
     const saved = saveOf(world).world;
     const cases = [
-      [{ major: SAVE_MAJOR - 1, minor: 0 }, saved, /new game/],
-      [{ major: SAVE_MAJOR + 1, minor: 0 }, saved, /new game/],
+      [{ major: SAVE_MAJOR - 1, minor: 0 }, saved, /incompatible/],
+      [{ major: SAVE_MAJOR + 1, minor: 0 }, saved, /incompatible/],
       [{ major: SAVE_MAJOR, minor: MIGRATIONS.length + 1 }, saved, /newer/],
-      [{ major: SAVE_MAJOR, minor: -1 }, saved, /format/],
-      [SAVE_FORMAT, { turn: 21 }, /world/],
+      [{ major: SAVE_MAJOR, minor: -1 }, saved, /noFormat/],
+      [SAVE_FORMAT, { turn: 21 }, /invalidWorld/],
     ] as const;
     for (const [format, savedWorld, error] of cases) {
       slots.put('auto', { format, world: savedWorld });
       expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(SaveError);
       expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(error);
     }
+  });
+
+  it('stocks every old-world loot spot of a save from before them, once', () => {
+    const slots = makeSlots();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
+    const ids = oldSpotPicks(TEST_MAP).map(oldStockId);
+    const saved = JSON.parse(JSON.stringify(saveOf(world))).world;
+    saved.salvage = saved.salvage.filter((stock: { id: string }) => !oldSpotOf(stock));
+    slots.put('auto', { format: { major: SAVE_MAJOR, minor: MIGRATIONS.length - 1 }, world: saved, savedAt: 1000, runId: RUN });
+    const loaded = loadWorld(slots, 'auto', TEST_MAP)!;
+    const oldIds = (w: World): string[] => w.salvage.filter((stock) => oldSpotOf(stock)).map((stock) => stock.id);
+    expect(oldIds(loaded)).toEqual(ids);
+    expect(loaded.salvage).toHaveLength(world.salvage.length);
+    writeSave(slots, 'auto', loaded, RUN, 1000);
+    expect(loadWorld(slots, 'auto', TEST_MAP)).toEqual(loaded);
+  });
+
+  it('refuses a save holding only some old-world loot spots', () => {
+    const slots = makeSlots();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
+    const saved = JSON.parse(JSON.stringify(saveOf(world))).world;
+    const first = oldStockId(oldSpotPicks(TEST_MAP)[0]);
+    saved.salvage = saved.salvage.filter((stock: { id: string }) => stock.id !== first);
+    slots.put('auto', { format: SAVE_FORMAT, world: saved, savedAt: 1000, runId: RUN });
+    expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(SaveError);
+    expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(/partial/);
   });
 
   it('records the saved shape of the current format', () => {
@@ -247,7 +274,7 @@ describe('game save', () => {
       const saved = { ...saveOf(world).world } as Record<string, unknown>;
       delete saved[field];
       slots.put('auto', { format: SAVE_FORMAT, world: saved });
-      expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(/world/);
+      expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(/invalidWorld/);
     }
   });
 
@@ -498,7 +525,7 @@ describe('saved world settings', () => {
     ['no setup at the current format', undefined],
   ])('rejects a save with %s as a save error', (_, setup) => {
     expect(() => loadWorld(storedWith(setup), 'auto', TEST_MAP)).toThrow(SaveError);
-    expect(() => loadWorld(storedWith(setup), 'auto', TEST_MAP)).toThrow(/Invalid world settings/);
+    expect(() => loadWorld(storedWith(setup), 'auto', TEST_MAP)).toThrow(/badSetup/);
   });
 });
 

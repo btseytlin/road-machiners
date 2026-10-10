@@ -31,12 +31,13 @@ import { skillEffect } from './progress';
 import { randRange } from './rng';
 import { recall, remember } from './memory';
 import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, CANNOT_HOLD, hasCargo, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable, STRIPPED } from './salvage';
+import { passesUpLoot } from './loot-warning';
 import { canUseSite, isTerritory, siteGap, siteGates, sitePads, siteUnder, type Site } from './sites';
 import { territoryAt, territoryGrounds } from './territory';
 import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
-import type { Contact, NpcActivity, PassReason, SalvageStock, Vehicle, World } from './types';
+import type { Contact, GoalReason, NpcActivity, PassReason, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 import { huntsOffRoad } from './hunt-style';
@@ -271,9 +272,12 @@ function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock, stripp
   return (!canReachSalvage(vehicle, stock) || canTakeAny(world, vehicle, stock)) && lootTaken(world, vehicle, stock.id) === null;
 }
 
-export function lootTaken(world: World, vehicle: Vehicle, targetId: string | null): string | null {
+// Why the driver may not start on the loot target: another truck is looting it. The rule blocks starts only, so a
+// job the driver already runs there keeps going. Null for no target, which nobody can claim.
+export function lootTaken(world: World, vehicle: Vehicle, targetId: string | null): GoalReason | null {
   if (targetId === null || worksOnLoot(vehicle, targetId)) return null;
-  return lootBlocker(world, vehicle, targetId) ? 'someone else is looting it' : null;
+  const looter = lootBlocker(world, vehicle, targetId);
+  return looter && passesUpLoot(world, vehicle, looter, targetId) ? 'lootTaken' : null;
 }
 
 export function worksOnLoot(vehicle: Vehicle, targetId: string): boolean {
@@ -321,10 +325,10 @@ function afterSale(vehicle: Vehicle): Vehicle {
   return { ...vehicle, items: kept };
 }
 
-export function lootPassedUp(vehicle: Vehicle, targetId: string | null): string | null {
+export function lootPassedUp(vehicle: Vehicle, targetId: string | null): GoalReason | null {
   if (targetId !== null && worksOnLoot(vehicle, targetId)) return null;
-  if (holdFull(vehicle)) return 'the hold is full';
-  return targetId !== null && knownUnfit(vehicle, targetId) ? 'the loot will not fit' : null;
+  if (holdFull(vehicle)) return 'holdFull';
+  return targetId !== null && knownUnfit(vehicle, targetId) ? 'lootWontFit' : null;
 }
 
 export function forgetFullHold(world: World, vehicle: Vehicle): void {
@@ -336,18 +340,20 @@ export function forgetFullHold(world: World, vehicle: Vehicle): void {
   else delete brain.unfit;
 }
 
-export function stockLootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
+// Why a loot goal on a stock ends. A driver learns a stock is empty only once it can reach it.
+export function stockLootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): GoalReason | null {
   const stock = world.salvage.find((s) => s.id === goal.targetId);
-  if (!stock) return 'the loot is gone';
+  if (!stock) return 'lootGone';
   if (!canReachSalvage(vehicle, stock)) return !hasCargoRoom(vehicle) ? CANNOT_HOLD : null;
   if (!hasSalvage(stock)) return STRIPPED;
   return canTakeAny(world, vehicle, stock) ? null : CANNOT_HOLD;
 }
 
-export function truckLootInvalid(vehicle: Vehicle, truck: Vehicle): string | null {
-  if (!isKnockedOut(truck)) return 'the truck got away';
+// Why a loot goal on a truck ends. A knocked-out truck is loot until it wakes. A refit on it keeps going until it ends.
+export function truckLootInvalid(vehicle: Vehicle, truck: Vehicle): GoalReason | null {
+  if (!isKnockedOut(truck)) return 'truckGotAway';
   if (vehicle.job?.kind === 'refit' || !inTowReach(vehicle, truck)) return null;
-  return canTakeFromTruck(vehicle, truck) ? null : CANNOT_HOLD;
+  return canTakeFromTruck(vehicle, truck) ? null : 'cargoFullLoot';
 }
 
 function stands(vehicle: Vehicle, site: Site): boolean {
@@ -650,6 +656,8 @@ const AVAILABLE: Record<OptionName, Availability> = {
   decline: always,
   give: canSpareSubject,
   aid: canSpareSubject,
+  warn: always,
+  leave: always,
 };
 
 type SituationFactor = (world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null) => number;
@@ -802,6 +810,10 @@ export function holdsOffRobbery(world: World, vehicle: Vehicle, target: Vehicle)
   return isStranded(world, vehicle) && robbedFor(world, vehicle, target) && !fightsAgainst(world, target, vehicle);
 }
 
+function leaveFactor(_world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
+  return danger !== null && !isManageable(vehicle, danger) ? NPC_BEHAVIOR.threatLeave : 1;
+}
+
 function complyFactor(world: World, vehicle: Vehicle, _decision: DecisionId, _subject: string | null, danger: number | null): number {
   const threat = danger !== null && !isManageable(vehicle, danger) ? NPC_BEHAVIOR.threatComply : 1;
   return guardedNow(world, vehicle) ? threat * NPC_BEHAVIOR.guardedComply : threat;
@@ -886,6 +898,8 @@ const SITUATION: Record<OptionName, SituationFactor> = {
   decline: (world, vehicle) => declineFactor(world, vehicle),
   give: neutral,
   aid: neutral,
+  warn: neutral,
+  leave: leaveFactor,
 };
 
 function changeTables(world: World, vehicle: Vehicle, subject: string | null): TraitWeights[] {
@@ -961,6 +975,8 @@ const DECISION_KINDS: Record<DecisionId, 'venture' | 'response'> = {
   mercyBegged: 'response',
   threatened: 'response',
   warnedOff: 'response',
+  lootContested: 'response',
+  warnRefused: 'response',
   mugging: 'response',
   strandedFoe: 'response',
   surrenderOffered: 'response',

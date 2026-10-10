@@ -1,31 +1,30 @@
 // Ending or dodging a fight by talk. A truce ends the feuds between two sides for a while. Mercy is a truce the
-// loser buys with its cargo. A threat asks a driver at peace for its cargo, and a warning asks a looter at the player's
-// wreck to back off. An NPC answers each with a weighted decision. Radio talk with the player lives in src/sim/dialogue.ts, and this module owns what the answers do.
+// loser buys with its cargo. A threat asks a driver at peace for its cargo. A pile claim warns other drivers off a
+// handed-over pile through the loot warnings of src/sim/loot-warning.ts. An NPC answers each with a weighted decision. Radio talk with the player lives in src/sim/dialogue.ts, and this module owns what the answers do.
 
 import { SPAWN } from '../data/npcs';
 import { isHostile } from './combat';
 import { isKnockedOut, standDown } from './defeat';
 import { RULES } from '../data/rules';
-import { playerVehicle, vehicleById } from './damage';
+import { playerVehicle } from './damage';
 import { partSellPrice } from './economy';
 import { corePart, isMounted } from './grid';
 import { applyRefitLayout } from './inventory';
 import { creditBounty } from './market';
-import { backOffLoot, defyThreat, finishGoal, pushGoal, topGoal } from './npc-activities';
-import { decide, firepower, holdsUp, perceiveDanger, robbedFor, visibleHostiles, wantsLoot } from './npc-decisions';
+import { defyThreat, finishGoal, pushGoal, topGoal } from './npc-activities';
+import { canArgue, fightOver, warnTruck } from './loot-warning';
+import { decide, holdsUp, perceiveDanger, robbedFor, visibleHostiles, wantsLoot } from './npc-decisions';
 import { SPARE_LINE } from '../data/dialogue';
 import { vehicleHasPerk } from './progress';
-import { backedOff, canReachSalvage, claimantOf, claimPile, createCargoSalvage, dumpOnPile, hasCargo, lootClaimedBy, salvageInRange, takeError } from './salvage';
+import { backedOff, canReachSalvage, claimantOf, claimPile, createCargoSalvage, dumpOnPile, hasCargo, takeError } from './salvage';
 import { isStranded } from './stats';
-import { addState, endState, pleaData, stateOf } from './states';
-import { inTowReach } from './tow';
+import { addState, endState, lootWarningData, pleaData, stateOf } from './states';
 import type { DecisionOptions } from '../data/npcs';
-import type { Aim, GridItem, Plea, SalvageStock, Vehicle, World } from './types';
+import type { Aim, GoalReason, GridItem, Plea, SalvageStock, Vehicle, World } from './types';
 import { canVehicleSee } from './vision';
 import { dist } from './vec';
 
 export type ThreatAnswer = DecisionOptions['threatened'];
-export type WarnAnswer = DecisionOptions['warnedOff'];
 
 function sideOf(world: World, v: Vehicle): Vehicle[] {
   if (!v.brain) return [v];
@@ -57,15 +56,15 @@ function holdFire(v: Vehicle, target: Vehicle): void {
 
 export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, dumped: SalvageStock | null = null): void {
   const stock = hasCargo(loser) ? createCargoSalvage(world, loser, 1) : dumped;
-  cede(world, loser, winner, stock, 'take the handed-over cargo');
+  cede(world, loser, winner, stock, 'takeHandedCargo');
   creditYield(world, loser, winner);
 }
 
 export function abandonSpill(world: World, loser: Vehicle, winner: Vehicle, stock: SalvageStock): void {
-  cede(world, loser, winner, stock, 'take the spilled cargo');
+  cede(world, loser, winner, stock, 'takeSpilledCargo');
 }
 
-function cede(world: World, loser: Vehicle, winner: Vehicle, stock: SalvageStock | null, reason: string): void {
+function cede(world: World, loser: Vehicle, winner: Vehicle, stock: SalvageStock | null, reason: GoalReason): void {
   makePeace(world, loser, winner);
   endFight(world, loser, winner);
   const grudge = stateOf(world, 'revenge', winner.id, loser.id);
@@ -73,7 +72,7 @@ function cede(world: World, loser: Vehicle, winner: Vehicle, stock: SalvageStock
   if (stock && winner.brain) goTake(world, winner, stock, [loser.id], reason);
 }
 
-function goTake(world: World, npc: Vehicle, stock: SalvageStock, warned: string[], reason: string): void {
+function goTake(world: World, npc: Vehicle, stock: SalvageStock, warned: string[], reason: GoalReason): void {
   pushGoal(world, npc, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason });
   claimPile(world, stock, npc, warned);
 }
@@ -197,22 +196,19 @@ export function settleThreat(world: World, npc: Vehicle, answer: ThreatAnswer): 
 }
 
 export function defendClaim(world: World, claimant: Vehicle, trespasser: Vehicle): void {
-  defyThreat(world, claimant, trespasser, firepower(world, claimant) > 0 ? 'fightBack' : 'flee', 'defend its claimed loot');
+  fightOver(world, claimant, trespasser, 'defendLoot');
 }
 
 export function warnedOff(world: World, vehicle: Vehicle, stock: SalvageStock): boolean {
   const claimant = claimantOf(world, stock);
   if (!claimant || claimant.id === vehicle.id || !canVehicleSee(world, claimant, vehicle.pos)) return false;
-  if (!backedOff(stock, vehicle.id)) {
-    const answer = decide(world, vehicle, 'threatened', claimant.id, perceiveDanger(world, vehicle, claimant));
-    if (answer === 'fightBack') {
-      defyThreat(world, vehicle, claimant, 'fightBack', 'take the claimed loot');
-      defendClaim(world, claimant, vehicle);
-      return true;
-    }
-    stock.pile!.claim!.warned.push(vehicle.id);
-  }
-  finishGoal(world, vehicle, 'the loot is claimed');
+  if (backsOffClaim(world, claimant, vehicle, stock) && !backedOff(stock, vehicle.id)) stock.pile!.claim!.warned.push(vehicle.id);
+  return true;
+}
+
+function backsOffClaim(world: World, claimant: Vehicle, vehicle: Vehicle, stock: SalvageStock): boolean {
+  if (!backedOff(stock, vehicle.id) && canArgue(world, claimant, vehicle)) return lootWarningData(warnTruck(world, claimant, vehicle, stock.id, 'fight')).answer === 'comply';
+  finishGoal(world, vehicle, 'lootClaimed');
   return true;
 }
 
@@ -225,7 +221,7 @@ export function claimSpill(world: World, victim: Vehicle, stock: SalvageStock): 
   const robbers = world.vehicles.filter((npc) => npc.brain && npc.id !== victim.id && claimsSpillOf(world, npc, victim, stock));
   const robber = robbers.sort((a, b) => dist(a.pos, stock.pos) - dist(b.pos, stock.pos))[0];
   if (!robber) return;
-  goTake(world, robber, stock, [], 'take the spilled cargo');
+  goTake(world, robber, stock, [], 'takeSpilledCargo');
   if (!victim.brain || isKnockedOut(victim)) return;
   if (decide(world, victim, 'threatened', robber.id, perceiveDanger(world, victim, robber)) === 'comply') abandonSpill(world, victim, robber, stock);
 }
@@ -263,24 +259,6 @@ export function defyClaims(world: World, npc: Vehicle): void {
   const me = playerVehicle(world);
   backOffClaims(world, npc);
   defendClaim(world, npc, me);
-}
-
-export function lootsBesidePlayer(world: World, npc: Vehicle): boolean {
-  const target = lootClaimedBy(world, npc);
-  const me = playerVehicle(world);
-  if (target === null || target === me.id) return false;
-  const stock = world.salvage.find((s) => s.id === target);
-  return stock ? salvageInRange(me, stock) : inTowReach(me, vehicleById(world, target));
-}
-
-export function answersWarning(world: World, npc: Vehicle): WarnAnswer {
-  const me = playerVehicle(world);
-  return decide(world, npc, 'warnedOff', me.id, perceiveDanger(world, npc, me));
-}
-
-export function settleWarning(world: World, npc: Vehicle, answer: WarnAnswer): void {
-  if (answer === 'comply') backOffLoot(world, npc);
-  else if (answer === 'fightBack') defyThreat(world, npc, playerVehicle(world), 'fightBack');
 }
 
 type PartItem = Extract<GridItem, { kind: 'part' }>;
@@ -328,7 +306,7 @@ export function judgeStrandedFoe(world: World, npc: Vehicle): void {
 }
 
 function spare(world: World, npc: Vehicle, prey: Vehicle): void {
-  if (!prey.brain) world.events.push({ t: 'say', speaker: npc.id, text: SPARE_LINE, vars: {} });
+  if (!prey.brain) world.events.push({ t: 'say', speaker: npc.id, line: SPARE_LINE, vars: {} });
   makePeace(world, npc, prey);
 }
 

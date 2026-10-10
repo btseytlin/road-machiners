@@ -1,0 +1,259 @@
+/* The design tokens of the game UI and the in-world overlays. This is the only file that writes a raw color, font,
+   type size, spacing step, radius, shadow, layer or UI size. Every other style uses var(--token).
+   docs/ui.md explains each group and ui.html shows them. src/ui/tokens.ts reads this file for Three.js overlays. */
+:root {
+  /* Type */
+  --font-ui: "Barlow Semi Condensed", "Fira Sans Condensed", sans-serif;
+  --font-mono: "IBM Plex Mono", monospace;
+  --text-caption: 10px;
+  --text-dense: 12px;
+  --text-body: 14px;
+  --text-lead: 16px;
+  --text-heading: 24px;
+  --text-hero: 40px;
+
+  /* Page and surfaces, dark to light */
+  --color-void: #1b1c1d;
+  --surface-sunk: #1a1e20;
+  --surface-well: #202529;
+  --surface-dock: #202529e8;
+  --surface-panel: #272b2ef5;
+  --surface-highlight: #2f3437;
+  --surface-raised: #33383b;
+  --surface-hover: #464d50;
+  --surface-overlay: #261c14ee;
+  --surface-overlay-shade: #1a1410;
+  --scrim: #101316b8;
+  --scrim-heavy: #101316e0;
+
+  /* Lines, faint to bright */
+  --line-faint: #3b454b;
+  --line-soft: #4b555b;
+  --line: #5d6264;
+  --line-strong: #777e81;
+  --line-bright: #838a8d;
+  --line-hover: #c2b08b;
+  --mark-own: #a4a074;
+
+  /* Text */
+  --ink: #e0d8ca;
+  --ink-bright: #f3efde;
+  --ink-title: #dac7a2;
+  --ink-label: #c4b888;
+  --ink-muted: #aaa69e;
+  --ink-faint: #7b7e7c;
+  --ink-overlay: #f0e0b8;
+  --ink-on-accent: #1d1a12;
+
+  /* Accent: selection, focus, progress and the utility mustard */
+  --accent: #eac779;
+  --accent-bright: #fbe3a0;
+  --accent-warm: #e4b56b;
+  --accent-dim: #b39a3a;
+  --accent-deep: #8a6d1c;
+  --accent-wash: #eac77929;
+  --select: #f0d060;
+
+  /* Danger: loss, hostility and failure */
+  --danger: #e06a3c;
+  --danger-bright: #ff7058;
+  --danger-ink: #f0a080;
+  --danger-deep: #b04a26;
+  --danger-dark: #7a2a22;
+  --danger-well: #3a2422;
+  --danger-well-alt: #2a1e1d;
+  --danger-wash: #cc775555;
+  --alarm: #fa3934;
+  --crash-bg: #280806f5;
+  --crash-ink: #ffd8c8;
+  --crash-hint: #c8a898;
+
+  /* Good: gain, health and success */
+  --good: #c0cf92;
+  --good-bright: #b9d27f;
+  --good-deep: #7fae4e;
+  --good-well: #182111;
+  --good-wash: #a4cd7555;
+
+  /* Path preview colors on the ground */
+  --path-plan: #f0e0b8;
+  --path-dest: #e05030;
+  --path-brake: #e05a3a;
+  --path-hold: #f0d060;
+  --path-accelerate: #7cc85a;
+  --path-spent: #9a9a94;
+  --path-contact: #f4f1ea;
+  --path-radio: #c49af0;
+  --path-flare: #ff6a50;
+  --path-beacon: #ff4030;
+  --path-damage: #ff4a3a;
+
+  /* Part condition, pristine to junk, then broken */
+  --cond-pristine: #fff4d6;
+  --cond-w1: #e0d8ca;
+  --cond-w2: #cdbfa4;
+  --cond-w3: #b9a888;
+  --cond-w4: #a8997f;
+  --cond-junk: #909395;
+  --cond-broken-fill: #262626;
+  --cond-broken-shade: #151515;
+  --cond-broken-light: #333333;
+
+  /* Truck grid cell kinds: the dark grid in the inventory and the bright map on truck cards */
+  --cell-line: #58656b;
+  --cell-ink: #a0adb2;
+  --cell-plan-line: #b9c6ca;
+  --cell-plain: #303d44;
+  --cell-deck: #483e36;
+  --cell-engine: #3d4b50;
+  --cell-side: #414c52;
+  --cell-none: #20292e;
+  --map-plain: #3a4a52;
+  --map-deck: #b0775a;
+  --map-engine: #6f9aac;
+  --map-side: #8d9ca3;
+  --map-none: #26313a;
+
+  /* Drawn hardware: steel from dark to light, the LCD screens and the dial */
+  --steel-0: #15191b;
+  --steel-1: #1d2022;
+  --steel-2: #2c3134;
+  --steel-3: #3a4043;
+  --steel-4: #4a5155;
+  --steel-5: #5a5f61;
+  --steel-6: #6b7072;
+  --steel-7: #8b9091;
+  --steel-8: #9da1a2;
+  --steel-9: #b9bcbc;
+  --steel-10: #e6e8e6;
+  --steel-11: #f4f4f0;
+  --lcd: #8e9a80;
+  --lcd-ink: #1d2318;
+  --lcd-ink-faint: #1d231812;
+  --lcd-rule: #1d231840;
+  --coin-face: #4a4338;
+  --coin-rim: #a08a55;
+  --coin-mark: #c5b981;
+  --dial-tick: #c4bf93;
+  --dial-pin: #c5b981;
+
+  /* Light and shade */
+  --bevel-light: #ffffff1a;
+  --bevel-light-strong: #ffffff26;
+  --bevel-dark: #00000066;
+  --shade: #00000055;
+  --shade-strong: #000000a0;
+  --shadow-panel: 0 3px 9px #00000055;
+  --shadow-raised: 0 2px 3px #000000a0;
+  --vignette: #140c0661;
+  --storm-near: #9d79542e;
+  --storm-far: #78583a8c;
+
+  /* Spacing steps */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 16px;
+  --space-8: 20px;
+  --space-9: 24px;
+  --space-10: 32px;
+
+  /* Corners */
+  --radius-s: 2px;
+  --radius-m: 4px;
+  --radius-pill: 8px;
+
+  /* Icon boxes */
+  --icon-xs: 12px;
+  --icon-s: 16px;
+  --icon-m: 18px;
+  --icon-l: 22px;
+  --icon-xl: 28px;
+  --icon-2xl: 36px;
+  --icon-3xl: 44px;
+  --icon-hero: 56px;
+
+  /* Text button heights: small, medium (the plain button) and large */
+  --btn-h-s: 24px;
+  --btn-h-m: 32px;
+  --btn-h-l: 44px;
+
+  /* Bars and pips */
+  --meter-s: 3px;
+  --meter-m: 4px;
+  --meter-l: 6px;
+  --pip: 10px;
+  --dial-size: 66px;
+  --slider-thumb: 12px;
+  --slider-track: 4px;
+  --slider-tick: 20px;
+
+  /* Panel widths and heights */
+  --panel-s: 260px;
+  --panel-m: 300px;
+  --panel-l: 420px;
+  --panel-xl: 520px;
+  --panel-m-height: 340px;
+  --dock-width: 282px;
+  --modal-width: 1360px;
+  --modal-height: 760px;
+  --modal-reserve: 250px;
+  --modal-close-gutter: 120px;
+  --tab-min-width: 85px;
+  --tip-left: 457px;
+  --inv-side-width: 235px;
+  --inv-side-min: 180px;
+  --col-name: 130px;
+  --col-trade: 148px;
+  --col-profit: 64px;
+  --card-truck-min: 480px;
+  --portrait-w: 128px;
+  --portrait-h: 80px;
+  --log-height: 122px;
+  --marker-min-width: 72px;
+  --marker-max-width: 180px;
+  --narrow-log-bottom: 176px;
+  --narrow-log-height: 80px;
+  --narrow-modal-clearance: 290px;
+
+  /* HUD placement */
+  --hud-inset: 14px;
+  --hud-gap: 8px;
+  --hud-hover-top: 64px;
+  --hud-notice-top: 112px;
+
+  /* Layers, bottom to top */
+  --z-outline: 1;
+  --z-badge: 2;
+  --z-hud: 3;
+  --z-popup: 5;
+  --z-modal: 20;
+  --z-over-modal: 21;
+  --z-log-open: 22;
+  --z-feedback: 25;
+  --z-toast: 30;
+  --z-console: 40;
+  --z-menu: 45;
+  --z-death: 50;
+  --z-new-game-block: 59;
+  --z-save: 60;
+  --z-new-game: 70;
+  --z-boot: 1000;
+  --z-drag: 1000;
+  --z-crash: 100000;
+}
+
+@media (max-width: 1100px) {
+  :root {
+    --dock-width: 246px;
+  }
+}
+
+@media (max-width: 720px) {
+  :root {
+    --dock-width: 200px;
+  }
+}

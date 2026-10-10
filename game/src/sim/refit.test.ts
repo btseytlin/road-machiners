@@ -73,7 +73,7 @@ describe('field refits', () => {
     const weapon = getWeapon(w);
     const to = { x: 1, y: CHASSIS.scout.layout.length, rot: 0 as const };
     w.vehicles[0].speed = 5;
-    expect(() => moveItem(w, weapon.id, to)).toThrow('Stop');
+    expect(() => moveItem(w, weapon.id, to)).toThrow('Refused: stopFirst');
     w.vehicles[0].speed = 0;
     startJob(w, w.vehicles[0], { kind: 'search', stockId: 'stock', total: 2, turnsLeft: 2 });
     expect(() => moveItem(w, weapon.id, to)).toThrow('already busy');
@@ -84,8 +84,8 @@ describe('field refits', () => {
     const { next, weapon } = startUnmount();
     const good = next.vehicles[0].items.find((item) => item.kind === 'good');
     if (!good) throw new Error('Expected goods');
-    expect(() => moveItem(next, weapon.id, weapon)).toThrow('Finish the refit');
-    expect(() => dumpItem(next, good.id)).toThrow('Finish the refit');
+    expect(() => moveItem(next, weapon.id, weapon)).toThrow('Refused: refitRunning');
+    expect(() => dumpItem(next, good.id)).toThrow('Refused: refitRunning');
   });
 
   it('cancels if a required item disappears', () => {
@@ -134,7 +134,7 @@ describe('field refits', () => {
     const w = emptyWorld();
     const engine = w.vehicles[0].items.find((item) => item.kind === 'part' && item.part.defId === 'stockEngine');
     if (!engine) throw new Error('Expected engine');
-    expect(() => moveItem(w, engine.id, { x: 4, y: 1, rot: 0 })).toThrow('More than one item');
+    expect(() => moveItem(w, engine.id, { x: 4, y: 1, rot: 0 })).toThrow('Refused: twoInTheWay');
   });
 
   it('cancels when a required item has changed position', () => {
@@ -166,7 +166,7 @@ describe('field refits', () => {
     if (!rack) throw new Error('Expected panniers');
     w.vehicles[0].items.push({ id: 'cargo', kind: 'good', good: 'scrap', x: 0, y: CHASSIS.scout.layout.length, rot: 0 });
     const result = planItemMove(w.vehicles[0], rack.id, { x: 2, y: CHASSIS.scout.layout.length, rot: 0 });
-    expect(result.error).toMatch(/fit|fall off/);
+    expect(result.error).toMatchObject({ id: 'badLayout' });
   });
 });
 

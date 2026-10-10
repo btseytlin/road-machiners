@@ -19,6 +19,7 @@ import { dist, polylineDist, type Vec } from './vec';
 import { exposureAt, watchPost } from './watch-posts';
 import { endTurn, newWorld } from './world';
 import { formatNpcPass } from '../ui/format';
+import { resolve } from '../text/resolve';
 import { playerVehicle } from './damage';
 import { canVehicleSee } from './vision';
 import { contactsOf } from './detect';
@@ -66,7 +67,7 @@ function scene(seed: number, kind: Prey, night: boolean): Scene {
   w.removed.push(...others);
   const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { ...post });
   raider.brain = npcBrain('buggy', sitePads(camp)[0], ['raider']);
-  raider.brain.goals = [{ kind: 'raid', targetId: null, destination: null, phase: 'act', reason: 'watch the road for prey', watchUntil: w.turn + HUNT.watchTurns }];
+  raider.brain.goals = [{ kind: 'raid', targetId: null, destination: null, phase: 'act', reason: 'watchedRoad', watchUntil: w.turn + HUNT.watchTurns }];
   const end = at(60);
   let prey: Vehicle;
   if (kind === 'player' || kind === 'playerEmpty') {
@@ -126,7 +127,7 @@ function play(s: Scene, turns = TURNS): Result {
     if (goals.some((g) => g.targetId === prey.id)) goalsChanged = true;
     for (const e of w.events) if (e.t === 'preyPassed' && e.vehicle === raider.id) passed.push(e.reason);
     const line = formatNpcPass(w, raider);
-    if (line) hover.add(line);
+    if (line) hover.add(resolve(line, 'en'));
     const contact = contactsOf(w, raider, Infinity).find((c) => c.vehicleId === prey.id);
     frames.push({
       turn: w.turn,

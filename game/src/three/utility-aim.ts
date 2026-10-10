@@ -14,6 +14,8 @@ import type { PartInstance, UtilityOrder, Vehicle, World } from '../sim/types';
 import { chargedParts, orderKindOf, pointBlock, pointReach, utilityOrderError } from '../sim/utility';
 import type { Vec } from '../sim/vec';
 import { setUtilityOrder } from '../sim/world';
+import { refusalText } from '../text/names';
+import type { Msg } from '../text/msg';
 import { aimBlock } from '../ui/weapons';
 import { GroundBand } from './render/zones';
 
@@ -28,7 +30,7 @@ const LOOK = {
 export type UtilityAimHost = {
   world(): World;
   apply(next: World): void;
-  note(text: string): void;
+  note(text: Msg): void;
 };
 
 export class UtilityAim {
@@ -69,7 +71,7 @@ export class UtilityAim {
   private order(part: PartInstance, order: UtilityOrder): void {
     const w = this.host.world();
     const error = utilityOrderError(w, playerVehicle(w), part.id, order);
-    if (error) return this.host.note(error);
+    if (error) return this.host.note(refusalText(w, error));
     this.selected = null;
     this.host.apply(setUtilityOrder(w, part.id, order));
   }
@@ -130,7 +132,7 @@ function cross(): THREE.Mesh {
 
 function effectRadius(part: PartInstance): number {
   const def = partDef(part.defId);
-  if (def.kind !== 'utility' || !('radius' in def.effect)) throw new Error(`${def.name} covers no radius`);
+  if (def.kind !== 'utility' || !('radius' in def.effect)) throw new Error(`${def.id} covers no radius`);
   return def.effect.radius;
 }
 

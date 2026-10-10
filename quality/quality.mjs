@@ -2,7 +2,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SEPARATOR, checkComments, checkFragmentation, checkGuidance, checkSeparators, collectComponents, inspectSource, isGuidance } from './quality-policy.mjs';
+import { SEPARATOR, checkComments, checkFragmentation, checkGuidance, checkSeparators, collectComponents, inspectSource, isGuidance, stripComments } from './quality-policy.mjs';
 
 const root = process.cwd();
 const sourcePattern = /\.(?:[cm]?[jt]s|[jt]sx)$/;
@@ -84,9 +84,9 @@ function readLintReport(result) {
   return report.diagnostics;
 }
 
-function collectFindings(directory, sources, config, maxDocstringLines) {
+function collectFindings(directory, sources, config) {
   const findings = runLint(directory, [...sources.keys()], config);
-  for (const [file, source] of sources) findings.push(...inspectSource(file, source).findings, ...checkComments(file, source, maxDocstringLines));
+  for (const [file, source] of sources) findings.push(...inspectSource(file, source).findings, ...checkComments(file, source));
   return findings;
 }
 
@@ -122,21 +122,21 @@ function findRegressions(current, previous) {
   });
 }
 
-function readParentSources(parent, baseline, config, maxDocstringLines) {
+function readParentSources(parent, baseline, config) {
   const sources = new Map(selectSources(parent.files).map(file => [file, runGit('show', `${parent.ref}:${file}`)]));
   mkdirSync(baseline, { recursive: true });
   writeSources(baseline, sources);
   const baselineConfig = path.join(baseline, '.oxlintrc.json');
   copyFileSync(config, baselineConfig);
-  return { sources, findings: collectFindings(baseline, sources, baselineConfig, maxDocstringLines) };
+  return { sources, findings: collectFindings(baseline, sources, baselineConfig) };
 }
 
 function checkQuality(directory, baseline, files, parents, staged) {
   const current = readSources(directory, selectSources(files));
   const config = path.join(directory, '.oxlintrc.json');
-  const { maxFilesPerKloc, maxGuidanceWords, maxDocstringLines } = JSON.parse(readFileSync(path.join(directory, '.quality.json'), 'utf8'));
-  const previous = parents.map((parent, index) => readParentSources(parent, path.join(baseline, String(index)), config, maxDocstringLines));
-  const currentFindings = collectFindings(directory, current, config, maxDocstringLines);
+  const { maxFilesPerKloc, maxGuidanceWords } = JSON.parse(readFileSync(path.join(directory, '.quality.json'), 'utf8'));
+  const previous = parents.map((parent, index) => readParentSources(parent, path.join(baseline, String(index)), config));
+  const currentFindings = collectFindings(directory, current, config);
   const regressions = previous.map(parent => new Set(findRegressions(currentFindings, parent.findings)));
   const findings = currentFindings.filter(finding => regressions.every(set => set.has(finding)));
   const fragmented = previous.map(parent => checkFragmentation(current, collectComponents(parent.sources), maxFilesPerKloc));
@@ -211,11 +211,27 @@ function assertStagedTooling() {
   if (unstaged.length) throw new Error(`Stage or restore quality tooling before committing: ${unstaged.join(', ')}`);
 }
 
+function stripStagedComments() {
+  const added = splitPaths(runGit('diff', '--cached', '--name-only', '--diff-filter=AM', '-z'));
+  for (const file of selectSources(added)) {
+    const source = runGit('show', `:${file}`);
+    const stripped = stripComments(file, source);
+    if (stripped === source) continue;
+    const [mode] = runGit('ls-files', '--stage', '--', file).split(' ');
+    const blob = execFileSync('git', ['hash-object', '-w', '--stdin'], { cwd: root, encoding: 'utf8', input: stripped }).trim();
+    runGit('update-index', '--cacheinfo', `${mode},${blob},${file}`);
+    const working = path.join(root, file);
+    if (existsSync(working)) writeFileSync(working, stripComments(file, readFileSync(working, 'utf8')));
+    console.log(`Stripped comments from ${file}.`);
+  }
+}
+
 function runChecks() {
   const args = process.argv.slice(2);
   if (args.some(argument => argument !== '--staged')) throw new Error('Usage: node quality/quality.mjs [--staged]');
   const staged = args.includes('--staged');
   if (staged) assertStagedTooling();
+  if (staged) stripStagedComments();
   mkdirSync(path.join(root, 'tmp'), { recursive: true });
   const temporary = mkdtempSync(path.join(root, 'tmp/quality-'));
   try {
