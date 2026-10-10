@@ -4,7 +4,7 @@ Weapons and armor are in [items.md](items.md). This page says how they work toge
 
 ## The turn
 
-Both sides fire at the same time. Every weapon shoots when it is loaded, has a target in range and arc, and no tall part blocks its side. A shot spends one round of the weapon's `magazine` and starts its `cooldown`, so a cooldown of 1 fires every turn. An empty weapon works `reload` turns without firing, then fires again with a full magazine. A weapon that holds fire and is not cooling down also works its reload, and firing resets that progress. Every value in the tables is multiplied by `RULES.weaponDamage` for rounds and `RULES.crashDamage` for crashes.
+Both sides fire at the same time. Every weapon shoots when it is loaded, has a target in range and arc, and no tall part on its truck hides that bearing. A shot spends one round of the weapon's `magazine` and starts its `cooldown`, so a cooldown of 1 fires every turn. An empty weapon works `reload` turns without firing, then fires again with a full magazine. A weapon that holds fire and is not cooling down also works its reload, and firing resets that progress. Every value in the tables is multiplied by `RULES.weaponDamage` for rounds and `RULES.crashDamage` for crashes.
 
 ## Aim and spread
 
@@ -35,7 +35,7 @@ Patrols of the Bowl Farmers and the Nose Army are hostile to raiders. `callLawme
 <!-- wiki:numbers -->
 | path | value |
 | --- | --- |
-| `RULES.weaponDamage` | 1.2375 |
+| `RULES.weaponDamage` | 1.60875 |
 | `RULES.crashDamage` | 1.125 |
 | `RULES.leadError` | 4.5 |
 | `RULES.shake` | 0.002 |

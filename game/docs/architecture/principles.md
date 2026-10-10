@@ -63,3 +63,11 @@ A rule throws on a state that should never happen. It never returns a default, a
 Why: a silent default turns a bug into a wrong number that nobody notices until the balance is off.
 
 Plan check: name the new invariants and where each one throws.
+
+## 8. Show it, don't say it
+
+A feature shows state with what the player already sees: the grid, the 3D view, an icon, a color or a drawn shape. Text is added only when no visual can carry the information. A tooltip, label or log line never repeats in words what a drawing on screen already shows.
+
+Why: agents keep adding text that explains what the screen shows. Example of what not to do: a gun's tooltip read "arc 270°, facing rear" while the inventory grid already drew its arc fan and a triangle on the side it faces. Both the number and the words were noise.
+
+Plan check: list each new word of UI text, and name the visual that already shows it or say why none can.

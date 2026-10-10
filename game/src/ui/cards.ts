@@ -74,6 +74,8 @@ const ART = {
   patch: '<path d="M8 14l14-9 11 17-14 9zM15 15l3 5M20 12l3 5M18 22l3 5"/>',
   tall: '<path d="M14 36V8h12v28M6 36h28M20 8V3"/>',
   clock: '<circle cx="20" cy="20" r="15"/><path d="M20 10v10l7 5"/>',
+  journal: '<path d="M9 5h21v30H9zM14 5v30M18 12h8M18 18h8M18 24h5"/>',
+  cut: '<circle cx="11" cy="30" r="5"/><circle cx="29" cy="30" r="5"/><path d="M14 26L31 4M26 26L9 4"/>',
 } as const;
 
 export type IconName = keyof typeof ART;
@@ -473,6 +475,7 @@ function weaponStats(world: World, part: PartInstance): Stat[] {
     stat("magazine", t("stat.magazine"), d.magazine, null, "more"),
     stat("reload", t("stat.reload"), d.reload, "t", "less"),
     stat("arc", t("stat.arc"), d.arc, "deg", "more"),
+    stat("spread", t("stat.spread"), d.spread, "deg", "less", 1),
     stat("recoil", t("stat.recoil"), d.recoil, "deg", "less", 1),
     stat("power", t("stat.draw"), d.draw, null, "less", 1),
     ...(d.line ? [stat("clock", t("stat.lineHolds"), d.line.turns, "t", "more")] : []),

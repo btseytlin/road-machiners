@@ -10,6 +10,7 @@ import { openingStockOf } from "../sim/opening";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { repairPlan } from "../sim/repair";
+import { isJunk } from "../sim/wear";
 import { canReachSalvage, hasSalvage } from "../sim/salvage";
 import type { SalvageStock, World } from "../sim/types";
 import { vehicleStats } from "../sim/stats";
@@ -60,7 +61,7 @@ const inOpeningReach = (w: World, { stock }: OpeningState): boolean => stock !==
 const engineNeedsPatch = (w: World): boolean => {
   const me = playerVehicle(w);
   const engine = mountedParts(me).find((p) => partDef(p.defId).kind === "engine");
-  return engine !== undefined && repairPlan(w, me, engine.id).needed > 0;
+  return engine !== undefined && !isJunk(engine) && repairPlan(w, me, engine.id).needed > 0;
 };
 
 const cageMounted = (w: World): boolean => mountedParts(playerVehicle(w)).some((p) => p.defId === "cage");

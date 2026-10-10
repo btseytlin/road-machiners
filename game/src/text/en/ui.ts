@@ -149,6 +149,7 @@ export const UI = {
   'help.does.mute': 'Mute',
   'help.does.inventory': 'Inventory',
   'help.does.character': 'Character',
+  'help.does.journal': 'Journal',
   'hitTip.weapon': 'Loose gun',
   'hitTip.range': 'Far',
   'hitTip.recoil': 'Gun kick',

@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { partDef, type WeaponDef } from '../data/parts';
-import { hitOdds } from '../sim/combat';
+import { fireBlock, hitOdds } from '../sim/combat';
 import { makePart } from '../sim/factory';
 import { mountPart } from '../sim/inventory';
 import { corePart } from '../sim/grid';
 import { vehicleStats } from '../sim/stats';
+import type { Vehicle, World } from '../sim/types';
 import { addVehicle, emptyWorld } from '../sim/testkit';
 import { refreshVision } from '../sim/vision';
 import { hitCardRows } from './hitCard';
@@ -15,11 +16,20 @@ import { partName, vehicleTitle } from "../text/names";
 
 const en = (msg: Msg): string => resolve(msg, "en");
 
+function turnToFire(world: World, shooter: Vehicle, target: Vehicle, pick: (v: Vehicle) => ReturnType<typeof vehicleStats>['weapons'][number]): void {
+  for (let quarter = 0; quarter < 4; quarter++) {
+    shooter.heading = (quarter * Math.PI) / 2;
+    if (fireBlock(world, shooter, pick(shooter), target) === null) return;
+  }
+  throw new Error('No heading lets the gun fire');
+}
+
 function createDuel() {
   const world = emptyWorld();
   const me = world.vehicles[0];
   const them = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 }, Math.PI / 2);
   them.speed = 2;
+  turnToFire(world, them, me, (v) => vehicleStats(world, v).weapons[0]);
   refreshVision(world);
   return { world, me, them, mine: vehicleStats(world, me).weapons[0], theirs: vehicleStats(world, them).weapons[0] };
 }
@@ -114,6 +124,7 @@ describe('hover card rows', () => {
 
   it('shows its weapons against me with the aim of its order at me', () => {
     const { world, me, them, theirs } = createDuel();
+    turnToFire(world, them, me, (v) => vehicleStats(world, v).weapons[0]);
     const cab = corePart(me, 'cab');
     them.weaponOrders[theirs.part.id] = { targetId: me.id, aim: cab.id };
     const card = hitCardRows(world, them.id)!;
@@ -123,6 +134,7 @@ describe('hover card rows', () => {
   it('uses a body shot for its weapons ordered at someone else', () => {
     const { world, me, them, theirs } = createDuel();
     const other = addVehicle(world, 'traders', 'buggy', [], { x: 30, y: 34 });
+    turnToFire(world, them, me, (v) => vehicleStats(world, v).weapons[0]);
     them.weaponOrders[theirs.part.id] = { targetId: other.id, aim: 'body' };
     expect(hitCardRows(world, them.id)!.theirs[0].odds).toEqual(hitOdds(world, them, theirs, me, 'body'));
   });
@@ -160,6 +172,7 @@ describe('hover card harpoon row', () => {
     const harpoon = makePart(world, 'harpoon', 0);
     if (!mountPart(world, me, harpoon)) throw new Error('No deck room for the harpoon');
     const them = addVehicle(world, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 35, y: 30 }, Math.PI / 2);
+    turnToFire(world, me, them, (v) => vehicleStats(world, v).weapons.find((w) => w.def.line)!);
     refreshVision(world);
     return { world, me, harpoon, them };
   }

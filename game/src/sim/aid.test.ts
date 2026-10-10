@@ -349,6 +349,7 @@ describe('unprompted aid offer', () => {
     const { w, npc } = needyScene();
     const me = playerVehicle(w);
     for (const id of ['flamer', 'slugCannon', 'shotgun', 'longRifle']) expect(stowPart(w, me, makePart(w, id, 0))).toBe(true);
+    for (const item of me.items) if (item.kind === 'part') item.part.wear = 0;
     expect(vehicleValue(me)).toBeGreaterThan(AID.poorValue);
     onNeedySeen(w, npc);
     expect(playerAid(w)).toBeNull();

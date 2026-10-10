@@ -7,6 +7,7 @@ export type StartKit = {
   chassis: string;
   parts: string[];
   storage: string[];
+  wear: number;
   money: number;
   fuel: number;
   supplies: number;
@@ -27,6 +28,7 @@ export const START_KITS: Record<string, StartKit> = {
     chassis: 'scout',
     parts: ['panniers', 'mg', 'stockEngine'],
     storage: [],
+    wear: 2,
     money: 33300,
     fuel: CHASSIS.scout.fuelCap,
     supplies: RULES.baseSupplies,
@@ -43,6 +45,7 @@ export const START_KITS: Record<string, StartKit> = {
     chassis: 'hauler',
     parts: ['cannon', 'mg', 'stockEngine', 'ram', 'plates', 'plates', 'rack'],
     storage: ['plates', 'cage', 'mg'],
+    wear: 0,
     money: 50000,
     fuel: 60,
     supplies: RULES.baseSupplies,
@@ -55,6 +58,7 @@ export const START_KITS: Record<string, StartKit> = {
     chassis: 'hauler',
     parts: ['trailerBox', 'autocannon', 'mg', 'workhorseDiesel', 'plates', 'plates'],
     storage: [],
+    wear: 0,
     money: 3000,
     fuel: CHASSIS.hauler.fuelCap,
     supplies: RULES.baseSupplies,
@@ -67,6 +71,7 @@ export const START_KITS: Record<string, StartKit> = {
     chassis: 'convertible',
     parts: ['mg', 'mg', 'slugCannon', 'shotgun', 'plowRam', 'workhorseDiesel', 'plates', 'plates', 'cage'],
     storage: [],
+    wear: 0,
     money: 83300,
     fuel: CHASSIS.convertible.fuelCap,
     supplies: RULES.baseSupplies,

@@ -328,6 +328,7 @@ export const LOG = {
   'goal.searchOldHulks': 'Search old tank hulks',
   'goal.searchOldRuin': 'Search an old ruin',
   'goal.cornered': 'Cornered',
+  'goal.defeated': 'Defeated',
   'goal.watchedRoad': 'Watched the road',
   'goal.ranFromIt': 'Ran from it',
   'goal.avoidRanFrom': 'Avoid a truck it ran from',

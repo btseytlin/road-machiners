@@ -1,13 +1,14 @@
-import { PARTS, partDef, type WeaponDef } from '../data/parts';
-import { openSides, reachedSides, sidePlanner, SIDES, type Round, type Side } from './armor';
+import { PARTS, type WeaponDef } from '../data/parts';
+import { gunSpans, sidePlanner, spanSides, SIDES, type Round, type Side } from './armor';
 import { corePart, mountedItems, mountedParts, sideOf } from './grid';
 import { vehicleStats } from './stats';
 import type { PartInstance, Vehicle, World } from './types';
 import { dist } from './vec';
+import { wornDef } from './wear';
 
 const LETTER_SIDE: Record<string, Side> = { F: 'front', B: 'rear', L: 'left', R: 'right' };
 
-const THREATS: Round[] = threatRounds(Object.values(PARTS).filter((d): d is WeaponDef => d.kind === 'weapon'), 3);
+export const THREATS: Round[] = threatRounds(Object.values(PARTS).filter((d): d is WeaponDef => d.kind === 'weapon'), 3);
 
 function threatRounds(weapons: WeaponDef[], groups: number): Round[] {
   const sorted = [...weapons].sort((a, b) => a.round.pen - b.round.pen);
@@ -89,8 +90,8 @@ export function gunsBySide(v: Vehicle): Record<Side, WeaponDef[]> {
   const out: Record<Side, WeaponDef[]> = { front: [], rear: [], left: [], right: [] };
   for (const item of mountedItems(v, 'weapon')) {
     if (item.part.hp <= 0) continue;
-    const def = partDef(item.part.defId) as WeaponDef;
-    for (const side of openSides(v, item)) if (reachedSides(def).includes(side)) out[side].push(def);
+    const def = wornDef<WeaponDef>(item.part);
+    for (const side of spanSides(gunSpans(v, item))) out[side].push(def);
   }
   return out;
 }

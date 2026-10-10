@@ -78,6 +78,7 @@ export const CONTROLS: ControlGroup[] = [
       { keys: ["M"], does: t("help.does.mute") },
       { keys: ["I"], does: t("help.does.inventory") },
       { keys: ["C"], does: t("help.does.character") },
+      { keys: ["J"], does: t("help.does.journal") },
     ],
   },
 ];

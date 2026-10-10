@@ -203,8 +203,8 @@ const TABLES: WikiTable[] = [
   { id: 'state-kinds', headers: ['kind', 'turns', 'binds a deal'], rows: stateKindRows },
   {
     id: 'gear-levels',
-    headers: ['level', 'budget mult', 'wear shift', 'cargo mult'],
-    rows: () => entries(GEAR_LEVELS).map(([level, g]) => [level, g.budget, g.wearShift, g.cargo]),
+    headers: ['level', 'gear money M', 'wear step odds', 'cargo mult'],
+    rows: () => entries(GEAR_LEVELS).map(([level, g]) => [level, moneyAmount(g.money), g.wear.map((w) => `${w.value}:${w.weight}`).join(' '), g.cargo]),
   },
   {
     id: 'loadout-priorities',

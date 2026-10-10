@@ -15,7 +15,7 @@ import type { Work, WorkLeft } from '../sim/states';
 import { dist } from '../sim/vec';
 import { goodsCount } from '../sim/grid';
 import { spareParts } from '../sim/inventory';
-import { carriedPart } from '../sim/salvage';
+import { carriedPart, isStoryWreck } from '../sim/salvage';
 import { playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
 import { npcTraits } from '../sim/npc-decisions';
@@ -30,7 +30,7 @@ import { shotDamage } from '../sim/combat';
 import { shutDownTurnsLeft } from '../sim/utility';
 import type { GameEvent, GridItem, Job, NpcState, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { concat, list, t, verbatim, type Msg } from '../text/msg';
-import { goalText, goodName, moneyReasonText, noteText, partName as partNameOf, refusalText, siteName, skillName, templateName, traitName, vehicleTitle } from '../text/names';
+import { goalText, goodName, moneyReasonText, noteText, noteTitle, partName as partNameOf, refusalText, siteName, skillName, templateName, traitName, vehicleTitle } from '../text/names';
 import { Refused } from '../sim/world';
 import { aidWords, lineText } from './dialogue';
 import { damage, fuelLiters, hp, kg, kph, moneyM, moneyMsg } from './units';
@@ -136,7 +136,7 @@ export function vehicleName(world: World, id: string): Msg {
   if (id === world.player.vehicleId) return t('log.you');
   const v = findAny(world, id);
   if (v) return vehicleTitle(world, v);
-  return OBSTACLE_ID.test(id) ? t('log.anObstacle') : t('log.something');
+  return OBSTACLE_ID.test(id) || isStoryWreck({ id }) ? t('log.anObstacle') : t('log.something');
 }
 
 function findAny(world: World, id: string): Vehicle | undefined {
@@ -714,6 +714,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]: (world: World, e: Extract<GameEvent,
   escortPaid: escortPaidText,
   escortHired: escortHiredText,
   escortRefused: escortRefusedText,
+  note: (_, e) => line(t('log.noted', { title: noteTitle(e.id) }), 'good'),
   lootArgument: lootArgumentText,
   collision: quiet,
   shot: shotText,
