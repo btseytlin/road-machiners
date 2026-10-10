@@ -49,6 +49,11 @@ export function rollPartStock(world: World, rng: Rng, table: PartStockTable, cou
   return stock;
 }
 
+export function rollPartStockPerKind(world: World, rng: Rng, table: PartStockTable, perKind: number, seller: string): PartInstance[] {
+  const kinds = [...new Set(table.parts.map((p) => PARTS[p.value].kind))];
+  return kinds.flatMap((kind) => rollPartStock(world, rng, { ...table, parts: table.parts.filter((p) => PARTS[p.value].kind === kind) }, perKind, seller));
+}
+
 export function initShop(world: World, shopId: string): ShopState {
   const def = shopDef(shopId);
   const pressure: Record<string, number> = {};

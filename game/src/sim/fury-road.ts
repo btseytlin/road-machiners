@@ -8,7 +8,7 @@ import { playerVehicle } from './damage';
 import { alongOf, highwayMap, milestoneAt, outpostFort, outpostId, outpostSite, roadPoint, stretchStream, toRoad, WINDOW_SHIFT } from './highway';
 import { canUseSite, sitePads } from './sites';
 import { mapObstacles } from './mapgen';
-import { rollPartStock } from './market';
+import { rollPartStockPerKind } from './market';
 import { fightCornered, topGoal } from './npc-activities';
 import { generateNpcLoadout } from './npc-loadout';
 import { nextRandom, randInt, type Rng } from './rng';
@@ -35,11 +35,6 @@ function curveAt(c: Curve, j: number): number {
 
 export function payOf(j: number, wrecks: number): number {
   return curveAt(FURY_ROAD.pay.base, j) + curveAt(FURY_ROAD.pay.perWreck, j) * wrecks;
-}
-
-export function stockSizeOf(j: number): number {
-  const s = FURY_ROAD.stock;
-  return Math.min(s.max, s.base + Math.floor(j / s.every));
 }
 
 export function waveOf(j: number): (typeof FURY_ROAD.waves)[number] {
@@ -95,7 +90,7 @@ function drawSide(rng: Rng, last: GroupSide | null): GroupSide {
 }
 
 function outpostFacts(world: World, j: number): OutpostFacts {
-  const stock: PartInstance[] = rollPartStock(world, stretchStream(world.seed, j, 'stock'), GARAGE_STOCK, stockSizeOf(j), outpostId(j));
+  const stock: PartInstance[] = rollPartStockPerKind(world, stretchStream(world.seed, j, 'stock'), GARAGE_STOCK, FURY_ROAD.stockPerKind, outpostId(j));
   return { milestone: j, stock, paid: false };
 }
 

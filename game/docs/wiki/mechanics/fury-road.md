@@ -57,7 +57,7 @@ An outpost stands at each milestone from 1 on: a walled fort with the Salvage Ya
 
 Parking on the pad of the next outpost wins the level in that turn, in combat or out. It pays 300 M's for stretch 1, 150 M's more for each later stretch, up to 1,200 M's, plus 60 M's for each wrecked truck of its groups, 15 M's more each stretch, up to 150 M's. The outpost is marked paid, so it never pays again, even after a reload. The surviving trucks of the stretch leave the road and their fights end, so the player is out of combat at once. Their wrecks give no pay.
 
-Between levels nothing spawns, even if the player drives off the pad and back. At a paid outpost the player can repair all or the basics at the garage price, buy fuel and supplies at the town price, buy a stock part onto the truck and buy parts for field patching at 1.5 times their value. Outposts buy nothing. The next level starts only when the player, parked on the pad, presses Wait for the road on the outpost screen.
+Between levels nothing spawns, even if the player drives off the pad and back. At a paid outpost the player can repair all or the basics at the garage price, buy fuel and supplies at the town price, buy a stock part onto the truck and buy parts for field patching at 1.5 times their value. Each outpost stocks exactly two parts of every part type, rolled from the seed when the outpost is made and kept in the save. Outposts buy nothing. The next level starts only when the player, parked on the pad, presses Wait for the road on the outpost screen.
 
 The run has no end. The HUD's run readout shows the stretch and the distance to its outpost, like `3: 640 m`, and its tooltip reads "Stretch 3: 640 m to Outpost 3". Between levels it shows the next stretch at its full length.
 
@@ -99,4 +99,4 @@ A carried-over Fury Road save starts a fresh run at stretch 1 with its truck. So
 
 ## Start
 
-The run starts at milestone 0 in the inner right lane, heading north toward the top right of the screen. The Fury Road kit is a hauler with a cannon, a heavy MG, an MG, a workhorse diesel, a ram, two plates and a rack, a full tank, base supplies, 4 parts for field patching and 200 M's.
+The run starts at milestone 0 in the inner right lane, heading north toward the top right of the screen. The Fury Road kit is a scout with one MG, a stock engine, a Rebar cage on the front and another on the back, a full tank, base supplies, 4 parts for field patching and 200 M's. It is the same every run.

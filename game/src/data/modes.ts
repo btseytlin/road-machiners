@@ -63,7 +63,7 @@ export const FURY_ROAD = {
   maxAlive: 8,
   spawnRetryTurns: 20,
   pay: { base: { first: 30000, step: 15000, max: 120000 } as Curve, perWreck: { first: 6000, step: 1500, max: 15000 } as Curve },
-  stock: { base: 2, every: 2, max: 6 },
+  stockPerKind: 2,
   goodsMarkup: 1.5,
   maxTries: 400,
 };

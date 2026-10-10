@@ -7,8 +7,8 @@ import { defaultSetup } from './settings';
 import { inOverdrive, maxSpeedSteps } from './stats';
 import { inCombat } from './combat';
 import { playerVehicle } from './damage';
-import { abandonRun, advanceFuryRoad, betweenLevels, canAbandonRun, canWaitForRoad, furyRoadReadout, moveWindow, outpostPad, payOf, planStretch, reachedOutpostAt, runEarnings, spawnGroup, stockSizeOf, waitForRoad, waveOf, WINDOW_MOVE } from './fury-road';
-import { acrossOf, alongOf, highwayHash, milestoneAt, roadPoint, toRoad, WINDOW_SHIFT } from './highway';
+import { abandonRun, advanceFuryRoad, betweenLevels, canAbandonRun, canWaitForRoad, furyRoadReadout, moveWindow, outpostPad, payOf, planStretch, reachedOutpostAt, runEarnings, spawnGroup, waitForRoad, waveOf, WINDOW_MOVE } from './fury-road';
+import { acrossOf, alongOf, highwayHash, highwayMap, milestoneAt, roadPoint, toRoad, WINDOW_SHIFT } from './highway';
 import { topGoal } from './npc-activities';
 import { optionWeights, tradeOffers } from './npc-decisions';
 import { getResources } from './resources';
@@ -209,7 +209,8 @@ describe('the pace of encounters', () => {
   });
 
   it('keeps a group hunting a player it meets long after it spawns', () => {
-    let w = furyRoadWorld();
+    const sturdy = { ...startKit('furyRoad'), chassis: 'hauler', parts: ['cannon', 'heavyMg', 'mg', 'workhorseDiesel', 'ram', 'plates', 'plates', 'rack'], placed: [] };
+    let w = newWorld(3, sturdy, highwayMap(3, 0), defaultSetup('furyRoad'));
     spawnFirst(w);
     for (let i = 0; i < 15; i++) w = endTurn(w, still);
 
@@ -470,8 +471,6 @@ describe('the endless run', () => {
     expect(payOf(2, 1)).toBe(FURY_ROAD.pay.base.first + FURY_ROAD.pay.base.step + FURY_ROAD.pay.perWreck.first + FURY_ROAD.pay.perWreck.step);
     expect(payOf(100, 0)).toBe(FURY_ROAD.pay.base.max);
     expect(payOf(100, 1) - payOf(100, 0)).toBe(FURY_ROAD.pay.perWreck.max);
-    expect(stockSizeOf(1)).toBe(2);
-    expect(stockSizeOf(100)).toBe(FURY_ROAD.stock.max);
     expect(() => waveOf(0)).toThrow(/no wave/);
   });
 

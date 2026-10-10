@@ -149,7 +149,10 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
   const truck = makeVehicle(world, {
     faction: "player",
     chassisId: kit.chassis,
-    parts: kit.parts.map((defId) => ({ defId, wear: kit.wear })),
+    parts: [
+      ...(kit.placed ?? []).map(({ defId, ...at }) => ({ defId, wear: kit.wear, at })),
+      ...kit.parts.map((defId) => ({ defId, wear: kit.wear })),
+    ],
     spares: [],
     cargo: kit.cargo,
     pos: start.pos,
