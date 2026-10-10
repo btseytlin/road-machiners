@@ -3,7 +3,7 @@ import { ECONOMY, GOODS } from '../data/goods';
 import { FURY_ROAD, HIGHWAY } from '../data/modes';
 import { REPAIR } from '../data/wear';
 import { playerVehicle } from './damage';
-import { outpostPad } from './fury-road';
+import { outpostPad, waitForRoad } from './fury-road';
 import { milestoneAt, roadPoint } from './highway';
 import { furyRoadWorld } from './testkit';
 import { corePart, goodsCount, mountedParts } from './grid';
@@ -92,7 +92,7 @@ describe('outpost services', () => {
     let w = atOutpost();
     w.player.money = 10_000_000;
     const part = w.furyRoad!.outposts[0].stock[0];
-    w = outpostBuyPart(w, part.id);
+    w = waitForRoad(outpostBuyPart(w, part.id));
     const me = playerVehicle(w);
     me.pos = roadPoint(w.seed, w.furyRoad!.window, milestoneAt(1) + 30, HIGHWAY.road.lanes[1]);
 
