@@ -63,6 +63,7 @@ export const combatBlocked = (turns: number): Msg => t("hud.combatBlocked", { n:
 type HudActions = {
   openInventory: () => void;
   openCharacter: () => void;
+  openJournal: () => void;
   toggleManual: () => void;
   toggleAutoRepair: () => void;
   toggleOverdrive: () => void;
@@ -410,6 +411,15 @@ export class Hud {
     );
   }
 
+  private journalButton(busy: boolean): HTMLElement {
+    return el(
+      "button",
+      { class: "instrument-button", disabled: busy, onclick: () => this.actions.openJournal(), title: t("journal.hint") },
+      createIcon("journal"),
+      t("hud.journalKey"),
+    );
+  }
+
   renderTop(w: World): void {
     const readout = getHudReadout(w);
     const busy = this.actions.isBusy();
@@ -510,6 +520,7 @@ export class Hud {
       }),
       ...this.engineButtons(w, busy),
       this.characterButton(w, busy),
+      this.journalButton(busy),
     );
   }
 

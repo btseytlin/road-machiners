@@ -10,7 +10,9 @@ import type { DecisionOptions } from "../data/npcs";
 import type { Contract, ShopState } from "./market";
 import type { Rng } from "./rng";
 import type { PerkId } from "../data/skills";
+import type { NoteId } from "../data/locals";
 import type { UtilityEffectType } from "../data/parts";
+import type { QuestValue } from "../data/quests";
 
 export type PatchDeal = DecisionOptions["patchDeal"];
 
@@ -324,6 +326,8 @@ export type LandmarkLook = Exclude<PropKind, "rock">;
 export type Hulk = { chassisId: string; yaw: number };
 
 export type Obstacle =
+  // Only kill wrecks and story wrecks have a hulk. Map, road and convoy wrecks, and kill wrecks from saves before format 2.10, show the
+  // generic wreck.
   | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site"; hulk?: Hulk }
   | { id: string; pos: Vec; r: number; kind: "landmark"; look: LandmarkLook; yaw: number };
 
@@ -372,6 +376,13 @@ export type CallVars = Record<string, CallVar>;
 export type Repeat = { count: number; turn: number };
 
 export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars; line: { line: LineId; vars: CallVars } };
+
+
+export type QuestVars = Record<string, QuestValue>;
+export type QuestSession = { quest: string; checkpoint: string; seed: number };
+export type QuestLine = { text: string; tags: string[] };
+export type QuestLive = { quest: string; ink: string; lines: QuestLine[]; choices: string[]; costs: (number | null)[] };
+export type QuestState = { world: QuestVars; local: Record<string, QuestVars>; session: QuestSession | null; live: QuestLive | null };
 export type TopicOutcome = "agreed" | "refused" | "done";
 
 export type Player = {
@@ -407,12 +418,14 @@ export type Player = {
   beacon: boolean;
   call: Call | null;
   talked: Record<string, Partial<Record<TopicId, TopicOutcome>>>;
+  quests: QuestState;
   explored: Uint8Array;
   visible: number[];
   contacts: Contact[];
   clouds: string[];
   marked: { vehicleId: string; until: number }[];
   rumored: string[];
+  notes: { id: NoteId; turn: number }[];
   hostilesSeen: string[];
 };
 
@@ -448,6 +461,7 @@ export type GameEvent =
   | { t: 'money'; amount: number; reason: MoneyReason }
   | { t: 'contract'; contract: Contract; outcome: 'accepted' | 'expiring' | 'fulfilled' | 'done' | 'failed' | 'lapsed' }
   | { t: 'discover'; location: string }
+  | { t: 'note'; id: NoteId } // the player wrote a rumor or clue into the journal
   | { t: 'supply'; what: string; note: SimNote }
   | { t: 'death' }
   | { t: 'knockout' }

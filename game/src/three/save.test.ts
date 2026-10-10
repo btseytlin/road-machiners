@@ -25,7 +25,8 @@ import { TIME } from '../data/time';
 import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR } from './save-migrations';
 import SAVED_SHAPE from './save-shape.json';
 import { allSlots, type SlotId } from './save-slots';
-import { newGameShape } from '../test/save-shape';
+import { lostQuestNames, newGameShape, questNames } from '../test/save-shape';
+import { chooseQuestOption, QUESTS, questView, startQuest } from '../sim/quests';
 import { defaultSetup, parseSetup } from '../sim/settings';
 
 const SLOTS = allSlots(3);
@@ -265,6 +266,48 @@ describe('game save', () => {
     const format = `${SAVE_FORMAT.major}.${SAVE_FORMAT.minor}`;
     expect(SAVED_SHAPE.format, 'Run npm run save:shape after a new save format').toBe(format);
     expect(newGameShape(), 'The saved shape changed. Add a migration step in src/three/save-migrations.ts, then run npm run save:shape').toEqual(SAVED_SHAPE.shape);
+  });
+
+  it('records the saved quest names, so a lost name needs a new format', () => {
+    expect(questNames(QUESTS), 'Saved quest names changed. A removed, renamed or retyped name needs a migration step. Then run npm run save:shape').toEqual(SAVED_SHAPE.quests);
+  });
+
+  it('finds a removed, retyped or lost checkpoint name against the recorded names', () => {
+    const recorded = { world: { heard: 'boolean' as const }, local: { bowl: { trust: 'number' as const } }, checkpoints: { bowl: ['start', 'start.talk'] } };
+    const current = { world: {}, local: { bowl: { trust: 'string' as const } }, checkpoints: { bowl: ['start'] } };
+    expect(lostQuestNames(recorded, current)).toEqual(['World variable heard (boolean)', 'Quest bowl variable trust (number)', 'Quest bowl checkpoint start.talk']);
+  });
+
+  it('saves quest variables and the checkpoint but never ink state, and resumes there on load', () => {
+    const slots = makeSlots();
+    const start = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
+    const mid = chooseQuestOption(startQuest(start, QUESTS, 'bowl_hattie', 'start'), QUESTS, 0);
+    writeSave(slots, 'auto', mid, 'run', 1);
+    const stored = JSON.stringify(slots.get('auto'));
+    expect(stored).not.toContain('"live"');
+    expect(stored).not.toContain('inkVersion');
+    const loaded = loadWorld(slots, 'auto', TEST_MAP);
+    expect(loaded?.player.quests.session).toEqual(mid.player.quests.session);
+    expect(loaded?.player.notes).toEqual(mid.player.notes);
+    expect(loaded && questView(loaded, QUESTS).choices).toEqual(questView(mid, QUESTS).choices);
+    expect(loaded?.player.money).toBe(mid.player.money);
+    expect(loaded?.events).toEqual([]);
+  });
+
+  it('rejects a save holding a quest variable or checkpoint this version does not know', () => {
+    const slots = makeSlots();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
+    const cases = [
+      [{ world: { gone: true }, local: {}, session: null }, /badQuests: World variable gone is not declared/],
+      [{ world: {}, local: {}, session: { quest: 'bowl_hattie', checkpoint: 'nowhere', seed: 1 } }, /badQuests: Quest bowl_hattie has no checkpoint nowhere/],
+      [{ world: {}, local: [], session: null }, /badQuests/],
+    ] as const;
+    for (const [quests, error] of cases) {
+      const saved = saveOf(world).world as { player: Record<string, unknown> };
+      slots.put('auto', { format: SAVE_FORMAT, world: { ...saved, player: { ...saved.player, quests } } });
+      expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(SaveError);
+      expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(error);
+    }
   });
 
   it('rejects a save missing a field required for future turns', () => {

@@ -43,10 +43,15 @@ import FORMAT_2_32 from './save-fixtures/format-2-32.json';
 import FORMAT_2_33 from './save-fixtures/format-2-33.json';
 import FORMAT_2_35 from './save-fixtures/format-2-35.json';
 import FORMAT_2_36 from './save-fixtures/format-2-36.json';
+import { STORY_WRECKS } from '../data/salvage';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
-import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
+import { dropQuest, dropQuestVar, endQuestSession, MIGRATIONS, moveQuestCheckpoint, pooledSkills_9_10, renameQuestVar, type SavedJson } from './save-migrations';
+import FORMAT_2_37 from './save-fixtures/format-2-37.json';
+import FORMAT_2_38 from './save-fixtures/format-2-38.json';
+import FORMAT_2_39 from './save-fixtures/format-2-39.json';
+import FORMAT_2_40 from './save-fixtures/format-2-40.json';
 
 describe('save migrations', () => {
   it('0 to 1 gives the player townPatched false and keeps every other field', () => {
@@ -821,5 +826,108 @@ describe('save migration 36 to 37', () => {
   it('hangs up a call on a line no table knows', () => {
     const unknown = { ...FORMAT_2_36, player: { ...FORMAT_2_36.player, call: { ...FORMAT_2_36.player.call, line: { text: 'Words from a mod', vars: {} } } } };
     expect((MIGRATIONS[36](unknown) as unknown as Saved).player.call).toBeNull();
+  });
+});
+
+describe('save migration 37 to 38', () => {
+  const wagon = STORY_WRECKS[0];
+  const fresh = emptyWorld();
+
+  it('gives the player an empty journal and puts wagon Seven in place as a new game has it', () => {
+    const next = MIGRATIONS[37](FORMAT_2_37) as typeof FORMAT_2_37 & { player: { notes: unknown[] } };
+
+    expect(next.player).toEqual({ ...FORMAT_2_37.player, notes: [] });
+    expect(next.obstacles).toEqual([...FORMAT_2_37.obstacles, { id: wagon.id, pos: wagon.pos, r: wagon.r, kind: 'wreck', hulk: { chassisId: wagon.chassisId, yaw: wagon.yaw } }]);
+    expect(next.salvage).toEqual([...FORMAT_2_37.salvage, fresh.salvage.find((s) => s.id === wagon.id)]);
+    expect(next.turn).toBe(FORMAT_2_37.turn);
+  });
+
+  it('adds no second wagon to a save that holds one', () => {
+    const once = MIGRATIONS[37](FORMAT_2_37);
+
+    const twice = MIGRATIONS[37](once) as typeof FORMAT_2_37;
+
+    expect(twice.obstacles.filter((o) => o.id === wagon.id)).toHaveLength(1);
+    expect(twice.salvage.filter((s) => s.id === wagon.id)).toHaveLength(1);
+  });
+});
+
+describe('save migration 38 to 39', () => {
+  it('gives the player empty quest state with no open quest', () => {
+    const next = MIGRATIONS[38](FORMAT_2_38);
+
+    expect(next).toEqual({ ...FORMAT_2_38, player: { ...FORMAT_2_38.player, quests: { world: {}, local: {}, session: null } } });
+  });
+});
+
+describe('save migration 39 to 40', () => {
+  it('drops the sample quests and their world variable and keeps every other quest name', () => {
+    const next = MIGRATIONS[39](FORMAT_2_39);
+
+    expect(next).toEqual({
+      ...FORMAT_2_39,
+      player: { ...FORMAT_2_39.player, quests: { world: { kept_flag: true }, local: { kept_quest: { n: 2 } }, session: null } },
+    });
+  });
+});
+
+describe('save migration 40 to 41', () => {
+  it('drops the depot quest counters that facts replaced and keeps the rest of the open quest', () => {
+    const next = MIGRATIONS[40](FORMAT_2_40);
+
+    expect(next).toEqual({
+      ...FORMAT_2_40,
+      player: { ...FORMAT_2_40.player, quests: { ...FORMAT_2_40.player.quests, local: { nose_depot_leak: { watches: 3, ledger_read: true } } } },
+    });
+  });
+});
+
+describe('quest migration helpers', () => {
+  const saved = (): SavedJson => ({
+    turn: 3000,
+    player: {
+      vehicleId: 'v1',
+      quests: {
+        world: { wagon_heard: true },
+        local: { bowl: { trust: 2, paid: true } },
+        session: { quest: 'bowl', checkpoint: 'start.talk', seed: 77 },
+      },
+    },
+  });
+  const questsIn = (world: SavedJson) => (world.player as { quests: unknown }).quests;
+
+  it('renames a world variable and keeps its value', () => {
+    expect(questsIn(renameQuestVar(saved(), null, 'wagon_heard', 'heard_of_wagon'))).toMatchObject({ world: { heard_of_wagon: true } });
+  });
+
+  it('renames a quest variable', () => {
+    expect(questsIn(renameQuestVar(saved(), 'bowl', 'trust', 'faith'))).toMatchObject({ local: { bowl: { faith: 2, paid: true } } });
+  });
+
+  it('leaves a save without the variable as it was', () => {
+    expect(renameQuestVar(saved(), 'bowl', 'missing', 'other')).toEqual(saved());
+  });
+
+  it('refuses to rename onto a variable that holds a value', () => {
+    expect(() => renameQuestVar(saved(), 'bowl', 'trust', 'paid')).toThrow('Quest variable paid already holds a value');
+  });
+
+  it('drops a quest variable and the quest entry once it is empty', () => {
+    const once = dropQuestVar(saved(), 'bowl', 'trust');
+    expect(questsIn(once)).toMatchObject({ local: { bowl: { paid: true } } });
+    expect(questsIn(dropQuestVar(once, 'bowl', 'paid'))).toMatchObject({ local: {} });
+  });
+
+  it('moves the open session to a renamed checkpoint', () => {
+    expect(questsIn(moveQuestCheckpoint(saved(), 'bowl', 'start.talk', 'start.chat'))).toMatchObject({ session: { quest: 'bowl', checkpoint: 'start.chat', seed: 77 } });
+  });
+
+  it('ends the session of a quest and leaves another quest session open', () => {
+    expect(questsIn(endQuestSession(saved(), 'bowl'))).toMatchObject({ session: null });
+    expect(endQuestSession(saved(), 'nose')).toEqual(saved());
+  });
+
+  it('drops a whole quest with its session and variables but keeps world variables', () => {
+    expect(questsIn(dropQuest(saved(), 'bowl'))).toEqual({ world: { wagon_heard: true }, local: {}, session: null });
   });
 });

@@ -40,14 +40,11 @@ import { TruckContext, TruckControls } from "./truck-controls";
 import { PAL } from "../render/palette";
 import { READY_ARC_BIT } from "./render/models";
 import { timed } from "../perf";
-import { CharacterScreen } from "../ui/character";
 import { HitCard } from "../ui/hitCard";
 import type { UiHost } from "../ui/host";
+import { ModalScreens } from "./screens";
 import { Hud } from "../ui/hud";
-import { InventoryScreen } from "../ui/inventory";
 import type { RadioPanel } from "../ui/radio";
-import { TownScreen, TruckTradeScreen } from "../ui/town";
-import { FullShopScreen } from "../ui/full-shop";
 import { aimActions, HoverHold, InspectPin, SLOT_KEYS, toggleBodyAim, vehicleMarks, WeaponPanel, weaponsForClick } from "../ui/weapons";
 import { CameraRig, KeyPan, TruckFollow } from "./render/camera";
 import { addScatter } from "./render/scatter";
@@ -184,12 +181,8 @@ export class Game {
   readonly hud: Hud;
   private readonly hitCard: HitCard;
   private readonly weapons: WeaponPanel;
-  private readonly town: TownScreen;
-  private readonly fullShop: FullShopScreen;
+  private readonly screens: ModalScreens;
   private readonly context: TruckContext;
-  private readonly trade: TruckTradeScreen;
-  private readonly character: CharacterScreen;
-  private readonly inventory: InventoryScreen;
   private readonly menu: GameMenu;
   private readonly death: DeathScreen;
   private readonly saves: GameSaves;
@@ -269,10 +262,10 @@ export class Game {
       apply: (next) => this.apply(next),
       pushEvents: () => this.hud.pushEvents(this.world),
       note: (text) => this.hud.note(this.world, text, "bad"),
-      openTrade: (id) => this.trade.openWith(id),
-      openTown: () => this.town.open(),
-      openDowned: (id) => this.inventory.openDowned(this.world, id),
-      openLoot: (id) => this.inventory.openLoot(id),
+      openTrade: (id) => this.screens.trade.openWith(id),
+      openTown: () => this.screens.town.open(),
+      openDowned: (id) => this.screens.inventory.openDowned(this.world, id),
+      openLoot: (id) => this.screens.inventory.openLoot(id),
     });
     const score = new CombatScore(player, Math.random);
     this.sound = new SoundDirector(player, this.rig, score);
@@ -284,14 +277,11 @@ export class Game {
 
     const host = this.uiHost();
     this.weapons = new WeaponPanel(host);
-    this.town = new TownScreen(host);
-    this.fullShop = new FullShopScreen(host);
-    this.trade = new TruckTradeScreen(host);
-    this.character = new CharacterScreen(host);
-    this.inventory = new InventoryScreen(host);
+    this.screens = new ModalScreens(host);
     this.hud = new Hud({
       openInventory: () => this.runKey("KeyI"),
       openCharacter: () => this.runKey("KeyC"),
+      openJournal: () => this.runKey("KeyJ"),
       toggleManual: () => this.runKey("KeyR"),
       toggleAutoRepair: () => this.runKey("KeyP"),
       toggleOverdrive: () => this.runKey("KeyO"),
@@ -310,7 +300,7 @@ export class Game {
         ),
       isBusy: () => this.anim !== null,
       autoTravel: () => this.travel.isAuto(this.world),
-      dialogue: { world: () => this.world, inspected: () => this.inspected(), busy: () => this.anim !== null, talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.saves.logWorld(next); this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
+      dialogue: { world: () => this.world, inspected: () => this.inspected(), busy: () => this.anim !== null || this.screens.quest.isOpen(), talk: (next) => this.runRescue(() => next), commit: (next) => { this.world = next; this.saves.logWorld(next); this.refreshUi(); }, log: (next) => this.hud.pushEvents(next), playHorn: (id, delayMs) => this.playHorn(id, delayMs) },
       recenter: () => this.runKey("KeyF"),
       ...aimActions({ world: () => this.world, selected: () => this.selected, canAim: () => this.anim === null && playerCanAct(this.world), apply: (w) => this.apply(w) }),
     }, radio);
@@ -378,8 +368,8 @@ export class Game {
 
   openFullShop(): void {
     if (this.anim) return;
-    this.closeScreens(null);
-    this.fullShop.open();
+    this.screens.closeAll(null);
+    this.screens.fullShop.open();
   }
 
   apply(next: World): void {
@@ -396,12 +386,11 @@ export class Game {
   }
 
   private modalOpen(): boolean {
-    return this.inventory.isOpen() || this.blockingModalOpen();
+    return this.screens.inventory.isOpen() || this.blockingModalOpen();
   }
 
   private blockingModalOpen(): boolean {
-    const screens = [this.town, this.fullShop, this.trade, this.character];
-    return screens.some((s) => s.isOpen()) || this.world.player.call !== null || this.menu.isOpen();
+    return this.screens.blockingOpen() || this.world.player.call !== null || this.menu.isOpen();
   }
 
   private displayWorld(): World {
@@ -430,11 +419,7 @@ export class Game {
     this.hud.renderRescue(this.displayWorld());
     if (!this.anim && this.world.player.state === "dead") this.death.show();
     this.weapons.render();
-    this.town.render();
-    this.fullShop.render();
-    this.trade.render();
-    this.character.render();
-    this.inventory.render();
+    this.screens.render();
     const { action, count, index } = this.context.shown();
     this.hud.renderAction(
       action,
@@ -522,14 +507,14 @@ export class Game {
 
   private searchFromLoot(stockId: string): void {
     const action = getSearchAction(this.world, this.world.salvage.find((s) => s.id === stockId)!);
-    this.inventory.close();
+    this.screens.inventory.close();
     this.context.searchStock(stockId, action.combat);
   }
 
   private runKey(code: string): void {
     const key = this.keys[code];
     if (!key || (key.noModal && (key.inventoryOk ? this.blockingModalOpen() : this.modalOpen())) || (key.idle && this.travel.isPlaying(this.anim))) return;
-    if (key.inventoryOk && this.inventory.isOpen()) this.inventory.close();
+    if (key.inventoryOk && this.screens.inventory.isOpen()) this.screens.inventory.close();
     key.run();
   }
 
@@ -549,25 +534,16 @@ export class Game {
     KeyG: { run: () => this.controls.douseEngine(), noModal: true, idle: true },
     KeyL: { run: () => this.controls.toggleHeadlights(), noModal: true },
     KeyN: { run: () => this.inspected() && !markError(this.world, this.inspected()!) && this.apply(markVehicle(this.world, this.inspected()!)), noModal: true, idle: true },
-    KeyC: { run: () => this.toggleScreen(this.character), idle: true },
-    KeyI: { run: () => this.toggleScreen(this.inventory), idle: true },
-    Escape: { run: () => { if (this.modalOpen()) this.closeScreens(null); else this.pin.clear(); this.selectUtility(null); } },
+    KeyC: { run: () => !this.anim && this.screens.toggle(this.screens.character), idle: true },
+    KeyJ: { run: () => !this.anim && this.screens.toggle(this.screens.journal), idle: true },
+    KeyI: { run: () => !this.anim && this.screens.toggle(this.screens.inventory), idle: true },
+    Escape: { run: () => { if (this.modalOpen()) this.screens.closeAll(null); else this.pin.clear(); this.selectUtility(null); } },
   };
 
   private selectUtility(id: string | null): void {
     if (this.anim || (id !== null && this.modalOpen())) return;
     this.utilityAim.select(id);
     this.refreshUi();
-  }
-
-  private closeScreens(keep: CharacterScreen | InventoryScreen | null): void {
-    for (const s of [this.town, this.fullShop, this.trade, this.character, this.inventory]) if (s !== keep) s.close();
-  }
-
-  private toggleScreen(screen: CharacterScreen | InventoryScreen): void {
-    if (this.anim) return;
-    this.closeScreens(screen);
-    screen.toggle();
   }
 
   private updateStopCue(): void {
@@ -769,7 +745,7 @@ export class Game {
     this.playImpactSounds();
     this.hud.pushEvents(this.world);
     const searched = this.world.events.find((e) => e.t === "searched");
-    if (searched) this.inventory.openLoot(searched.stock);
+    if (searched) this.screens.inventory.openLoot(searched.stock);
     this.uiStale = true;
     for (const b of this.breakCues.rest()) this.playBreak(b);
   }
