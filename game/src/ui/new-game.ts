@@ -3,12 +3,17 @@
 // a boot request with the picked setup and reloads, and boot then deletes the autosaves and builds the world.
 
 import { GAME_MODES, WORLD_SETTINGS } from "../data/modes";
-import { defaultSetup, parseSetup, percent } from "../sim/settings";
+import { defaultSetup, parseSetup } from "../sim/settings";
 import type { GameModeId, WorldSettings, WorldSetup } from "../sim/types";
 import type { BootRequest } from "../three/save-slots";
+import { bindAttr, say, setText } from "../text/language";
+import { t, type Msg } from "../text/msg";
+import { modeDescription, modeName, settingDescription, settingName } from "../text/names";
 import { el, panel } from "./dom";
 
-export const CONFIRM_NEW_GAME = "Start a new game? The autosaves are deleted. Your save slots stay.";
+export const CONFIRM_NEW_GAME = t("save.confirmNew");
+
+const share = (value: number): Msg => t("setting.percent", { n: Math.round(value * 100) });
 
 export type NewGameActions = {
   requestBoot: (request: BootRequest) => void;
@@ -39,11 +44,11 @@ class NewGameScreen {
   private draft: WorldSetup = defaultSetup("roaming");
   private readonly opener = document.activeElement as HTMLElement | null;
   private readonly block = panel("new-game-block");
-  private readonly root = panel("new-game");
-  private readonly modes = el("div", { class: "mode-list", role: "radiogroup", "aria-label": "Game mode" });
-  private readonly settingsButton = el("button", { class: "settings-toggle", "aria-expanded": "false", onclick: () => this.toggleSettings() }, "World Settings");
+  private readonly root = panel("new-game dialog");
+  private readonly modes = el("div", { class: "mode-list", role: "radiogroup", "aria-label": t("newGame.mode") });
+  private readonly settingsButton = el("button", { class: "settings-toggle", "aria-expanded": "false", onclick: () => this.toggleSettings() }, t("newGame.settings"));
   private readonly settings = el("div", { class: "world-settings", hidden: true });
-  private readonly startButton = el("button", { class: "start", onclick: () => this.start() }, "Start");
+  private readonly startButton = el("button", { class: "start btn-l", onclick: () => this.start() }, t("newGame.start"));
   private readonly onKey = (e: Event) => {
     if ((e as KeyboardEvent).code !== "Escape") return;
     e.stopPropagation();
@@ -53,17 +58,17 @@ class NewGameScreen {
   constructor(private actions: NewGameActions, private onClose: () => void) {
     this.root.setAttribute("role", "dialog");
     this.root.setAttribute("aria-modal", "true");
-    this.root.setAttribute("aria-label", "New game");
+    bindAttr(this.root, "aria-label", t("menu.newGame"));
     this.root.addEventListener("keydown", (e) => {
       e.stopPropagation();
       if ((e as KeyboardEvent).code === "Tab") this.wrapFocus(e as KeyboardEvent);
     });
     this.root.append(
-      el("h3", {}, "New game"),
+      el("h3", {}, t("menu.newGame")),
       this.modes,
       this.settingsButton,
       this.settings,
-      el("div", { class: "new-game-buttons" }, el("button", { class: "back", onclick: () => this.close() }, "Back"), this.startButton),
+      el("div", { class: "new-game-buttons" }, el("button", { class: "back btn-l", onclick: () => this.close() }, t("newGame.back")), this.startButton),
     );
     this.render();
     window.addEventListener("keydown", this.onKey, true);
@@ -74,41 +79,41 @@ class NewGameScreen {
     this.modes.replaceChildren(...MODE_IDS.map((id) => this.modeCard(id)));
     this.settings.replaceChildren(
       ...SETTING_IDS.map((id) => this.settingRow(id)),
-      el("button", { class: "reset", onclick: () => this.reset() }, "Reset to defaults"),
+      el("button", { class: "reset", onclick: () => this.reset() }, t("newGame.reset")),
     );
   }
 
   private modeCard(id: GameModeId): HTMLElement {
     const selected = this.draft.mode === id;
-    const mode = GAME_MODES[id];
     return el(
       "button",
       { class: `mode-card${selected ? " selected" : ""}`, role: "radio", "aria-checked": String(selected), "data-mode": id, onclick: () => this.pickMode(id) },
-      el("b", {}, mode.name),
-      el("span", {}, mode.description),
+      el("b", {}, modeName(id)),
+      el("span", {}, modeDescription(id)),
     );
   }
 
   private settingRow(id: SettingId): HTMLElement {
     const def = WORLD_SETTINGS[id];
     const value = this.draft.settings[id];
-    const label = el("span", { class: "setting-value" }, percent(value));
+    const label = el("span", { class: "setting-value" }, share(value));
     const input = el("input", {
       type: "range", id: `setting-${id}`, min: def.min, max: def.max, step: def.step, value,
-      "aria-valuetext": percent(value),
+      "aria-valuetext": share(value),
       oninput: (e) => {
         const next = Number((e.target as HTMLInputElement).value);
         this.draft.settings[id] = next;
-        label.textContent = percent(next);
-        input.setAttribute("aria-valuetext", percent(next));
+        setText(label, share(next));
+        bindAttr(input, "aria-valuetext", share(next));
       },
     });
+    const defaultAt = (def.default - def.min) / (def.max - def.min);
     return el(
       "div",
       { class: "setting-row", "data-setting": id },
-      el("label", { for: `setting-${id}` }, el("b", {}, def.name), label, el("span", { class: "dim" }, `default ${percent(def.default)}`)),
-      el("div", { class: "dim" }, def.description),
-      el("div", { class: "setting-input" }, el("span", { class: "dim" }, percent(def.min)), input, el("span", { class: "dim" }, percent(def.max))),
+      el("label", { for: `setting-${id}`, title: settingDescription(id) }, settingName(id)),
+      el("div", { class: "setting-slider" }, input, el("span", { class: "default-tick", style: `--default-at: ${defaultAt}` })),
+      label,
     );
   }
 
@@ -138,7 +143,7 @@ class NewGameScreen {
   }
 
   private start(): void {
-    if (!this.actions.confirm(CONFIRM_NEW_GAME)) return;
+    if (!this.actions.confirm(say(CONFIRM_NEW_GAME))) return;
     this.actions.requestBoot({ new: parseSetup(this.draft) });
     this.actions.reload();
   }

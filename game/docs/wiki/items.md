@@ -1,6 +1,6 @@
 # Items
 
-Every chassis, part and good in the game. Value is money for a pristine item. Every price derives from it, see [economy.md](economy.md). Mass is per part in kilograms, and per unit for goods. Footprints are in grid cells. One cell is `RULES.cellMeters` meters wide.
+Every chassis, part and good in the game. Value is in M's, the basin's currency ([lore](../lore.md#ms)), for a pristine item. Every price derives from it, see [economy.md](economy.md). Mass is per part in kilograms, and per unit for goods. Footprints are in grid cells. One cell is `RULES.cellMeters` meters wide.
 
 Parts are defined in `src/data/parts.ts`, chassis in `src/data/chassis.ts` and goods in `src/data/goods.ts`. A value is a hand-set base plus a modifier from the stats the kind is bought for. The modifier numbers are `PART_PRICE_MODIFIERS` for parts and `CHASSIS_PRICE_MODIFIERS` for chassis. Core parts come built into a chassis at fixed cells and are never sold.
 
@@ -34,19 +34,19 @@ Parts are defined in `src/data/parts.ts`, chassis in `src/data/chassis.ts` and g
 <!-- wiki:weapons -->
 | id | name | tier | value (M) | cells (w x h) | mass (kg) | hp | armor | tall | range (tiles) | cooldown (turns) | magazine (shots) | reload (turns) | arc (deg) | spread (deg) | rounds per shot | recoil (deg) | shake | line (turns) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| mg | MG turret | 1 | 49 | 1 x 1 | 110 | 40 | 3 | false | 12 | 1 | 5 | 2 | 360 | 5 | 6 | 0.5 | 0.5 |  |
+| mg | MG turret | 1 | 49 | 1 x 2 | 110 | 40 | 3 | false | 12 | 1 | 5 | 2 | 270 | 5 | 6 | 0.5 | 0.5 |  |
 | shotgun | Shotgun | 1 | 60 | 1 x 2 | 100 | 36 | 2 | false | 10 | 1 | 2 | 2 | 90 | 12 | 10 | 1.5 | 0.6 |  |
 | longRifle | Long rifle | 1 | 54 | 1 x 2 | 120 | 30 | 2 | false | 18 | 1 | 3 | 2 | 60 | 1 | 1 | 0.8 | 1 |  |
 | flamer | Flamer | 1 | 69 | 1 x 2 | 100 | 34 | 2 | false | 8 | 1 | 3 | 2 | 90 | 7 | 8 | 0.3 | 0.6 |  |
 | pneumobolter | Pneumobolter | 1 | 69 | 2 x 2 | 150 | 44 | 3 | false | 14 | 1 | 2 | 1 | 60 | 1.6 | 1 | 1.5 | 1.5 |  |
 | slugCannon | Slug cannon | 1 | 67 | 1 x 2 | 160 | 46 | 3 | false | 16 | 1 | 3 | 2 | 180 | 2 | 2 | 3 | 1.5 |  |
-| heavyMg | Heavy MG | 2 | 88 | 1 x 2 | 95 | 50 | 4 | false | 13 | 1 | 5 | 2 | 360 | 4 | 6 | 1.5 | 0.6 |  |
+| heavyMg | Heavy MG | 2 | 88 | 1 x 2 | 95 | 50 | 4 | false | 13 | 1 | 5 | 2 | 270 | 4 | 6 | 1.5 | 0.6 |  |
 | cannon | Forward cannon | 2 | 114 | 2 x 2 | 270 | 60 | 3 | true | 13 | 1 | 2 | 2 | 60 | 3.5 | 1 | 6 | 1 |  |
 | amRifle | Anti-materiel rifle | 2 | 78 | 1 x 3 | 190 | 40 | 2 | false | 19 | 1 | 3 | 3 | 45 | 0.8 | 1 | 2 | 1.2 |  |
 | autocannon | Autocannon | 2 | 126 | 2 x 2 | 180 | 56 | 4 | false | 12 | 1 | 4 | 2 | 180 | 4 | 3 | 3 | 0.8 |  |
 | recoilless | Recoilless rifle | 2 | 109 | 1 x 3 | 150 | 40 | 2 | false | 15 | 1 | 2 | 2 | 45 | 1.4 | 1 | 1 | 2 |  |
 | battleRifle | Battle rifle | 2 | 117 | 1 x 3 | 150 | 44 | 3 | false | 17 | 1 | 5 | 1 | 180 | 1.6 | 3 | 2 | 1.4 |  |
-| gatling | Gatling MG | 3 | 170 | 2 x 2 | 150 | 70 | 5 | false | 14 | 1 | 6 | 3 | 360 | 5 | 12 | 2 | 0.7 |  |
+| gatling | Gatling MG | 3 | 170 | 2 x 2 | 150 | 70 | 5 | false | 14 | 1 | 6 | 3 | 270 | 5 | 12 | 2 | 0.7 |  |
 | rocketRack | Rocket rack | 3 | 165 | 2 x 2 | 110 | 32 | 1 | false | 14 | 1 | 1 | 3 | 90 | 6 | 4 | 1 | 1.2 |  |
 | sniperCannon | Sniper cannon | 3 | 205 | 2 x 3 | 180 | 40 | 2 | true | 20 | 1 | 3 | 3 | 30 | 0.6 | 1 | 2 | 1.4 |  |
 | grenadeLauncher | Grenade launcher | 3 | 196 | 2 x 2 | 130 | 50 | 4 | false | 12 | 1 | 4 | 3 | 180 | 5 | 3 | 2 | 1 |  |
@@ -102,18 +102,18 @@ Each weapon's round:
 <!-- wiki:armor -->
 | id | name | tier | value (M) | cells (w x h) | mass (kg) | hp | armor | tall | blast armor | field repair | ram mult | claymore |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| plates | Steel plates | 2 | 102 | 1 x 3 | 225 | 80 | 12 | false | 12 | capped | 1 |  |
-| cage | Rebar cage | 1 | 73 | 1 x 2 | 110 | 60 | 2 | false | 20 | capped | 1 |  |
-| ram | Ram bar | 2 | 110 | 3 x 1 | 480 | 100 | 20 | false | 8 | capped | 2 |  |
-| scrapPanels | Scrap panels | 1 | 50 | 1 x 2 | 200 | 44 | 5 | false | 5 | full | 1 |  |
-| ceramicPlates | Ceramic plates | 2 | 150 | 1 x 2 | 100 | 36 | 22 | false | 8 | none | 1 |  |
-| spacedArmor | Spaced armor | 2 | 142 | 1 x 4 | 260 | 110 | 10 | false | 28 | capped | 1 |  |
-| reinforcedCage | Reinforced cage | 2 | 117 | 1 x 3 | 180 | 130 | 4 | false | 26 | capped | 1.2 |  |
-| plowRam | Plow ram | 3 | 201 | 3 x 1 | 420 | 170 | 25 | false | 12 | none | 2.8 |  |
-| claymoreRam | Claymore ram | 2 | 140 | 3 x 1 | 380 | 80 | 14 | false | 6 | capped | 1.5 | {"minImpact":3,"blast":{"damage":60,"pen":12,"radius":2},"selfBlast":{"damage":25,"pen":6},"throw":{"impulse":40000,"lift":0.35},"reload":20} |
-| steelPlate | Steel plate | 2 | 66 | 1 x 1 | 80 | 28 | 12 | false | 12 | capped | 1 |  |
-| scrapSheet | Scrap sheet | 1 | 34 | 1 x 1 | 100 | 22 | 5 | false | 5 | full | 1 |  |
-| ceramicTile | Ceramic tile | 2 | 87 | 1 x 1 | 50 | 18 | 22 | false | 8 | none | 1 |  |
+| plates | Steel plates | 2 | 102 | 1 x 3 | 42 | 80 | 12 | false | 12 | capped | 1 |  |
+| cage | Rebar cage | 1 | 73 | 1 x 2 | 20.625 | 60 | 2 | false | 20 | capped | 1 |  |
+| ram | Ram bar | 2 | 86 | 3 x 1 | 50.625 | 100 | 8 | false | 8 | capped | 2 |  |
+| scrapPanels | Scrap panels | 1 | 50 | 1 x 2 | 30 | 44 | 5 | false | 5 | full | 1 |  |
+| ceramicPlates | Ceramic plates | 2 | 150 | 1 x 2 | 18.75 | 36 | 22 | false | 8 | none | 1 |  |
+| spacedArmor | Spaced armor | 2 | 142 | 1 x 4 | 48.75 | 110 | 10 | false | 28 | capped | 1 |  |
+| reinforcedCage | Reinforced cage | 2 | 117 | 1 x 3 | 33.75 | 130 | 4 | false | 26 | capped | 1.2 |  |
+| plowRam | Plow ram | 3 | 167 | 3 x 1 | 47.25 | 170 | 10 | false | 10 | none | 2.8 |  |
+| claymoreRam | Claymore ram | 2 | 140 | 3 x 1 | 142.5 | 80 | 14 | false | 6 | capped | 1.5 | {"minImpact":3,"blast":{"damage":60,"pen":12,"radius":2},"selfBlast":{"damage":25,"pen":6},"throw":{"impulse":40000,"lift":0.35},"reload":20} |
+| steelPlate | Steel plate | 2 | 66 | 1 x 1 | 15 | 28 | 12 | false | 12 | capped | 1 |  |
+| scrapSheet | Scrap sheet | 1 | 34 | 1 x 1 | 15 | 22 | 5 | false | 5 | full | 1 |  |
+| ceramicTile | Ceramic tile | 2 | 87 | 1 x 1 | 9.375 | 18 | 22 | false | 8 | none | 1 |  |
 <!-- /wiki:armor -->
 
 ## Cargo
@@ -121,13 +121,13 @@ Each weapon's round:
 <!-- wiki:cargo -->
 | id | name | tier | value (M) | cells (w x h) | mass (kg) | hp | armor | tall | extra rows |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| rack | Roof rack | 1 | 40 | 2 x 1 | 60 | 30 | 1 | false | 1 |
-| trailerBox | Cargo box | 2 | 100 | 2 x 2 | 135 | 60 | 1 | true | 3 |
+| rack | Roof rack | 1 | 67 | 2 x 1 | 60 | 30 | 1 | false | 2 |
+| trailerBox | Cargo box | 2 | 120 | 2 x 2 | 135 | 60 | 1 | true | 5 |
 | panniers | Panniers | 1 | 34 | 1 x 1 | 60 | 20 | 1 | false | 1 |
 | flatbed | Flatbed extension | 1 | 67 | 2 x 1 | 120 | 50 | 1 | false | 2 |
-| lightFrame | Light cargo frame | 2 | 127 | 2 x 2 | 90 | 24 | 1 | false | 3 |
-| enclosedFrame | Enclosed cargo frame | 2 | 147 | 2 x 2 | 165 | 110 | 8 | true | 3 |
-| heavyFrame | Heavy cargo frame | 3 | 217 | 2 x 2 | 175 | 90 | 3 | true | 5 |
+| lightFrame | Light cargo frame | 2 | 127 | 2 x 2 | 90 | 24 | 1 | false | 5 |
+| enclosedFrame | Enclosed cargo frame | 2 | 134 | 2 x 2 | 165 | 110 | 8 | true | 5 |
+| heavyFrame | Heavy cargo frame | 3 | 160 | 2 x 2 | 150 | 90 | 3 | true | 6 |
 <!-- /wiki:cargo -->
 
 ## Scanners
@@ -169,7 +169,7 @@ Yellow deck parts with one job each. An active utility acts once on an order and
 <!-- wiki:core -->
 | id | name | tier | value (M) | cells (w x h) | mass (kg) | hp | armor | tall | role |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| cab | Driver seat | 1 | 67 | 1 x 2 | 80 | 120 | 3 | false | cab |
+| cab | Driver seat | 1 | 67 | 1 x 2 | 80 | 120 | 3 | true | cab |
 | cabPickup | Cab | 1 | 67 | 3 x 2 | 80 | 120 | 3 | true | cab |
 | cabHardtop | Hardtop cab | 1 | 67 | 3 x 2 | 80 | 120 | 3 | true | cab |
 | transmission | Transmission | 1 | 50 | 2 x 2 | 60 | 40 | 3 | false | transmission |

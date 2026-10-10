@@ -1,8 +1,12 @@
 // The boot screen: renders a BootProgress into the static #boot markup of index.html.
 
-import { BOOT_STEPS, BOOT_TEXT, BootProgress, type BootStep } from './boot-progress';
+import { bindAttr, setText } from '../text/language';
+import { sameMsg, t, type Msg } from '../text/msg';
+import { BOOT_STEPS, BOOT_TEXT, BootProgress, type BootState, type BootStep } from './boot-progress';
 
 const FADE_MS = 250;
+
+const STATUS: Record<BootState, Msg> = { waiting: t('boot.waiting'), running: t('boot.running'), done: t('boot.done'), failed: t('boot.failed') };
 
 function part(root: HTMLElement, selector: string): HTMLElement {
   const el = root.querySelector<HTMLElement>(selector);
@@ -17,7 +21,8 @@ export class BootScreen {
   private readonly segments = new Map<BootStep, HTMLElement>();
   private readonly lines = new Map<BootStep, HTMLElement>();
   private readonly announcer: HTMLElement;
-  private live = '';
+  private live: Msg | null = null;
+  private stageShown: Msg = BOOT_TEXT.code;
 
   private constructor(private readonly root: HTMLElement) {
     this.bar = part(root, '[role=progressbar]');
@@ -45,6 +50,7 @@ export class BootScreen {
     this.progress.finish('code');
     this.bar.setAttribute('aria-valuemin', '0');
     this.bar.setAttribute('aria-valuemax', String(this.progress.total));
+    bindAttr(this.bar, 'aria-label', t('boot.loading'));
     this.render();
   }
 
@@ -55,7 +61,7 @@ export class BootScreen {
   }
 
   // Runs one boot step. A function waits for its label to paint first, since it blocks the page until it returns.
-  async track<T>(step: BootStep, work: Promise<T> | (() => T), label?: string): Promise<T> {
+  async track<T>(step: BootStep, work: Promise<T> | (() => T), label?: Msg): Promise<T> {
     this.begin(step, label);
     try {
       if (typeof work === 'function') await this.painted();
@@ -82,7 +88,7 @@ export class BootScreen {
   }
 
   // A counted loader reports its first count before track() gets its promise, so either may start the step.
-  private begin(step: BootStep, label?: string): void {
+  private begin(step: BootStep, label?: Msg): void {
     if (!this.progress.failed && this.progress.state(step) === 'waiting') this.progress.start(step, label);
     this.render();
   }
@@ -120,9 +126,9 @@ export class BootScreen {
     setTimeout(() => this.root.remove(), FADE_MS * 2);
   }
 
-  private failure(): string {
+  private failure(): Msg {
     const step = BOOT_STEPS.find((s) => this.progress.state(s) === 'failed');
-    return step ? `${this.progress.label(step)} ${BOOT_TEXT.failed}` : BOOT_TEXT.failedToLoad;
+    return step ? t('boot.stepFailed', { label: this.progress.label(step) }) : t('boot.failedToLoad');
   }
 
   private render(): void {
@@ -130,17 +136,17 @@ export class BootScreen {
     const p = this.progress;
     const text = this.stageText();
     this.bar.setAttribute('aria-valuenow', String(p.finished));
-    this.bar.setAttribute('aria-valuetext', text);
-    this.stage.textContent = text;
+    bindAttr(this.bar, 'aria-valuetext', text);
+    setText(this.stage, text);
     this.announce(p.failed ? text : p.liveLine);
     this.root.classList.toggle('failed', p.failed);
     if (p.failed) this.root.setAttribute('aria-busy', 'false');
   }
 
   // Between two steps nothing runs, and the line keeps its last text.
-  private stageText(): string {
-    if (this.progress.failed) return this.failure();
-    return this.progress.stageLine || this.stage.textContent || '';
+  private stageText(): Msg {
+    this.stageShown = this.progress.failed ? this.failure() : (this.progress.stageLine ?? this.stageShown);
+    return this.stageShown;
   }
 
   private renderStep(step: BootStep): void {
@@ -151,13 +157,13 @@ export class BootScreen {
     segment.className = `boot-seg ${state}`;
     line.className = state;
     const [name, status] = Array.from(line.children);
-    name.textContent = this.progress.label(step);
-    status.textContent = state === 'running' ? BOOT_TEXT.running : BOOT_TEXT[state];
+    setText(name, this.progress.label(step));
+    setText(status, STATUS[state]);
   }
 
-  private announce(live: string): void {
-    if (!live || live === this.live) return;
+  private announce(live: Msg | null): void {
+    if (!live || (this.live && sameMsg(live, this.live))) return;
     this.live = live;
-    this.announcer.textContent = live;
+    setText(this.announcer, live);
   }
 }

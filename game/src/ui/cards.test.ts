@@ -2,19 +2,25 @@ import { describe, expect, it } from "vitest";
 import { START_KITS } from "../data/start";
 import { mountedParts } from "../sim/grid";
 import { playerVehicle } from "../sim/damage";
+import { addVehicle } from "../sim/testkit";
 import { newWorld } from "../sim/world";
 import type { PartInstance } from "../sim/types";
-import { baselinePart, chassisPortraitCell, chassisStats, compareBase, dialShare, diffStats, headlineStat, itemIconCell, partStats, toneStyle } from "./cards";
+import { baselinePart, chassisPortraitCell, chassisStats, compareBase, dialShare, diffStats, headlineStat, itemIconCell, partStats, statValue, toneStyle } from "./cards";
 import ICONS from "../data/item-icons.json";
 import { CHASSIS } from "../data/chassis";
 import { GOODS } from "../data/goods";
 import { PARTS } from "../data/parts";
 import { BODY_PARTS } from "../render/partLooks";
 import { TEST_MAP } from "../test/map";
+import type { Msg } from "../text/msg";
+import { resolve } from "../text/resolve";
+import { chassisName, goodName, partName } from "../text/names";
 import { defaultSetup, parseSetup } from "../sim/settings";
 import { emptyWorld } from "../sim/testkit";
 import { roundDamage } from "../sim/combat";
 import { partDef, type WeaponDef } from "../data/parts";
+
+const en = (msg: Msg): string => resolve(msg, "en");
 
 const boxOf = ([x, y, w, h]: number[]) => ({ x, y, w, h });
 const part = (defId: string, wear = 0): PartInstance => ({ id: defId, defId, hp: 1, wear });
@@ -43,6 +49,11 @@ describe("part stats and their change against the player's part", () => {
     expect(speed(part("turbine", 2))).toBeLessThan(speed(part("turbine")) ?? 0);
   });
 
+  it("shows a rebuilt gun with more spread than a pristine one", () => {
+    const spread = diffStats(partStats(world, part("mg", 4)), partStats(world, part("mg"))).find((d) => d.stat.icon === "spread");
+    expect(spread).toMatchObject({ verdict: "worse" });
+  });
+
   it("shows a gun's damage per shot as the world deals it, so a Damage 200% world reads twice the default", () => {
     const damaging = emptyWorld();
     damaging.setup = parseSetup({ mode: "roaming", settings: { damage: 2, fuelUse: 1, supplyUse: 1 } });
@@ -56,6 +67,22 @@ describe("part stats and their change against the player's part", () => {
   it("compares trucks stat by stat", () => {
     const speed = diffStats(chassisStats("courier"), chassisStats("hauler")).find((d) => d.stat.icon === "speed");
     expect(speed).toMatchObject({ verdict: "better" });
+  });
+});
+
+describe("cargo cards", () => {
+  const courierWorld = emptyWorld();
+  courierWorld.player.vehicleId = addVehicle(courierWorld, "player", "courier", [], { x: 40, y: 40 }).id;
+  const head = (defId: string) => headlineStat(courierWorld, part(defId), null).stat;
+
+  it("headline the net cargo cells on the player's chassis", () => {
+    expect(head("panniers")).toMatchObject({ icon: "cells", value: 5 });
+    expect(head("heavyFrame")).toMatchObject({ icon: "cells", value: 32 });
+  });
+
+  it("marks a heavy frame better than panniers", () => {
+    const diff = diffStats(partStats(courierWorld, part("heavyFrame")), partStats(courierWorld, part("panniers")))[0];
+    expect(diff).toMatchObject({ verdict: "better" });
   });
 });
 
@@ -111,7 +138,7 @@ describe("item icons", () => {
   const items = [...Object.keys(PARTS).filter((id) => !BODY_PARTS.has(id)), ...Object.keys(GOODS)];
 
   it.each(items)("names the %s icon after its def", (id) => {
-    expect(itemIconCell(id).label).toBe(id in GOODS ? GOODS[id].name : PARTS[id].name);
+    expect(en(itemIconCell(id).label)).toBe(en(id in GOODS ? goodName(id) : partName(id)));
   });
 
   it("gives every item its own cell on the sheet", () => {
@@ -135,11 +162,11 @@ describe("item icons", () => {
   });
 
   it("has an item icon for every cab", () => {
-    expect(["cab", "cabPickup", "cabHardtop"].map((id) => itemIconCell(id).label)).toEqual(["Driver seat", "Cab", "Hardtop cab"]);
+    expect(["cab", "cabPickup", "cabHardtop"].map((id) => en(itemIconCell(id).label))).toEqual(["Driver seat", "Cab", "Hardtop cab"]);
   });
 
   it.each(Object.keys(CHASSIS))("names the %s portrait after its chassis", (id) => {
-    expect(chassisPortraitCell(id).label).toBe(CHASSIS[id].name);
+    expect(en(chassisPortraitCell(id).label)).toBe(en(chassisName(id)));
   });
 });
 
@@ -173,5 +200,16 @@ describe("item tones", () => {
 describe("chassis portraits", () => {
   it.each(Object.keys(CHASSIS))("crop the %s portrait to its drawing", (id) => {
     expect(chassisPortraitCell(id).box).toEqual(boxOf(ICONS.chassis[id as keyof typeof ICONS.chassis].box));
+  });
+});
+
+describe("stat values", () => {
+  it("writes the unit as plain text after the value", () => {
+    expect(en(statValue(partStats(world, part("mg")).find((s) => s.icon === "mass")!))).toMatch(/^[\d,]+ kg$/);
+  });
+
+  it("keeps degrees and multipliers tight to the number", () => {
+    const stats = partStats(world, part("stockEngine"));
+    expect(en(statValue(stats.find((s) => s.icon === "heat")!))).toMatch(/^[\d.]+×$/);
   });
 });

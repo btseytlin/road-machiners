@@ -49,7 +49,7 @@ function openingStock(world: World, opening: Opening, obstacle: Obstacle): Salva
 function applyCondition(v: Vehicle, condition: Record<string, number>): void {
   for (const [defId, share] of Object.entries(condition)) {
     const part = mountedParts(v).find((p) => p.defId === defId);
-    if (!part) throw new Error(`Opening condition names ${defId}, which ${v.name} does not mount`);
+    if (!part) throw new Error(`Opening condition names ${defId}, which ${v.id} does not mount`);
     setStartHp(part, share);
   }
 }

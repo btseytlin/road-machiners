@@ -21,7 +21,7 @@ function getWeapon(w: World): Extract<GridItem, { kind: 'part' }> {
 function startUnmount() {
   const w = emptyWorld();
   const weapon = getWeapon(w);
-  const next = moveItem(w, weapon.id, { x: 1, y: CHASSIS.scout.layout.length, rot: 0 });
+  const next = moveItem(w, weapon.id, { x: 3, y: CHASSIS.scout.layout.length, rot: 1 });
   return { next, weapon };
 }
 
@@ -30,8 +30,9 @@ describe('field refits', () => {
     const w = emptyWorld();
     const weapon = getWeapon(w);
     const target = { x: weapon.x, y: weapon.y, rot: weapon.rot };
-    weapon.x = 1;
+    weapon.x = 3;
     weapon.y = CHASSIS.scout.layout.length;
+    weapon.rot = 1;
     const next = moveItem(w, weapon.id, target);
     for (let turn = 0; turn < 4; turn++) advanceJobs(next);
     expect(getWeapon(next).y).toBe(weapon.y);
@@ -71,9 +72,9 @@ describe('field refits', () => {
   it('rejects a moving or busy truck without changing the input', () => {
     const w = emptyWorld();
     const weapon = getWeapon(w);
-    const to = { x: 1, y: CHASSIS.scout.layout.length, rot: 0 as const };
+    const to = { x: 3, y: CHASSIS.scout.layout.length, rot: 1 as const };
     w.vehicles[0].speed = 5;
-    expect(() => moveItem(w, weapon.id, to)).toThrow('Stop');
+    expect(() => moveItem(w, weapon.id, to)).toThrow('Refused: stopFirst');
     w.vehicles[0].speed = 0;
     startJob(w, w.vehicles[0], { kind: 'search', stockId: 'stock', total: 2, turnsLeft: 2 });
     expect(() => moveItem(w, weapon.id, to)).toThrow('already busy');
@@ -84,8 +85,8 @@ describe('field refits', () => {
     const { next, weapon } = startUnmount();
     const good = next.vehicles[0].items.find((item) => item.kind === 'good');
     if (!good) throw new Error('Expected goods');
-    expect(() => moveItem(next, weapon.id, weapon)).toThrow('Finish the refit');
-    expect(() => dumpItem(next, good.id)).toThrow('Finish the refit');
+    expect(() => moveItem(next, weapon.id, weapon)).toThrow('Refused: refitRunning');
+    expect(() => dumpItem(next, good.id)).toThrow('Refused: refitRunning');
   });
 
   it('cancels if a required item disappears', () => {
@@ -134,7 +135,7 @@ describe('field refits', () => {
     const w = emptyWorld();
     const engine = w.vehicles[0].items.find((item) => item.kind === 'part' && item.part.defId === 'stockEngine');
     if (!engine) throw new Error('Expected engine');
-    expect(() => moveItem(w, engine.id, { x: 4, y: 1, rot: 0 })).toThrow('More than one item');
+    expect(() => moveItem(w, engine.id, { x: 4, y: 1, rot: 0 })).toThrow('Refused: twoInTheWay');
   });
 
   it('cancels when a required item has changed position', () => {
@@ -151,11 +152,12 @@ describe('field refits', () => {
     const first = getWeapon(w);
     first.x = 0;
     first.y = CHASSIS.scout.layout.length;
-    const second = { ...first, id: 'second-spare', part: { ...first.part, id: 'second-part' }, x: 1 };
+    first.rot = 1;
+    const second = { ...first, id: 'second-spare', part: { ...first.part, id: 'second-part' }, x: 2 };
     w.vehicles[0].items.push(second);
-    const next = moveItem(w, first.id, { x: second.x, y: second.y, rot: 0 });
+    const next = moveItem(w, first.id, { x: second.x, y: second.y, rot: 1 });
     expect(next.vehicles[0].job).toBeNull();
-    expect(next.vehicles[0].items.find((item) => item.id === first.id)?.x).toBe(1);
+    expect(next.vehicles[0].items.find((item) => item.id === first.id)?.x).toBe(2);
     expect(next.vehicles[0].items.find((item) => item.id === second.id)?.x).toBe(0);
   });
 
@@ -166,7 +168,7 @@ describe('field refits', () => {
     if (!rack) throw new Error('Expected panniers');
     w.vehicles[0].items.push({ id: 'cargo', kind: 'good', good: 'scrap', x: 0, y: CHASSIS.scout.layout.length, rot: 0 });
     const result = planItemMove(w.vehicles[0], rack.id, { x: 2, y: CHASSIS.scout.layout.length, rot: 0 });
-    expect(result.error).toMatch(/fit|fall off/);
+    expect(result.error).toMatchObject({ id: 'badLayout' });
   });
 });
 
@@ -175,7 +177,7 @@ describe('machining on refits', () => {
     const w = emptyWorld();
     w.player.ranks.machining = 5;
     const weapon = getWeapon(w);
-    const next = moveItem(w, weapon.id, { x: 1, y: CHASSIS.scout.layout.length, rot: 0 });
+    const next = moveItem(w, weapon.id, { x: 3, y: CHASSIS.scout.layout.length, rot: 1 });
     const turns = Math.ceil(RULES.refitTurnsPerPart * 2 * (1 - 5 * SKILL_EFFECTS.machining.refit));
     expect(next.vehicles[0].job).toMatchObject({ kind: 'refit', turnsLeft: turns, total: turns });
     expect(turns).toBeLessThan(RULES.refitTurnsPerPart * 2);
@@ -248,10 +250,10 @@ describe('the Patcher crane on refits', () => {
     expect(townAt(w)).not.toBeNull();
     const weapon = getWeapon(w);
 
-    const next = moveItem(w, weapon.id, { x: 1, y: CHASSIS.scout.layout.length, rot: 0 });
+    const next = moveItem(w, weapon.id, { x: 3, y: CHASSIS.scout.layout.length, rot: 1 });
 
     expect(next.vehicles[0].job).toBeNull();
-    expect(getWeapon(next)).toMatchObject({ x: 1, y: CHASSIS.scout.layout.length });
+    expect(getWeapon(next)).toMatchObject({ x: 3, y: CHASSIS.scout.layout.length });
   });
 });
 

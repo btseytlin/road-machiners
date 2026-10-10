@@ -58,7 +58,7 @@ function pulseEvent(w: World): Extract<GameEvent, { t: 'pulse' }> {
 
 function partOf(v: Vehicle, defId: string): PartInstance {
   const part = v.items.flatMap((it) => (it.kind === 'part' && it.part.defId === defId ? [it.part] : []))[0];
-  if (!part) throw new Error(`${v.name} has no ${defId}`);
+  if (!part) throw new Error(`${v.id} has no ${defId}`);
   return part;
 }
 
@@ -235,10 +235,10 @@ describe('the player shut down', () => {
     const { w, sprout } = pulsedPlayer();
     const use = () => setUtilityOrder(w, sprout.id, { kind: 'self' });
 
-    expect(use).toThrow(/shutDown/);
+    expect(use).toThrow(expect.objectContaining({ refusal: { id: 'utilityBlocked', part: 'sprout', block: 'shutDown' } }));
     nextTurn(w);
     settleShutdowns(w);
-    expect(use).toThrow(/shutDown/);
+    expect(use).toThrow(expect.objectContaining({ refusal: { id: 'utilityBlocked', part: 'sprout', block: 'shutDown' } }));
     nextTurn(w);
     settleShutdowns(w);
     expect(use).not.toThrow();

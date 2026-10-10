@@ -18,8 +18,9 @@ export const CONFIG = {
   combatReadMs: 1100,
   saveTurns: 20,
   saveSlots: 3,
-  autoTurnMs: 250,
   travelHoldMs: 250,
   travelFastSpeed: 4,
   playbackFrameMs: 50,
+  questCharMs: 18,
+  questWordMs: 70,
 };

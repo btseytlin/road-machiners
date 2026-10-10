@@ -45,7 +45,7 @@ describe('vehicle mass', () => {
     const w = emptyWorld();
     const layout = CHASSIS[id].layout.join('');
     const armorCells = [...layout].filter((c) => 'FBLR'.includes(c)).length;
-    const guns = Math.ceil([...layout].filter((c) => c === 'D').length / 2);
+    const guns = Math.ceil([...layout].filter((c) => c === 'D').length / 4);
     const kit = ['stockEngine', ...Array<string>(armorCells).fill('scrapSheet'), ...Array<string>(guns).fill('mg')];
     const v = addVehicle(w, 'raiders', id, kit, { x: 40, y: 40 });
     expect(mountedParts(v, 'armor')).toHaveLength(armorCells);

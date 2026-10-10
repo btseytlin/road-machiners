@@ -15,7 +15,7 @@ import { ROAD_INDEX } from './road-index';
 import { siteGates, siteUnder } from './sites';
 import type { Terrain } from './terrain';
 import { hazardZones, type HazardZone } from './territory';
-import type { NpcActivity, Obstacle, Vehicle, World } from './types';
+import type { GoalReason, NpcActivity, Obstacle, Vehicle, World } from './types';
 import { dist, segmentDist, type Vec } from './vec';
 import { clearOverTerrain, hasLineOfSight, sightLine } from './vision';
 
@@ -153,8 +153,8 @@ export function startWatch(world: World, goal: NpcActivity): void {
   goal.watchUntil = world.turn + HUNT.watchTurns;
 }
 
-export function watchOver(world: World, goal: NpcActivity): string | null {
+export function watchOver(world: World, goal: NpcActivity): GoalReason | null {
   if (goal.watchUntil === undefined) return null;
   if (goal.kind !== 'raid' || goal.phase !== 'act') throw new Error(`A ${goal.kind} goal in its ${goal.phase} phase holds a watch end`);
-  return world.turn >= goal.watchUntil ? 'watched the road' : null;
+  return world.turn >= goal.watchUntil ? 'watchedRoad' : null;
 }

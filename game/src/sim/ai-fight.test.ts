@@ -148,7 +148,7 @@ describe('fight driving', () => {
     const range = vehicleStats(w, v).weapons[0].def.range;
     chooseOn(w, v, me.id, me.pos, 'fight', true);
     v.brain!.noticed[`ramChance:${me.id}`] = w.turn;
-    v.brain!.goals.push({ kind: 'fight', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'test', worn: { turn: w.turn, condition: 1 } });
+    v.brain!.goals.push({ kind: 'fight', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'tripToSite', worn: { turn: w.turn, condition: 1 } });
     v.brain!.whim = { kind: 'keep', until: w.turn + 4, angle: 0 };
     planNpcOrders(w);
     const dest = v.order?.kind === 'stopAt' ? v.order.dest : null;
@@ -169,7 +169,7 @@ function inFight(): { w: World; v: Vehicle } {
   const me = w.player.vehicleId;
   chooseOn(w, v, me, w.vehicles[0].pos, 'fight', true);
   v.brain!.noticed[`ramChance:${me}`] = w.turn;
-  v.brain!.goals.push({ kind: 'fight', targetId: me, destination: { x: 40, y: 30 }, phase: 'travel', reason: 'test', worn: { turn: w.turn, condition: 1 } });
+  v.brain!.goals.push({ kind: 'fight', targetId: me, destination: { x: 40, y: 30 }, phase: 'travel', reason: 'tripToSite', worn: { turn: w.turn, condition: 1 } });
   return { w, v };
 }
 

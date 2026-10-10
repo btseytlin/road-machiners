@@ -9,6 +9,12 @@ import { PARTS, type PartDef, type PartKind } from '../data/parts';
 import { hashStr } from './noise';
 import type { PartInstance } from '../sim/types';
 import { maxHp } from '../sim/wear';
+import { chassisName, goodName, partName } from '../text/names';
+import type { Msg } from '../text/msg';
+import { resolve } from '../text/resolve';
+
+// The icon sheet is a dev page in English.
+const enName = (msg: Msg): string => resolve(msg, 'en');
 
 export const PLAN_PAD = 0.5;
 
@@ -396,14 +402,14 @@ function iconModel(defId: string): ModelName {
 }
 
 function partDraft(def: PartDef, picks: Record<string, WeaponLook>): IconDraft {
-  const base = { id: def.id, section: PART_SECTION[def.kind], label: def.name, footprint: { w: def.w, h: def.h } };
+  const base = { id: def.id, section: PART_SECTION[def.kind], label: enName(partName(def.id)), footprint: { w: def.w, h: def.h } };
   if (def.kind !== 'weapon') return { entry: { ...base, models: [iconModel(def.id)], weapon: null }, hp: def.hp };
   const weapon = picks[def.id] ?? weaponLook(`icon:${def.id}`, def.id);
   return { entry: { ...base, models: weaponModels(weapon), weapon }, hp: def.hp };
 }
 
 function goodDraft(def: GoodDef): IconDraft {
-  return { entry: { id: def.id, section: 'good', label: def.name, models: [partModel(def.id)], footprint: { w: 1, h: 1 }, weapon: null }, hp: 0 };
+  return { entry: { id: def.id, section: 'good', label: enName(goodName(def.id)), models: [partModel(def.id)], footprint: { w: 1, h: 1 }, weapon: null }, hp: 0 };
 }
 
 const PORTRAIT_MODELS: readonly ModelName[] = ['coilover', 'axle', 'antenna', 'tow_chain'];
@@ -412,7 +418,7 @@ function chassisDraft(def: ChassisDef): IconDraft {
   const footprint = { w: def.layout[0].length, h: def.layout.length };
   const cores = def.core.filter((c) => !BODY_PARTS.has(c.defId)).map((c) => partModel(c.defId));
   const models = [...new Set([baseModel(def.id), ...cores, ...PORTRAIT_MODELS])];
-  return { entry: { id: def.id, section: 'chassis', label: def.name, models, footprint, weapon: null }, hp: 0 };
+  return { entry: { id: def.id, section: 'chassis', label: enName(chassisName(def.id)), models, footprint, weapon: null }, hp: 0 };
 }
 
 function checkUniqueIds(drafts: readonly IconDraft[]): void {

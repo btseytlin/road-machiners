@@ -5,7 +5,7 @@ const testPattern = /(?:^|\/)(?:tests?|[^/]+\.(?:test|spec)\.[^/]+)(?:\/|$)/;
 export function inspectSource(file, source) {
   const parsed = parseSync(file, source);
   if (parsed.errors.length) throw new Error(`${file}: ${parsed.errors.map(error => error.message).join('\n')}`);
-  const suppressions = parsed.comments.filter(comment => /(?:eslint|oxlint)-(?:disable|enable)|@ts-(?:ignore|nocheck)/.test(comment.value));
+  const suppressions = parsed.comments.filter(isSuppression);
   const findings = suppressions.map(comment => ({ filename: file, code: 'quality/no-suppression', message: comment.value.trim() }));
   const characters = source.split('');
   for (const comment of parsed.comments) {
@@ -17,25 +17,43 @@ export function inspectSource(file, source) {
   return { findings, lines };
 }
 
-export function checkComments(file, source, maxDocstringLines) {
-  if (!Number.isInteger(maxDocstringLines) || maxDocstringLines <= 0) throw new Error('maxDocstringLines must be a positive integer.');
+export function checkComments(file, source) {
   const parsed = parseSync(file, source);
-  const codeStart = parsed.program.body[0]?.start ?? source.length;
-  const findings = parsed.comments.filter(comment => comment.end > codeStart && !isJsType(file, comment))
+  return parsed.comments.filter(comment => !isJsType(file, comment))
     .map(comment => ({ filename: file, code: 'quality/no-comment', message: comment.value.trim() }));
-  if (docstringLines(source, parsed.comments.filter(comment => comment.end <= codeStart)) > maxDocstringLines) {
-    findings.push({ filename: file, code: 'quality/long-docstring', message: `module docstring over ${maxDocstringLines} lines` });
+}
+
+export function stripComments(file, source) {
+  const parsed = parseSync(file, source);
+  if (parsed.errors.length) throw new Error(`${file}: ${parsed.errors.map(error => error.message).join('\n')}`);
+  let result = source;
+  for (const comment of parsed.comments.filter(comment => !isJsType(file, comment) && !isSuppression(comment)).reverse()) {
+    result = removeSpan(result, comment.start, comment.end);
   }
-  return findings;
+  return result;
+}
+
+function removeSpan(text, start, end) {
+  const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+  const newline = text.indexOf('\n', end);
+  const lineEnd = newline === -1 ? text.length : newline;
+  const before = text.slice(lineStart, start);
+  const after = text.slice(end, lineEnd);
+  if (!before.trim() && !after.trim()) return text.slice(0, lineStart) + text.slice(Math.min(lineEnd + 1, text.length));
+  if (!before.trim()) return text.slice(0, start) + text.slice(end).replace(/^[ \t]+/, '');
+  return text.slice(0, start).replace(/[ \t]+$/, '') + joinGap(before, after) + text.slice(end).replace(/^[ \t]+(?=\n|$)/, '');
+}
+
+function joinGap(before, after) {
+  return /\w$/.test(before) && /^\w/.test(after) ? ' ' : '';
+}
+
+function isSuppression(comment) {
+  return /(?:eslint|oxlint)-(?:disable|enable)|@ts-(?:ignore|nocheck)/.test(comment.value);
 }
 
 export function isJsType(file, comment) {
   return /\.[cm]?jsx?$/.test(file) && comment.type === 'Block' && /^\*\s*@(?:type|typedef|param|returns?|template|satisfies|import|callback|property|overload)\b/.test(comment.value);
-}
-
-function docstringLines(source, header) {
-  if (!header.length) return 0;
-  return source.slice(header[0].start, header.at(-1).end).split('\n').length;
 }
 
 export function collectComponents(sources) {

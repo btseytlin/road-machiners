@@ -138,10 +138,35 @@ test('rejects renderer imports in the simulation', () => {
   assertRejected(runCheck(), /no-restricted-imports/);
 });
 
-test('rejects inline attempts to suppress lint', () => {
-  writeSource('/* eslint-disable */\nexport const value: any = 2;\n');
+test('keeps a lint suppression and rejects it', () => {
+  writeSource('/* eslint-disable */\nexport const value: any = 2; // why\n');
   runGit('add', 'game');
   assertRejected(runCheck(), /no-suppression/);
+  assert.equal(runGit('show', ':game/src/example.ts'), '/* eslint-disable */\nexport const value: any = 2;\n');
+});
+
+test('reports a lint suppression in the working tree check', () => {
+  writeSource('/* eslint-disable */\nexport const value: any = 2;\n');
+  assertRejected(runCheck('--working'), /no-suppression/);
+});
+
+test('strips comments from staged files in the index and the working copy', () => {
+  writeSource('// header\nexport const value = 2; // why\n');
+  runGit('add', 'game');
+  const result = runCheck();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /Stripped comments from game\/src\/example.ts/);
+  assert.equal(runGit('show', ':game/src/example.ts'), 'export const value = 2;\n');
+  assert.equal(readFileSync(path.join(directory, 'game/src/example.ts'), 'utf8'), 'export const value = 2;\n');
+});
+
+test('strips comments from the unstaged copy of a partly staged file on its own', () => {
+  writeSource('// header\nexport const value = 2;\n');
+  runGit('add', 'game');
+  writeSource('// other\nexport const value = 3; // unstaged\n');
+  runCheck();
+  assert.equal(runGit('show', ':game/src/example.ts'), 'export const value = 2;\n');
+  assert.equal(readFileSync(path.join(directory, 'game/src/example.ts'), 'utf8'), 'export const value = 3;\n');
 });
 
 test('installs the hook and rejects a real commit without changing the index', () => {

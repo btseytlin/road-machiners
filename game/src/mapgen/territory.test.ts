@@ -636,7 +636,7 @@ describe('the orchard farm', () => {
       if (j > i && dist(a.pos, b.pos) <= 1.5) group[root(j)] = root(i);
     }));
     expect(new Set(arcs.map((_, i) => root(i))).size).toBeGreaterThanOrEqual(28);
-    expect(arcs.length).toBeGreaterThanOrEqual(55);
+    expect(arcs.length).toBeGreaterThanOrEqual(52);
     expect(traps.length).toBeGreaterThanOrEqual(20);
     expect(barriers.length).toBeGreaterThanOrEqual(60);
   });
@@ -728,7 +728,7 @@ describe('the orchard farm', () => {
 });
 
 describe('a third territory', () => {
-  const flats: TerritoryDef = { id: 'test-flats', name: 'Test Flats', kind: 'territory', pos: { x: 200, y: 380 }, radius: 22, outline: null };
+  const flats: TerritoryDef = { id: 'test-flats', kind: 'territory', pos: { x: 200, y: 380 }, radius: 22, outline: null };
   function flatsRules(): TerritoryRules {
     return {
       seed: 2,

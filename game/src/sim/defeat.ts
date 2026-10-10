@@ -23,7 +23,7 @@ import { chance } from "./rng";
 import { sitePads, type Site } from "./sites";
 import { isFree } from "./spawn";
 import { npcHomeSite, towOf } from "./tow";
-import { pushGoal } from "./npc-activities";
+import { dropGoal, pushGoal } from "./npc-activities";
 import { liesUp } from "./npc-service";
 import { isWeak, wantsLoot } from "./npc-decisions";
 import type { SalvageStock, Vehicle, World } from "./types";
@@ -105,6 +105,11 @@ export function gaveUp(v: Vehicle): boolean {
 function layDown(world: World, v: Vehicle, foes: string[], gaveUp: boolean): void {
   v.defeat = { phase: "out", turns: 0, unseen: 0, foes, gaveUp };
   stopKnockedOut(world, v);
+  endDangerGoals(world, v);
+}
+
+function endDangerGoals(world: World, v: Vehicle): void {
+  for (const goal of v.brain!.goals.filter((g) => g.kind === "fight" || g.kind === "flee")) dropGoal(world, v, goal, "defeated");
 }
 
 export function standDown(world: World, v: Vehicle, winnerId: string): void {
@@ -229,7 +234,7 @@ function teleportHome(world: World, v: Vehicle, spot: Vec): void {
 export function refitAtHome(world: World, v: Vehicle): void {
   const template = NPCS[v.brain!.templateId];
   const loadout = generateNpcLoadout(world, template, v.chassisId);
-  const fresh = makeVehicle(world, { name: v.name, faction: v.faction, ...loadout, pos: v.pos, heading: v.heading, brain: null });
+  const fresh = makeVehicle(world, { faction: v.faction, ...loadout, pos: v.pos, heading: v.heading, brain: null });
   v.items = fresh.items;
   v.resources = { ...fresh.resources!, money: getResources(world, v).money };
   v.job = null;
@@ -247,5 +252,5 @@ export function lootRobbed(w: World, robberId: string, victimId: string): void {
   if (!robber) return;
   const stock = robbedLoot(w, victimId);
   if (!stock) throw new Error(`${robberId} won a robbery, but ${victimId} left no stock`);
-  pushGoal(w, robber, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'loot the robbed truck' });
+  pushGoal(w, robber, { kind: 'loot', targetId: stock.id, destination: { ...stock.pos }, phase: 'travel', reason: 'lootRobbed' });
 }

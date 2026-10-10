@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { CHASSIS } from '../../data/chassis';
 import { NPCS } from '../../data/npcs';
-import { partDef, type WeaponDef } from '../../data/parts';
+import { partDef } from '../../data/parts';
 import { BODY_PARTS, partModel, weaponLook } from '../../render/partLooks';
-import { aimWithin, fireSpans, openSides } from '../../sim/armor';
+import { aimWithin, gunSpans } from '../../sim/armor';
 import { cellRect, highestUnder, restOn, surfaceSamples } from '../../sim/body';
 import { makeVehicle, newId } from '../../sim/factory';
 import { baseGrid, isMounted, itemCells, mountSpots, MOUNT_CELLS } from '../../sim/grid';
@@ -75,7 +75,7 @@ function clips(world: World, v: Vehicle): string[] {
     if (itemCells(gun).some((c) => c.y >= baseGrid(v.chassisId).h)) continue;
     const pivot = view.partPoint(gun.part.id);
     const pts = headVertices(gun);
-    const spans = isMounted(v.chassisId, gun) ? fireSpans((partDef(gun.part.defId) as WeaponDef).arc, openSides(v, gun)) : [];
+    const spans = isMounted(v.chassisId, gun) ? gunSpans(v, gun) : [];
     const boxes = obstacles(v, gun);
     const own = cellRect(v.chassisId, itemCells(gun));
     const yaws = Array.from({ length: 360 }, (_, i) => i - 180).filter((a) => spans.length > 0 && aimWithin(spans, a) === a);
@@ -120,7 +120,7 @@ function place(world: World, v: Vehicle, defId: string | null, good: string | nu
 
 function bare(chassisId: string): { world: World; v: Vehicle } {
   const world = emptyWorld();
-  const v = makeVehicle(world, { name: chassisId, faction: 'player', chassisId, parts: [], spares: [], cargo: {}, pos: { x: 50, y: 50 }, heading: 0, brain: null });
+  const v = makeVehicle(world, { faction: 'player', chassisId, parts: [], spares: [], cargo: {}, pos: { x: 50, y: 50 }, heading: 0, brain: null });
   return { world, v };
 }
 
@@ -159,7 +159,7 @@ describe('gun heads clear what they sweep over', () => {
         let v: Vehicle;
         try {
           const l = generateNpcLoadout(world, t, null, 'loaded');
-          v = makeVehicle(world, { ...l, name: 'x', faction: t.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+          v = makeVehicle(world, { ...l, faction: t.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
         } catch {
           continue;
         }

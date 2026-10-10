@@ -1,5 +1,6 @@
 // First-time tips for driving and the horn, and a farewell once the player heads out. A tip shows while its moment lasts, one at a time. It goes away for good
 // once the player closes it or does what it says. Seen tips stay in browser storage across saves, and a new game clears them.
+// The player can switch all tips off. Done tips still count as seen while off, so turning tips back on from the Menu shows only what is still new.
 // A new game first runs the opening tips: reach the opening wreck, search it, loot it, patch the engine and mount the
 
 import { isKnockedOut } from "../sim/defeat";
@@ -9,26 +10,29 @@ import { openingStockOf } from "../sim/opening";
 import { partDef } from "../data/parts";
 import { RULES } from "../data/rules";
 import { repairPlan } from "../sim/repair";
+import { isJunk } from "../sim/wear";
 import { canReachSalvage, hasSalvage } from "../sim/salvage";
 import type { SalvageStock, World } from "../sim/types";
 import { vehicleStats } from "../sim/stats";
 import { playerSees } from "../sim/vision";
 import { dist } from "../sim/vec";
 import { playerCanAct, hostileToPlayer, startPose } from "../sim/world";
+import { t } from "../text/msg";
 import { el, panel } from "./dom";
 
 const TIPS_KEY = "roam.tips";
+const TIPS_OFF_KEY = "roam.tipsOff";
 
 export type OpeningStep = "wreck" | "search" | "loot" | "patch" | "install";
 export type TipId = OpeningStep | "waypoint" | "drive" | "autoStop" | "stop" | "stopAt" | "manual" | "zones" | "aim" | "honk" | "farewell";
 
+// A tip's words live in src/text/ as hint.<id>.
 type Tip = {
   id: TipId;
-  text: string;
   opening?: true;
-  after?: TipId;
-  seenWhenOver?: true;
-  when: (w: World, auto: boolean, o: OpeningState) => boolean;
+  after?: TipId; // shows only once this tip is seen
+  seenWhenOver?: true; // counts as seen once its moment ends while it shows
+  when: (w: World, auto: boolean, o: OpeningState) => boolean; // auto: turns follow each other without a key press
   done: (w: World, o: OpeningState) => boolean;
 };
 
@@ -57,7 +61,7 @@ const inOpeningReach = (w: World, { stock }: OpeningState): boolean => stock !==
 const engineNeedsPatch = (w: World): boolean => {
   const me = playerVehicle(w);
   const engine = mountedParts(me).find((p) => partDef(p.defId).kind === "engine");
-  return engine !== undefined && repairPlan(w, me, engine.id).needed > 0;
+  return engine !== undefined && !isJunk(engine) && repairPlan(w, me, engine.id).needed > 0;
 };
 
 const cageMounted = (w: World): boolean => mountedParts(playerVehicle(w)).some((p) => p.defId === "cage");
@@ -92,9 +96,8 @@ const patchDue = (w: World): boolean => engineNeedsPatch(w) && (goodsCount(playe
 
 const installDue = (w: World): boolean => holdsLooseCage(w) && !cageMounted(w);
 
-const openingTip = (id: OpeningStep, text: string, done: (w: World, o: OpeningState) => boolean): Tip => ({
+const openingTip = (id: OpeningStep, done: (w: World, o: OpeningState) => boolean): Tip => ({
   id,
-  text,
   opening: true,
   when: (w, _auto, o) => !playerVehicle(w).direct && o.step === id,
   done,
@@ -103,41 +106,34 @@ const openingTip = (id: OpeningStep, text: string, done: (w: World, o: OpeningSt
 const TIPS: readonly Tip[] = [
   openingTip(
     "wreck",
-    "Your engine is nearly dead. [Shift]-click the ground by the wreck to set a stop point, then [Space] to drive there.",
     (w, o) => inOpeningReach(w, o) || searchedOpening(w, o),
   ),
-  openingTip("search", "Click Search the wreck, then [Space] to run the search.", searchedOpening),
+  openingTip("search", searchedOpening),
   openingTip(
     "loot",
-    "Drag the parts and the Rebar cage onto your truck, or click Take all that fits.",
     (w, o) => o.stock !== null && searchedOpening(w, o) && !hasSalvage(o.stock),
   ),
   openingTip(
     "patch",
-    "[I] opens your truck. Click the engine, then Patch. Close your truck and [Space] runs the patch.",
     (w, o) => o.stock !== null && !engineNeedsPatch(w),
   ),
   openingTip(
     "install",
-    "[I] opens your truck. Drag the Rebar cage onto a free cell at its edge, then close it and [Space] mounts the cage.",
     (w, o) => o.stock !== null && cageMounted(w),
   ),
   {
     id: "waypoint",
-    text: "Click the ground to set a waypoint.",
     when: (w) => !playerVehicle(w).direct,
     done: (w) => hasWaypoint(w),
   },
   {
     id: "drive",
-    text: "[Space] to drive to the waypoint.",
     after: "waypoint",
     when: (w) => !playerVehicle(w).direct && hasWaypoint(w),
     done: moving,
   },
   {
     id: "autoStop",
-    text: "[Space] to stop automatic travel.",
     after: "drive",
     when: (_w, auto) => auto,
     done: () => false,
@@ -145,46 +141,39 @@ const TIPS: readonly Tip[] = [
   },
   {
     id: "stop",
-    text: "Click your truck to stop.",
     after: "drive",
     when: moving,
     done: (w) => playerVehicle(w).order?.kind === "brake",
   },
   {
     id: "stopAt",
-    text: "[Shift]-click to set a waypoint your truck stops at. Click a waypoint to switch it.",
     after: "stop",
     when: (w) => !playerVehicle(w).direct,
     done: (w) => playerVehicle(w).order?.kind === "stopAt",
   },
   {
     id: "manual",
-    text: "[R] to drive in manual mode.",
     after: "stopAt",
     when: (w) => !playerVehicle(w).direct,
     done: (w) => playerVehicle(w).direct,
   },
   {
     id: "zones",
-    text: "Manual mode: click a zone to drive. Green speeds up. Yellow holds speed. Red slows down.",
     when: (w) => playerVehicle(w).direct,
     done: () => false,
   },
   {
     id: "aim",
-    text: "Click a truck to inspect it. Pick a weapon first to aim it at the body, or click a part in the card.",
     when: (w) => vehicleStats(w, playerVehicle(w)).weapons.length > 0 && hostileInSight(w),
     done: (w) => Object.values(playerVehicle(w).weaponOrders).some((o) => o.aim !== "body"),
   },
   {
     id: "honk",
-    text: "[H] to honk.",
     when: npcInSight,
     done: (w) => w.events.some((e) => e.t === "honk" && e.vehicle === w.player.vehicleId),
   },
   {
     id: "farewell",
-    text: "That's it, good luck.",
     after: "honk",
     when: (w) => dist(playerVehicle(w).pos, spawn) >= FAREWELL_DISTANCE,
     done: () => false,
@@ -209,7 +198,23 @@ export function tipToShow(world: World, auto: boolean, seen: ReadonlySet<TipId>,
 
 export function clearTips(storage: Storage): void {
   storage.removeItem(TIPS_KEY);
+  storage.removeItem(TIPS_OFF_KEY);
 }
+
+export function tipsOff(storage: Storage): boolean {
+  const raw = storage.getItem(TIPS_OFF_KEY);
+  if (raw === null) return false;
+  if (raw !== "1") throw new Error(`Stored tips switch is not "1": ${raw}`);
+  return true;
+}
+
+export function setTipsOff(storage: Storage, off: boolean): void {
+  if (off) storage.setItem(TIPS_OFF_KEY, "1");
+  else storage.removeItem(TIPS_OFF_KEY);
+}
+
+// What the Menu sees of the tips: whether they show, and a way to flip that.
+export type TipSwitch = { isOn: () => boolean; setOn: (on: boolean) => void };
 
 function readSeen(storage: Storage): Set<TipId> {
   const raw = storage.getItem(TIPS_KEY);
@@ -222,19 +227,35 @@ function readSeen(storage: Storage): Set<TipId> {
 }
 
 export class Tips {
-  private readonly box = panel("tip");
+  private readonly box: HTMLElement;
   private readonly seen: Set<TipId>;
   private shown: TipId | null = null;
   private moment: { world: World; auto: boolean } | null = null;
 
-  constructor(private readonly storage: Storage) {
+  private off: boolean;
+
+  constructor(
+    private readonly storage: Storage,
+    parent: HTMLElement,
+    private readonly onTurnedOff: () => void,
+  ) {
+    this.box = panel("tip", parent);
     this.seen = readSeen(storage);
+    this.off = tipsOff(storage);
     this.box.style.display = "none";
   }
 
   update(world: World, auto: boolean): void {
     this.moment = { world, auto };
     for (const id of doneTips(world, this.seen)) this.markSeen(id);
+    if (this.off) {
+      // Being switched off is not the end of the tip's moment, so nothing passes.
+      if (this.shown !== null) {
+        this.shown = null;
+        this.render();
+      }
+      return;
+    }
     const next = tipToShow(world, auto, this.seen, this.shown);
     if (next === this.shown) return;
     this.passShown();
@@ -242,6 +263,21 @@ export class Tips {
     this.render();
   }
 
+  isOn(): boolean {
+    return !this.off;
+  }
+
+  setOn(on: boolean): void {
+    if (on === !this.off) return;
+    setTipsOff(this.storage, !on);
+    this.off = !on;
+    this.shown = null;
+    this.render();
+    if (on && this.moment) this.update(this.moment.world, this.moment.auto);
+    if (!on) this.onTurnedOff();
+  }
+
+  // The shown tip leaves the screen. A tip marked seenWhenOver has done its job.
   private passShown(): void {
     const tip = TIPS.find((t) => t.id === this.shown);
     if (tip?.seenWhenOver) this.markSeen(tip.id);
@@ -267,8 +303,9 @@ export class Tips {
     if (!tip) return;
     this.box.classList.toggle("opening-tip", tip.opening === true);
     this.box.replaceChildren(
-      el("span", {}, tip.text),
-      el("button", { class: "tip-close", title: "Close", onclick: () => this.close() }, "×"),
+      el("span", { class: "tip-text" }, t(`hint.${tip.id}`)),
+      el("button", { class: "tip-close", title: t("hint.closeThis"), "aria-label": t("hint.closeThis"), onclick: () => this.close() }, t("hint.closeMark")),
+      el("div", { class: "tip-actions" }, el("button", { class: "tip-off", onclick: () => this.setOn(false) }, t("hint.turnOff"))),
     );
   }
 }

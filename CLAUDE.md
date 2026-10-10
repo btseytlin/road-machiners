@@ -15,6 +15,10 @@ This repo holds ROAM, a turn-based wasteland truck RPG, and the AI coding agent-
 - Work on the factory from `factory/`. Read `factory/CLAUDE.md` first.
 - Game and factory never import each other.
 
+## No comments
+
+Comments are banned in source files, including module docstrings. Write code that explains itself with clear names and small functions. The pre-commit hook strips any comment it finds, so a comment is wasted work.
+
 ## Quality gate
 
 The gate blocks new lint and architecture debt and runs tsc for `game/` and `factory/`. It is documented in `quality/README.md`.

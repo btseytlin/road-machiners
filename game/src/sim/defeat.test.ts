@@ -1,11 +1,10 @@
 import { NPCS } from '../data/npcs';
 import { describe, expect, it } from 'vitest';
-import { partDef } from '../data/parts';
 import { RULES } from '../data/rules';
 import { CONDITION } from '../data/wear';
 import { autoOrders, isHostile } from './combat';
 import { buyGood } from './economy';
-import { advanceKnockout, checkDeath, checkKnockout, gaveUp, isKnockedOut, standDown } from './defeat';
+import { advanceKnockout, checkDeath, checkKnockout, gaveUp, isKnockedOut, knockOutNpc, standDown } from './defeat';
 import { corePart, coreParts, goodsCount, hasLoot, isLoot } from './grid';
 import { addGoods, dumpItem, moveItem } from './inventory';
 import { scavenge } from './locations';
@@ -18,7 +17,7 @@ import { maxHealthOf } from './health';
 import { PERK_NUMBERS } from '../data/skills';
 import { territoryOfStock } from './territory';
 import { refreshVision } from './vision';
-import type { Vehicle, World } from './types';
+import type { PartInstance, Vehicle, World } from './types';
 import { endTurn, setDirect, setMoveOrder, setWeaponOrder } from './world';
 
 function inventory(w: World, v: Vehicle): { goods: Record<string, number>; parts: string[] } {
@@ -221,9 +220,11 @@ describe('waking', () => {
     const truck = next.vehicles[0];
     expect(next.player.state).toBe('active');
     expect(next.events).toContainEqual({ t: 'wake' });
-    const patched = (defId: string) => Math.max(1, Math.round(partDef(defId).hp * RULES.defeatPatch));
-    expect(corePart(truck, 'cab').hp).toBe(patched('cab'));
-    expect(coreParts(truck, 'wheel').find((p) => p.id === wheel.id)!.hp).toBe(patched(wheel.defId));
+    const patched = (p: PartInstance) => Math.max(1, Math.round(maxHp(p) * RULES.defeatPatch));
+    const cab = corePart(truck, 'cab');
+    const brokenWheel = coreParts(truck, 'wheel').find((p) => p.id === wheel.id)!;
+    expect(cab.hp).toBe(patched(cab));
+    expect(brokenWheel.hp).toBe(patched(brokenWheel));
   });
 
   it('leaves junk core parts broken on waking', () => {
@@ -468,5 +469,29 @@ describe('gave up', () => {
     expect(gaveUp(npc)).toBe(true);
     npc.defeat!.gaveUp = false;
     expect(gaveUp(npc)).toBe(false);
+  });
+});
+
+describe('defeat of an NPC', () => {
+  function fleeingRearmer(): { w: World; npc: Vehicle } {
+    const w = emptyWorld();
+    const npc = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 40, y: 30 });
+    npc.brain = npcBrain('buggy', npc.pos, ['raider']);
+    const at = { x: 0, y: 0 };
+    npc.brain.goals = [
+      { kind: 'rearm', targetId: 'kiln', destination: at, phase: 'act', reason: 'lieUp', until: 500 },
+      { kind: 'fight', targetId: w.player.vehicleId, destination: at, phase: 'travel', reason: 'fightBack' },
+      { kind: 'flee', targetId: w.player.vehicleId, destination: at, phase: 'travel', reason: 'avoidCostlyFight', perceived: 0 },
+    ];
+    return { w, npc };
+  }
+
+  it('ends its fight and flee goals and keeps the rest, so the lie-up it held comes on top', () => {
+    for (const lose of [(w: World, npc: Vehicle) => standDown(w, npc, w.player.vehicleId), knockOutNpc]) {
+      const { w, npc } = fleeingRearmer();
+      lose(w, npc);
+      expect(npc.brain!.goals.map((g) => g.kind)).toEqual(['rearm']);
+      expect(isKnockedOut(npc)).toBe(true);
+    }
   });
 });

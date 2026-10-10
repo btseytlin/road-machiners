@@ -58,7 +58,7 @@ export function spotTable(o: Obstacle): LootTable {
   return SALVAGE[table];
 }
 
-export function spotLookOf(stock: SalvageStock): PropKind | null {
+export function spotLookOf(stock: { id: string }): PropKind | null {
   const kind = stock.id.slice(0, stock.id.lastIndexOf('-'));
   return PROP_KINDS.find((k) => k === kind) ?? null;
 }
@@ -155,10 +155,10 @@ export function spotGoal(world: World, territoryId: string): NpcActivity {
   const spots = territorySpots(world, territoryId);
   if (!spots.length) throw new Error(`Territory ${territoryId} has no baked loot spots`);
   const spot = spots[randInt(world, 0, spots.length - 1)];
-  return { kind: 'scavenge', targetId: spot.id, destination: { ...spot.pos }, phase: 'travel', reason: 'search a loot spot' };
+  return { kind: 'scavenge', targetId: spot.id, destination: { ...spot.pos }, phase: 'travel', reason: 'searchSpot' };
 }
 
 export function tripGoal(vehicle: Vehicle, territory: TerritoryDef): NpcActivity {
   const entry = territoryEntries(territory).reduce((a, b) => (dist(vehicle.pos, a) <= dist(vehicle.pos, b) ? a : b));
-  return { kind: 'travel', targetId: territory.id, destination: { ...entry }, phase: 'travel', reason: 'make a trip to another site' };
+  return { kind: 'travel', targetId: territory.id, destination: { ...entry }, phase: 'travel', reason: 'tripToSite' };
 }
