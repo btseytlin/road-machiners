@@ -28,7 +28,6 @@ export type TerrainTypeId =
 
 export type TerrainType = {
   id: TerrainTypeId;
-  name: string;
   speed: number;
   wear: number;
   dust: number;
@@ -40,23 +39,23 @@ export type TerrainType = {
 };
 
 export const TERRAIN_TYPES: Record<TerrainTypeId, TerrainType> = {
-  road: { id: "road", name: "Road", speed: 1, wear: 0.5, dust: 0.3, grip: 1, sideGrip: 1, color: 0xa8865a, craters: true, rut: 0 },
-  hardpan: { id: "hardpan", name: "Hardpan", speed: 0.9, wear: 1, dust: 1, grip: 1, sideGrip: 1, color: 0xc8a676, craters: true, rut: 0.5 },
-  sand: { id: "sand", name: "Loose sand", speed: 0.7, wear: 1.2, dust: 1.3, grip: 1, sideGrip: 1, color: 0xdcc08c, craters: true, rut: 0.8 },
-  scrub: { id: "scrub", name: "Scrub", speed: 0.8, wear: 1.3, dust: 0.7, grip: 1, sideGrip: 1, color: 0xa89a66, craters: true, rut: 0.6 },
-  scree: { id: "scree", name: "Scree", speed: 0.55, wear: 2, dust: 0.5, grip: 1, sideGrip: 1, color: 0x9a8a78, craters: true, rut: 0.2 },
-  mud: { id: "mud", name: "Mud", speed: 0.45, wear: 1.5, dust: 0.1, grip: 1, sideGrip: 0.5, color: 0x665044, craters: true, rut: 1 },
-  gravel: { id: "gravel", name: "Gravel", speed: 0.85, wear: 1.4, dust: 0.8, grip: 1, sideGrip: 1, color: 0x9e9489, craters: true, rut: 0.3 },
-  saltCrust: { id: "saltCrust", name: "Salt crust", speed: 0.95, wear: 0.8, dust: 1.2, grip: 1, sideGrip: 1, color: 0xe0d8ba, craters: true, rut: 0.5 },
-  asphalt: { id: "asphalt", name: "Cracked asphalt", speed: 0.98, wear: 0.6, dust: 0.3, grip: 1, sideGrip: 1, color: 0x55565b, craters: true, rut: 0 },
-  ash: { id: "ash", name: "Ash", speed: 0.6, wear: 1, dust: 1.6, grip: 1, sideGrip: 1, color: 0x77737a, craters: true, rut: 0.8 },
-  field: { id: "field", name: "Dead field", speed: 0.8, wear: 1.1, dust: 1.4, grip: 1, sideGrip: 1, color: 0x8e6e4a, craters: true, rut: 0.8 },
-  dirtyWater: { id: "dirtyWater", name: "Dirty water", speed: 0.45, wear: 1.5, dust: 0.1, grip: 1, sideGrip: 0.5, color: 0x55583a, craters: false, rut: 0 },
-  toxic: { id: "toxic", name: "Toxic pool", speed: 0.45, wear: 1.8, dust: 0.1, grip: 1, sideGrip: 0.5, color: 0x9aa83c, craters: false, rut: 0 },
-  track: { id: "track", name: "Dirt track", speed: 0.9, wear: 1, dust: 1, grip: 1, sideGrip: 1, color: 0xa88458, craters: true, rut: 0 },
-  canal: { id: "canal", name: "Irrigation canal", speed: 0.45, wear: 1.5, dust: 0.1, grip: 1, sideGrip: 1, color: 0x5f6f7a, craters: false, rut: 0 },
-  concrete: { id: "concrete", name: "Cracked concrete", speed: 0.98, wear: 0.6, dust: 0.3, grip: 1, sideGrip: 1, color: 0xa39e94, craters: true, rut: 0 },
-  glass: { id: "glass", name: "Fused glass", speed: 0.95, wear: 0.8, dust: 0.3, grip: 0.2, sideGrip: 0.15, color: 0x86ada3, craters: true, rut: 0.1 },
+  road: { id: "road", speed: 1, wear: 0.5, dust: 0.3, grip: 1, sideGrip: 1, color: 0xa8865a, craters: true, rut: 0 },
+  hardpan: { id: "hardpan", speed: 0.9, wear: 1, dust: 1, grip: 1, sideGrip: 1, color: 0xc8a676, craters: true, rut: 0.5 },
+  sand: { id: "sand", speed: 0.7, wear: 1.2, dust: 1.3, grip: 1, sideGrip: 1, color: 0xdcc08c, craters: true, rut: 0.8 },
+  scrub: { id: "scrub", speed: 0.8, wear: 1.3, dust: 0.7, grip: 1, sideGrip: 1, color: 0xa89a66, craters: true, rut: 0.6 },
+  scree: { id: "scree", speed: 0.55, wear: 2, dust: 0.5, grip: 1, sideGrip: 1, color: 0x9a8a78, craters: true, rut: 0.2 },
+  mud: { id: "mud", speed: 0.45, wear: 1.5, dust: 0.1, grip: 1, sideGrip: 0.5, color: 0x665044, craters: true, rut: 1 },
+  gravel: { id: "gravel", speed: 0.85, wear: 1.4, dust: 0.8, grip: 1, sideGrip: 1, color: 0x9e9489, craters: true, rut: 0.3 },
+  saltCrust: { id: "saltCrust", speed: 0.95, wear: 0.8, dust: 1.2, grip: 1, sideGrip: 1, color: 0xe0d8ba, craters: true, rut: 0.5 },
+  asphalt: { id: "asphalt", speed: 0.98, wear: 0.6, dust: 0.3, grip: 1, sideGrip: 1, color: 0x55565b, craters: true, rut: 0 },
+  ash: { id: "ash", speed: 0.6, wear: 1, dust: 1.6, grip: 1, sideGrip: 1, color: 0x77737a, craters: true, rut: 0.8 },
+  field: { id: "field", speed: 0.8, wear: 1.1, dust: 1.4, grip: 1, sideGrip: 1, color: 0x8e6e4a, craters: true, rut: 0.8 },
+  dirtyWater: { id: "dirtyWater", speed: 0.45, wear: 1.5, dust: 0.1, grip: 1, sideGrip: 0.5, color: 0x55583a, craters: false, rut: 0 },
+  toxic: { id: "toxic", speed: 0.45, wear: 1.8, dust: 0.1, grip: 1, sideGrip: 0.5, color: 0x9aa83c, craters: false, rut: 0 },
+  track: { id: "track", speed: 0.9, wear: 1, dust: 1, grip: 1, sideGrip: 1, color: 0xa88458, craters: true, rut: 0 },
+  canal: { id: "canal", speed: 0.45, wear: 1.5, dust: 0.1, grip: 1, sideGrip: 1, color: 0x5f6f7a, craters: false, rut: 0 },
+  concrete: { id: "concrete", speed: 0.98, wear: 0.6, dust: 0.3, grip: 1, sideGrip: 1, color: 0xa39e94, craters: true, rut: 0 },
+  glass: { id: "glass", speed: 0.95, wear: 0.8, dust: 0.3, grip: 0.2, sideGrip: 0.15, color: 0x86ada3, craters: true, rut: 0.1 },
 };
 
 export type DeckStation = { at: Vec; rise: number };

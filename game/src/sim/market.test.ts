@@ -215,7 +215,7 @@ describe('market', () => {
 });
 
 describe('creditBounty', () => {
-  const bounty = (id: string, template: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template, targetName: 'Target', reward: 10000, deadline: 900, window: 900, tier: 2, fulfilled: false });
+  const bounty = (id: string, template: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template, reward: 10000, deadline: 900, window: 900, tier: 2, fulfilled: false });
 
   function withTarget(): { w: World; npc: Vehicle } {
     const w = emptyWorld();

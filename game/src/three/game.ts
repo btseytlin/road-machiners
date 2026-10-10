@@ -22,7 +22,8 @@ import {
 } from "../phys/frames";
 import { type PreparedTurn } from "../phys/turn";
 import { playerVehicle, vehicleById } from "../sim/damage";
-import { setupLabel } from "../sim/settings";
+import { setupText } from "../text/names";
+import { say } from "../text/language";
 
 import { inOverdrive, isStranded, maxTurn, vehicleStats } from "../sim/stats";
 import { clickOrder } from "../sim/steering";
@@ -79,7 +80,7 @@ import { ShadeView } from "./render/shade";
 import { BeaconPulseView } from "./render/beaconPulse";
 import { SoundRingView } from "./render/soundRing";
 import { reportError } from "./crash";
-import { GameSaves, turnFailedNote, type Run } from "./save";
+import { GameSaves, TURN_FAILED_NOTE, type Run } from "./save";
 import { GameMenu } from "../ui/game-menu";
 import { DeathScreen } from "../ui/death";
 import { MIX } from "../data/sounds";
@@ -126,7 +127,8 @@ export class Game {
   private readonly fog: FogView;
   private readonly lastSeen = new Map<string, number>();
   private readonly shade: ShadeView;
-  private uiStale = false;
+  // A turn step or a language switch changed what the UI shows. advanceTurn refreshes it once at its end.
+  uiStale = false;
   private readonly weather: WeatherView;
   private readonly labels: Labels;
   private readonly zones = new ZonesView();
@@ -314,7 +316,7 @@ export class Game {
     this.hitCard = new HitCard(this.hud.getExchangeRoot());
     this.hoverHold.watch(this.hud.getInspectionRoot());
     const saves = this.saves.menuActions(() => this.world);
-    this.menu = new GameMenu(saves, () => this.anim !== null, () => setupLabel(this.world.setup), this.hud.tipSwitch());
+    this.menu = new GameMenu(saves, () => this.anim !== null, () => say(setupText(this.world.setup)), this.hud.tipSwitch());
     this.death = new DeathScreen(saves);
 
     this.bindInput();
@@ -678,7 +680,7 @@ export class Game {
   private failTurn(err: unknown): void {
     this.travel.abandon(this.world);
     this.saves.noteError();
-    this.hud.note(this.world, turnFailedNote(err), "bad");
+    this.hud.note(this.world, TURN_FAILED_NOTE, "bad");
     reportError(err);
     this.refreshUi();
   }
@@ -719,7 +721,7 @@ export class Game {
       return hit ? Math.max(0, stepMs(hit.step ?? TURN_STEPS) - elapsed) : null;
     });
     if (!towed) this.playDriveSound(playback.result);
-    this.phase = "Moving";
+    this.phase = "moving";
     this.path.clear();
     this.uiStale = true;
   }
@@ -732,7 +734,7 @@ export class Game {
     for (const [id, fs] of Object.entries(a.result.frames))
       this.frames[id] = fs[fs.length - 1];
     this.live = null;
-    this.phase = a.combat ? "Firing" : "Results";
+    this.phase = a.combat ? "firing" : "results";
     timed("fog", () => this.fog.update(this.combatFogWorld()));
     const host = this.combatHost();
     playCrashes(host, this.crashCues, null);
@@ -744,7 +746,7 @@ export class Game {
 
   private landImpacts(a: Playback): void {
     a.impacts = true;
-    this.phase = "Results";
+    this.phase = "results";
     this.craters.revealAll(this.world.turn);
     for (const e of this.world.events) {
       if (e.t !== "destroyed") continue;

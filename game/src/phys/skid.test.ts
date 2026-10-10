@@ -39,7 +39,7 @@ function withChassis(w: World, chassis: Chassis): void {
   if (chassis === 'scout') return;
   const id = chassis === 'buggy' ? 'buggy' : 'hauler';
   const parts = chassis === 'buggy' ? ['mg', 'stockEngine'] : ['mg', 'stockEngine', 'plates', 'trailerBox'];
-  const v = makeVehicle(w, { name: id, faction: 'player', chassisId: id, parts: parts.map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {}, pos: { x: 20, y: 60 }, heading: 0, brain: null });
+  const v = makeVehicle(w, { faction: 'player', chassisId: id, parts: parts.map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {}, pos: { x: 20, y: 60 }, heading: 0, brain: null });
   w.vehicles[0] = { ...v, id: w.vehicles[0].id };
   if (chassis === 'loadedHauler') addGoods(w, w.vehicles[0], 'scrap', 999);
   w.player.fuel = 999;

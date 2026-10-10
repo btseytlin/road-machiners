@@ -22,6 +22,8 @@ Read the doc for an area before changing it.
 - [UI design system](docs/ui.md): the principles, patterns, tokens and shared pieces every screen and overlay follows. `npm run dev` serves a live guide at <http://localhost:5173/ui.html>.
 - [Map and world](docs/architecture/map.md): the bake layers, the bridge, weather and vision.
 - [Saves](docs/architecture/saves.md): slots, boot, versions and rescue.
+- [Text and languages](docs/architecture/text.md): the English and Russian catalog, ids in the sim, the language switch and the text checks.
+- [Russian copy](docs/russian-style.md): how Russian text must read, with examples and the glossary.
 - [Principles](docs/architecture/principles.md): the project's architecture principles every design answers to, like one rulebook for every truck, no hot full scans and same seed, same game.
 - [Art pipeline](docs/art.md): Blender models, the truck grid projection and part model rules.
 - [Sound](docs/sound.md), [Publishing](docs/publishing.md), [Wiki](docs/wiki/README.md).
@@ -38,7 +40,9 @@ Run these from `game/`. The repo-wide quality gate and pre-commit hook run from 
 - `npm run progression:record`, `progression:report`, `progression:analyze` and `progression:watch` are the playtest harness. Bots play the real turn pipeline headless with every NPC alive, and each run writes logs of every turn. It covers economy, progression, NPC behavior and fights at the macro level. `progression:playthrough` writes the full activity log of one markov bot run, which the factory's release playtest reads.
 - `npm run combat` plays single fights with physics, for hit rates and ram detail the recorder does not model. `npm run loadouts` rolls NPC gear.
 - `npm run perf` fails on a miss against `scripts/perf-budgets.json`.
+- `npm run layout` checks every surveyed screen in English, Russian and pseudo-long text at two window sizes, and fails on clipped text, overlapping or unreachable controls and English in Russian. It needs the dev server.
 - `npm run map:bake` writes `public/maps/icarus.bin`. Commit it after a change to map rules, then run `npm run old-spots`.
+- `npm run text:review` writes the Russian review sheet to `tmp/text-review/`: every entry in context with sample params.
 - `npm run models:shapes`, `npm run wiki`, `npm run save:shape` and `npm run old-spots` regenerate checked files. A test fails when they are stale.
 - `npm run sfx:board`, `sfx:import`, `sfx:reimport`, `sfx:report` and `sfx:gen` manage sounds. `sfx:gen` costs credits, so ask before running it.
 - `npm run itch` publishes to itch.io.
@@ -64,6 +68,7 @@ One owner per concept. Use these and do not decide the same thing elsewhere:
 - `src/sim/wear.ts` is the only writer of part HP.
 - `workOf()` in `src/sim/states.ts` gives timed work, so new work gets a progress bar.
 - `practice()` in `src/sim/progress.ts` is the only way to gain XP.
+- `src/text/` owns all player text. The sim keeps ids, and new text ships its English and Russian entries in the same change. If you write or change Russian text, read [Russian copy](docs/russian-style.md) first.
 - `talkOf()` in `src/sim/dialogue.ts` is the one place talk reads traits.
 - `propPose()` in `src/sim/mapgen.ts` gives each prop's turn and scale.
 - `src/sim/body.ts` is the only conversion between grid cells and meters.

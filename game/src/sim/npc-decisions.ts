@@ -37,7 +37,7 @@ import { territoryAt, territoryGrounds } from './territory';
 import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
-import type { Contact, NpcActivity, SalvageStock, Vehicle, World } from './types';
+import type { Contact, GoalReason, NpcActivity, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
 import { isWatching, postsOf } from './watch-posts';
@@ -271,10 +271,12 @@ function seesSalvage(world: World, vehicle: Vehicle, stock: SalvageStock, stripp
   return (!canReachSalvage(vehicle, stock) || canTakeAny(world, vehicle, stock)) && lootTaken(world, vehicle, stock.id) === null;
 }
 
-export function lootTaken(world: World, vehicle: Vehicle, targetId: string | null): string | null {
+// Why the driver may not start on the loot target: another truck is looting it. The rule blocks starts only, so a
+// job the driver already runs there keeps going. Null for no target, which nobody can claim.
+export function lootTaken(world: World, vehicle: Vehicle, targetId: string | null): GoalReason | null {
   if (targetId === null || worksOnLoot(vehicle, targetId)) return null;
   const looter = lootBlocker(world, vehicle, targetId);
-  return looter && passesUpLoot(world, vehicle, looter, targetId) ? 'someone else is looting it' : null;
+  return looter && passesUpLoot(world, vehicle, looter, targetId) ? 'lootTaken' : null;
 }
 
 export function worksOnLoot(vehicle: Vehicle, targetId: string): boolean {
@@ -322,10 +324,10 @@ function afterSale(vehicle: Vehicle): Vehicle {
   return { ...vehicle, items: kept };
 }
 
-export function lootPassedUp(vehicle: Vehicle, targetId: string | null): string | null {
+export function lootPassedUp(vehicle: Vehicle, targetId: string | null): GoalReason | null {
   if (targetId !== null && worksOnLoot(vehicle, targetId)) return null;
-  if (holdFull(vehicle)) return 'the hold is full';
-  return targetId !== null && knownUnfit(vehicle, targetId) ? 'the loot will not fit' : null;
+  if (holdFull(vehicle)) return 'holdFull';
+  return targetId !== null && knownUnfit(vehicle, targetId) ? 'lootWontFit' : null;
 }
 
 export function forgetFullHold(world: World, vehicle: Vehicle): void {
@@ -337,18 +339,20 @@ export function forgetFullHold(world: World, vehicle: Vehicle): void {
   else delete brain.unfit;
 }
 
-export function stockLootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): string | null {
+// Why a loot goal on a stock ends. A driver learns a stock is empty only once it can reach it.
+export function stockLootInvalid(world: World, vehicle: Vehicle, goal: NpcActivity): GoalReason | null {
   const stock = world.salvage.find((s) => s.id === goal.targetId);
-  if (!stock) return 'the loot is gone';
+  if (!stock) return 'lootGone';
   if (!canReachSalvage(vehicle, stock)) return !hasCargoRoom(vehicle) ? CANNOT_HOLD : null;
   if (!hasSalvage(stock)) return STRIPPED;
   return canTakeAny(world, vehicle, stock) ? null : CANNOT_HOLD;
 }
 
-export function truckLootInvalid(vehicle: Vehicle, truck: Vehicle): string | null {
-  if (!isKnockedOut(truck)) return 'the truck got away';
+// Why a loot goal on a truck ends. A knocked-out truck is loot until it wakes. A refit on it keeps going until it ends.
+export function truckLootInvalid(vehicle: Vehicle, truck: Vehicle): GoalReason | null {
+  if (!isKnockedOut(truck)) return 'truckGotAway';
   if (vehicle.job?.kind === 'refit' || !inTowReach(vehicle, truck)) return null;
-  return canTakeFromTruck(vehicle, truck) ? null : CANNOT_HOLD;
+  return canTakeFromTruck(vehicle, truck) ? null : 'cargoFullLoot';
 }
 
 function stands(vehicle: Vehicle, site: Site): boolean {

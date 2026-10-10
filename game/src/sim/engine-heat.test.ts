@@ -41,7 +41,7 @@ describe('engine heat', () => {
       expect(turns).toBeLessThan(60);
     }
     expect(turns).toBeGreaterThan(20);
-    expect(w.events.some((e) => e.t === 'info' && e.text.startsWith('Engine running hot'))).toBe(true);
+    expect(w.events.some((e) => e.t === 'info' && e.note.id === 'engineHot')).toBe(true);
     expect(engine(w).hp).toBe(hp - ENGINE_HEAT.overheatDamage);
     advanceEngineHeat(w);
     expect(engine(w).hp).toBe(hp - 2 * ENGINE_HEAT.overheatDamage);
@@ -356,10 +356,10 @@ describe('douse reasons', () => {
     const w = emptyWorld();
     w.player.supplies = 0;
     w.player.engineHeat = 0.5;
-    expect(douseBlock(w)).toBe(`Need ${ENGINE_HEAT.douseSupplies} supplies`);
+    expect(douseBlock(w)).toBe('noSupplies');
     w.player.supplies = ENGINE_HEAT.douseSupplies;
     w.player.engineHeat = 0;
-    expect(douseBlock(w)).toBe('Engine is cool');
+    expect(douseBlock(w)).toBe('engineCool');
     w.player.engineHeat = 0.5;
     expect(douseBlock(w)).toBeNull();
   });

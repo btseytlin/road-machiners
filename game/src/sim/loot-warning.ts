@@ -16,7 +16,7 @@ import { decide, firepower, lootTaken, perceiveDanger } from './npc-decisions';
 import { claimantOf, inLootReach, jobTarget, lootBlocker, lootClaimedBy, salvageInRange, salvagePlace } from './salvage';
 import { addState, boundTo, endState, lootWarningData, stateOf } from './states';
 import { inTowReach } from './tow';
-import type { GameEvent, NpcActivity, NpcState, StateEnding, Vehicle, World } from './types';
+import type { GameEvent, GoalReason, NpcActivity, NpcState, StateEnding, Vehicle, World } from './types';
 import { canVehicleSee } from './vision';
 
 export type WarnAnswer = DecisionOptions['warnedOff'];
@@ -52,8 +52,8 @@ function claimsPile(world: World, v: Vehicle, targetId: string): boolean {
   return stock !== undefined && claimantOf(world, stock)?.id === v.id;
 }
 
-function fightReason(world: World, warner: Vehicle, targetId: string): string {
-  return claimsPile(world, warner, targetId) ? 'defend its claimed loot' : 'fight over loot';
+function fightReason(world: World, warner: Vehicle, targetId: string): GoalReason {
+  return claimsPile(world, warner, targetId) ? 'defendLoot' : 'fightOverLoot';
 }
 
 export function heldByLooter(world: World, npc: Vehicle, activity: NpcActivity): boolean {
@@ -75,8 +75,8 @@ export function contestLoot(world: World, npc: Vehicle, looter: Vehicle, targetI
   noteArgument(world, npc, looter);
   const choice = decide(world, npc, 'lootContested', looter.id, perceiveDanger(world, npc, looter));
   if (choice === 'warn') warnTruck(world, npc, looter, targetId, 'roll');
-  else if (choice === 'fight') fightOver(world, npc, looter, 'fight over loot');
-  else leaveLoot(world, npc, targetId, 'someone else is looting it');
+  else if (choice === 'fight') fightOver(world, npc, looter, 'fightOverLoot');
+  else leaveLoot(world, npc, targetId, 'lootTaken');
 }
 
 export function warnTruck(world: World, warner: Vehicle, warned: Vehicle, targetId: string, onRefuse: OnRefuse, answer: WarnAnswer | null = null): NpcState {
@@ -107,11 +107,11 @@ type AnswerRule = (world: World, warner: Vehicle, warned: Vehicle, targetId: str
 
 const ANSWERS: Record<WarnAnswer, AnswerRule> = {
   comply: (world, _warner, warned, targetId) => {
-    leaveLoot(world, warned, targetId, 'warned off the loot');
+    leaveLoot(world, warned, targetId, 'warnedOff');
     return 'yielded';
   },
   fightBack: (world, warner, warned, targetId) => {
-    if (warned.brain) defyThreat(world, warned, warner, 'fightBack', 'keep its loot');
+    if (warned.brain) defyThreat(world, warned, warner, 'fightBack', 'keepLoot');
     if (warner.brain) fightOver(world, warner, warned, fightReason(world, warner, targetId));
     return 'fight';
   },
@@ -119,7 +119,7 @@ const ANSWERS: Record<WarnAnswer, AnswerRule> = {
     if (!warner.brain) return null;
     const refusal = onRefuse === 'roll' ? warnRefusalOf(world, warner, warned) : onRefuse;
     if (refusal === 'leave') {
-      leaveLoot(world, warner, targetId, 'the looter would not leave');
+      leaveLoot(world, warner, targetId, 'looterWontLeave');
       return 'backedOff';
     }
     fightOver(world, warner, warned, fightReason(world, warner, targetId));
@@ -131,11 +131,11 @@ export function warnRefusalOf(world: World, warner: Vehicle, warned: Vehicle): R
   return decide(world, warner, 'warnRefused', warned.id, perceiveDanger(world, warner, warned));
 }
 
-export function fightOver(world: World, npc: Vehicle, other: Vehicle, reason: string): void {
+export function fightOver(world: World, npc: Vehicle, other: Vehicle, reason: GoalReason): void {
   defyThreat(world, npc, other, firepower(world, npc) > 0 ? 'fightBack' : 'flee', reason);
 }
 
-export function leaveLoot(world: World, v: Vehicle, targetId: string, reason: string): void {
+export function leaveLoot(world: World, v: Vehicle, targetId: string, reason: GoalReason): void {
   if (jobTarget(v) === targetId) cancelJob(world, v);
   if (!v.brain) return;
   v.brain.noticed[`salvageSeen:${targetId}`] = world.turn;
@@ -205,12 +205,12 @@ export function checkLootWarning(world: World, s: NpcState): StateEnding | null 
 export function lapseLootWarning(world: World, s: NpcState): void {
   const warner = world.vehicles.find((v) => v.id === s.holder);
   const data = lootWarningData(s);
-  if (warner && data.answer === null) leaveLoot(world, warner, data.targetId, 'no answer to its warning');
+  if (warner && data.answer === null) leaveLoot(world, warner, data.targetId, 'warningUnanswered');
 }
 
 export function defendWarned(world: World, s: NpcState): void {
   const warner = world.vehicles.find((v) => v.id === s.holder);
   const warned = world.vehicles.find((v) => v.id === s.other);
   if (!warner?.brain || !warned || isKnockedOut(warner) || !canVehicleSee(world, warner, warned.pos)) return;
-  fightOver(world, warner, warned, 'defend the loot it was promised');
+  fightOver(world, warner, warned, 'defendPromisedLoot');
 }

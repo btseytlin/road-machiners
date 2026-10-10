@@ -360,7 +360,7 @@ describe('the caltrops and the oil spiller in use', () => {
     const { w, me, part } = playerWith('oilSpiller');
     w.player.fuel = 1.9;
 
-    expect(utilityOrderError(w, me, part.id, { kind: 'self' })).toBe('Oil spiller: fuel');
+    expect(utilityOrderError(w, me, part.id, { kind: 'self' })).toMatchObject({ id: 'utilityBlocked', block: 'fuel' });
     me.utilityOrders[part.id] = { kind: 'self' };
     activateUtilities(w);
     expect(w.fields).toEqual([]);

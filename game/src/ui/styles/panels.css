@@ -411,6 +411,11 @@
 .save-screen > div {
   max-width: var(--panel-xl);
 }
+.save-screen > .options-button {
+  position: absolute;
+  right: var(--hud-inset);
+  top: var(--hud-inset);
+}
 .death .death-buttons {
   display: flex;
   gap: var(--space-5);

@@ -185,7 +185,7 @@ function withFreshIds(world: World, v: Vehicle): Vehicle {
 
 function buildArmedChoices(world: World, template: NpcTemplate, chassisId: string, budget: number): ArmedChoice[] {
   const table = template.loadout;
-  const bare = makeVehicle(world, { name: template.name, faction: template.faction, chassisId, parts: [], spares: [], cargo: {}, pos: { x: 0, y: 0 }, heading: 0, brain: null });
+  const bare = makeVehicle(world, { faction: template.faction, chassisId, parts: [], spares: [], cargo: {}, pos: { x: 0, y: 0 }, heading: 0, brain: null });
   const choices: ArmedChoice[] = [];
   for (const engine of table.engine) {
     const powered = tryMountChoice(world, bare, engine.value, budget);

@@ -1,7 +1,6 @@
 // Dredge-style inventory grid: drag items to arrange them, R or right click rotates while dragging.
 // At a shop the garage storage shows beside the grid.
 
-import { GOODS } from "../data/goods";
 import { chassisDef } from "../data/chassis";
 import { partDef } from "../data/parts";
 import { STRIP } from "../data/salvage";
@@ -62,7 +61,7 @@ import {
   storageItem,
   footprint,
 } from "./inventory-draw";
-import { fuelLiters, kg, moneyEl, moneyText, pricedEl } from "./units";
+import { fuelLiters, kg, moneyEl, moneyMsg, pricedEl } from "./units";
 import { maxSpeedSteps } from "../sim/stats";
 import { powerChip } from "./hud-readout";
 import {
@@ -75,7 +74,11 @@ import {
   type ItemSource,
   type LastClick,
 } from "./inventory-moves";
-import { npcName } from "../sim/spawn";
+import type { Refusal } from "../sim/types";
+import { bindAttr, setText } from "../text/language";
+import { t, type Msg } from "../text/msg";
+import { chassisName, goodName, partName, siteName, vehicleTitle } from "../text/names";
+import { commandFailure } from "./format";
 
 const CELL_PX = 42;
 const MIN_CELL_PX = 28;
@@ -97,7 +100,7 @@ export class InventoryView {
   private press: Press | null = null;
   private lastClick: LastClick = null;
   private lastPointer: PointerEvent | null = null;
-  private error = "";
+  private error: Msg | null = null;
   private gridEl: HTMLElement | null = null;
   private root: HTMLElement = el("div");
   private inspection = el("div", { class: "inv-inspection" });
@@ -175,7 +178,7 @@ export class InventoryView {
           { class: "inv-side" },
           ...this.refitBanner(me),
           this.sideList(w),
-          ...(this.dumpZone ? [el("div", { class: "inv-dump", "data-drop": "dump" }, "Dump")] : []),
+          ...(this.dumpZone ? [el("div", { class: "inv-dump", "data-drop": "dump" }, t("inv.dumpShort"))] : []),
           this.inspection,
         ),
         ...(this.truck ? [this.truckEl(w, this.truck)] : []),
@@ -225,7 +228,7 @@ export class InventoryView {
     const node = this.itemEl(w, item);
     const left = v.job?.kind === "refit" ? v.job.turnsLeft : 0;
     node.classList.add("refitting");
-    node.title = `${itemName(item)}, refit: ${turnsText(left)} left`;
+    bindAttr(node, "title", t("inv.itemRefit", { item: itemName(item), n: left }));
     return node;
   }
 
@@ -322,8 +325,8 @@ export class InventoryView {
       el(
         "div",
         { class: "inv-refit" },
-        el("span", {}, `Refit: ${turnsText(me.job.turnsLeft)} left`),
-        el("button", { title: "Leave every part where it was", onclick: () => this.run(cancelRefit) }, "Cancel refit"),
+        el("span", {}, t("inv.refitLeft", { n: me.job.turnsLeft })),
+        el("button", { title: t("inv.cancelRefitTitle"), onclick: () => this.run(cancelRefit) }, t("inv.cancelRefit")),
       ),
     ];
   }
@@ -374,23 +377,23 @@ export class InventoryView {
       {
         class: "inv-patch",
         disabled: reason !== null,
-        title: reason ?? `${plan.parts} of ${plan.needed} parts, +${Math.round(plan.hp)} HP`,
+        title: reason ?? t("inv.patchYield", { parts: plan.parts, needed: plan.needed, hp: Math.round(plan.hp) }),
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();
           this.run((world) => startRepair(world, part.id));
         },
       },
-      `Patch ${turnsText(plan.turns)}, ${partsText(plan.parts)}`,
+      t("inv.patchLabel", { turns: plan.turns, parts: plan.parts }),
     );
   }
 
   private repairButton(w: World, part: PartInstance): HTMLElement | null {
-    if (!isJunk(part)) return this.garageButton(w, part, "Repair", `Restore to ${maxHp(part)} HP`);
-    return canRebuild(w, part) ? this.garageButton(w, part, "Rebuild", "Rebuild to the last wear step, once per part") : null;
+    if (!isJunk(part)) return this.garageButton(w, part, "repair", t("inv.repairTitle", { hp: maxHp(part) }));
+    return canRebuild(w, part) ? this.garageButton(w, part, "rebuild", t("inv.rebuildTitle")) : null;
   }
 
-  private garageButton(w: World, part: PartInstance, action: string, title: string): HTMLElement | null {
+  private garageButton(w: World, part: PartInstance, action: "repair" | "rebuild", title: Msg): HTMLElement | null {
     const cost = partRepairCost(w, part);
     if (cost === 0) return null;
     return el(
@@ -398,14 +401,14 @@ export class InventoryView {
       {
         class: "inv-patch",
         disabled: w.player.money < cost,
-        title: w.player.money < cost ? `Need ${moneyText(cost - w.player.money)} more` : title,
+        title: w.player.money < cost ? t("trade.needMore", { price: moneyMsg(cost - w.player.money) }) : title,
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();
           this.run((world) => repairPart(world, part.id));
         },
       },
-      pricedEl(action, cost),
+      pricedEl(t(`inv.verb.${action}`), cost),
     );
   }
 
@@ -427,7 +430,7 @@ export class InventoryView {
           this.run((world) => startStrip(world, part.id));
         },
       },
-      `Strip ${turnsText(STRIP.turns)}, ${partsText(stripYield(me, part))}`,
+      t("inv.stripLabel", { turns: STRIP.turns, parts: stripYield(me, part) }),
     );
   }
 
@@ -444,14 +447,14 @@ export class InventoryView {
       {
         class: "inv-patch",
         disabled: reason !== null,
-        title: reason ?? `Spends ${scrap} scrap`,
+        title: reason ?? t("inv.weldSpends", { scrap }),
         onpointerdown: (e: Event) => e.stopPropagation(),
         onclick: (e: Event) => {
           e.stopPropagation();
           this.run((world) => startWeld(world));
         },
       },
-      `Weld ${partDef(PERK_NUMBERS.welder.part).name}, ${turnsText(turns)}`,
+      t("inv.weldLabel", { part: partName(PERK_NUMBERS.welder.part), turns }),
     );
   }
 
@@ -462,7 +465,7 @@ export class InventoryView {
         "div",
         { class: "inv-chip", style: toneStyle(p.defId) },
         partIconEl(p),
-        el("span", {}, d.name),
+        el("span", {}, partName(d.id)),
         conditionTag(p),
         footprintEl(d.w, d.h),
         conditionMeter(p),
@@ -477,7 +480,7 @@ export class InventoryView {
     return el(
       "div",
       { class: "inv-storage", "data-drop": "storage" },
-      el("h3", {}, "Storage"),
+      el("h3", {}, t("inv.storage")),
       ...chips,
     );
   }
@@ -490,7 +493,7 @@ export class InventoryView {
         "div",
         { class: "inv-chip", style: toneStyle(p.defId) },
         partIconEl(p),
-        el("span", {}, d.name),
+        el("span", {}, partName(d.id)),
         conditionTag(p),
         footprintEl(d.w, d.h),
         conditionMeter(p),
@@ -514,7 +517,7 @@ export class InventoryView {
         "div",
         { class: "inv-chip", style: toneStyle(good) },
         itemIconEl(item),
-        `${GOODS[good].name} x${count}`,
+        t("inv.goodCount", { good: goodName(good), n: count }),
       );
       this.markSelected(chip, item);
       chip.addEventListener("pointerdown", (e) =>
@@ -531,7 +534,7 @@ export class InventoryView {
       el(
         "button",
         { onclick: () => this.run((world) => takeStores(world, stock.id)) },
-        `Take ${fuelLiters(stock.fuel ?? 0)} L fuel, ${(stock.supplies ?? 0).toFixed(1)} supplies`,
+        t("inv.takeStores", { fuel: fuelLiters(stock.fuel ?? 0), supplies: stock.supplies ?? 0 }),
       ),
     ];
   }
@@ -548,10 +551,10 @@ export class InventoryView {
     return el(
       "div",
       { class: "inv-storage inv-loot" },
-      el("h3", {}, `Salvage${site ? `: ${site.name}` : ""}`),
+      el("h3", {}, site ? t("inv.salvageAt", { site: siteName(site.id) }) : t("inv.salvage")),
       ...(chips.length
         ? chips
-        : [el("div", { class: "dim" }, hiddenUnits(stock) > 0 ? "Nothing found yet." : "Nothing left here.")]),
+        : [el("div", { class: "dim" }, hiddenUnits(stock) > 0 ? t("inv.nothingFound") : t("inv.nothingLeft"))]),
       ...(chips.length
         ? [
             el(
@@ -559,7 +562,7 @@ export class InventoryView {
               {
                 onclick: () => this.run((world) => takeAllLoot(world, stockId)),
               },
-              "Take all that fits",
+              t("inv.takeAll"),
             ),
           ]
         : []),
@@ -569,14 +572,14 @@ export class InventoryView {
   private truckEl(w: World, truckId: string): HTMLElement {
     const target = w.vehicles.find((v) => v.id === truckId);
     if (!target || !isKnockedOut(target))
-      return el("div", { class: "inv-truck inv-target" }, el("h3", {}, "The truck got away"));
+      return el("div", { class: "inv-truck inv-target" }, el("h3", {}, t("inv.truckGone")));
     const grid = gridEl(gridOf(target), target.chassisId, this.cell);
     const removing = removalIds(w, target);
     grid.append(...target.items.map((it) => this.truckItemEl(w, target, it, grid, removing.has(it.id))));
     return el(
       "div",
       { class: "inv-truck inv-target" },
-      el("h3", {}, `${npcName(target)}, ${gaveUp(target) ? "gave up" : "knocked out"}`),
+      el("h3", {}, gaveUp(target) ? t("inv.truckGaveUp", { truck: vehicleTitle(w, target) }) : t("inv.truckOut", { truck: vehicleTitle(w, target) })),
       el("div", { class: "truck-shell" }, grid),
     );
   }
@@ -655,7 +658,7 @@ export class InventoryView {
       start: { x: at.clientX, y: at.clientY },
       moved: false,
     };
-    this.error = "";
+    this.error = null;
     this.onMove(at);
   }
 
@@ -708,7 +711,7 @@ export class InventoryView {
     const g = this.gridEl?.getBoundingClientRect();
     const ok = onGrid && this.placementProblem(d) === null;
     d.ghost.className = `inv-ghost ${onGrid ? (ok ? "ok" : "no") : ""}`;
-    d.ghost.textContent = itemLabel(d.item).short;
+    setText(d.ghost, itemLabel(d.item).short);
     d.ghost.style.width = `${size.w * this.cell}px`;
     d.ghost.style.height = `${size.h * this.cell}px`;
     if (onGrid && g) {
@@ -720,7 +723,7 @@ export class InventoryView {
     }
   }
 
-  private placementProblem(d: Drag): string | null {
+  private placementProblem(d: Drag): Refusal | null {
     const me = playerVehicle(this.host.world());
     if (d.source === "grid")
       return planItemMove(me, d.id, {
@@ -804,9 +807,9 @@ export class InventoryView {
     try {
       const next = cmd(this.host.world());
       if (next !== this.host.world()) this.host.apply(next);
-      this.error = "";
+      this.error = null;
     } catch (err) {
-      this.error = quiet ? "" : (err as Error).message;
+      this.error = quiet ? null : commandFailure(this.host.world(), err);
     }
     this.onChange();
   }
@@ -864,8 +867,8 @@ export class InventoryScreen {
     if (!this.isOpen()) return;
     const truck = el("div", { class: "inv-body" }, this.view.render());
     this.root.replaceChildren(
-      el("button", { class: "close", onclick: () => this.close() }, "Close [I]"),
-      el("h3", {}, "Inventory", truckChips(this.host.world())),
+      el("button", { class: "close", onclick: () => this.close() }, t("inv.close")),
+      el("h3", {}, t("inv.title"), truckChips(this.host.world())),
       truck,
     );
     this.view.fitTo(truck);
@@ -879,14 +882,14 @@ export function truckChips(w: World, opts: { freeCells: boolean } = { freeCells:
   return el(
     "span",
     { class: "chips" },
-    el("span", { class: "chip" }, createIcon("truck"), chassisDef(me.chassisId).name),
+    el("span", { class: "chip" }, createIcon("truck"), chassisName(chassisDef(me.chassisId).id)),
     el("span", { class: "chip" }, moneyEl(w.player.money)),
-    opts.freeCells ? el("span", { class: "chip", title: "Free cargo cells" }, createIcon("cells"), `${freeCells(me)} free`) : null,
+    opts.freeCells ? el("span", { class: "chip", title: t("inv.freeCellsTitle") }, createIcon("cells"), t("inv.freeCells", { n: freeCells(me) })) : null,
     el(
       "span",
-      { class: `chip${mass > rated ? " bad" : ""}`, title: "Mass against rated load" },
+      { class: `chip${mass > rated ? " bad" : ""}`, title: t("inv.loadTitle") },
       createIcon("load"),
-      `${kg(mass)} / ${kg(rated)}`,
+      t("speed.loadChip", { mass: kg(mass), rated: kg(rated) }),
     ),
     powerChipNode(w, me),
   );
@@ -897,30 +900,25 @@ function powerChipNode(w: World, me: Vehicle): HTMLElement {
   return el("span", { class: `chip${chip.over ? " bad" : ""}`, title: chip.detail, "aria-label": chip.detail }, createIcon("power"), chip.text);
 }
 
-function patchBlocker(w: World, me: Vehicle, plan: RepairPlan): string | null {
-  if (!isParkedForWork(w, me)) return "Stop to patch";
-  return plan.parts === 0 ? "No parts" : null;
+// Why a Patch button is disabled, or null when the patch can start.
+function patchBlocker(w: World, me: Vehicle, plan: RepairPlan): Msg | null {
+  if (!isParkedForWork(w, me)) return t("inv.stopToPatch");
+  return plan.parts === 0 ? t("inv.noParts") : null;
 }
 
-function stripBlocker(w: World, me: Vehicle): string | null {
-  if (!isParkedForWork(w, me)) return "Stop to strip";
-  if (me.job) return "Busy";
+// Why a Strip button is disabled, or null when stripping can start.
+function stripBlocker(w: World, me: Vehicle): Msg | null {
+  if (!isParkedForWork(w, me)) return t("inv.stopToStrip");
+  if (me.job) return t("inv.busy");
   return null;
 }
 
-function weldBlocker(w: World, me: Vehicle): string | null {
-  if (!isParkedForWork(w, me)) return "Stop to weld";
-  if (me.job) return "Busy";
+// Why a Weld button is disabled, or null when welding can start.
+function weldBlocker(w: World, me: Vehicle): Msg | null {
+  if (!isParkedForWork(w, me)) return t("inv.stopToWeld");
+  if (me.job) return t("inv.busy");
   const scrap = PERK_NUMBERS.welder.scrap;
-  return (goodsCount(me).scrap ?? 0) < scrap ? `Need ${scrap} scrap` : null;
-}
-
-function turnsText(n: number): string {
-  return n === 1 ? "1 turn" : `${n} turns`;
-}
-
-function partsText(n: number): string {
-  return n === 1 ? "1 part" : `${n} parts`;
+  return (goodsCount(me).scrap ?? 0) < scrap ? t("inv.needsScrap", { n: scrap }) : null;
 }
 
 function fieldPatchable(part: PartInstance): boolean {
@@ -929,7 +927,7 @@ function fieldPatchable(part: PartInstance): boolean {
 }
 
 function shopOnlyPatch(part: PartInstance): HTMLElement | null {
-  return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true, title: "Shop only" }, "Patch") : null;
+  return part.hp < maxHp(part) ? el("button", { class: "inv-patch", disabled: true, title: t("inv.shopOnly") }, t("inv.verb.patch")) : null;
 }
 
 function partDetails(w: World, me: Vehicle, part: PartInstance, mounted: boolean): HTMLElement[] {
@@ -940,6 +938,6 @@ function partDetails(w: World, me: Vehicle, part: PartInstance, mounted: boolean
     ...(row ? [row] : []),
     conditionMeter(part),
     statGrid(diffStats(partStats(w, part), base ? partStats(w, base) : null)),
-    base ? el("p", { class: "dim" }, `Against ${partDef(base.defId).name} `, conditionTag(base)) : el("span"),
+    base ? el("p", { class: "dim" }, t("inv.against", { part: partName(base.defId) }), conditionTag(base)) : el("span"),
   ];
 }

@@ -14,5 +14,5 @@ export type UiHost = {
   releaseTurn(): void;
   runKey(code: string): void;
   autoTravel(): boolean;
-  getTurnPhase(): "Moving" | "Firing" | "Results" | null;
+  getTurnPhase(): "moving" | "firing" | "results" | null;
 };

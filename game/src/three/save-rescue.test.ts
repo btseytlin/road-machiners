@@ -138,7 +138,7 @@ describe('rescueSave', () => {
     const save = currentSave() as ReturnType<typeof currentSave> & { world: { setup: unknown } };
     save.world.setup = { mode: 'roaming', settings: { damage: null, fuelUse: 1.5, supplyUse: 40 } };
     slots.put('auto', save);
-    expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(/Invalid world settings/);
+    expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(/badSetup/);
     const rescued = rescueSave(slots, 'auto', TEST_MAP, KIT, fresh, freshRun, 1000)!;
 
     expect(rescued.report.settingsReset).toEqual(['damage', 'supplyUse']);
