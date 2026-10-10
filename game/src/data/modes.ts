@@ -2,19 +2,19 @@
 // is the standard game. The mode picker lists GAME_MODES, so a new mode is a new row here and a new GameModeId.
 // docs/wiki/mechanics/world-settings.md says which rules are settings and why the others stay fixed.
 
-import type { GameModeId, ModeRules, WorldSettings } from '../sim/types';
+import type { GameModeId, MapKind, ModeRules, WorldSettings } from '../sim/types';
 import type { GearLevel } from './npcs';
 import type { PropKind } from '../sim/terrain';
 import type { TerrainTypeId } from './terrain';
 
-export type GameMode = { rules: ModeRules; kit: string | null };
+export type GameMode = { rules: ModeRules; kit: string | null; map: MapKind };
 
-const OPEN_WORLD: ModeRules = { traffic: true, salvage: true, knockouts: true, yielding: true, radio: true, rescue: true, roadWrecks: true };
-const RUN: ModeRules = { traffic: false, salvage: false, knockouts: false, yielding: false, radio: false, rescue: false, roadWrecks: false };
+const OPEN_WORLD: ModeRules = { traffic: true, looting: true, knockouts: true, yielding: true, radio: true, rescue: true, roadWrecks: true, run: false };
+const RUN: ModeRules = { traffic: false, looting: false, knockouts: false, yielding: false, radio: false, rescue: false, roadWrecks: false, run: true };
 
 export const GAME_MODES: Record<GameModeId, GameMode> = {
-  roaming: { rules: OPEN_WORLD, kit: null },
-  furyRoad: { rules: RUN, kit: 'furyRoad' },
+  roaming: { rules: OPEN_WORLD, kit: null, map: 'icarus' },
+  furyRoad: { rules: RUN, kit: 'furyRoad', map: 'highway' },
 };
 
 export type WorldSettingDef = { default: number; min: number; max: number; step: number };

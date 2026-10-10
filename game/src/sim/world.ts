@@ -3,7 +3,6 @@ import { CHASSIS } from '../data/chassis';
 import { GOODS } from '../data/goods';
 import { partDef } from '../data/parts';
 import { REGION } from '../data/region';
-import { GAME_MODES } from '../data/modes';
 import { MAX_RANK, PERKS, SKILL_IDS, XP_SOURCES } from '../data/skills';
 import { CONDITION } from '../data/wear';
 import { RULES } from '../data/rules';
@@ -42,7 +41,7 @@ import { endCallIfOut, raiseCalls } from './dialogue';
 import { advancePatches } from './patch';
 import { advanceAid, readyAid } from './aid';
 import type { GridItem, MoveOrder, PartInstance, Refusal, Rot, UtilityOrder, Vehicle, WeaponOrder, World, WorldSettings, WorldSetup, XpSource } from './types';
-import { defaultSetup, modeRules, parseSetup, repairSetup } from './settings';
+import { defaultSetup, modeMap, modeRules, modeRulesOf, parseSetup, repairSetup } from './settings';
 import { fittingQuestVars, QUESTS, type CarriedQuestVars } from './quests';
 import { highwayStart } from './highway';
 import { advanceFuryRoad, startRun } from './fury-road';
@@ -176,14 +175,14 @@ export function newWorld(seed: number, kit: StartKit, map: BakedMap, setup: Worl
 function requireMapFits(map: BakedMap, setup: WorldSetup): void {
   const atlas = atlasOf(map.terrain);
   if (atlas === icarusAtlas() && map.terrain.size !== REGION.size) throw new Error(`Map size ${map.terrain.size} does not match region size ${REGION.size}`);
-  const rules = GAME_MODES[setup.mode].rules;
+  const rules = modeRulesOf(setup.mode);
   if ((rules.traffic || rules.rescue) && atlas.towns.length === 0) throw new Error(`Mode ${setup.mode} needs towns, and map ${map.hash} has none`);
 }
 
 function setUpWorldStock(world: World, map: BakedMap, truck: Vehicle, kit: StartKit, populate: boolean): void {
   const rules = modeRules(world);
-  if (world.setup.mode === 'furyRoad') startRun(world);
-  if (rules.salvage) initializeSalvage(world);
+  if (rules.run) startRun(world);
+  if (rules.looting) initializeSalvage(world);
   setUpOpening(world, truck, kit.opening);
   world.player.storage = kit.storage.map((defId) => makePart(world, defId, kit.wear));
   if (populate && rules.traffic) spawnInitial(world);
@@ -192,7 +191,7 @@ function setUpWorldStock(world: World, map: BakedMap, truck: Vehicle, kit: Start
 }
 
 export function startOf(seed: number, setup: WorldSetup): { pos: Vec; heading: number } {
-  return setup.mode === 'furyRoad' ? highwayStart(seed) : startPose();
+  return modeMap(setup.mode) === 'highway' ? highwayStart(seed) : startPose();
 }
 
 function wearCoreParts(world: World, truck: Vehicle, wear: number): void {
@@ -511,7 +510,7 @@ export function carriedWorld(carried: Carried, kit: StartKit, mapOf: (setup: Wor
   const report: CarryReport = { toGarage: [], sold: [], lost: [], settingsReset: reset };
   const truckKit = carriedKit(carried, kit, report);
   const seed = pick(carried.seed, freshSeed());
-  const world = newWorld(seed, { ...truckKit, opening: null, autoRepair: true }, mapOf(setup, seed), setup, true, setup.mode === 'roaming' ? townStart() : startOf(seed, setup));
+  const world = newWorld(seed, { ...truckKit, opening: null, autoRepair: true }, mapOf(setup, seed), setup, true, carriedStart(seed, setup));
   carryPlayer(world, carried);
   carryQuests(world, carried.quests, report);
   carryTruck(world, carried, carried.truck !== null && truckKit !== kit, report);
@@ -520,6 +519,10 @@ export function carriedWorld(carried: Carried, kit: StartKit, mapOf: (setup: Wor
   refreshVision(world);
   world.events = [];
   return { world, report };
+}
+
+function carriedStart(seed: number, setup: WorldSetup): { pos: Vec; heading: number } {
+  return modeMap(setup.mode) === 'icarus' ? townStart() : startOf(seed, setup);
 }
 
 function carriedSetup(setup: unknown): ReturnType<typeof repairSetup> {

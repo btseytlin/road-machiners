@@ -997,7 +997,7 @@ function damagedByShots(world: World): Set<string> {
 
 export function wreckVehicle(world: World, v: Vehicle): void {
   const by = beatenBy(world, v);
-  if (modeRules(world).salvage) createWreckSalvage(world, v);
+  if (modeRules(world).looting) createWreckSalvage(world, v);
   world.vehicles = world.vehicles.filter((x) => x.id !== v.id);
   world.removed.push(v);
   world.obstacles.push({

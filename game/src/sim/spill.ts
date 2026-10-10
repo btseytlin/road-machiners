@@ -18,7 +18,7 @@ function spillVehicle(world: World, v: Vehicle): void {
   if (items.length === 0) return;
   const broken = mountedParts(v, 'cargo').find((p) => p.hp === 0);
   if (!broken) throw new Error(`${v.id} has dead rows but no broken cargo part`);
-  if (modeRules(world).salvage) spillOnGround(world, v, broken.id, items);
+  if (modeRules(world).looting) spillOnGround(world, v, broken.id, items);
   else loseCargo(world, v, broken.id, items);
 }
 

@@ -1,8 +1,10 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { GAME_MODES } from '../data/modes';
 import { startKit } from '../data/start';
 import { TEST_MAP } from '../test/map';
-import { defaultSetup, modeKit, modeRules } from './settings';
+import { defaultSetup, modeKit, modeMap, modeRules, modeRulesOf } from './settings';
 import { highwayMap } from './highway';
 import { furyRoadWorld } from './testkit';
 import { newWorld } from './world';
@@ -19,16 +21,40 @@ function fingerprint(w: World): object {
 }
 
 describe('game mode rules', () => {
-  it('keeps every Roaming rule on', () => {
+  it('keeps every Roaming rule on and plays no run', () => {
     const world = newWorld(7, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
+    const { run, ...open } = modeRules(world);
 
-    expect(Object.values(modeRules(world)).every((on) => on)).toBe(true);
+    expect(run).toBe(false);
+    expect(Object.values(open).every((on) => on)).toBe(true);
   });
 
-  it('turns every open-world rule off in a Fury Road world', () => {
+  it('turns every open-world rule off in a Fury Road world and plays a run', () => {
     const world = furyRoadWorld(7);
+    const { run, ...open } = modeRules(world);
 
-    expect(Object.values(modeRules(world)).some((on) => on)).toBe(false);
+    expect(run).toBe(true);
+    expect(Object.values(open).some((on) => on)).toBe(false);
+  });
+
+  it('names each mode difference in its row', () => {
+    expect(GAME_MODES.roaming).toEqual({
+      rules: { traffic: true, looting: true, knockouts: true, yielding: true, radio: true, rescue: true, roadWrecks: true, run: false },
+      kit: null,
+      map: 'icarus',
+    });
+    expect(GAME_MODES.furyRoad).toEqual({
+      rules: { traffic: false, looting: false, knockouts: false, yielding: false, radio: false, rescue: false, roadWrecks: false, run: true },
+      kit: 'furyRoad',
+      map: 'highway',
+    });
+  });
+
+  it('reads a mode row before a world exists', () => {
+    expect(modeMap('roaming')).toBe('icarus');
+    expect(modeMap('furyRoad')).toBe('highway');
+    expect(modeRulesOf('furyRoad')).toBe(GAME_MODES.furyRoad.rules);
+    expect(() => modeMap('fury' as never)).toThrow(/Unknown game mode fury/);
   });
 
   it('throws on a mode that is not a game mode', () => {
@@ -85,5 +111,23 @@ describe('a world and its map', () => {
 
   it('refuses a Fury Road world on Icarus', () => {
     expect(() => newWorld(7, startKit('furyRoad'), TEST_MAP, defaultSetup('furyRoad'))).toThrow(/highway window 0/);
+  });
+});
+
+const SOURCE = new URL('..', import.meta.url).pathname;
+const MODE_LISTS = ['data/modes.ts', 'ui/new-game.ts', 'three/save-migrations.ts'];
+const MODE_ID_CHECK = /[!=]==?\s*'(furyRoad|roaming)'|'(furyRoad|roaming)'\s*[!=]==?/;
+
+function sourceFiles(): string[] {
+  return readdirSync(SOURCE, { recursive: true, encoding: 'utf8' })
+    .filter((file) => file.endsWith('.ts') && !file.endsWith('.test.ts'))
+    .filter((file) => !MODE_LISTS.includes(file.split('\\').join('/')));
+}
+
+describe('mode differences', () => {
+  it('reads every mode difference from the mode table, never from a mode id', () => {
+    const checks = sourceFiles().filter((file) => MODE_ID_CHECK.test(readFileSync(join(SOURCE, file), 'utf8')));
+
+    expect(checks).toEqual([]);
   });
 });

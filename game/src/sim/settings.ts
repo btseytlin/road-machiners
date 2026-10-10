@@ -2,7 +2,7 @@
 // setup and is the only reader of its settings for rules, through the scale queries below.
 
 import { GAME_MODES, WORLD_SETTINGS } from '../data/modes';
-import type { GameModeId, ModeRules, World, WorldSettings, WorldSetup } from './types';
+import type { GameModeId, MapKind, ModeRules, World, WorldSettings, WorldSetup } from './types';
 
 type SettingId = keyof WorldSettings;
 const SETTING_IDS = Object.keys(WORLD_SETTINGS) as SettingId[];
@@ -31,7 +31,15 @@ export function repairSetup(raw: unknown): { setup: WorldSetup; reset: SettingId
 }
 
 export function modeRules(world: World): ModeRules {
-  return modeOf(world.setup.mode).rules;
+  return modeRulesOf(world.setup.mode);
+}
+
+export function modeRulesOf(mode: GameModeId): ModeRules {
+  return modeOf(mode).rules;
+}
+
+export function modeMap(mode: GameModeId): MapKind {
+  return modeOf(mode).map;
 }
 
 export function modeKit(mode: GameModeId, fallback: string): string {

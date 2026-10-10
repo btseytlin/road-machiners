@@ -105,7 +105,7 @@ export function rollStock(world: World, table: LootTable, id: string, pos: Vec, 
 }
 
 export function stockOldSpots(world: World, map: BakedMap): void {
-  if (!modeRules(world).salvage) return;
+  if (!modeRules(world).looting) return;
   const picks = oldSpotPicks(map);
   const ids = new Set(picks.map(oldStockId));
   const stray = world.salvage.find((stock) => oldSpotOf(stock) && !ids.has(stock.id));
@@ -421,7 +421,7 @@ function requireNoOldSpots(gone: Set<string>): void {
 }
 
 export function renewSalvage(world: World): void {
-  if (!modeRules(world).salvage || world.turn % TIME.turnsPerDay !== 0) return;
+  if (!modeRules(world).looting || world.turn % TIME.turnsPerDay !== 0) return;
   for (const o of world.obstacles.filter(isLootSpot)) restockSite(world, spotStock(world, o.id), spotTable(o));
   for (const stock of world.salvage) {
     const old = oldSpotOf(stock);

@@ -33,7 +33,7 @@ export function generateObstacles(world: World, map: BakedMap, fixed: Obstacle[]
 function placeModeWrecks(world: World, out: Obstacle[]): void {
   const rules = modeRules(world);
   if (rules.roadWrecks) placeRoadWrecks(world, out);
-  if (rules.salvage) out.push(...STORY_WRECKS.map((w): Obstacle => ({ id: w.id, pos: { ...w.pos }, r: w.r, kind: 'wreck', hulk: { chassisId: w.chassisId, yaw: w.yaw } })));
+  if (rules.looting) out.push(...STORY_WRECKS.map((w): Obstacle => ({ id: w.id, pos: { ...w.pos }, r: w.r, kind: 'wreck', hulk: { chassisId: w.chassisId, yaw: w.yaw } })));
 }
 
 export function mapObstacles(map: BakedMap): Obstacle[] {

@@ -509,7 +509,8 @@ export type GameEvent =
   | { t: 'runLost'; stretch: number; cause: RunLossCause };
 
 export type GameModeId = 'roaming' | 'furyRoad';
-export type ModeRules = { traffic: boolean; salvage: boolean; knockouts: boolean; yielding: boolean; radio: boolean; rescue: boolean; roadWrecks: boolean };
+export type ModeRules = { traffic: boolean; looting: boolean; knockouts: boolean; yielding: boolean; radio: boolean; rescue: boolean; roadWrecks: boolean; run: boolean };
+export type MapKind = 'icarus' | 'highway';
 export type RunLossCause = 'wrecked' | 'abandoned';
 export type OutpostFacts = { milestone: number; stock: PartInstance[]; paid: boolean };
 export type WaveGroup = {

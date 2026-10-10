@@ -61,7 +61,7 @@ export function handedOver(world: World, loser: Vehicle, winner: Vehicle): GridI
 }
 
 export function yieldTo(world: World, loser: Vehicle, winner: Vehicle, haul: GridItem[] = handedOver(world, loser, winner)): void {
-  if (!modeRules(world).salvage) throw new Error(`${loser.id} cannot hand over cargo where nothing is looted`);
+  if (!modeRules(world).looting) throw new Error(`${loser.id} cannot hand over cargo where nothing is looted`);
   const stock = haul.length > 0 ? dropHaul(world, loser, haul) : null;
   cede(world, loser, winner, stock, 'takeHandedCargo');
   creditYield(world, loser, winner);

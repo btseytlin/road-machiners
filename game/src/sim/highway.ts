@@ -6,6 +6,7 @@ import { decksOf } from './bridge';
 import { fortressProps } from './fortress';
 import { closurePieces, craterDip, sceneAt, scenePieces, stretchLayout, windowCraters, windowStretches, type Crater } from './road-hazards';
 import { INDEX_CELL, RoadIndex } from './road-index';
+import { modeMap } from './settings';
 import { hashRandom, nextRandom, randInt, randRange, type Rng } from './rng';
 import type { BakedMap, BakedProp, PropKind, Terrain } from './terrain';
 import type { WorldSetup } from './types';
@@ -390,7 +391,7 @@ export function highwayMap(seed: number, window: number): BakedMap {
 }
 
 export function newMapFor(setup: WorldSetup, seed: number, icarus: BakedMap): BakedMap {
-  return setup.mode === 'furyRoad' ? highwayMap(seed, 0) : icarus;
+  return modeMap(setup.mode) === 'highway' ? highwayMap(seed, 0) : icarus;
 }
 
 export function highwayLine(seed: number, window: number): Vec[] {

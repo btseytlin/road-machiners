@@ -8,7 +8,7 @@ export { newMapFor } from '../sim/highway';
 import type { BrokenProp, Obstacle, Player, QuestState, Vehicle, World, WorldSetup } from '../sim/types';
 import { QUESTS, questProblems, restoreQuest } from '../sim/quests';
 import { refreshVision } from '../sim/vision';
-import { parseSetup } from '../sim/settings';
+import { modeMap, parseSetup } from '../sim/settings';
 import { clearTips } from '../ui/tips';
 import type { NewGameActions } from '../ui/new-game';
 import { settleAims } from '../sim/combat';
@@ -83,7 +83,7 @@ type ViewField = 'visible' | 'contacts' | 'clouds';
 
 export function mapFor(saved: Pick<World, 'mapHash' | 'seed' | 'setup' | 'furyRoad'>, icarus: BakedMap): BakedMap {
   const highway = saved.mapHash.startsWith('highway:');
-  if (saved.setup.mode !== 'furyRoad') {
+  if (modeMap(saved.setup.mode) !== 'highway') {
     if (highway) throw new SaveError('otherMap', null, `A ${saved.setup.mode} save names highway map ${saved.mapHash}`);
     return icarus;
   }
