@@ -578,11 +578,12 @@ function rescueOf<K extends RescueReadout["kind"]>(r: RescueReadout | null, kind
 
 function infoHead(w: World, v: Vehicle, hostile: boolean): HTMLElement {
   const quiet = [v.brain ? templateName(v.brain.templateId) : null, factionName(v.faction)].filter((part) => part !== null);
+  const quietText = list(quiet);
   return el(
     "div",
     { class: "info-head" },
     el("span", { class: "info-name" }, v.brain ? driverName(v) : vehicleTitle(w, v)),
-    el("span", { class: "info-quiet" }, list(quiet)),
+    el("span", { class: "info-quiet", title: quietText }, quietText),
     ...(v.faction === "player" ? [] : [el("span", { class: `tag ${hostile ? "bad" : "dim"}` }, t(hostile ? "hud.tagHostile" : "hud.tagNeutral"))]),
   );
 }
