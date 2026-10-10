@@ -260,7 +260,7 @@ function park(player: Vehicle, at: Vec): void {
 function placeSide(w: World, trucks: Truck[], ground: Ground, forward: number, turn: number): string[] {
   return trucks.map((t, i) => {
     const pos = along(ground, forward, (i - (trucks.length - 1) / 2) * LINE_SPACING);
-    const v = spawnAt(w, NPCS[t.driver], loadoutOf(w, t.gear), pos);
+    const v = spawnAt(w, NPCS[t.driver], sideLoadout(w, t.gear), pos);
     if (t.gear.kind === 'outfit') outfit(w, v, t.gear.outfit);
     if (t.wear !== null) rebuildAt(w, v, t.wear);
     v.heading = Math.atan2(ground.axis.y, ground.axis.x) + turn;
@@ -271,6 +271,11 @@ function placeSide(w: World, trucks: Truck[], ground: Ground, forward: number, t
 
 function rebuildAt(w: World, v: Vehicle, wear: number): void {
   for (const item of v.items) if (item.kind === 'part') item.part = makePart(w, item.part.defId, wear);
+}
+
+function sideLoadout(w: World, gear: Gear): NpcLoadout {
+  const loadout = loadoutOf(w, gear);
+  return w.furyRoad === null ? loadout : { ...loadout, cargo: {}, spares: [] };
 }
 
 function loadoutOf(w: World, gear: Gear): NpcLoadout {
