@@ -56,6 +56,7 @@ const PROP_LOOKS = {
   hullChunk: { color: 0x909090, shape: 'long' },
   shipCache: { color: 0x40d040, shape: 'disc' },
   reactor: { color: 0xff40ff, shape: 'disc' },
+  engineCache: { color: 0xf0f040, shape: 'disc' },
   hullCache: { color: 0xf0f040, shape: 'disc' },
   shipBow: { color: 0xd6cfbf, shape: 'long' },
   shipCage: { color: 0xd6cfbf, shape: 'long' },

@@ -144,6 +144,13 @@ describe('the territory layer', () => {
     expect(TEST_MAP.props.filter((p) => p.kind === 'rimRock')).toHaveLength(rules.rimRocks!.count);
   });
 
+  it('turns each hull cache to its authored yaw, and holds no crate-drawn army cache', () => {
+    const baked = inside.filter((p) => p.kind === rules.cacheLook);
+    for (const c of territoryCaches(t)) expect(baked.filter((o) => dist(o.pos, c.pos) < 1e-3 && Math.abs(o.yaw - c.yaw) < 0.01), `${c.pos.x},${c.pos.y}`).toHaveLength(1);
+    expect(inside.filter((p) => p.kind === 'armyCache')).toHaveLength(0);
+    expect(TEST_MAP.props.filter((p) => p.kind === 'hullCache' && territoryAt(p.pos)?.id !== 'fallen-sun')).toHaveLength(0);
+  });
+
   it('gives each cache and field spot one stock after world creation', () => {
     const w = newWorld(1337, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
     const spots = w.obstacles.filter((o) => isLootSpot(o) && territoryAt(o.pos)?.id === 'fallen-sun');
@@ -728,7 +735,7 @@ describe('a third territory', () => {
       wreck: {
         pieces: [{ look: 'hullDrum', at: { x: -9, y: -4 }, yaw: 0, r: 3 }],
         buildings: [{ look: 'barn', table: 'farmStores', turnJitter: 0.06, shift: 0.3, poses: [{ at: { x: 7, y: -7 }, r: 2.5, turn: 0, shoulder: false }] }],
-        caches: [{ at: { x: 0, y: 9 } }],
+        caches: [{ at: { x: 0, y: 9 }, yaw: 0 }],
         cacheLook: 'hullCache',
         cacheTable: 'landmark',
         cacheRadius: 0.7,
@@ -841,7 +848,7 @@ describe('Glass Flats on the baked map', () => {
     for (const pose of poses) expect(props.filter((o) => o.kind === pose.look && dist(o.pos, pose.at) < 0.5), `${pose.look} at ${pose.at.x},${pose.at.y}`).toHaveLength(1);
     const caches = props.filter((o) => o.kind === wreck.cacheLook);
     expect(caches).toHaveLength(wreck.caches.length);
-    for (const c of territoryCaches(gt)) expect(caches.filter((o) => dist(o.pos, c) < 1e-3), `cache at ${c.x},${c.y}`).toHaveLength(1);
+    for (const c of territoryCaches(gt)) expect(caches.filter((o) => dist(o.pos, c.pos) < 1e-3 && Math.abs(o.yaw - c.yaw) < 0.01), `cache at ${c.pos.x},${c.pos.y}`).toHaveLength(1);
   });
 
   it('gives each of its 21 loot spots one stock after world creation (IV5)', () => {

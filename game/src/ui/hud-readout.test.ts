@@ -185,6 +185,8 @@ describe('loot spot wording', () => {
   it.each([
     ['an orchard army truck', spotOf('orchard', 'armyTruck')],
     ['a Fallen Sun ship cache', spotOf('fallen-sun', 'shipCache')],
+    ['a Glass Flats engine cache', spotOf('glass-flats', 'engineCache')],
+    ['a Glass Flats dead truck', spotOf('glass-flats', 'deadTruck')],
     ['a road wreck', (o: Obstacle) => isRoadWreck(o)],
   ])('keeps the wreck wording at %s', (_name, find) => {
     const { w, id } = parkedAt(find);

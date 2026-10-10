@@ -208,6 +208,16 @@ describe('prop poses', () => {
     expect(blockingBoxes(hulk('buggy', 0), TEST_MAP.terrain).length).toBeGreaterThan(0);
   });
 
+  it.each([
+    ['hullCache', 'hull_bay'],
+    ['shipCache', 'cargo_pod'],
+    ['engineCache', 'engine_section'],
+  ] as const)('draws a %s loot spot as a %s section scaled to its radius', (look, model) => {
+    const pose = propPose(landmark(look, 0.7, 1.2));
+    expect(pose).toEqual({ model, pos: { x: 12, y: 34 }, yaw: 1.2, scale: even(1) });
+    expect(propReach(landmark(look, 0.7))).toBeLessThanOrEqual(0.9 * S);
+  });
+
   it('keeps the generic wreck pose and shape for a kill wreck without a hulk', () => {
     const plain: Obstacle = { id: 'wreck-npc7', pos: { x: 12, y: 34 }, r: 0.9, kind: 'wreck' };
 

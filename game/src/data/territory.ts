@@ -11,14 +11,14 @@ import type { DeckSpec, DeckStation } from './terrain';
 export { onOrchardRoad };
 
 export type SpotTable = 'landmark' | 'hullScrap' | 'roadWreck' | 'farmStores' | 'armyStores' | 'engineScrap' | 'cityStores';
-export const WRECK_LOOKS: readonly PropKind[] = ['armyTruck', 'shipCache', 'hullCache', 'tank'];
+export const WRECK_LOOKS: readonly PropKind[] = ['armyTruck', 'shipCache', 'hullCache', 'engineCache', 'deadTruck', 'tank'];
 export type Hazard = {
   radius: number;
   healthPerTurn: number;
   floor: number;
 };
 export type HullPiece = { look: LandmarkLook; at: Vec; yaw: number; r: number; sink?: number };
-export type Cache = { at: Vec };
+export type Cache = { at: Vec; yaw: number };
 export type DebrisRule = { look: PropKind; count: number; radius: [number, number] };
 export type Patch = { at: Vec; radius: number; debris: DebrisRule[]; spots: number };
 export type RimRocks = { from: number; to: number; out: [number, number]; count: number; size: [number, number] };
@@ -217,15 +217,15 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         { look: 'hullDrum', at: inFurrow(39.5, 0), yaw: ACROSS_FURROW, r: 6, sink: PIER_SINK },
       ],
       caches: [
-        { at: { x: 5.9, y: 26.9 } },
-        { at: { x: 5.6, y: 20.9 } },
-        { at: { x: -21.1, y: 5.1 } },
-        { at: { x: -13.8, y: -7.9 } },
-        { at: { x: -8.7, y: -1 } },
-        { at: { x: 17.5, y: -3.2 } },
-        { at: { x: -10.5, y: -22 } },
-        { at: { x: 30.8, y: 11 } },
-        { at: { x: 10.2, y: 2.1 } },
+        { at: { x: 5.9, y: 26.9 }, yaw: 1.57 },
+        { at: { x: 5.6, y: 20.9 }, yaw: 1.31 },
+        { at: { x: -21.1, y: 5.1 }, yaw: -0.35 },
+        { at: { x: -13.8, y: -7.9 }, yaw: -0.52 },
+        { at: { x: -8.7, y: -1 }, yaw: -1.83 },
+        { at: { x: 17.5, y: -3.2 }, yaw: -0.04 },
+        { at: { x: -10.5, y: -22 }, yaw: -1.8 },
+        { at: { x: 30.8, y: 11 }, yaw: 1.94 },
+        { at: { x: 10.2, y: 2.1 }, yaw: 1.37 },
       ],
       cacheLook: 'hullCache',
       cacheTable: 'landmark',
@@ -514,11 +514,11 @@ export const TERRITORIES: Record<string, TerritoryRules> = {
         tower(2.2, 10.8, -0.8, 13.9, -0.15),
       ],
       caches: [
-        { at: { x: -1.6, y: -0.9 } },
-        { at: { x: -1.5, y: -8.5 } },
-        { at: { x: -6.2, y: -4.6 } },
+        { at: { x: -1.6, y: -0.9 }, yaw: -0.26 },
+        { at: { x: -1.5, y: -8.5 }, yaw: 2.88 },
+        { at: { x: -6.2, y: -4.6 }, yaw: -2.88 },
       ],
-      cacheLook: 'hullCache',
+      cacheLook: 'engineCache',
       cacheTable: 'engineScrap',
       cacheRadius: 0.7,
       patches: [

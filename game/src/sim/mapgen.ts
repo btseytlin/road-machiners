@@ -107,7 +107,7 @@ export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: num
 
 type FortLook = Extract<PropKind, `fort${string}`>;
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
-type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'crates' | 'reactor' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | 'ship_bow' | 'ship_cage' | 'ship_hub' | 'hull_shell' | 'hull_drum' | 'hull_shard' | 'hull_tower' | 'hull_gantry' | 'rim_rock' | 'escape_pod' | 'habitat_cylinder' | 'wing_shard' | 'power_cell' | 'tank_trap' | 'nose_rise' | 'nose_crag' | 'engine_nozzle' | 'engine_frame' | 'watchtower' | 'ruin_compound' | 'glass_spire' | 'scrap_wall' | FortModel;
+type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'crates' | 'reactor' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | 'ship_bow' | 'ship_cage' | 'ship_hub' | 'hull_shell' | 'hull_drum' | 'hull_shard' | 'hull_tower' | 'hull_gantry' | 'rim_rock' | 'escape_pod' | 'habitat_cylinder' | 'wing_shard' | 'power_cell' | 'tank_trap' | 'nose_rise' | 'nose_crag' | 'engine_nozzle' | 'engine_frame' | 'watchtower' | 'ruin_compound' | 'glass_spire' | 'scrap_wall' | 'hull_bay' | 'cargo_pod' | 'engine_section' | FortModel;
 
 const M = PHYSICS.metersPerTile;
 const TURN = Math.PI * 2;
@@ -127,7 +127,7 @@ const LANDMARK_MODELS: Record<Exclude<LandmarkLook, FortLook>, PropModel> = {
   junk: 'junk',
   carWreck: 'wreck',
   hullChunk: 'hull_chunk',
-  shipCache: 'crates',
+  shipCache: 'cargo_pod',
   reactor: 'reactor',
   deadTree: 'dead_tree',
   armyCache: 'crates',
@@ -143,7 +143,8 @@ const LANDMARK_MODELS: Record<Exclude<LandmarkLook, FortLook>, PropModel> = {
   drums: 'drums',
   woodpile: 'woodpile',
   shipWing: 'ship_wing',
-  hullCache: 'crates',
+  hullCache: 'hull_bay',
+  engineCache: 'engine_section',
   shipBow: 'ship_bow',
   shipCage: 'ship_cage',
   shipHub: 'ship_hub',
@@ -201,6 +202,9 @@ const MODEL_RADIUS: Partial<Record<PropModel, number>> = {
   hull_gantry: 22,
   rim_rock: 8,
   escape_pod: 2.4,
+  hull_bay: 2.8,
+  cargo_pod: 2.8,
+  engine_section: 2.8,
   habitat_cylinder: 8,
   wing_shard: 7,
   power_cell: 1.6,

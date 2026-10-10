@@ -766,7 +766,7 @@ describe('territory loot spots', () => {
     const w = await realWorld();
     const flats = REGION.locations.find((site) => site.id === 'glass-flats')!;
     const spots = spotsOf(w).filter((o) => siteGap(flats, o.pos) < 0);
-    const tables: Record<string, LootTable> = { hullCache: SALVAGE.engineScrap, ruinCompound: SALVAGE.cityStores, deadTruck: SALVAGE.roadWreck };
+    const tables: Record<string, LootTable> = { engineCache: SALVAGE.engineScrap, ruinCompound: SALVAGE.cityStores, deadTruck: SALVAGE.roadWreck };
     expect(spots).toHaveLength(21);
     for (const o of spots) {
       const stocks = w.salvage.filter((s) => s.id === o.id);
@@ -860,11 +860,14 @@ describe('salvage place', () => {
     expect(salvagePlace(stockOf(w, `wreck-${npc.id}`))).toBe('wreck');
   }, 30_000);
 
-  it('calls army trucks, ship caches and hull caches wrecks, and other loot spots spots', async () => {
+  it('calls army trucks, ship, hull and engine caches and dead trucks wrecks, and other loot spots spots', async () => {
     const w = await realWorld();
     expect(salvagePlace(spotStock(w, 'orchard', 'armyTruck'))).toBe('wreck');
     expect(salvagePlace(spotStock(w, 'fallen-sun', 'shipCache'))).toBe('wreck');
     expect(salvagePlace(spotStock(w, 'fallen-sun', 'hullCache'))).toBe('wreck');
+    expect(salvagePlace(spotStock(w, 'glass-flats', 'engineCache'))).toBe('wreck');
+    expect(salvagePlace(spotStock(w, 'glass-flats', 'deadTruck'))).toBe('wreck');
+    expect(salvagePlace(spotStock(w, 'glass-flats', 'ruinCompound'))).toBe('spot');
     expect(salvagePlace(spotStock(w, 'orchard', 'farmhouse'))).toBe('spot');
     expect(salvagePlace(spotStock(w, 'orchard', 'quonset'))).toBe('spot');
   }, 30_000);
