@@ -210,12 +210,12 @@ describe("equipment variety", () => {
     }
   });
 
-  it.each(["fuelDrums", "water"])("%s sells dear in Bowl and Nose, and no shop makes it", (good) => {
+  it.each([["fuelDrums", []], ["water", ["dustwell", "green-pit"]]])("%s sells dear in Bowl and Nose, and only %j make it", (good, makers) => {
     for (const town of ["bowl", "nose"]) {
       expect(SHOPS[town].needs).toContain(good);
       expect(sellPrice(world, town, good)).toBeGreaterThan(0);
     }
-    expect(Object.values(SHOPS).filter((shop) => shop.makes.includes(good))).toEqual([]);
+    expect(Object.values(SHOPS).filter((shop) => shop.makes.includes(good)).map((shop) => shop.id).sort()).toEqual(makers);
   });
 });
 

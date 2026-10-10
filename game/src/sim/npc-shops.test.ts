@@ -4,6 +4,7 @@ import { REGION } from '../data/region';
 import { corePart } from './grid';
 import { thinkNpc } from './npc-activities';
 import { tradeOffers } from './npc-decisions';
+import { serviceAtStall } from './economy';
 import { sitePads } from './sites';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 
@@ -52,12 +53,39 @@ describe('NPCs use stalls as well as towns', () => {
     expect(REGION.locations.find((l) => l.id === activity.targetId)?.kind).toBe('camp');
   });
 
+  it.each(['dustwell', 'green-pit'])('serves a driver at the outpost %s for money, like any stall', (id) => {
+    const { w, npc } = traderAt(id);
+    npc.resources!.fuel = 0;
+    npc.resources!.supplies = 0;
+    const money = npc.resources!.money;
+    expect(thinkNpc(w, npc)).toMatchObject({ kind: 'resupply', targetId: id });
+    serviceAtStall(w, npc, id, 0);
+    expect(npc.resources!.supplies).toBeGreaterThan(0);
+    expect(npc.resources!.fuel).toBeGreaterThan(0);
+    expect(npc.resources!.money).toBeLessThan(money);
+  });
+
+  it('gives a broke driver no free supplies at an outpost', () => {
+    const { w, npc } = traderAt('dustwell');
+    npc.resources!.supplies = 0;
+    npc.resources!.money = 0;
+    expect(thinkNpc(w, npc).kind).not.toBe('resupply');
+    serviceAtStall(w, npc, 'dustwell', 0);
+    expect(npc.resources!.supplies).toBe(0);
+  });
+
   it('offers trade runs through stalls from many sources', () => {
     const { w, npc } = traderAt('bowl');
     const offers = tradeOffers(w, npc);
     const stalls = Object.values(SHOPS).filter((s) => s.kind === 'stall').map((s) => s.id);
     expect(offers.some((o) => stalls.includes(o.value.source) || stalls.includes(o.value.sellShop))).toBe(true);
     expect(new Set(offers.map((o) => o.value.source)).size).toBeGreaterThan(1);
+  });
+
+  it('has traders buy water at an outpost that makes it', () => {
+    const { w, npc } = traderAt('bowl');
+    const offers = tradeOffers(w, npc);
+    expect(offers.some((o) => o.value.source === 'dustwell' || o.value.source === 'green-pit')).toBe(true);
   });
 
   it('offers nothing to a driver with no money above its upkeep reserve', () => {

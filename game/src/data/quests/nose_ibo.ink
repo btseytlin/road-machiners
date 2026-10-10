@@ -20,9 +20,6 @@ Eh? Pull up a crate. Ibo. I listen to the air for the Army, and to everything el
   Scavengers chatter about Burnt Convoy now and then. Picked clean, they say. Nothing left there but ash and bent rims. Not worth the fuel.
   ~ note("burntConvoy")
   -> hub
-+ {found("burnt-convoy")} [What happened at Burnt Convoy?]
-  A whole convoy went up in one night. Some say raiders, some say a fuel truck blew and took the rest with it. I heard the last calls on the air. Nobody said who started it.
-  -> hub
 + {depot_thief != "none" and depot_thief != "open"} [Heard about the depot business?]
   { depot_thief:
   - "vance": Vance! He sat at my table on cold nights. You never know a man until he sells you out.

@@ -1,6 +1,7 @@
 // How far trucks climb a straight ramp through the real physics turn pipeline, and what the climb rule leaves alone.
 
 import { beforeAll, describe, expect, it } from 'vitest';
+import { RULES } from '../data/rules';
 import type { TerrainTypeId } from '../data/terrain';
 import { makeVehicle } from '../sim/factory';
 import { addGoods } from '../sim/inventory';
@@ -56,15 +57,36 @@ describe('climbing', () => {
     expect(climbTiles('loadedHauler', 0.35)).toBeGreaterThan(3);
   }, 90_000);
 
+  it('a loaded hauler still climbs a grade a tenth gentler in sine than its limit', () => {
+    const sine = 0.9 * Math.sin(Math.atan(HAULER_LIMIT));
+    expect(climbTiles('loadedHauler', Math.tan(Math.asin(sine)))).toBeGreaterThan(1);
+  }, 90_000);
+
   it('a climb a tenth steeper in sine than its limit still stops the loaded hauler', () => {
     const sine = 1.1 * Math.sin(Math.atan(HAULER_LIMIT));
     expect(climbTiles('loadedHauler', Math.tan(Math.asin(sine)))).toBeLessThan(1);
   }, 90_000);
 
-  it('flat ground acceleration from rest is unchanged', () => {
+  it('flat ground launch from rest is pinned', () => {
     const xs = drive(ramp('scout', 0, 'road'), 3);
-    expect(xs[0]).toBeCloseTo(26.864674, 5);
-    expect(xs[1]).toBeCloseTo(29.089706, 5);
-    expect(xs[2]).toBeCloseTo(32.655609, 5);
+    expect(xs[0]).toBeCloseTo(26.722775, 5);
+    expect(xs[1]).toBeCloseTo(28.584459, 5);
+    expect(xs[2]).toBeCloseTo(31.569391, 5);
+  }, 90_000);
+
+  it('a launch from rest gains about 85% of the distance it did at the old acceleration scale', () => {
+    const rules = RULES as { accelScale: number };
+    const scale = rules.accelScale;
+    const now = drive(ramp('scout', 0, 'road'), 3);
+    let old: number[];
+    try {
+      rules.accelScale = scale / 0.85;
+      old = drive(ramp('scout', 0, 'road'), 3);
+    } finally {
+      rules.accelScale = scale;
+    }
+    const ratio = (now[2] - 26) / (old[2] - 26);
+    expect(ratio).toBeGreaterThan(0.82);
+    expect(ratio).toBeLessThan(0.88);
   }, 90_000);
 });

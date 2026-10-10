@@ -33,9 +33,10 @@ import { topGoal } from '../npc-activities';
 import { firepower, getUpkeepReserve, isWeak, judgeDanger, getKnownSite, strengthRatio, tripFuelCost } from '../npc-decisions';
 import { fightOdds } from '../fight-odds';
 import { warnedOffTarget } from '../loot-warning';
-import { canLootTruck, canReachSalvage, hasSalvage, isSiteStock, lootBlocker, takeError, takeFromTruck } from '../salvage';
+import { canLootTruck, canReachSalvage, hasSalvage, lootBlocker, takeError, takeFromTruck } from '../salvage';
 import { startSearch } from '../search';
-import { canUseSite, nearestPad, nearestTown, siteGates, sitePads, townAt, type Site } from '../sites';
+import { territoryEntries } from '../territory';
+import { canUseSite, isTerritory, nearestPad, reachedSite, nearestTown, siteGates, sitePads, townAt, type Site } from '../sites';
 import { fuelCap, hasWorkingEngine, isStranded, isWorking, suppliesCap, vehicleStats } from '../stats';
 import { escortsOf, inTowReach, playerTow, setBeacon } from '../tow';
 import { towData } from '../states';
@@ -616,9 +617,10 @@ function cargoToTown(o: Orders, stripping: boolean): boolean {
 }
 
 function findSalvageSite(o: Orders): boolean {
-  const site = nearestUndiscovered(o.world, REGION.locations.filter((l) => l.kind === 'convoy' || l.kind === 'landmark'));
+  const site = nearestUndiscovered(o.world, REGION.locations.filter(isTerritory));
   if (!site) return false;
-  driveToSite(o, site);
+  const entry = nearest(o.me.pos, territoryEntries(site));
+  if (entry && !reachedSite(o.me.pos, site)) driveTo(o, entry);
   return true;
 }
 
@@ -967,7 +969,7 @@ function demandInSight(o: Orders, guarded: boolean): void {
 function collectOrPatrol(o: Orders, guarded: boolean): void {
   const downed = downedTarget(o.world);
   if (downed) return takeFromTarget(o, downed);
-  const stock = nearestStock(o.world, knownStocks(o.world).filter((s) => !isSiteStock(s) && playerSees(o.world, s.pos)));
+  const stock = nearestStock(o.world, knownStocks(o.world).filter((s) => playerSees(o.world, s.pos)));
   if (stock) return visitStock(o, stock);
   patrol(o, robPatrol(guarded));
 }

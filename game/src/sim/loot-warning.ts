@@ -154,7 +154,6 @@ function placeOf(world: World, targetId: string): 'wreck' | 'pile' | 'spot' | 't
   const stock = world.salvage.find((s) => s.id === targetId);
   if (!stock) return 'truck';
   const place = salvagePlace(stock);
-  if (place === 'site') throw new Error(`Site stock ${targetId} is no loot target`);
   return place;
 }
 
