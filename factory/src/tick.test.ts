@@ -549,6 +549,13 @@ describe('tick', () => {
     expect(chooseJobs(state({ lastWasteReview: '2026-01-05T12:00:00Z' }), [], NOW, CFG)).toEqual([]);
   });
 
+  it('starts no waste review while its failure stands, so a broken review does not run again each tick', () => {
+    const failure = { stage: 'waste' as const, issue: null, error: 'gh issue view failed', log: null, at: '2026-01-05T11:00:00Z' };
+    const due = state({ lastWasteReview: '2026-01-02T12:00:00Z', failures: [failure] });
+    expect(chooseJobs(due, [], NOW, CFG)).toEqual([]);
+    expect(chooseJobs({ ...due, failures: [{ ...failure, stage: 'dev' }] }, [], NOW, CFG)).toEqual([{ stage: 'waste', issue: null }]);
+  });
+
   it('never starts a review the first time it sees no review, and starts the period then', async () => {
     expect(chooseJobs(state({ lastWasteReview: null }), [], NOW, CFG)).toEqual([]);
     const h = harness(null, false);
