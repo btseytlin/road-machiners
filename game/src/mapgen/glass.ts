@@ -7,7 +7,7 @@ import type { BuildingGroup, GlassRules, TerritoryRules, WreckRules } from '../d
 import { noiseAt } from '../sim/elevation';
 import { randInt, randRange, type Rng } from '../sim/rng';
 import { siteGap } from '../sim/sites';
-import { tableOfKind, territoryCaches, territoryPieces } from '../sim/territory';
+import { tableOfKind } from '../sim/territory';
 import type { BakedProp } from '../sim/terrain';
 import { dist, lerp, type Vec } from '../sim/vec';
 import type { MapDraft } from './bake';
@@ -49,8 +49,9 @@ function keptProps(d: MapDraft, t: TerritoryDef, rules: TerritoryRules): BakedPr
 }
 
 function wreckKept(t: TerritoryDef, wreck: WreckRules): BakedProp[] {
-  const pieces = territoryPieces(t).map((p) => prop(p.look, p.pos, p.r, p.yaw));
-  return [...pieces, ...territoryCaches(t).map((c) => prop(wreck.cacheLook, c.pos, wreck.cacheRadius, c.yaw))];
+  const at = (v: Vec): Vec => ({ x: t.pos.x + v.x, y: t.pos.y + v.y });
+  const pieces = wreck.pieces.map((p) => prop(p.look, at(p.at), p.r, p.yaw));
+  return [...pieces, ...wreck.caches.map((c) => prop(wreck.cacheLook, at(c.at), wreck.cacheRadius, c.yaw))];
 }
 
 function buildingGroups(rules: TerritoryRules): BuildingGroup[] {
