@@ -1,0 +1,318 @@
+/* Drawn hardware of the radio: the LCD screen, the volume knobs and the next track key. The shapes keep their own sizes. */
+
+/* The speed dial on the truck instrument. */
+#ui .truck-instrument {
+  position: relative;
+  align-self: center;
+  width: var(--dial-size);
+  height: var(--dial-size);
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.speed-dial {
+  display: block;
+  width: var(--dial-size);
+  height: var(--dial-size);
+}
+.speed-dial svg {
+  display: block;
+  width: 100%;
+}
+.dial-rim {
+  fill: var(--steel-4);
+  stroke: var(--steel-8);
+  stroke-width: 2;
+}
+.dial-face {
+  fill: var(--steel-0);
+  stroke: var(--steel-6);
+}
+.dial-ticks {
+  fill: none;
+  stroke: var(--dial-tick);
+  stroke-width: 3;
+  stroke-dasharray: 1 8;
+}
+.dial-needle {
+  stroke: var(--accent-warm);
+  stroke-width: 2;
+}
+.dial-pin {
+  fill: var(--dial-pin);
+}
+.speed-value {
+  position: absolute;
+  top: 37px;
+  left: 0;
+  right: 0;
+  text-align: center;
+  font: var(--text-dense) var(--font-mono);
+}
+.truck-instrument > .icon {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 16px;
+  height: 16px;
+}
+
+/* Metal toggle switch: a riveted plate, the on option above the lever and the off option below. */
+#ui :is(.instrument-actions, .weapon-head) button.switch {
+  height: auto;
+  gap: 0;
+  padding: 2px 8px;
+}/* A smaller lever keeps the switch row short. The margin takes back the space the scale frees. */
+:is(.instrument-actions, .weapon-head) .switch-lever {
+  transform: scale(0.7);
+  margin: -4px 0;
+}
+#ui button.switch {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 10px;
+  background: linear-gradient(var(--steel-3), var(--steel-2));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  box-shadow:
+    inset 0 1px 0 var(--bevel-light),
+    inset 0 -1px 0 var(--bevel-dark);
+}
+#ui button.switch:hover {
+  border-color: var(--line-hover);
+}
+/* Chosen hardware keeps its metal and takes the accent edge of the shared selected look. */
+#ui :is(button.switch, .truck-instrument):is(.selected, .on) {
+  border-color: var(--accent);
+  box-shadow:
+    inset 0 1px 0 var(--bevel-light),
+    inset 0 -1px 0 var(--bevel-dark),
+    0 0 0 1px var(--accent);
+}
+.switch::before,
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  margin-top: -2px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, var(--steel-8), var(--steel-3));
+  box-shadow: 0 1px 0 var(--shade-strong);
+}
+.switch::before {
+  left: 4px;
+}
+.switch::after {
+  right: 4px;
+}
+.switch-option {
+  font: var(--text-caption) / 1.2 var(--font-ui);
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+.switch-option kbd {
+  margin-left: 2px;
+  font: var(--text-caption) var(--font-mono);
+  color: var(--ink-title);
+}
+.switch-option.chosen {
+  color: var(--accent);
+}
+/* The lever stands on a hex nut and leans toward the chosen option. */
+.switch-lever {
+  position: relative;
+  width: 22px;
+  height: 26px;
+}
+.switch-nut {
+  position: absolute;
+  left: 3px;
+  top: 5px;
+  width: 16px;
+  height: 16px;
+  clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%);
+  background: linear-gradient(160deg, var(--steel-9), var(--steel-5) 60%, var(--steel-3));
+}
+.switch-nut::after {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 50%;
+  background: var(--steel-1);
+  box-shadow: inset 0 1px 1px var(--shade-strong);
+}
+.switch-bat {
+  position: absolute;
+  left: 7px;
+  width: 8px;
+  height: 15px;
+  border-radius: var(--radius-m);
+  background: linear-gradient(90deg, var(--steel-6), var(--steel-10) 40%, var(--steel-8) 70%, var(--steel-5));
+  box-shadow: 0 2px 2px var(--shade-strong);
+}
+.switch-bat::after {
+  content: "";
+  position: absolute;
+  left: -1px;
+  width: 10px;
+  height: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, var(--steel-11), var(--steel-7));
+}
+.up .switch-bat {
+  top: -2px;
+}
+.up .switch-bat::after {
+  top: -1px;
+}
+.down .switch-bat {
+  bottom: -2px;
+}
+.down .switch-bat::after {
+  bottom: -1px;
+}
+
+.radio-screen {
+  padding: 2px 6px 4px;
+  background: var(--lcd);
+  border: 2px solid var(--steel-0);
+  border-radius: var(--radius-s);
+  box-shadow: inset 0 2px 4px var(--bevel-dark);
+  color: var(--lcd-ink);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+.radio-band {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-caption);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  border-bottom: 1px solid var(--lcd-rule);
+  margin-bottom: 2px;
+}
+.radio-lcd {
+  position: relative;
+  height: calc(var(--radio-line) * var(--radio-lines));
+  overflow-y: auto;
+  scrollbar-width: none;
+  font-size: var(--text-dense);
+  line-height: var(--radio-line);
+}
+.radio-ghost {
+  position: absolute;
+  inset: 0;
+  color: var(--lcd-ink-faint);
+  word-break: break-all;
+  user-select: none;
+}
+.knob-cell {
+  flex: 1 1 0;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  cursor: ns-resize;
+  touch-action: none;
+  user-select: none;
+  font: var(--text-caption) var(--font-mono);
+  color: var(--ink-muted);
+  text-transform: uppercase;
+}
+.knob {
+  width: var(--knob-size);
+  height: var(--knob-size);
+  border-radius: 50%;
+  background: var(--steel-1);
+  border: 2px dotted var(--steel-3);
+  box-sizing: border-box;
+  box-shadow: var(--shadow-raised);
+}
+/* The name and the level share one slot, so swapping them never shifts the layout. */
+.knob-labels {
+  display: grid;
+  justify-items: center;
+}
+.knob-label,
+.knob-readout {
+  grid-area: 1 / 1;
+}
+.knob-readout {
+  visibility: hidden;
+}
+.knob-cell:hover .knob-readout,
+.knob-cell.turning .knob-readout,
+.knob-cell:focus-within .knob-readout {
+  visibility: visible;
+}
+.knob-cell:hover .knob-label,
+.knob-cell.turning .knob-label,
+.knob-cell:focus-within .knob-label {
+  visibility: hidden;
+}
+.knob:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.knob-dial {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--steel-4);
+  box-shadow: inset 0 1px 0 var(--bevel-light-strong), inset 0 -2px 0 var(--shade);
+  transform: scale(0.82) rotate(var(--knob-angle, 0deg));
+}
+.knob-notch {
+  position: absolute;
+  left: calc(50% - 1px);
+  top: 2px;
+  width: 2px;
+  height: 35%;
+  border-radius: var(--radius-s);
+  background: var(--ink);
+}
+/* The next track key is a black plastic transport key from an old CD player, in a strip above the screen. */
+#ui .radio-next {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--knob-size) * 1.3);
+  height: calc(var(--knob-size) * 0.65);
+  padding: 0;
+  background: linear-gradient(var(--steel-4), var(--steel-2));
+  border: 1px solid var(--steel-0);
+  border-radius: var(--radius-s);
+  box-shadow: inset 0 1px 0 var(--bevel-light-strong), inset 0 -2px 0 var(--shade), var(--shadow-raised);
+  color: var(--ink);
+}
+#ui .radio-next:hover {
+  background: linear-gradient(var(--steel-5), var(--steel-3));
+  border-color: var(--steel-0);
+}
+#ui .radio-next:active {
+  transform: translateY(1px);
+  background: linear-gradient(var(--steel-2), var(--steel-3));
+  box-shadow: inset 0 2px 3px var(--bevel-dark), 0 1px 1px var(--shade-strong);
+}
+.radio-next svg {
+  width: 50%;
+  fill: currentColor;
+}
+/* The mute switch is the metal toggle, shrunk to the knobs' height. */
+#ui .radio-faceplate button.switch {
+  gap: 0;
+  padding: 1px 8px;
+}
+.radio-faceplate .switch-lever {
+  transform: scale(0.6);
+  margin: -5px 0;
+}

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { partDef } from '../data/parts';
 import { gridOf, itemCells, mountedParts } from './grid';
 import { moveItem } from './inventory';
 import { makePart } from './factory';
@@ -63,10 +64,11 @@ describe('cargo spills', () => {
     const npc = addVehicle(w, 'traders', 'hauler', ['rack', 'trailerBox'], { x: 60, y: 60 });
     const g = gridOf(npc);
     const box = mountedParts(npc, 'cargo').find((p) => p.defId === 'trailerBox')!;
-    const tall: GridItem = { id: 'i-tall', x: 0, y: g.chassisH, rot: 1, kind: 'part', part: makePart(w, 'rack', 0) };
+    const rackRows = (partDef('rack') as { extraRows: number }).extraRows;
+    const tall: GridItem = { id: 'i-tall', x: 0, y: g.chassisH + rackRows - 1, rot: 1, kind: 'part', part: makePart(w, 'rack', 0) };
     npc.items.push(tall);
     box.hp = 0;
-    expect(gridOf(npc).deadFrom).toBe(g.chassisH + 1);
+    expect(gridOf(npc).deadFrom).toBe(g.chassisH + rackRows);
     spillDeadRows(w);
     expect(npc.items.some((it) => it.id === 'i-tall')).toBe(false);
     const pile = w.salvage.find((s) => s.pile)!;
@@ -121,7 +123,8 @@ describe('cargo spills', () => {
     const { w, me } = loadedPlayer();
     const gun = me.items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
     const target = onRow(me, lastRow(me))[0];
-    let next = moveItem(w, gun.id, { x: target.x, y: target.y, rot: gun.rot });
+    me.items = me.items.filter((it) => it === target || it.kind !== 'good' || it.y !== target.y);
+    let next = moveItem(w, gun.id, { x: target.x, y: target.y, rot: 1 });
     expect(next.vehicles[0].job?.kind).toBe('refit');
     panniersOf(next.vehicles[0]).hp = 0;
     next = endTurn(next, testDrive);

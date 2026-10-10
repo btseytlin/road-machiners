@@ -1,14 +1,15 @@
 // What a click or double click on an inventory item does. Pure choices, so the view only wires events.
 
+import { Refused } from '../sim/world';
 import { partDef } from "../data/parts";
 import { playerVehicle } from "../sim/damage";
 import { instantMoveItem } from "../sim/cheats";
-import { isMounted } from "../sim/grid";
-import { installSpot, moveItem, storePart, stowSpot, takeFromStorage } from "../sim/inventory";
+import { isMounted, type Spot } from "../sim/grid";
+import { installSpot, moveItem, planItemMove, storePart, stowSpot, takeFromStorage, type RefitLayout } from "../sim/inventory";
 import { takeFromTruck } from "../sim/salvage";
 import { takeLoot } from "../sim/locations";
 import { shopAt } from "../sim/market";
-import type { GridItem, World } from "../sim/types";
+import type { GridItem, Vehicle, World } from "../sim/types";
 
 export const HOLD_TO_DRAG_MS = 300;
 
@@ -78,4 +79,26 @@ function instantGridCommand(w: World, c: ClickedItem): ((w: World) => World) | n
   if (!item || item.kind !== "part" || partDef(item.part.defId).kind === "core") return null;
   const spot = isMounted(me.chassisId, item) ? stowSpot(me, item) : installSpot(me, item);
   return spot ? (next) => instantMoveItem(next, item.id, spot) : null;
+}
+
+export function plannedVehicle(v: Vehicle, plan: RefitLayout): Vehicle {
+  if (Object.keys(plan).length === 0) return v;
+  return { ...v, items: v.items.map((it) => (plan[it.id] ? { ...it, ...plan[it.id] } : it)) };
+}
+
+export function planAfterMove(v: Vehicle, plan: RefitLayout, itemId: string, to: Spot): RefitLayout {
+  const result = planItemMove(plannedVehicle(v, plan), itemId, to);
+  if (result.error !== null) throw new Refused(result.error);
+  const next = { ...plan };
+  for (const move of result.plan.moves) {
+    if (isAtStart(v, move.itemId, move.to)) delete next[move.itemId];
+    else next[move.itemId] = move.to;
+  }
+  return next;
+}
+
+function isAtStart(v: Vehicle, itemId: string, to: Spot): boolean {
+  const start = v.items.find((it) => it.id === itemId);
+  if (!start) throw new Error(`No item ${itemId}`);
+  return start.x === to.x && start.y === to.y && start.rot === to.rot;
 }

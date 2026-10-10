@@ -7,7 +7,7 @@ import { addVehicle, emptyWorld } from './testkit';
 import { corePart, mountedParts } from './grid';
 import { addGoods } from './inventory';
 import { makePart } from './factory';
-import { partValue } from './wear';
+import { maxHp, partValue } from './wear';
 import { planPartRepair, repairPlan } from './repair';
 
 function armorPart(v: ReturnType<typeof emptyWorld>['vehicles'][0]) {
@@ -38,7 +38,7 @@ describe('repairPlan', () => {
     cage.hp = 1;
     addGoods(w, me, 'parts', 20);
     const plan = repairPlan(w, me, cage.id);
-    const cap = partDef(cage.defId).hp * REPAIR.fieldCapShare;
+    const cap = maxHp(cage) * REPAIR.fieldCapShare;
     expect(plan.hp).toBeCloseTo(cap - 1, 5);
     expect(plan.parts).toBeGreaterThan(0);
     expect(plan.turns).toBeGreaterThan(0);
@@ -87,8 +87,8 @@ describe('field repair cap', () => {
     const w = emptyWorld();
     const me = w.vehicles[0];
     const cage = armorPart(me);
-    const max = partDef(cage.defId).hp;
-    cage.hp = Math.floor(max * REPAIR.fieldCapShare);
+    const max = maxHp(cage);
+    cage.hp = max * REPAIR.fieldCapShare;
     expect(repairPlan(w, me, cage.id).needed).toBe(0);
     w.player.ranks.machining = 5;
     const cap = max * (REPAIR.fieldCapShare + 5 * SKILL_EFFECTS.machining.fieldCap);

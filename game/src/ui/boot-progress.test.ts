@@ -1,12 +1,17 @@
 import { describe, expect, it } from 'vitest';
+import { resolve } from '../text/resolve';
+import type { Msg } from '../text/msg';
 import { BOOT_STEPS, BOOT_TEXT, BootProgress, type BootStep } from './boot-progress';
+
+const en = (msg: Msg | null): string => (msg ? resolve(msg, 'en') : '');
+const ru = (msg: Msg | null): string => (msg ? resolve(msg, 'ru') : '');
 
 describe('BootProgress', () => {
   it('starts with the code step running and the rest waiting', () => {
     const p = new BootProgress();
     expect(p.state('code')).toBe('running');
     expect(BOOT_STEPS.slice(1).every((s) => p.state(s) === 'waiting')).toBe(true);
-    expect(p.stageLine).toBe(BOOT_TEXT.code);
+    expect(en(p.stageLine)).toBe(en(BOOT_TEXT.code));
     expect(p.finished).toBe(0);
     expect(p.total).toBe(9);
   });
@@ -25,8 +30,9 @@ describe('BootProgress', () => {
     p.finish('code');
     p.start('sounds');
     p.count('sounds', 31, 76);
-    expect(p.stageLine).toBe('Loading sounds 31 of 76');
-    expect(p.liveLine).toBe('Loading sounds');
+    expect(en(p.stageLine)).toBe('Loading sounds 31 of 76');
+    expect(en(p.liveLine)).toBe('Loading sounds');
+    expect(ru(p.stageLine)).toBe('Загружаем звуки (31 из 76)');
   });
 
   it('joins running steps with a comma', () => {
@@ -34,14 +40,14 @@ describe('BootProgress', () => {
     p.finish('code');
     p.start('map');
     p.start('physics');
-    expect(p.stageLine).toBe('Reading the map, Starting physics');
+    expect(en(p.stageLine)).toBe('Reading the map, Starting physics');
   });
 
   it('labels the world step on start', () => {
     const p = new BootProgress();
     p.finish('code');
     p.start('world', BOOT_TEXT.newGame);
-    expect(p.stageLine).toBe(BOOT_TEXT.newGame);
+    expect(en(p.stageLine)).toBe(en(BOOT_TEXT.newGame));
   });
 
   it('throws on misuse', () => {

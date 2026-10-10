@@ -6,7 +6,7 @@ import type { NpcActivity, NpcBrain } from './types';
 
 function driver(traits: TraitId[], kinds: NpcActivity['kind'][]): NpcBrain {
   const brain = npcBrain('buggy', { x: 0, y: 0 }, traits);
-  brain.goals = kinds.map((kind) => ({ kind, targetId: null, destination: null, phase: 'travel', reason: 'test' }));
+  brain.goals = kinds.map((kind) => ({ kind, targetId: null, destination: null, phase: 'travel', reason: 'idle' }));
   return brain;
 }
 

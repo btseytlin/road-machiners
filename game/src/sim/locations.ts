@@ -6,6 +6,7 @@ import { RULES } from '../data/rules';
 import { playerVehicle } from './damage';
 import { isKnockedOut } from './defeat';
 import { inTowReach } from './tow';
+import { breakLootWarning } from './loot-warning';
 import { canLootTruck, canReachSalvage, collectSalvage, hasRevealed, hasSalvage, hiddenUnits, lootBlocker, pourStores, requireLootFree, salvageInRange, takeBasis } from './salvage';
 import { takeClaimed } from './parley';
 import { newId } from './factory';
@@ -19,7 +20,7 @@ import { isFortress, locationAt, siteGap, type Site } from './sites';
 import { shopAt } from './market';
 import type { GridItem, PartInstance, SalvageStock, Vehicle, World } from './types';
 import { tileCenter } from './vision';
-import { playerCommand } from './world';
+import { playerCommand, Refused } from './world';
 import { suppliesCap } from './stats';
 
 export function discoverSites(world: World): void {
@@ -33,7 +34,8 @@ export function discoverSites(world: World): void {
   }
 }
 
-export function discoverSite(world: World, s: { id: string; name: string }): void {
+// Marks a site found, by sight or by being told the way, and pays the discovery XP once.
+export function discoverSite(world: World, s: { id: string }): void {
   if (world.player.discovered.includes(s.id)) throw new Error(`${s.id} is already discovered`);
   world.player.discovered.push(s.id);
   world.events.push({ t: "discover", location: s.id });
@@ -50,7 +52,7 @@ export function useOasis(world: World): World {
     if (loc?.kind !== 'oasis') throw new Error('Not at an oasis');
     if (!canUseOasis(w)) throw new Error('Stop the truck first');
     w.player.supplies = suppliesCap(playerVehicle(w));
-    w.events.push({ t: "info", text: `Filled supplies at ${loc.name}` });
+    w.events.push({ t: 'info', note: { id: 'filledSupplies', site: loc.id } });
   });
 }
 
@@ -124,6 +126,7 @@ export function canLoot(world: World, stockId: string): boolean {
 export function scavenge(world: World, stockId: string): World {
   return playerCommand(world, (w) => {
     if (w.salvage.some((s) => s.id === stockId)) requireLootFree(w, playerVehicle(w), stockId);
+    breakLootWarning(w, playerVehicle(w), stockId);
     if (!canScavenge(w, stockId)) throw new Error('Nothing to search in reach');
     beginSearch(w, playerVehicle(w), stockId);
   });
@@ -141,7 +144,7 @@ export function takeLoot(world: World, stockId: string, pick: LootPick, to: Spot
       : { id: newId(w, 'i'), kind: 'good', good: pick.good, ...to };
     if (pick.kind === 'good' && (stock.goods[pick.good] ?? 0) <= 0) throw new Error(`No ${pick.good} left here`);
     const err = getLayoutError(me, [...me.items, item]);
-    if (err) throw new Error(err);
+    if (err) throw new Refused(err);
     transferLoot(w, stock, item, to);
   });
 }
@@ -190,6 +193,7 @@ function requireLootable(world: World, stockId: string): SalvageStock {
   if (!world.player.scavenged.includes(stockId)) throw new Error('Search this site first');
   if (!canReachSalvage(playerVehicle(world), stock)) throw new Error('Stop within reach of the salvage');
   requireLootFree(world, playerVehicle(world), stockId);
+  breakLootWarning(world, playerVehicle(world), stockId);
   takeClaimed(world, stock);
   return stock;
 }

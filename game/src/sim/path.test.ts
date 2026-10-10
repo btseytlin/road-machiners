@@ -372,7 +372,7 @@ describe('routes prefer roads', () => {
       const v = addVehicle(w, faction, 'buggy', ['mg', 'stockEngine'], { x: 0, y: 0 });
       v.id = 'v7';
       v.brain = npcBrain('buggy', { x: 0, y: 0 }, traits);
-      v.brain.goals = [{ kind, targetId: null, destination: null, phase: 'travel', reason: 'test' }];
+      v.brain.goals = [{ kind, targetId: null, destination: null, phase: 'travel', reason: 'idle' }];
       return v;
     }
     function drivers(w: World) {
@@ -465,11 +465,11 @@ describe('raiders that keep off roads', () => {
   function raider(w: World, pos: Vec): Vehicle {
     const v = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], pos);
     v.brain = npcBrain('test', pos, []);
-    v.brain.goals = [{ kind: 'sell', targetId: null, destination: null, phase: 'travel', reason: 'test sell' }];
+    v.brain.goals = [{ kind: 'sell', targetId: null, destination: null, phase: 'travel', reason: 'patrolTown' }];
     return v;
   }
   function flee(v: Vehicle): void {
-    v.brain!.goals.push({ kind: 'flee', targetId: null, destination: null, phase: 'travel', reason: 'test flee' });
+    v.brain!.goals.push({ kind: 'flee', targetId: null, destination: null, phase: 'travel', reason: 'escapeAttacker' });
   }
 
   function roadRuns(w: World, from: Vec, points: Vec[]): number[] {

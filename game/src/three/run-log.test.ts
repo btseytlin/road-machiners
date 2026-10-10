@@ -37,7 +37,7 @@ describe('logEntries', () => {
     const events = logEntries(prev, next, true).filter((e) => e.kind === 'event');
 
     expect(events.map((e) => e.event)).toEqual(['destroyed', 'skillUp']);
-    expect(events[0]).toMatchObject({ turn: 400, vehicle: foe.id, by: me, trucks: { [foe.id]: { name: foe.name, faction: foe.faction, chassis: foe.chassisId } } });
+    expect(events[0]).toMatchObject({ turn: 400, vehicle: foe.id, by: me, trucks: { [foe.id]: { name: foe.brain ? foe.brain.driver : foe.id, faction: foe.faction, chassis: foe.chassisId } } });
   });
 
   it('records money and parts gained and lost, which no event covers', () => {

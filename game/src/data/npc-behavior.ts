@@ -14,6 +14,7 @@ const LAW_GATE_REACH = 12;
 export const NPC_BEHAVIOR = {
   stallTurns: 100,
   stallJump: 20,
+  lieUp: { gap: { min: 2, max: 8 }, reach: 1.5, spacing: 1.5 },
   escortFeePerTile: 5,
   weakDecline: 20,
   escortWaitGap: 12,
@@ -34,6 +35,8 @@ export const NPC_BEHAVIOR = {
   hurtFullFlee: 0.1,
   missFlee: 0.5,
   manageableFight: 5,
+  threatLeave: 10,
+  warnAnswerTurns: 5,
   keepWork: 400,
   noticeMemory: 3,
   fleeMemory: 30,
@@ -113,6 +116,11 @@ export const FIRST_NAMES: readonly string[] = [
   'Rook', 'Ruth', 'Sal', 'Sasha', 'Silas', 'Tam', 'Tess', 'Ugo', 'Vera', 'Vic', 'Wade', 'Wren', 'Yuri', 'Zeke',
   'Zoya',
 ];
+
+export const FEMALE_NAMES: ReadonlySet<string> = new Set([
+  'Ada', 'Anya', 'Bea', 'Cass', 'Dora', 'Edda', 'Faye', 'Hester', 'Ida', 'Ivy', 'Juno', 'Kat', 'Lorna', 'Lupe',
+  'Mae', 'Mira', 'Nell', 'Opal', 'Pru', 'Raya', 'Ruth', 'Tess', 'Vera', 'Wren', 'Zoya',
+]);
 
 export const SURNAMES: readonly string[] = [
   'Ash', 'Baines', 'Barrow', 'Boyle', 'Brandt', 'Cobb', 'Crane', 'Culver', 'Dawes', 'Drummond', 'Dust', 'Fisk',

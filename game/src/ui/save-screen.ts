@@ -2,44 +2,53 @@
 // and the report of what the migration kept, refunded and lost.
 
 import type { CarryReport } from '../sim/world';
-import { GOODS } from '../data/goods';
-import { partDef } from '../data/parts';
+import { bindAttr } from '../text/language';
+import { list, t, verbatim, type Msg } from '../text/msg';
+import { goodName, partName, settingName } from '../text/names';
 import { WORLD_SETTINGS } from '../data/modes';
-import { percent } from '../sim/settings';
-import { download, el, panel } from './dom';
+import type { SaveError } from '../three/save';
+import { disabledWith, download, el, panel } from './dom';
 import { openNewGame, type NewGameActions } from './new-game';
-import { moneyText } from './units';
+import { OptionsPanel } from './options';
+import { moneyMsg } from './units';
 
-export function chooseSaveFate(reason: string, canMigrate: boolean, stored: unknown, newGame: NewGameActions): Promise<void> {
+// Why a save does not load, in words.
+export function saveErrorText(error: SaveError): Msg {
+  const code = error.code;
+  if (code !== 'incompatible' && code !== 'newer' && code !== 'notMigrated') return t(`save.error.${code}`);
+  if (!error.format) throw new Error(`Save error ${code} names no format`);
+  return t(`save.error.${code}`, error.format);
+}
+
+export function chooseSaveFate(reason: Msg, canMigrate: boolean, stored: unknown, newGame: NewGameActions): Promise<void> {
   return new Promise((resolve) => {
-    const root = savePanel('Your save needs migrating');
+    const root = savePanel(t('save.needsMigrating'));
     const migrate = () => {
       root.remove();
       resolve();
     };
     root.append(
-      el('div', {}, 'This update changed the world. Migrate keeps your skills, perks, money, truck, parts and cargo, and moves you to a town. The rest of the world starts fresh.'),
+      el('div', {}, t('save.migrateExplain')),
       el('div', { class: 'dim' }, reason),
       el(
         'div',
         { class: 'death-buttons' },
-        el('button', { onclick: migrate, disabled: !canMigrate }, 'Migrate save'),
-        el('button', { onclick: () => openNewGame(newGame, () => {}) }, 'New game'),
-        el('button', { onclick: () => downloadSave(stored) }, 'Download save'),
+        el('button', disabledWith(canMigrate ? null : t('save.unreadable'), migrate), t('save.migrate')),
+        el('button', { onclick: () => openNewGame(newGame, () => {}) }, t('menu.newGame')),
+        el('button', { onclick: () => downloadSave(stored) }, t('save.download')),
       ),
     );
-    if (!canMigrate) root.append(el('div', { class: 'dim' }, 'The save is unreadable'));
-    root.append(el('div', { class: 'dim' }, 'If this looks like a bug, download the save and attach it to a GitHub issue.'));
+    root.append(el('div', { class: 'dim' }, t('save.reportBug')));
   });
 }
 
 export function showCarryReport(report: CarryReport): Promise<void> {
   return new Promise((resolve) => {
-    const root = savePanel('Save migrated');
+    const root = savePanel(t('save.migrated'));
     const lines = reportLines(report);
     root.append(
-      ...(lines.length === 0 ? [el('div', {}, 'Everything carried over')] : lines.map((line) => el('div', {}, line))),
-      el('div', { class: 'death-buttons' }, el('button', { onclick: () => { root.remove(); resolve(); } }, 'Drive on')),
+      ...(lines.length === 0 ? [el('div', {}, t('save.allCarried'))] : lines.map((line) => el('div', {}, line))),
+      el('div', { class: 'death-buttons' }, el('button', { onclick: () => { root.remove(); resolve(); } }, t('save.driveOn'))),
     );
   });
 }
@@ -48,21 +57,24 @@ function downloadSave(stored: unknown): void {
   download('roam-save.json', typeof stored === 'string' ? stored : JSON.stringify(stored), 'application/json');
 }
 
-function savePanel(title: string): HTMLElement {
+// Boot shows these screens before any menu, so their header opens the same Options panel the Menu does.
+const options = new OptionsPanel(() => document.querySelector<HTMLElement>('.save-screen .options-button')?.focus());
+
+function savePanel(title: Msg): HTMLElement {
   const root = panel('death save-screen');
   root.setAttribute('role', 'alertdialog');
-  root.setAttribute('aria-label', title);
-  root.append(el('h3', {}, title));
+  bindAttr(root, 'aria-label', title);
+  root.append(el('h3', {}, title), el('button', { class: 'options-button', onclick: () => options.open() }, t('menu.options')));
   return root;
 }
 
-function reportLines(report: CarryReport): string[] {
-  const garage = report.toGarage.map((id) => partDef(id).name);
-  const sold = report.sold.map((s) => `${s.units} ${GOODS[s.good].name} sold for ${moneyText(s.money)}`);
+// Lost ids are no longer in the game, so they have no words. They show as the ids the save held.
+function reportLines(report: CarryReport): Msg[] {
+  const sold = report.sold.map((s) => t('save.sold', { n: s.units, good: goodName(s.good), money: moneyMsg(s.money) }));
   return [
-    ...(garage.length > 0 ? [`Moved to the garage: ${garage.join(', ')}`] : []),
+    ...(report.toGarage.length > 0 ? [t('save.toGarage', { parts: list(report.toGarage.map(partName)) })] : []),
     ...sold,
-    ...(report.lost.length > 0 ? [`Lost, no longer in the game: ${report.lost.join(', ')}`] : []),
-    ...report.settingsReset.map((id) => `${WORLD_SETTINGS[id].name} was reset to ${percent(WORLD_SETTINGS[id].default)}`),
+    ...(report.lost.length > 0 ? [t('save.lost', { ids: list(report.lost.map(verbatim)) })] : []),
+    ...report.settingsReset.map((id) => t('save.settingReset', { setting: settingName(id), pct: Math.round(WORLD_SETTINGS[id].default * 100) })),
   ];
 }

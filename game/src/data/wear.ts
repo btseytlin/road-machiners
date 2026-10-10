@@ -3,16 +3,13 @@
 // Part condition. A part gains one wear step each time it drops to 0 HP. See src/sim/condition.ts.
 export const CONDITION = {
   maxWear: 4,
-  hpLoss: 0.1,
   valueFactor: [1, 0.7, 0.55, 0.45, 0.35],
-  statLoss: {
-    spread: 0.15,
+  stepLoss: 0.027,
+  speedLoss: {
     speedBonus: 0.26,
     accelBonus: 0.1,
-    armor: 0.12,
-    scannerRange: 0.1,
-    reloadPercent: 10,
   },
+  reloadPercent: 10,
 };
 
 export const WEAR = {

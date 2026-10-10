@@ -1,0 +1,11 @@
+{
+ "turn": 640,
+ "states": [
+  { "id": "state-12", "kind": "feud", "holder": "npc-3", "other": "player", "turnsLeft": 8, "born": 631, "data": { "kind": "feud", "robbery": false } },
+  { "id": "state-13", "kind": "backedOff", "holder": "npc-4", "other": "npc-3", "turnsLeft": 21, "born": 630, "data": { "kind": "none" } }
+ ],
+ "player": {
+  "vehicleId": "player",
+  "call": { "with": "npc-4", "topic": "rob", "node": "hear", "vars": { "answer": { "kind": "answer", "option": "comply" } }, "line": { "text": "Say that again?", "vars": {} } }
+ }
+}

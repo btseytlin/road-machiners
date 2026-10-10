@@ -11,7 +11,7 @@ import type { DeckSpec, DeckStation } from './terrain';
 export { onOrchardRoad };
 
 export type SpotTable = 'landmark' | 'hullScrap' | 'roadWreck' | 'farmStores' | 'armyStores' | 'engineScrap' | 'cityStores';
-export const WRECK_LOOKS: readonly PropKind[] = ['armyTruck', 'shipCache', 'hullCache'];
+export const WRECK_LOOKS: readonly PropKind[] = ['armyTruck', 'shipCache', 'hullCache', 'tank'];
 export type Hazard = {
   radius: number;
   healthPerTurn: number;

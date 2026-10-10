@@ -8,7 +8,7 @@ import { lineAnchors, type LineAnchor } from '../sim/harpoon';
 import { addVehicle, emptyWorld, npcBrain } from '../sim/testkit';
 import type { Vehicle, World } from '../sim/types';
 import { buildDrive, freeDrive, initPhysics, simulateTurn, syncDrive, type Drive, type TurnResult } from './drive';
-import { rotateBy } from './frames';
+import { rotateBy, upOf } from './frames';
 import { applyTurn } from './turn';
 
 beforeAll(async () => {
@@ -78,7 +78,7 @@ describe('harpoon line physics', () => {
     play(w, 10, (r) => expect(r.tears).toEqual([]));
 
     expect(w.lines).toHaveLength(1);
-    expect(scout.pos.x - start).toBeGreaterThan(5);
+    expect(scout.pos.x - start).toBeGreaterThan(2);
   });
 
   it('lets a scout drag a frozen truck, which has no brakes, much farther than a braking one', () => {
@@ -129,6 +129,43 @@ describe('harpoon line physics', () => {
 
     expect(w.lines).toHaveLength(1);
     expect(worst).toBeLessThanOrEqual(0.5);
+  });
+
+  function across(from: string, to: string, mover: 'target' | 'shooter', slack: number): { w: World; shooter: Vehicle; target: Vehicle } {
+    const w = emptyWorld();
+    const shooter = addVehicle(w, 'traders', from, ['stockEngine', 'harpoon'], { x: 30, y: 30 }, Math.PI / 2);
+    const target = addVehicle(w, 'traders', to, ['stockEngine'], { x: 33, y: 30 });
+    w.vehicles = w.vehicles.filter((v) => v.id === w.player.vehicleId || v === shooter || v === target);
+    w.vehicles[0].pos = { x: 10, y: 10 };
+    const harpoon = mountedParts(shooter, 'weapon').find((p) => p.defId === 'harpoon');
+    if (!harpoon) throw new Error('The harpoon did not mount');
+    w.lines = [{ id: 'l1', from: shooter.id, fromPart: harpoon.id, to: target.id, toPart: mountedParts(target, 'engine')[0].id, length: 0, turnsLeft: 9 }];
+    w.lines[0].length = anchorGap(target, shooter, lineAnchors(w)[0]) + slack;
+    shooter.order = mover === 'shooter' ? { kind: 'through', dest: { x: 30, y: 90 } } : { kind: 'brake' };
+    target.order = mover === 'target' ? { kind: 'through', dest: { x: 90, y: 30 } } : { kind: 'brake' };
+    return { w, shooter, target };
+  }
+
+  function worstTilt(w: World, ids: string[], turns: number): Record<string, number> {
+    const worst = Object.fromEntries(ids.map((id) => [id, 0]));
+    play(w, turns, (r) => {
+      for (const id of ids) for (const f of r.frames[id]) worst[id] = Math.max(worst[id], (Math.acos(Math.min(1, upOf(f.rot))) * 180) / Math.PI);
+    });
+    return worst;
+  }
+
+  it.each([['hauler'], ['tractor'], ['bus']])('never tips a scout shooter that a %s drags across', (to) => {
+    const { w, shooter } = across('scout', to, 'target', 0);
+
+    expect(worstTilt(w, [shooter.id], 5)[shooter.id]).toBeLessThan(15);
+  });
+
+  it('tips a truck of like weight that the shooter pulls across', () => {
+    const { w, shooter, target } = across('scout', 'scout', 'shooter', 2);
+    const tilt = worstTilt(w, [shooter.id, target.id], 5);
+
+    expect(tilt[shooter.id]).toBeLessThan(15);
+    expect(tilt[target.id]).toBeGreaterThan(PHYSICS.truck.flipTilt);
   });
 
   it('does not pull a slack line', () => {

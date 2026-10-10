@@ -362,7 +362,7 @@ describe('isExpired', () => {
 
 describe('bounty settlement', () => {
   const held = (id: string, template = 'buggy', shop = 'bowl'): Contract =>
-    ({ id, shop, kind: 'bounty', template, targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1, fulfilled: false });
+    ({ id, shop, kind: 'bounty', template, reward: 100, deadline: 900, window: 900, tier: 1, fulfilled: false });
 
   function settle(w: World, contracts: Contract[], events: GameEvent[], removed: Vehicle[] = []): World {
     return update(w, (d) => {
@@ -546,7 +546,7 @@ describe('contract boards and delivery', () => {
 
   it('refuses a haul that does not fit the grid and leaves the board unchanged', () => {
     const w = atBowlWithOffer(haul('nose', 999));
-    expect(() => acceptContract(w, 'ct-haul')).toThrow(/free cells/);
+    expect(() => acceptContract(w, 'ct-haul')).toThrow(/free cells|noCargoRoom/);
     expect(w.shops.bowl.contracts).toHaveLength(1);
   });
 
@@ -615,8 +615,8 @@ describe('contract boards and delivery', () => {
     expect(warned(deadline - CONTRACTS.warnTurns + 1)).toHaveLength(0);
   });
 
-  const bounty = (id: string, targetName = 'Target'): Contract =>
-    ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName, reward: 400, deadline: 900, window: 900, tier: 2, fulfilled: false });
+  const bounty = (id: string): Contract =>
+    ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', reward: 400, deadline: 900, window: 900, tier: 2, fulfilled: false });
 
   function holding(...held: Contract[]): { w: World; raider: Vehicle } {
     const w = emptyWorld(sitePads(bowl)[0]);
@@ -759,7 +759,7 @@ describe('contract boards and delivery', () => {
 });
 
 describe('bounties in a real fight', () => {
-  const bounty = (id: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', targetName: 'Raider outrider', reward: 100, deadline: 900, window: 900, tier: 1, fulfilled: false });
+  const bounty = (id: string): Contract => ({ id, shop: 'bowl', kind: 'bounty', template: 'buggy', reward: 100, deadline: 900, window: 900, tier: 1, fulfilled: false });
   const contractEvents = (w: World) => w.events.filter((e) => e.t === 'contract');
 
   function sharedFight(seed: number) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NPCS } from '../data/npcs';
+import { NPC_BEHAVIOR, NPCS } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { advanceNpcKnockouts, isDefeated } from './defeat';
@@ -52,7 +52,7 @@ describe('a raider unfit to hunt', () => {
     forceOption('idle', 'raid');
     expect(corePart(v, 'cab').hp).toBe(maxHp(corePart(v, 'cab')));
     expect(fitToHunt(w, v)).toBe(false);
-    expect(thinkNpc(w, v)).toMatchObject({ kind: 'resupply', targetId: 'kiln', reason: 'unfit to hunt' });
+    expect(thinkNpc(w, v)).toMatchObject({ kind: 'resupply', targetId: 'kiln', reason: 'unfitToHunt' });
     expect(v.brain!.goals.map((g) => g.kind)).toEqual(['resupply']);
   });
 
@@ -81,6 +81,9 @@ function npcTurn(w: World, v: Vehicle): void {
   w.events = [];
   w.turn++;
   thinkNpc(w, v);
+  const top = topGoal(v);
+  if (top?.kind === 'rearm') v.pos = { ...top.destination! };
+  if (top?.kind === 'retreat') v.pos = { ...sitePads(npcHomeSite(v)!)[0] };
   resolveNpcActivities(w);
   watchStalls(w);
   expect(w.events.filter((e) => e.t === 'stall')).toEqual([]);
@@ -135,6 +138,30 @@ describe('the lie-up for fresh gear', () => {
     expect(goalKinds(v)).not.toContain('rearm');
   });
 
+  it('lies up at a random free spot beyond the camp edge and off its pad, apart from a truck already lying up', () => {
+    const { w, v } = raider();
+    crippleGear(v);
+    getResources(w, v).money = 0;
+    serveAtCamp(w, v);
+    const first = topGoal(v)!.destination!;
+    v.pos = { ...first };
+    const other = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine', 'plates'], outside(20));
+    other.brain = npcBrain('buggy', other.pos, NPCS.buggy.traits);
+    crippleGear(other);
+    getResources(w, other).money = 0;
+    serveAtCamp(w, other);
+    const second = topGoal(other)!.destination!;
+
+    for (const spot of [first, second]) {
+      expect(sitePads(kiln).some((pad) => dist(pad, spot) < 0.01)).toBe(false);
+      expect(dist(spot, kiln.pos) - kiln.radius).toBeGreaterThanOrEqual(NPC_BEHAVIOR.lieUp.gap.min);
+      expect(dist(spot, kiln.pos) - kiln.radius).toBeLessThanOrEqual(NPC_BEHAVIOR.lieUp.gap.max);
+    }
+    expect(dist(first, second)).toBeGreaterThanOrEqual(2 * RULES.arriveRadius + NPC_BEHAVIOR.lieUp.spacing);
+    expect(liesUp(v)).toBe(true);
+    expect(liesUp(other)).toBe(false);
+  });
+
   it('ends without fresh gear once the driver is fit again', () => {
     const { w, v } = raider();
     getResources(w, v).health = RULES.maxHealth * 0.4;
@@ -147,7 +174,7 @@ describe('the lie-up for fresh gear', () => {
     getResources(w, v).health = RULES.maxHealth * 0.6;
     npcTurn(w, v);
     expect(goalKinds(v)).not.toContain('rearm');
-    expect(w.events).toContainEqual(expect.objectContaining({ t: 'activity', previous: 'rearm', reason: 'fit again' }));
+    expect(w.events).toContainEqual(expect.objectContaining({ t: 'activity', previous: 'rearm', reason: 'fitAgain' }));
     expect(itemIds(v)).toEqual(items);
   });
 

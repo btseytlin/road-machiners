@@ -1,10 +1,9 @@
 // HTML labels floating over the map: site labels for towns and locations, and vehicle markers. Site labels
 // follow the old 2D WorldScene rules: sites under never-explored fog or past gray vision show nothing, explored but
-// undiscovered sites show ???, discovered sites show their name. A wreck a driver told of shows a rumor label,
+// undiscovered sites show ???, discovered sites show their name. setText writes a label only when its words change. A wreck a driver told of shows a rumor label,
 
 import { REGION } from '../../data/region';
 import { groundPoint, type VehicleFrame } from '../../phys/frames';
-import { PAL } from '../../render/palette';
 import type { World } from '../../sim/types';
 import type { Vec } from '../../sim/vec';
 import { el } from '../../ui/dom';
@@ -13,22 +12,17 @@ import type { JobMark, VehicleMark, WeaponMark } from '../../ui/weapons';
 import { playerExplored } from '../../sim/vision';
 import type { CameraRig } from './camera';
 import type { SightLimit } from './scope';
+import { setText } from '../../text/language';
+import { num, t } from '../../text/msg';
+import { siteName } from '../../text/names';
 
 const LABEL_LIFT_PX = 90;
-const RUMOR_TEXT = 'Wreck (rumor)';
 
-type Site = { id: string; name: string; pos: { x: number; y: number } };
+type Site = { id: string; pos: { x: number; y: number } };
 
 function labelEl(container: HTMLElement): HTMLDivElement {
   const el = document.createElement('div');
-  el.style.position = 'absolute';
-  el.style.transform = 'translate(-50%, -100%)';
-  el.style.font = '15px var(--font-mono)';
-  el.style.color = PAL.text;
-  el.style.background = '#1a1410aa';
-  el.style.padding = '3px 6px';
-  el.style.whiteSpace = 'nowrap';
-  el.style.pointerEvents = 'none';
+  el.className = 'world-label';
   container.appendChild(el);
   return el;
 }
@@ -54,7 +48,7 @@ export class Labels {
   update(world: World, rig: CameraRig, limit: SightLimit): void {
     for (const s of sites()) {
       const el = this.els.get(s.id)!;
-      el.textContent = world.player.discovered.includes(s.id) ? s.name : '???';
+      setText(el, world.player.discovered.includes(s.id) ? siteName(s.id) : t('map.unknownSite'));
       place(el, world, s.pos, rig, limit, playerExplored(world, s.pos));
     }
     this.updateRumors(world, rig, limit);
@@ -72,7 +66,7 @@ export class Labels {
       let el = this.rumors.get(stock.id);
       if (!el) {
         el = labelEl(this.container);
-        el.textContent = RUMOR_TEXT;
+        setText(el, t('map.rumor'));
         this.rumors.set(stock.id, el);
       }
       place(el, world, stock.pos, rig, limit, true);
@@ -87,7 +81,7 @@ function sites(): Site[] {
 function weaponChip(mark: WeaponMark): HTMLElement {
   return el('div', { class: `marker-weapon ${mark.ready ? 'ready' : 'blocked'}`, title: mark.status },
     createIcon(mark.look),
-    el('span', { class: 'marker-slot' }, String(mark.slot)),
+    el('span', { class: 'marker-slot' }, num(mark.slot, 'int')),
     el('span', { class: 'marker-status' }, mark.status),
   );
 }
@@ -95,7 +89,7 @@ function weaponChip(mark: WeaponMark): HTMLElement {
 function jobChip(job: JobMark): HTMLElement {
   return el('div', { class: 'marker-job' },
     el('span', {}, job.label),
-    el('span', { class: 'job-bar' }, el('span', { style: `width:${Math.round(job.progress * 100)}%` })),
+    el('span', { class: 'job-bar meter progress' }, el('span', { style: `width:${Math.round(job.progress * 100)}%` })),
   );
 }
 
@@ -106,8 +100,8 @@ function weaponsRow(weapons: WeaponMark[]): HTMLElement | null {
 function markerNode(mark: VehicleMark): HTMLElement {
   return el('div', { class: 'vehicle-marker' },
     weaponsRow(mark.weapons),
-    mark.radio ? el('div', { class: 'marker-radio' }, '[T] Radio') : null,
-    mark.out ? el('div', { class: 'marker-out' }, mark.gaveUp ? 'Gave up' : 'Knocked out') : null,
+    mark.radio ? el('div', { class: 'marker-radio' }, t('map.radio')) : null,
+    mark.out ? el('div', { class: 'marker-out' }, mark.gaveUp ? t('npc.gaveUp') : t('npc.knockedOut')) : null,
     mark.job ? jobChip(mark.job) : null,
   );
 }

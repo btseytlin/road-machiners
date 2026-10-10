@@ -29,18 +29,18 @@ NPC behavior has three layers. Traits in `brain.traits` are permanent. A goal st
 | id | robs | boldness | fuel margin | weight changes |
 | --- | --- | --- | --- | --- |
 | scavenger | offDuty | 1 | 1 | idle.scavenge +10, salvageSeen.loot +3, strandedSeen.tow +9, hostileSeen.fight +2, aidAsked.give  x2, needySeen.aid +0.02 |
-| trader | offDuty | 1 | 0.75 | idle.trade +30, idle.haul +1, strandedSeen.tow +9, hostileSeen.fight  x0.002, attacked.fightBack  x0.1, ramChance.ram  x0.001, crashed.retaliate  x0.2, parley.truce +2, truceOffered.accept +4, mercyBegged.spare +3, threatened.comply +1, threatened.fightBack  x0.1, warnedOff.comply +1, warnedOff.fightBack  x0.1, escortSeen.hire +1, aidAsked.give  x2, needySeen.aid +0.02 |
-| raider | offDuty | 1 | 1 | idle.raid +9, idle.patrol +6, contactHeard.investigate +10.8, hostileSeen.fight +7.2, strandedSeen.tow +9, crashed.retaliate +3, parley.truce  x0.3, parley.beg  x0.3, truceOffered.refuse +2, mercyBegged.finish +2, threatened.comply  x0.2, threatened.fightBack +2, warnedOff.comply  x0.2, warnedOff.fightBack +2 |
-| scumbag | offDuty | 1.3 | 1 | preySeen.rob +0.45, crashed.retaliate +1 |
-| coward | offDuty | 0.6 | 1.4 | hostileSeen.flee  x3, hostileSeen.fight  x0.5, attacked.flee  x3, attacked.fightBack  x0.3, parley.truce  x2, parley.beg  x3, threatened.flee  x3, threatened.comply +1, warnedOff.comply +1, escortSeen.hire  x3, fightWhim.veer  x3 |
+| trader | offDuty | 1 | 0.75 | idle.trade +30, idle.haul +1, strandedSeen.tow +9, hostileSeen.fight  x0.002, attacked.fightBack  x0.1, ramChance.ram  x0.001, crashed.retaliate  x0.2, parley.truce +2, truceOffered.accept +4, mercyBegged.spare +3, threatened.comply +1, threatened.fightBack  x0.1, warnedOff.comply +1, warnedOff.fightBack  x0.1, lootContested.leave  x3, warnRefused.leave  x3, escortSeen.hire +1, aidAsked.give  x2, needySeen.aid +0.02 |
+| raider | offDuty | 1 | 1 | idle.raid +9, idle.patrol +6, contactHeard.investigate +10.8, hostileSeen.fight +7.2, strandedSeen.tow +9, crashed.retaliate +3, parley.truce  x0.3, parley.beg  x0.3, truceOffered.refuse +2, mercyBegged.finish +2, threatened.comply  x0.2, threatened.fightBack +2, warnedOff.comply  x0.2, warnedOff.fightBack +2, lootContested.warn +4, lootContested.fight +1, warnRefused.fight +2 |
+| scumbag | offDuty | 1.3 | 1 | preySeen.rob +0.45, crashed.retaliate +1, lootContested.warn +2, lootContested.fight +0.5, warnRefused.fight +1 |
+| coward | offDuty | 0.6 | 1.4 | hostileSeen.flee  x3, hostileSeen.fight  x0.5, attacked.flee  x3, attacked.fightBack  x0.3, parley.truce  x2, parley.beg  x3, threatened.flee  x3, threatened.comply +1, warnedOff.comply +1, lootContested.leave  x3, warnRefused.leave  x3, escortSeen.hire  x3, fightWhim.veer  x3 |
 | lawman | never | 1 | 1 | idle.patrol +20, idle.wait +2, idle.scavenge  x0.05, hostileSeen.fight +8, attacked.fightBack  x2, strandedSeen.tow +9, parley.truce  x0.3, parley.beg  x0.3, threatened.comply  x0.2, threatened.fightBack +2, warnedOff.comply  x0.2, warnedOff.fightBack +2 |
-| courier | offDuty | 1 | 1 | idle.travel +20, idle.scavenge  x0.001, strandedSeen.tow +2, hostileSeen.fight  x0.1, threatened.comply +1, warnedOff.comply +1, escortSeen.hire +0.5 |
+| courier | offDuty | 1 | 1 | idle.travel +20, idle.scavenge  x0.001, strandedSeen.tow +2, hostileSeen.fight  x0.1, threatened.comply +1, warnedOff.comply +1, escortSeen.hire +0.5, lootContested.leave  x3 |
 | roamer | offDuty | 1 | 1 | idle.explore +10, idle.trade +3, idle.scavenge +2, salvageSeen.loot +3, strandedSeen.tow +3, escortSeen.hire +0.2, aidAsked.give  x2, needySeen.aid +0.02 |
 | vulture | offDuty | 1 | 1 | idle.prowl +10, idle.scavenge +2, salvageSeen.loot +20, crashed.retaliate +0.5 |
 | supplier | never | 1 | 1 | idle.haul +30, idle.trade +15, idle.scavenge  x0.001, strandedSeen.tow +9, hostileSeen.fight  x0.002, attacked.fightBack  x0.1, threatened.comply +1, threatened.fightBack  x0.1, warnedOff.comply +1, warnedOff.fightBack  x0.1 |
 | guard | never | 1 | 1 | idle.escort +30, idle.wait +5, idle.travel +1, idle.scavenge  x0.001, hostileSeen.fight +8, attacked.fightBack  x2, threatened.comply  x0.2, threatened.fightBack +2, warnedOff.comply  x0.2, warnedOff.fightBack +2 |
 | merc | offDuty | 1 | 1 | idle.wait +10, idle.travel +1, idle.scavenge  x0.001, hostileSeen.fight +4, attacked.fightBack  x2, threatened.comply  x0.2, threatened.fightBack +2, warnedOff.comply  x0.2, warnedOff.fightBack +2 |
-| brave | offDuty | 1.5 | 1 | hostileSeen.flee  x0.05, contactHeard.flee  x0.05, attacked.flee  x0.05, parley.truce  x0.05, parley.beg  x0.05, threatened.flee  x0.05, threatened.comply  x0.05, warnedOff.comply  x0.05, fightWhim.rush  x3 |
+| brave | offDuty | 1.5 | 1 | hostileSeen.flee  x0.05, contactHeard.flee  x0.05, attacked.flee  x0.05, parley.truce  x0.05, parley.beg  x0.05, threatened.flee  x0.05, threatened.comply  x0.05, warnedOff.comply  x0.05, lootContested.warn  x2, lootContested.leave  x0.5, lootContested.fight  x3, warnRefused.fight  x3, fightWhim.rush  x3 |
 <!-- /wiki:traits -->
 
 ## Decisions
@@ -94,6 +94,11 @@ Base weights of every option at each decision point. Traits and states add or mu
 | warnedOff | comply | 1 |
 | warnedOff | refuse | 1 |
 | warnedOff | fightBack | 1 |
+| lootContested | warn | 4 |
+| lootContested | leave | 5.7 |
+| lootContested | fight | 0.2 |
+| warnRefused | leave | 3 |
+| warnRefused | fight | 1 |
 | mugging | demand | 3 |
 | mugging | attack | 2 |
 | resume | resume | 9 |
@@ -141,31 +146,32 @@ A timed state between two vehicles, like a feud or a tow, is owned by `src/sim/s
 | strayFire | 60 | false |
 | aid | 20 | true |
 | combat | 10 | false |
+| lootWarning | 30 | false |
 <!-- /wiki:state-kinds -->
 
 ## Gear levels
 
-`src/sim/npc-loadout.ts` rolls each NPC a level, then its chassis and its engine with the engine's wear, then the main gun among those that keep the truck at `MIN_NPC_SPEED`, twice a crawl. The level sets the money, the wear and the cargo. The gear money is the level's share of what the template budget leaves past this base build. The driver then adds one gun, or covers one side with one armor type, at a time, by the fight model in `src/sim/npc-gear-score.ts`. It expects a fight with a truck like its own and counts each side's guns and the rounds that side takes before the truck stops. A faster attacker picks the weakest side, and a faster driver gets away if its rear holds. The template's priorities weigh firepower, armor, the speed it keeps and the room for its biggest load.
+`src/sim/npc-loadout.ts` rolls each NPC a level and a chassis. The level sets the gear money past the chassis, the wear and the cargo. The driver then buys one part at a time from every part in the game. Each step looks at `GEAR_DRAWS` random offers and takes the best gain for the money, or with `GEAR_WHIM` odds a random offer. The gain is the change in the score in `src/sim/npc-gear-score.ts`, which adds armor, guns and speed. The template's priorities weigh each part of the score and the room for its biggest load. Armor counts the quality on each side. Guns count by arc and facing on each side, and each side saturates. `GEAR_SCORE` holds the scales.
 
 <!-- wiki:gear-levels -->
-| level | budget mult | wear shift | cargo mult |
+| level | gear money M | wear step odds | cargo mult |
 | --- | --- | --- | --- |
-| poor | 0.6 | 1 | 0.5 |
-| light | 0.85 | 0 | 0.75 |
-| standard | 1.15 | 0 | 1 |
-| heavy | 1.6 | 0 | 1 |
-| loaded | 2.4 | 0 | 1.5 |
+| poor | 1,250 | 3:1 4:15 | 0.5 |
+| light | 1,460 | 2:1 3:3 4:12 | 0.75 |
+| standard | 1,710 | 2:1 3:3 4:12 | 1 |
+| heavy | 2,080 | 2:1 3:3 4:12 | 1 |
+| loaded | 2,750 | 2:1 3:3 4:12 | 1.5 |
 <!-- /wiki:gear-levels -->
 
 <!-- wiki:loadout-priorities -->
 | template | speed | firepower | armor | cargo |
 | --- | --- | --- | --- | --- |
 | buggy | 3 | 3 | 3 | 1 |
-| gunwagon | 0 | 3 | 3 | 0 |
+| gunwagon | 0.1 | 3 | 3 | 0 |
 | trader | 1 | 1 | 3 | 3 |
 | scavenger | 1 | 1 | 3 | 3 |
-| bowlFarmer | 0 | 3 | 3 | 0 |
-| noseArmy | 0 | 3 | 3 | 0 |
+| bowlFarmer | 0.1 | 3 | 3 | 0 |
+| noseArmy | 0.1 | 3 | 3 | 0 |
 | courier | 3 | 1 | 3 | 2 |
 | roamer | 2 | 1 | 3 | 2 |
 | vulture | 1 | 1 | 3 | 3 |

@@ -33,7 +33,7 @@ function carriedOf(over: Partial<Carried> = {}): Carried {
   return {
     seed: 99, money: 777, xp: 340, ranks: { driving: 2, social: 1 }, xpBySource: { ram: 12 }, perks: [], discovered: [],
     knockouts: 2, autoFire: true, autoRepair: false, fuel: 5, supplies: 3, costBasis: { scrap: 8 },
-    truck: { chassisId: 'scout', name: 'Rusty', items: kitItems() }, storage: [], setup: undefined, ...over,
+    truck: { chassisId: 'scout', items: kitItems() }, storage: [], setup: undefined, quests: { world: {}, local: {} }, ...over,
   };
 }
 
@@ -42,7 +42,7 @@ const defIds = (items: { kind: string; part?: { defId: string } }[]) => items.fl
 describe('carriedWorld', () => {
   it('keeps progression, the truck and the garage, and parks on a town pad', () => {
     const items = kitItems().map((it) => (it.kind === 'part' && it.part.defId === 'mg' ? { ...it, part: part('mg', { wear: 2, hp: 5 }) } : it));
-    const { world, report } = carriedWorld(carriedOf({ truck: { chassisId: 'scout', name: 'Rusty', items }, storage: [part('plates', { wear: 1 })] }), KIT, TEST_MAP, fresh);
+    const { world, report } = carriedWorld(carriedOf({ truck: { chassisId: 'scout', items }, storage: [part('plates', { wear: 1 })] }), KIT, TEST_MAP, fresh);
     const truck = playerVehicle(world);
     expect(townAt(world)).not.toBeNull();
     expect(world.seed).toBe(99);
@@ -51,7 +51,6 @@ describe('carriedWorld', () => {
     expect(world.player.xp).toBe(340);
     expect(world.player.ranks).toEqual({ driving: 2, perception: 0, machining: 0, toughness: 0, social: 1 });
     expect(world.player.xpBySource.ram).toBe(12);
-    expect(truck.name).toBe('Rusty');
     const mg = truck.items.find((it) => it.kind === 'part' && it.part.defId === 'mg');
     expect(mg?.kind === 'part' && [mg.part.wear, mg.part.hp]).toEqual([2, 5]);
     expect(defIds(truck.items)).toEqual(expect.arrayContaining(KIT.parts));
@@ -64,7 +63,7 @@ describe('carriedWorld', () => {
 
   it('sends a part with an invalid spot to the garage', () => {
     const items = kitItems().map((it) => (it.kind === 'part' && it.part.defId === 'mg' ? { ...it, x: 99, y: 99 } : it));
-    const { world, report } = carriedWorld(carriedOf({ truck: { chassisId: 'scout', name: null, items } }), KIT, TEST_MAP, fresh);
+    const { world, report } = carriedWorld(carriedOf({ truck: { chassisId: 'scout', items } }), KIT, TEST_MAP, fresh);
     expect(report.toGarage).toEqual(['mg']);
     expect(world.player.storage.map((p) => p.defId)).toEqual(['mg']);
     expect(defIds(playerVehicle(world).items)).not.toContain('mg');
@@ -72,7 +71,7 @@ describe('carriedWorld', () => {
 
   it('sells goods with no room at base value and keeps the money books', () => {
     const many: CarriedItem[] = Array.from({ length: 200 }, () => ({ kind: 'good', good: 'scrap', x: 0, y: 0, rot: 0 }));
-    const { world, report } = carriedWorld(carriedOf({ truck: { chassisId: 'scout', name: null, items: [...kitItems().filter((it) => it.kind === 'part'), ...many] } }), KIT, TEST_MAP, fresh);
+    const { world, report } = carriedWorld(carriedOf({ truck: { chassisId: 'scout', items: [...kitItems().filter((it) => it.kind === 'part'), ...many] } }), KIT, TEST_MAP, fresh);
     const held = playerVehicle(world).items.filter((it) => it.kind === 'good').length;
     expect(report.sold).toHaveLength(1);
     expect(report.sold[0].units).toBe(200 - held);
@@ -82,9 +81,9 @@ describe('carriedWorld', () => {
 
   it('lists unknown ids as lost and gives an unknown chassis the kit truck', () => {
     const items: CarriedItem[] = [...kitItems(), { kind: 'part', part: part('ghostGun'), x: 0, y: 0, rot: 0 }, { kind: 'good', good: 'ghostGood', x: 0, y: 0, rot: 0 }];
-    const known = carriedWorld(carriedOf({ truck: { chassisId: 'scout', name: null, items } }), KIT, TEST_MAP, fresh);
+    const known = carriedWorld(carriedOf({ truck: { chassisId: 'scout', items } }), KIT, TEST_MAP, fresh);
     expect(known.report.lost.sort()).toEqual(['ghostGood', 'ghostGun']);
-    const other = carriedWorld(carriedOf({ truck: { chassisId: 'ghostChassis', name: null, items }, storage: [part('ghostPlate')] }), KIT, TEST_MAP, fresh);
+    const other = carriedWorld(carriedOf({ truck: { chassisId: 'ghostChassis', items }, storage: [part('ghostPlate')] }), KIT, TEST_MAP, fresh);
     expect(other.report.lost).toEqual(expect.arrayContaining(['ghostChassis', 'ghostGun', 'ghostGood', 'ghostPlate']));
     expect(playerVehicle(other.world).chassisId).toBe(KIT.chassis);
     expect(other.world.player.storage.map((p) => p.defId)).toEqual(expect.arrayContaining(['mg']));
