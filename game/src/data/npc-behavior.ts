@@ -31,6 +31,7 @@ export const NPC_BEHAVIOR = {
   dangerSpread: 0.25,
   threatFlee: 20,
   weakFlee: 20,
+  hunterFlee: 0.1,
   trappedFlee: 0.2,
   hurtFullFlee: 0.1,
   missFlee: 0.5,
@@ -45,7 +46,6 @@ export const NPC_BEHAVIOR = {
   fightStallTurns: 20,
   fightWearShare: 0.05,
   crippledInvestigate: 0.01,
-  watchKeep: 30,
   lootedResume: 0.01,
   ram: {
     partWeight: { cab: 4, wheel: 2, transmission: 2, tank: 1, engine: 3, weapon: 3, armor: 0.25, scanner: 1, store: 1, cargo: 1, utility: 1 },
@@ -60,6 +60,7 @@ export const NPC_BEHAVIOR = {
   lootAppeal: {
     rob: { poor: 5000, rich: 16667, poorMul: 0.02 },
     raid: { poor: 0, rich: 13333, poorMul: 0.002 },
+    hunt: { poor: 0, rich: 6667, poorMul: 0.002 },
   },
   fightNearGuards: 0.001,
   towNearTown: { factor: 0.02, crawl: 15, far: 60 },
@@ -97,8 +98,9 @@ export const HUNT = {
   lawReach: NPC_BEHAVIOR.patrolRadius + TERRAIN.vision.radius,
   offRoadGoals: ['raid', 'patrol', 'investigate'] as const,
   postRoadGap: 6,
-  postRings: [10, 14, 7],
-  postBearings: 16,
+  postRings: [7, 10, 14, 18, 22],
+  roadSample: 4,
+  postBearings: 12,
   patrolPostSpacing: 20,
   watchTurns: 40,
 };

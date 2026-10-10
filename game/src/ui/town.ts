@@ -45,7 +45,7 @@ import type { PartInstance, Vehicle, World } from "../sim/types";
 import { chassisMap, chassisPortrait, chassisStats, compareBase, createIcon, createItemIcon, diffStats, statGrid, type IconName } from "./cards";
 import { PartRows, type PartRow } from "./part-rows";
 import { el, panel, type Child } from "./dom";
-import { contractSummary, contractWindow, estimateText, estimateTitle, GOODS_COLUMNS, heldContractDue, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
+import { contractSummary, contractWindow, CRATE_NOTE, estimateText, estimateTitle, GOODS_COLUMNS, heldContractDue, lotTitle, PROFIT_HEAD_TITLE, saleEstimate, type SaleEstimate } from "./format";
 import { InventoryView, truckChips } from "./inventory";
 import { peopleList } from "./talk";
 import { localsAt } from "../sim/dialogue-rules";
@@ -224,7 +224,7 @@ export class TownScreen {
     const hint = pressureHint(def, state, g);
     const buyReason = (n: number) => {
       const lot = getLotTradePrice(w, me, shopId, g, n, "buy");
-      return shortBy(w.player.money, lot) ?? (cargoRoom(me, g) < n ? t("trade.noRoom") : null);
+      return shortBy(w.player.money, lot) ?? (cargoRoom(me) < n ? t("trade.noRoom") : null);
     };
     const sellReason = held === 0 ? t("trade.nothingToSell") : null;
     return el(
@@ -521,9 +521,9 @@ function caption(text: Msg, coin = false): HTMLElement {
   return el("span", { class: "cap" }, text, coin ? coinEl() : null);
 }
 
-function goodsHead(withTheirs: boolean): HTMLElement {
+function goodsHead(withTheirs: boolean): DocumentFragment {
   const c = GOODS_COLUMNS;
-  return el(
+  const head = el(
     "div",
     { class: "goods-head row dim" },
     el("span", {}, c.good),
@@ -533,6 +533,9 @@ function goodsHead(withTheirs: boolean): HTMLElement {
     el("span", { class: "end" }, c.held),
     el("span", { class: "end", title: PROFIT_HEAD_TITLE, "aria-label": PROFIT_HEAD_TITLE }, c.profit, coinEl()),
   );
+  const fragment = document.createDocumentFragment();
+  fragment.append(head, el("div", { class: "goods-note dim" }, CRATE_NOTE));
+  return fragment;
 }
 
 function suppliesHead(): HTMLElement {
@@ -729,10 +732,10 @@ export class TruckTradeScreen {
     const buy = truckGoodPrice(w, g, "buy");
     const sell = truckGoodPrice(w, g, "sell");
     const buyReason = (n: number) =>
-      theyHave(theirs, n, (v) => num(v, "int")) ?? shortBy(w.player.money, buy * n) ?? (cargoRoom(me, g) < n ? t("trade.noRoom") : null);
+      theyHave(theirs, n, (v) => num(v, "int")) ?? shortBy(w.player.money, buy * n) ?? (cargoRoom(me) < n ? t("trade.noRoom") : null);
     const sellReason = (n: number) => {
       if (held < Math.max(n, 1)) return t("trade.nothingToSell");
-      if (cargoRoom(npc, g) < n) return t("trade.noRoomThem");
+      if (cargoRoom(npc) < n) return t("trade.noRoomThem");
       return theyLack(npc, sell * n);
     };
     return el(

@@ -9,14 +9,14 @@ import { CONDITION } from '../data/wear';
 import { everyGunFires, gunSpans } from './armor';
 import { makeVehicle } from './factory';
 import { baseGrid, coreParts, facingOf, freeCells, goodsCount, gridOf, isMounted, itemCells, mountedItems, mountedParts, placementError } from './grid';
-import { loadFactor, vehicleMass } from './mass';
+import { itemMass, loadFactor, vehicleMass } from './mass';
 import { generateNpcLoadout, sampleWeighted } from './npc-loadout';
 import { spawnAt, spawnInitial, spawnNpcs } from './spawn';
 import { gunDrag, isStranded, npcMassRoom, vehicleStats } from './stats';
 import { wornDef } from './wear';
-import { addGoods } from './inventory';
-import { GOODS } from '../data/goods';
-import { emptyWorld } from './testkit';
+import { addGoods, cargoRoom, removeGoods } from './inventory';
+import { CRATE_MASS } from '../data/goods';
+import { emptyWorld, npcBrain } from './testkit';
 import type { Vehicle, World } from './types';
 import { TEST_MAP } from '../test/map';
 import TRUCK_SHAPES from '../data/truck-shapes.json';
@@ -73,6 +73,30 @@ describe('NPC equipment generation', () => {
       expect(vehicleMass(v)).toBeLessThanOrEqual(CHASSIS[v.chassisId].ratedMass);
       expect(gearCost(loadout.parts)).toBeLessThanOrEqual(GEAR_LEVELS[loadout.level].money);
       expect(v.resources?.money).toBe(fixture.player.money);
+    }
+  });
+
+
+  it('loads a trader with crates of one mass, within its rated mass', () => {
+    for (let seed = 1; seed <= 12; seed++) {
+      const world = { ...fixture, rngState: seed };
+      const loadout = generateNpcLoadout(world, NPCS.trader);
+      const v = makeVehicle(world, { ...loadout, faction: NPCS.trader.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+      const crates = Object.values(loadout.cargo).reduce((sum, n) => sum + n, 0);
+      expect(crates).toBeGreaterThan(0);
+      const goodsMass = v.items.filter((it) => it.kind === 'good').reduce((sum, it) => sum + itemMass(it), 0);
+      expect(goodsMass).toBe(crates * CRATE_MASS);
+      expect(vehicleMass(v)).toBeLessThanOrEqual(CHASSIS[v.chassisId].ratedMass);
+    }
+  });
+
+  it.each(['tractor', 'hauler', 'bus'])('leaves a trader on a %s room for a crate once it sells its goods', (chassisId) => {
+    for (let seed = 1; seed <= 24; seed++) {
+      const world = { ...fixture, rngState: seed, marketRng: { rngState: seed * 7919 + 1 } };
+      const loadout = generateNpcLoadout(world, NPCS.trader, chassisId);
+      const v = makeVehicle(world, { ...loadout, faction: NPCS.trader.faction, brain: npcBrain('trader', { x: 50, y: 50 }, ['trader']), pos: { x: 50, y: 50 }, heading: 0 });
+      for (const [good, n] of Object.entries(goodsCount(v))) if (good !== 'parts') removeGoods(v, good, n);
+      expect(cargoRoom(v), `seed ${seed} ${loadout.level} ${describeLoadout(v)}`).toBeGreaterThan(0);
     }
   });
 
@@ -169,15 +193,12 @@ describe('NPC equipment generation', () => {
   }, budget(120_000));
 
   it('gives an NPC no cargo past its speed floor, and the player any', () => {
-    const rolls = Array.from({ length: 20 }, (_, i) => {
-      const world = { ...structuredClone(fixture), rngState: i + 1 };
-      const npc = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 50, y: 50 });
-      return { world, npc };
-    });
-    const { world, npc } = rolls.find(({ npc }) => Math.floor(npcMassRoom(npc) / GOODS.tools.mass) < freeCells(npc))!;
+    const world = structuredClone(fixture);
+    const npc = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 50, y: 50 });
     const room = npcMassRoom(npc);
+    const free = freeCells(npc);
     const added = addGoods(world, npc, 'tools', 1000);
-    expect(added).toBe(Math.floor(room / GOODS.tools.mass));
+    expect(added).toBe(Math.min(free, Math.floor(room / CRATE_MASS)));
     const player = spawnAt(world, NPCS.gunwagon, { ...generateNpcLoadout(world, NPCS.gunwagon, null, 'loaded'), cargo: {}, spares: [] }, { x: 60, y: 50 });
     player.brain = null;
     const playerFree = freeCells(player);
@@ -487,4 +508,33 @@ describe('NPC utility parts', () => {
 
     expect(rams).toBeGreaterThan(0);
   }, budget(120_000));
+});
+
+describe('raider haul room', () => {
+  const RAIDERS = ['buggy', 'gunwagon'];
+  const rolled = (id: string, level: GearLevel, seed: number) => {
+    const world = { ...structuredClone(fixture), vehicles: [], rngState: seed * 7919 + 1, marketRng: { rngState: seed * 104729 + 1 } };
+    const template = NPCS[id];
+    return { template, v: spawnAt(world, template, generateNpcLoadout(world, template, null, level), { x: 40, y: 30 }) };
+  };
+
+  it.each(RAIDERS)('keeps room for the reserve after its own load on at least 95%% of %s rolls, armed', (id) => {
+    let kept = 0;
+    let rolls = 0;
+    for (const level of ['standard', 'heavy', 'loaded'] as const) {
+      for (let seed = 1; seed <= 40; seed++, rolls++) {
+        const { template, v } = rolled(id, level, seed);
+        if (freeCells(v) >= template.loadout.haul.cells && npcMassRoom(v) >= template.loadout.haul.kg) kept++;
+        expect(mountedItems(v, 'weapon').length).toBeGreaterThan(0);
+      }
+    }
+    expect(kept / rolls).toBeGreaterThanOrEqual(0.95);
+  }, budget(240_000));
+
+  it('rejects a negative or fractional reserve', () => {
+    const template = { ...NPCS.buggy, loadout: { ...NPCS.buggy.loadout, haul: { kg: -1, cells: 0 } } };
+    expect(() => generateNpcLoadout({ ...fixture }, template)).toThrow(/haul reserves/);
+    const fractional = { ...NPCS.buggy, loadout: { ...NPCS.buggy.loadout, haul: { kg: 0, cells: 1.5 } } };
+    expect(() => generateNpcLoadout({ ...fixture }, fractional)).toThrow(/haul reserves/);
+  });
 });

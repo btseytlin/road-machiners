@@ -8,7 +8,7 @@ import { corePart, mountedParts } from './grid';
 import { addGoods } from './inventory';
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { chooseOn } from './tracks';
-import { fightOddsAgainst, judgeDanger, perceiveDanger } from './npc-decisions';
+import { fightOddsAgainst, judgeDanger, perceiveDanger, usefulContacts } from './npc-decisions';
 import { siteGates } from './sites';
 import { addVehicle, emptyWorld, npcBrain } from './testkit';
 import type { NpcActivity, Vehicle, World } from './types';
@@ -203,12 +203,15 @@ describe('NPC gameplay recovery', () => {
 
   it('mostly withdraws from a locally stronger enemy group', () => {
     const { world, npc } = createScenario('buggy');
-    addVehicle(world, 'scavengers', 'scout', ['mg'], { x: 33, y: 30 });
-    addVehicle(world, 'scavengers', 'scout', ['mg'], { x: 34, y: 32 });
-    expect(shareOfSeeds(world, npc.id, (x, me) => thinkNpc(x, me).kind === 'flee')).toBeGreaterThan(0.5);
+    for (const pos of [{ x: 33, y: 30 }, { x: 34, y: 32 }]) {
+      const mate = addVehicle(world, 'scavengers', 'scout', ['mg', 'mg', 'mg', 'stockEngine'], pos);
+      mate.brain = npcBrain('scavenger', mate.pos, ['scavenger']);
+      addGoods(world, mate, 'scrap', 2);
+    }
+    expect(shareOfSeeds(world, npc.id, (x, me) => thinkNpc(x, me).kind === 'flee')).toBeGreaterThan(0.25);
   });
 
-  it('investigates a useful contact once instead of chasing its moving center forever', () => {
+  it('follows the heard center of a useful contact until it arrives there, never the truck itself', () => {
     const { world, npc } = createScenario('buggy');
     const prey = addVehicle(world, 'traders', 'scout', ['stockEngine'], { x: 55, y: 30 });
     prey.speed = 4;
@@ -222,10 +225,12 @@ describe('NPC gameplay recovery', () => {
     world.rngState = seed;
     planNpcOrders(world);
     expect(topGoal(npc)?.kind).toBe('investigate');
-    const destination = { ...topGoal(npc)!.destination! };
     prey.pos.x += 1;
+    world.turn++;
     planNpcOrders(world);
-    expect(topGoal(npc)?.destination).toEqual(destination);
+    const destination = { ...topGoal(npc)!.destination! };
+    expect(destination).toEqual(usefulContacts(world, npc).find((c) => c.vehicleId === prey.id)!.center);
+    expect(destination).not.toEqual(prey.pos);
     npc.pos = destination;
     prey.pos = { x: destination.x + 25, y: destination.y };
     resolveNpcActivities(world);

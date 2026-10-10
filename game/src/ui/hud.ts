@@ -10,6 +10,7 @@ import {
   heldContractDue,
   contractSummary,
   eventText,
+  formatNpcPass,
   workLabel,
   workProgress,
   formatNpcCargo,
@@ -588,7 +589,7 @@ function infoHead(w: World, v: Vehicle, hostile: boolean): HTMLElement {
 
 function quietLines(w: World, v: Vehicle): Msg[] {
   if (!v.brain) return [];
-  return [formatNpcTraits(w, v), formatNpcCargo(w, v), formatNpcMark(w, v)].filter((line) => line !== null);
+  return [formatNpcPass(w, v), formatNpcTraits(w, v), formatNpcCargo(w, v), formatNpcMark(w, v)].filter((line) => line !== null);
 }
 
 function shownWork(action: ContextAction | null, work: Work | null): Work | null {

@@ -547,7 +547,7 @@ export const SCREENS: Translation<typeof EN> = {
   'cell.builtIn': 'встроенная деталь',
   'item.title': '{part}\n{state}',
   'item.partTitle': '{name} ({kind}) {wear}, {hp}/{max} прочн., {w}x{h}',
-  'item.cargo': 'Груз, {mass}',
+  'item.cargo': 'Ящик, {mass}',
   'item.builtIn': 'Часть шасси',
   'item.mounted': 'На креплении',
   'item.spare': 'В запасе',

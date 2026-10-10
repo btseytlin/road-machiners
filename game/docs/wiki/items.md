@@ -187,19 +187,19 @@ Yellow deck parts with one job each. An active utility acts once on an order and
 ## Goods
 
 <!-- wiki:goods -->
-| id | name | tier | value (M) | mass per unit (kg) |
-| --- | --- | --- | --- | --- |
-| scrap | Scrap metal | 1 | 7 | 100 |
-| salt | Salt | 1 | 9 | 75 |
-| meds | Meds | 2 | 24 | 50 |
-| grain | Grain | 1 | 7 | 90 |
-| textiles | Textiles | 1 | 12 | 25 |
-| tools | Machine tools | 3 | 37 | 160 |
-| batteries | Batteries | 2 | 26 | 120 |
-| electronics | Electronics | 3 | 52 | 15 |
-| parts | Parts | 1 | 7 | 20 |
-| fuelDrums | Fuel drums | 1 | 10 | 140 |
-| water | Water | 1 | 6 | 110 |
+| id | name | tier | value per crate (M) |
+| --- | --- | --- | --- |
+| scrap | Scrap metal | 1 | 7 |
+| salt | Salt | 1 | 9 |
+| meds | Meds | 2 | 24 |
+| grain | Grain | 1 | 7 |
+| textiles | Textiles | 1 | 12 |
+| tools | Machine tools | 3 | 37 |
+| batteries | Batteries | 2 | 26 |
+| electronics | Electronics | 3 | 52 |
+| parts | Parts | 1 | 7 |
+| fuelDrums | Fuel drums | 1 | 10 |
+| water | Water | 1 | 6 |
 <!-- /wiki:goods -->
 
 ## Numbers
