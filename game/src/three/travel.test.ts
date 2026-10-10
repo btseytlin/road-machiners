@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { RULES } from "../data/rules";
-import { buildDrive, freeDrive, initPhysics, restFrame, TURN_STEPS, type Drive } from "../phys/drive";
+import { buildDrive, captureDrive, freeDrive, initPhysics, restFrame, TURN_STEPS, type Drive } from "../phys/drive";
 import { PHYSICS } from "../data/physics";
 import { physicsMove } from "../phys/turn";
 import { emptyWorld } from "../sim/testkit";
@@ -128,9 +128,11 @@ describe("turns that run on their own", () => {
     const travel = new Travel(250);
     expect(travel.autoAllowed(world)).toBe(true);
     travel.pressTurn(false, world);
-    expect(travel.autoAllowed(world)).toBe(false);
     travel.release();
+    expect(travel.autoAllowed(world)).toBe(false);
     travel.pressTurn(false, world);
+    expect(travel.autoAllowed(world)).toBe(true);
+    travel.release();
     expect(travel.autoAllowed(world)).toBe(true);
   });
 
@@ -168,6 +170,7 @@ describe("turns that run on their own", () => {
     world.player.state = "knockedOut";
     const travel = new Travel(250);
     travel.pressTurn(false, world);
+    travel.release();
     world.player.state = "active";
     expect(travel.autoAllowed(world)).toBe(false);
     world.player.state = "knockedOut";
@@ -400,5 +403,160 @@ describe("turns on a tow rope", () => {
     const { travel, prepare } = travelWithPrepared();
     travel.prepareNext(makeSafeWorld(), playback, 0);
     expect(prepare).not.toHaveBeenCalled();
+  });
+});
+
+describe("every turn that runs on its own", () => {
+  const ready = { world: {}, result: { frames: {}, next: {} } } as never;
+
+  function stranded(kind: "knockedOut" | "towed" | "beacon") {
+    const world = makeSafeWorld();
+    const me = playerVehicle(world);
+    if (kind === "knockedOut") world.player.state = "knockedOut";
+    if (kind === "beacon") world.player.beacon = true;
+    if (kind === "towed") {
+      world.vehicles.push({ ...me, id: "tower", pos: { x: me.pos.x + 3, y: me.pos.y } });
+      addState(world, "tow", "tower", me.id, { kind: "tow", site: "bowl", fee: 0, waived: 0, hitched: true });
+    }
+    return world;
+  }
+
+  function travelWithTurns(take: () => unknown = () => null) {
+    const prepare = vi.fn();
+    const prepareFrom = vi.fn();
+    const travel = new Travel(250);
+    Object.assign(travel, { turns: { prepare, prepareFrom, take } });
+    return { travel, prepare, prepareFrom };
+  }
+
+  const playback = { result: { next: {} }, nextSnapshot: {} } as unknown as Parameters<Travel["prepareNext"]>[1];
+  const drive = {} as Drive;
+  const kinds = ["knockedOut", "towed", "beacon"] as const;
+
+  it.each(kinds)("prepares the next turn during playback while %s", (kind) => {
+    const { travel, prepareFrom } = travelWithTurns();
+    travel.prepareNext(stranded(kind), playback, 0);
+    expect(prepareFrom).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(kinds)("begins the prepared turn with no key held while %s", (kind) => {
+    const { travel } = travelWithTurns(() => ready);
+    expect(travel.takeReady(stranded(kind), drive, 0)).toBe(ready);
+  });
+
+  it.each(kinds)("waits once stopped while %s", (kind) => {
+    const { travel, prepareFrom } = travelWithTurns(() => ready);
+    const world = stranded(kind);
+    travel.stopAuto(world);
+    travel.prepareNext(world, playback, 0);
+    expect(prepareFrom).not.toHaveBeenCalled();
+    expect(travel.takeReady(world, drive, 0)).toBeNull();
+  });
+
+  it("begins nothing while held back by a panel", () => {
+    const { travel } = travelWithTurns(() => ready);
+    expect(travel.takeReady(stranded("knockedOut"), drive, 0, true)).toBeNull();
+    expect(travel.takeReady(stranded("knockedOut"), drive, 0, false)).toBe(ready);
+  });
+
+  it("carries the overshoot of a finished turn into the next one", () => {
+    const { travel } = travelWithTurns(() => ready);
+    const world = stranded("knockedOut");
+    const a = { elapsed: 0, lastTick: null as number | null } as Parameters<Travel["advanceClock"]>[0];
+    travel.advanceClock(a, 1000, 1, 50);
+    const elapsed = travel.advanceClock(a, 1040, 1, 50);
+    travel.finishClock(elapsed, 30);
+    expect(travel.takeReady(world, drive, 1040)).toBe(ready);
+    expect(travel.getRemainder(true)).toBe(10);
+  });
+
+  describe("with Space", () => {
+    beforeAll(initPhysics);
+    const at = (t: number) => vi.spyOn(performance, "now").mockReturnValue(t);
+
+    it("makes a tap on a running run halt it, with no turn begun while undecided", () => {
+      const { travel } = travelWithTurns(() => ready);
+      const world = stranded("knockedOut");
+      at(1000);
+      travel.pressTurn(true, world);
+      expect(travel.takeReady(world, drive, 1100)).toBeNull();
+      travel.release(1100);
+      expect(travel.autoAllowed(world)).toBe(false);
+      expect(travel.takeReady(world, drive, 1200)).toBeNull();
+    });
+
+    it("makes a tap on a halted run resume it", () => {
+      const { travel } = travelWithTurns(() => ready);
+      const world = stranded("towed");
+      travel.stopAuto(world);
+      at(1000);
+      travel.pressTurn(true, world);
+      expect(travel.autoAllowed(world)).toBe(true);
+      travel.release(1100);
+      expect(travel.autoAllowed(world)).toBe(true);
+      expect(travel.takeReady(world, drive, 1200)).toBe(ready);
+    });
+
+    it("makes a hold on a running run fast-forward it without halting", () => {
+      const { travel } = travelWithTurns(() => ready);
+      const world = stranded("beacon");
+      at(1000);
+      travel.pressTurn(true, world);
+      expect(travel.isFast(1250)).toBe(true);
+      expect(travel.getSpeed(1250, 4)).toBe(4);
+      expect(travel.takeReady(world, drive, 1250)).toBe(ready);
+      travel.release(1500);
+      expect(travel.autoAllowed(world)).toBe(true);
+      expect(travel.getSpeed(1500, 4)).toBe(1);
+    });
+
+    it("makes a hold on a halted run resume and fast-forward it", () => {
+      const { travel } = travelWithTurns(() => ready);
+      const world = stranded("knockedOut");
+      travel.stopAuto(world);
+      at(1000);
+      travel.pressTurn(true, world);
+      expect(travel.autoAllowed(world)).toBe(true);
+      expect(travel.isFast(1300)).toBe(true);
+      travel.release(1600);
+      expect(travel.autoAllowed(world)).toBe(true);
+      expect(travel.isFast(1600)).toBe(false);
+    });
+
+    it.each(["wake", "call", "dead"])("lets a held press end with the run on %s", (end) => {
+      const { travel, prepareFrom } = travelWithTurns(() => ready);
+      const world = stranded("knockedOut");
+      at(1000);
+      travel.pressTurn(true, world);
+      if (end === "wake") world.player.state = "active";
+      if (end === "call") world.player.call = { kind: "radio" } as never;
+      if (end === "dead") world.player.state = "dead";
+      travel.updateWorld(world, false);
+      expect(travel.isFast(2000)).toBe(false);
+      expect(travel.shouldAdvance(2000)).toBe(false);
+      expect(travel.takeReady(world, drive, 2000)).toBeNull();
+      travel.prepareNext(world, playback, 2000);
+      expect(prepareFrom).not.toHaveBeenCalled();
+    });
+
+    it("keeps a held press through turns while still knocked out, but drops it at the knockout", () => {
+      const out = stranded("knockedOut");
+      const prepared = (world: unknown) => {
+        const live = buildDrive(out);
+        const next = captureDrive(live);
+        freeDrive(live);
+        return { world, result: { frames: {}, next } } as never;
+      };
+      const awake = makeSafeWorld();
+      const keep = travelWithTurns().travel;
+      at(1000);
+      keep.pressTurn(true, out);
+      keep.beginPlayback(out, prepared(out), 1000, 0, {});
+      expect(keep.isFast(1300)).toBe(true);
+      const drop = travelWithTurns().travel;
+      drop.pressTurn(true, out);
+      drop.beginPlayback(awake, prepared(out), 1000, 0, {});
+      expect(drop.isFast(1300)).toBe(false);
+    });
   });
 });

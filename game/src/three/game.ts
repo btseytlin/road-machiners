@@ -502,7 +502,7 @@ export class Game {
   }
 
   private releaseTurn(): void {
-    this.travel.release();
+    this.travel.release(performance.now());
   }
 
   private searchFromLoot(stockId: string): void {
@@ -674,9 +674,9 @@ export class Game {
     this.refreshUi();
   }
 
-  private tryBeginTurn(now: number, wasPlaying: boolean): "began" | "none" | "failed" {
+  private tryBeginTurn(now: number, wasPlaying: boolean, held: boolean): "began" | "none" | "failed" {
     try {
-      const prepared = this.anim ? null : this.travel.takeReady(this.world, this.drive, now);
+      const prepared = this.anim ? null : this.travel.takeReady(this.world, this.drive, now, held);
       if (prepared) this.beginTurn(prepared, now, this.travel.getRemainder(wasPlaying));
       return prepared ? "began" : "none";
     } catch (err) {
@@ -782,14 +782,6 @@ export class Game {
     this.hud.pushEvents(this.world);
   }
 
-  private autoTurn(now: number): void {
-    if (this.anim || this.modalOpen() || this.world.player.state === "dead")
-      return;
-    if (!this.travel.autoAllowed(this.world) || now - this.idleSince < CONFIG.autoTurnMs)
-      return;
-    this.endTurn();
-  }
-
   private playHorn(id: string, delayMs: number): void {
     const v = vehicleById(this.world, id), f = this.frames[v.id] ?? restFrame(this.world, v);
     this.sound.honk({ x: f.pos.x, y: f.pos.y + GUN_HEIGHT, z: f.pos.z }, delayMs, v.chassisId);
@@ -888,14 +880,14 @@ export class Game {
   }
 
   private advanceTurn(now: number): { step: number | null; speed: number } {
-    if (this.modalOpen() || this.isEditingControl() || document.hidden)
-      this.travel.pause();
+    const held = this.modalOpen() || this.isEditingControl() || document.hidden;
+    if (held) this.travel.pause();
     const speed = this.travel.getSpeed(now, CONFIG.travelFastSpeed);
     const wasPlaying = this.anim !== null;
     let step = this.animStep(now, speed);
     this.updateLiveVision();
     this.updateTravel();
-    const began = this.tryBeginTurn(now, wasPlaying);
+    const began = this.tryBeginTurn(now, wasPlaying, held);
     if (began === "failed") return { step, speed };
     if (began === "began") {
       step = this.animStep(now, speed);
@@ -942,7 +934,6 @@ export class Game {
     for (const scope of this.scopes) scope.update(this.rig.camera);
     this.renderer.render(this.scene, this.rig.camera);
     this.refreshPlan();
-    this.autoTurn(now);
   }
 
   private updateLiveVision(): void {

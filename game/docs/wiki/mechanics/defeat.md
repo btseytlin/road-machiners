@@ -31,7 +31,7 @@ A player at a town who is stranded or at or below 20% fuel, and whose money plus
 
 A stranded player can switch on an emergency beacon. Every vehicle within 250 tiles hears it, through hills. Traders and scavengers come as if they saw the truck, and one of them answers. Raiders hear it too, so a stripped truck calls safely and a truck with cargo draws raiders. Turns run on their own while the beacon calls and no offer is open. The beacon switches off when the truck can drive again or gets towed.
 
-Space stops turns that run on their own, while knocked out, towed or on the beacon. The next Space starts them again.
+A tap of Space stops turns that run on their own, while knocked out, towed or on the beacon, and the next tap starts them again. Holding Space fast-forwards them, and they run on at normal speed after release.
 
 NPCs tow each other by the same decision. A stranded driver waits once a tower is on its way. It takes the tow at once and pays what it can once it stands on the pad. The tower parks so the truck it pulls stands on the pad, and the tow ends there. A raider goes to its nearest camp, and any other driver to its nearest known town. Raiders tow only raiders, and only raiders or the player tow a raider. NPCs find stranded drivers only by sight.
 
