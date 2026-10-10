@@ -51,15 +51,12 @@ describe('settlement locals', () => {
 
   it('opens a question only once its fact holds', () => {
     const w = parkedAt('nose');
-    expect(choices(w, 'nose_ibo')).not.toContain('What happened at Burnt Convoy?');
     expect(choices(w, 'nose_kovac')).not.toContain(WAGON);
     expect(choices(w, 'nose_kovac')).not.toContain(WAGON_FOUND);
 
-    w.player.discovered.push('burnt-convoy');
     w.player.notes.push({ id: 'wagonBowl', turn: 0 });
     w.player.scavenged.push(WAGON_SEVEN);
 
-    expect(choices(w, 'nose_ibo')).toContain('What happened at Burnt Convoy?');
     expect(choices(w, 'nose_kovac')).toEqual(['What is this place?', 'Who runs Nose?', WORK, 'Anything off the books?', WAGON, WAGON_FOUND, 'Goodbye.']);
   });
 

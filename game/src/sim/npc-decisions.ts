@@ -30,9 +30,9 @@ import { getResources } from './resources';
 import { skillEffect } from './progress';
 import { randRange } from './rng';
 import { recall, remember } from './memory';
-import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, CANNOT_HOLD, hasCargo, hasSalvage, holdsClaim, jobTarget, lootBlocker, siteLootTable, STRIPPED } from './salvage';
+import { backedOff, canReachSalvage, canTakeAny, canTakeFromTruck, CANNOT_HOLD, hasCargo, hasSalvage, holdsClaim, jobTarget, lootBlocker, STRIPPED } from './salvage';
 import { passesUpLoot } from './loot-warning';
-import { canUseSite, isTerritory, siteGap, siteGates, sitePads, siteUnder, type Site } from './sites';
+import { canUseSite, isTerritory, siteGap, siteGates, siteUnder, type Site } from './sites';
 import { territoryAt, territoryGrounds } from './territory';
 import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
@@ -47,7 +47,6 @@ export type NpcProfile = {
   bases: string[];
   markets: string[];
   salvageSites: string[];
-  supplySites: string[];
   travelSites: string[];
   haulSites: string[];
   contactReactRadius: number;
@@ -75,13 +74,12 @@ export function profileOf(traits: TraitId[]): NpcProfile {
     if (!Object.hasOwn(TRAITS, id)) throw new Error(`Unknown trait ${id}`);
     return TRAITS[id];
   });
-  const union = (key: 'towns' | 'bases' | 'markets' | 'salvageSites' | 'supplySites' | 'travelSites' | 'haulSites') => [...new Set(defs.flatMap((t) => t[key]))];
+  const union = (key: 'towns' | 'bases' | 'markets' | 'salvageSites' | 'travelSites' | 'haulSites') => [...new Set(defs.flatMap((t) => t[key]))];
   return {
     towns: union('towns'),
     bases: union('bases'),
     markets: union('markets'),
     salvageSites: union('salvageSites'),
-    supplySites: union('supplySites'),
     travelSites: union('travelSites'),
     haulSites: union('haulSites'),
     contactReactRadius: Math.max(...defs.map((t) => t.contactReactRadius)),
@@ -370,9 +368,8 @@ export function huntingGrounds(): readonly Vec[] {
   const sites = [...REGION.towns, ...REGION.locations];
   const lonely = (p: Vec) => sites.every((site) => siteGap(site, p) >= HUNT.siteDistance);
   const roadPoints = REGION.roads.flatMap((road) => pointsAlong(road, HUNT.roadSpacing)).filter(lonely);
-  const lootPads = REGION.locations.filter((site) => site.kind !== 'camp' && siteLootTable(site)).flatMap((site) => sitePads(site));
   const inTerritories = REGION.locations.filter(isTerritory).flatMap(territoryGrounds);
-  grounds = [...roadPoints, ...lootPads, ...inTerritories];
+  grounds = [...roadPoints, ...inTerritories];
   return grounds;
 }
 

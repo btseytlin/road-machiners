@@ -24,9 +24,9 @@ import { ENGINE_HEAT } from "../data/wear";
 import type { IconName } from "./cards";
 import { contextKey, type ContextAction } from './hud';
 import { SHOPS } from '../data/market';
-import { canUseSite, locationAt } from '../sim/sites';
+import { canUseSite } from '../sim/sites';
 import { shopAt } from '../sim/market';
-import { canUseOasis, downedListNear, emptySalvageNear, hasLootFor, lootBlockerHere, needsSearch, salvageListNear } from '../sim/locations';
+import { downedListNear, emptySalvageNear, hasLootFor, lootBlockerHere, needsSearch, salvageListNear } from '../sim/locations';
 import { canLootTruck, canReachSalvage, salvagePlace } from '../sim/salvage';
 import { playerCanAct } from '../sim/world';
 import { combatTurnsLeft } from '../sim/combat';
@@ -109,9 +109,7 @@ function getPlaceActions(world: World): ContextAction[] {
 }
 
 function getSiteActions(world: World): ContextAction[] {
-  const oasis = locationAt(world);
   const actions: ContextAction[] = [];
-  if (oasis?.kind === 'oasis') actions.push({ label: t("action.refill", { site: siteName(oasis.id) }), ready: canUseOasis(world), target: { kind: 'oasis' } });
   const stocks = salvageListNear(world);
   actions.push(...stocks.flatMap((stock) => getStockActions(world, stock)));
   if (stocks.length === 0) {

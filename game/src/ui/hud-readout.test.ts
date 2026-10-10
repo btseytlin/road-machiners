@@ -4,7 +4,7 @@ import { RULES } from "../data/rules";
 import { corePart, mountedParts } from "../sim/grid";
 import { knockOutNpc } from "../sim/defeat";
 import { STATE_TURNS } from "../data/npcs";
-import { addVehicle, emptyWorld, npcBrain, startCombat } from "../sim/testkit";
+import { addVehicle, emptyWorld, npcBrain, spotWorld, startCombat } from "../sim/testkit";
 import { maxHealthOf } from "../sim/health";
 import { suppliesCap } from "../sim/stats";
 import { maxHp } from "../sim/wear";
@@ -58,12 +58,13 @@ describe('knocked-out truck interaction', () => {
   });
 });
 
-describe('oasis interaction', () => {
-  it.each(REGION.locations.filter((site) => site.kind === 'oasis'))('offers refilling at $id only while stopped', (site) => {
+describe('outpost interaction', () => {
+  it.each(REGION.locations.filter((site) => site.kind === 'oasis'))('offers the shop at $id only while stopped, and no free refill', (site) => {
     const w = emptyWorld({ ...sitePads(site)[0] });
-    expect(actions(w)[0]).toMatchObject({ label: `Refill supplies at ${siteEn(site.id)}`, ready: true });
+    expect(actions(w)[0]).toMatchObject({ label: `Enter ${siteEn(site.id)}`, ready: true });
     w.vehicles[0].speed = RULES.parkedSpeed + 1;
-    expect(actions(w)[0]).toMatchObject({ label: `Refill supplies at ${siteEn(site.id)}`, ready: false });
+    expect(actions(w)[0]).toMatchObject({ label: `Enter ${siteEn(site.id)}`, ready: false });
+    expect(actions(w).map((a) => a.label).join()).not.toMatch(/Refill/);
   });
 
   it('hides interaction during playback and while knocked out', () => {
@@ -77,53 +78,53 @@ describe('oasis interaction', () => {
 
 describe('salvage interaction', () => {
   it('says a site is picked clean when its stock is empty', () => {
-    const site = REGION.locations.find((site) => site.id === 'podfield')!;
-    const w = emptyWorld({ ...sitePads(site)[0] });
+    const { w, spot } = spotWorld();
+    const site = { id: spot.id, pos: spot.pos, radius: propReach(spot) };
     w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [], hidden: emptyHidden() }];
-    expect(actions(w)[0]).toMatchObject({ label: `Search ${siteEn(site.id)}`, ready: true, combat: undefined });
+    expect(actions(w)[0]).toMatchObject({ label: 'Search', ready: true, combat: undefined });
     w.salvage[0].goods.scrap = 0;
-    expect(actions(w)[0]).toMatchObject({ label: `${siteEn(site.id)} is picked clean`, ready: false, hint: 'No loot left' });
+    expect(actions(w)[0]).toMatchObject({ label: 'Picked clean', ready: false, hint: 'No loot left' });
   });
 
   it('offers a search while units stay hidden and the revealed loot once searched, both at once', () => {
-    const site = REGION.locations.find((site) => site.id === 'podfield')!;
-    const w = emptyWorld({ ...sitePads(site)[0] });
+    const { w, spot } = spotWorld();
+    const site = { id: spot.id, pos: spot.pos, radius: propReach(spot) };
     w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [], hidden: { ...emptyHidden(), goods: { scrap: 2 } } }];
-    expect(actions(w).map((a) => a.label)).toEqual([`Search ${siteEn(site.id)}`]);
+    expect(actions(w).map((a) => a.label)).toEqual(['Search']);
     w.player.scavenged.push(site.id);
     expect(actions(w)).toEqual([
-      expect.objectContaining({ label: `Search ${siteEn(site.id)}`, ready: true, target: { kind: 'stock', id: site.id } }),
-      expect.objectContaining({ label: `Loot ${siteEn(site.id)}`, ready: true, target: { kind: 'loot', id: site.id } }),
+      expect.objectContaining({ label: 'Search', ready: true, target: { kind: 'stock', id: site.id } }),
+      expect.objectContaining({ label: 'Loot', ready: true, target: { kind: 'loot', id: site.id } }),
     ]);
     w.salvage[0].hidden = emptyHidden();
-    expect(actions(w).map((a) => a.label)).toEqual([`Loot ${siteEn(site.id)}`]);
+    expect(actions(w).map((a) => a.label)).toEqual(['Loot']);
     w.salvage[0].goods.scrap = 0;
-    expect(actions(w)[0]).toMatchObject({ label: `${siteEn(site.id)} is picked clean` });
+    expect(actions(w)[0]).toMatchObject({ label: 'Picked clean' });
   });
 
   it('keeps offering a search beside revealed supplies the full tank cannot take', () => {
-    const site = REGION.locations.find((site) => site.id === 'podfield')!;
-    const w = emptyWorld({ ...sitePads(site)[0] });
+    const { w, spot } = spotWorld();
+    const site = { id: spot.id, pos: spot.pos, radius: propReach(spot) };
     w.player.supplies = suppliesCap(w.vehicles[0]);
     w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: {}, parts: [], supplies: 20, hidden: { ...emptyHidden(), goods: { scrap: 2 } } }];
     w.player.scavenged.push(site.id);
     expect(actions(w)).toEqual([
-      expect.objectContaining({ label: `Search ${siteEn(site.id)}`, ready: true }),
-      expect.objectContaining({ label: `Loot ${siteEn(site.id)}`, ready: true }),
+      expect.objectContaining({ label: 'Search', ready: true }),
+      expect.objectContaining({ label: 'Loot', ready: true }),
     ]);
     w.salvage[0].hidden = emptyHidden();
-    expect(actions(w).map((a) => a.label)).toEqual([`Loot ${siteEn(site.id)}`]);
+    expect(actions(w).map((a) => a.label)).toEqual(['Loot']);
   });
 
   it('picks the loot of a stock beside its search with the arrows', () => {
-    const site = REGION.locations.find((site) => site.id === 'podfield')!;
-    const w = emptyWorld({ ...sitePads(site)[0] });
+    const { w, spot } = spotWorld();
+    const site = { id: spot.id, pos: spot.pos, radius: propReach(spot) };
     w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [], hidden: { ...emptyHidden(), goods: { scrap: 2 } } }];
     w.player.scavenged.push(site.id);
     const picker = new ContextPicker();
-    expect(en(picker.pick(getContextActions(w, false))!.label)).toBe(`Search ${siteEn(site.id)}`);
+    expect(en(picker.pick(getContextActions(w, false))!.label)).toBe('Search');
     picker.cycle(getContextActions(w, false), 1);
-    expect(en(picker.pick(getContextActions(w, false))!.label)).toBe(`Loot ${siteEn(site.id)}`);
+    expect(en(picker.pick(getContextActions(w, false))!.label)).toBe('Loot');
   });
 
   it('blocks both the search and the loot while another truck loots the stock', () => {
@@ -281,24 +282,24 @@ describe('shared wreck', () => {
 
 describe('search in combat', () => {
   function siteScene() {
-    const site = REGION.locations.find((site) => site.id === 'podfield')!;
-    const w = emptyWorld({ ...sitePads(site)[0] });
+    const { w, spot } = spotWorld();
+    const site = { id: spot.id, pos: spot.pos, radius: propReach(spot) };
     w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [], hidden: emptyHidden() }];
     const me = playerVehicle(w).pos;
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg'], { x: me.x + 6, y: me.y });
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
-    return { w, site, raider };
+    return { w, raider };
   }
 
   it('does not block a search beside a hostile that has not attacked', () => {
-    const { w, site } = siteScene();
-    expect(actions(w)[0]).toMatchObject({ label: `Search ${siteEn(site.id)}`, combat: undefined });
+    const { w } = siteScene();
+    expect(actions(w)[0]).toMatchObject({ label: 'Search', combat: undefined });
   });
 
   it('blocks a search in combat and says how many turns are left', () => {
-    const { w, site, raider } = siteScene();
+    const { w, raider } = siteScene();
     startCombat(w, raider, playerVehicle(w));
-    expect(actions(w)[0]).toMatchObject({ label: `Search ${siteEn(site.id)}`, ready: false, combat: STATE_TURNS.combat });
+    expect(actions(w)[0]).toMatchObject({ label: 'Search', ready: false, combat: STATE_TURNS.combat });
   });
 });
 

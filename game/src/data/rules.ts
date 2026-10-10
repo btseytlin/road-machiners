@@ -45,7 +45,7 @@ export const RULES = {
     feudDamage: 40,
   },
 
-  accelScale: 0.67,
+  accelScale: 0.5695,
   overdriveBoost: 1.33,
   overdriveMinEngineShare: 0.15,
   overloadExponent: 4,

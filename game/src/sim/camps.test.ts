@@ -159,7 +159,7 @@ describe('raider camps', () => {
   });
 
   it('keep every market for drivers without camps, and list camps and the Salvage Yard for raiders', () => {
-    expect(TOWN_MARKETS.sort()).toEqual([...REGION.towns.map((t) => t.id), 'salvage-yard', 'granary', 'pump-station'].sort());
+    expect(TOWN_MARKETS.sort()).toEqual([...REGION.towns.map((t) => t.id), 'salvage-yard', 'granary', 'pump-station', 'dustwell', 'green-pit'].sort());
     expect(profileOf(['raider']).markets).toEqual(['scrapjaw', 'kiln', 'salvage-yard']);
     expect(profileOf(['trader']).markets.sort()).toEqual([...TOWN_MARKETS].sort());
     expect(profileOf(['raider', 'trader']).markets).toHaveLength(new Set(['scrapjaw', 'kiln', ...TOWN_MARKETS]).size);

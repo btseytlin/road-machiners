@@ -1,7 +1,7 @@
 // The fortress bake layer: each fortress site's layout pieces from src/sim/fortress.ts as baked props, the pit dug
 // inside a curtain, and the rock masses of Nose from src/sim/nose.ts.
 
-import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES, NOSE_APRON, type FortressStyle } from '../data/fortress';
+import { FORTRESS_SITES, FORTRESS_STYLES, NOSE_APRON, type FortressStyle } from '../data/fortress';
 import { REGION } from '../data/region';
 import { TERRAIN } from '../data/terrain';
 import { along, fortProp, fortressOutline, fortressPieces, pitDepth, type FortressPiece } from '../sim/fortress';
@@ -110,10 +110,6 @@ function bakedPiece(style: FortressStyle, piece: FortressPiece): BakedProp {
     const yaw = piece.yaw - Math.PI / 2;
     const { gate, gateFlare } = FORTRESS_STYLES[style];
     return { ...base, pos: along(piece.pos, { x: Math.cos(yaw), y: Math.sin(yaw) }, gate.depth / 2 - gateFlare), yaw };
-  }
-  if (piece.kind === 'bastion') {
-    const yaw = piece.yaw - Math.PI / 2;
-    return { ...base, pos: along(piece.pos, { x: Math.cos(yaw), y: Math.sin(yaw) }, -FORTRESS.bastionBack), yaw };
   }
   if (piece.kind === 'inner') return { ...base, pos: piece.pos, yaw: piece.yaw - Math.PI / 2 };
   return { ...base, pos: piece.pos, yaw: piece.yaw };

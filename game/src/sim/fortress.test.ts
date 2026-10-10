@@ -41,9 +41,9 @@ function sag(site: (typeof SITES)[number], o: object): number {
 describe('fort prop kinds', () => {
   it('names one model per kind, and every kind is a map prop kind (IV14)', () => {
     const kinds = Object.values(FORT_PROPS).flatMap((styles) => Object.values(styles));
-    expect(new Set(kinds).size).toBe(24);
+    expect(new Set(kinds).size).toBe(26);
     for (const kind of kinds) expect(PROP_KINDS).toContain(kind);
-    expect(new Set([...FORT_MODELS.values()].map((m) => m.model)).size).toBe(24);
+    expect(new Set([...FORT_MODELS.values()].map((m) => m.model)).size).toBe(26);
   });
 
   it('drops the ship barbican kinds (IV23)', () => {
@@ -69,21 +69,15 @@ describe('fort prop kinds', () => {
 });
 
 describe('fortress obstacles', () => {
-  it('has the ten inhabited sites as fortresses', () => {
+  it('has the nine inhabited sites as fortresses', () => {
     expect(FORT_SITES.map((s) => s.id).sort()).toEqual(Object.keys(FORTRESS_SITES).sort());
-    expect(FORT_SITES).toHaveLength(10);
+    expect(FORT_SITES).toHaveLength(9);
   });
 
   it('keeps no site circle and no town building ring for a fortress site (IV2)', () => {
     const ids = world.obstacles.map((o) => o.id);
     for (const s of FORT_SITES) expect(ids).not.toContain(`site-${s.id}`);
     expect(ids.some((id) => id.startsWith('bld-bowl-') || id.startsWith('bld-nose-'))).toBe(false);
-  });
-
-  it('keeps the circle of every abandoned site (IV7)', () => {
-    const abandoned = SITES.filter((s) => !isFortress(s) && !('kind' in s && s.kind === 'territory'));
-    expect(abandoned.length).toBeGreaterThan(0);
-    for (const s of abandoned) expect(world.obstacles.find((o) => o.id === `site-${s.id}`)?.kind).toBe('site');
   });
 
   it('knows every fortress piece as a baked drive obstacle', () => {

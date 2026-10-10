@@ -9,7 +9,7 @@ const PAD = REGION.sites.pad;
 
 describe('outposts', () => {
   it('are the trading stalls, not towns', () => {
-    expect(OUTPOSTS.map((o) => o.id).sort()).toEqual(['granary', 'pump-station', 'salvage-yard']);
+    expect(OUTPOSTS.map((o) => o.id).sort()).toEqual(['dustwell', 'granary', 'green-pit', 'pump-station', 'salvage-yard']);
   });
   it('are near within reach of a gate and not beyond it', () => {
     const gate = siteGates(OUTPOSTS[0])[0];

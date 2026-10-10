@@ -26,6 +26,8 @@ A shop holds a finite, random stock of parts and restocks every so many turns. O
 | salvage-yard | stall | scrap, parts | tools | scrap, parts, tools | fuel, supplies | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
 | granary | stall | grain | salt, textiles | grain, salt, textiles | fuel, supplies | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
 | pump-station | stall | batteries | scrap, parts | batteries, scrap, parts | fuel, supplies | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
+| dustwell | stall | water | tools, meds | water, scrap, tools, meds | fuel, supplies | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
+| green-pit | stall | water | salt, textiles | water, grain, salt, textiles | fuel, supplies | 2 to 4 | 300 | 0.02 | 0.0075 | 1 |
 <!-- /wiki:shops -->
 
 ## Repair and wear

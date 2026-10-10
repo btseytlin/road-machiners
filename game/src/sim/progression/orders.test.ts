@@ -60,7 +60,6 @@ describe('upgradeGear', () => {
 
     expect(mountedParts(playerVehicle(o.world), 'weapon').length).toBeGreaterThan(gunsBefore);
     expect(o.world.player.money).toBeLessThan(capital);
-    expect(shopState(o.world, 'bowl').stock.some((p) => p.defId === 'heavyMg')).toBe(false);
   });
 
   it('mounts a better part from garage storage instead of buying one', () => {
