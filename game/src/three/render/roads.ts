@@ -8,7 +8,10 @@ import { atlasOf, atlasSites, type Atlas } from "../../sim/atlas";
 import { sitePads } from "../../sim/sites";
 import type { Terrain } from "../../sim/terrain";
 import { mix, PAL } from "../../render/palette";
-import { paintRoadDetail, paintRoadMask, paintRoadTone, ROAD_DETAIL_SIDE, ROAD_TONE_PIXELS, ROAD_TONE_SIDE, type RoadImage } from "../../render/roadPaint";
+import { HIGHWAY } from "../../data/fury-road";
+import { fromRoad } from "../../sim/highway";
+import { windowCraters } from "../../sim/road-hazards";
+import { paintRoadDetail, paintRoadMask, type RoadHole, paintRoadTone, ROAD_DETAIL_SIDE, ROAD_TONE_PIXELS, ROAD_TONE_SIDE, type RoadImage } from "../../render/roadPaint";
 
 const S = PHYSICS.metersPerTile;
 const PIXEL_SPLIT = 3;
@@ -24,7 +27,9 @@ const DIRT_WANDER = 0.2;
 const DIRT_SOFT = 0.15;
 const DIRT_SHOULDER = 0.9;
 const LANE_EDGE = "0.42";
-const LANE_FADE = "0.16";
+const LANE_FADE = "0.04";
+const BAND_FROM = "0.1";
+const BAND_FULL = "0.25";
 const LANE_MIX = "0.82";
 const GLASS_PLATE = 2;
 const GLASS_TINT = 0.16;
@@ -42,7 +47,7 @@ const GLASS_DUST = mix(PAL.glass.top, 0xb9a47c, 0.6);
 const GLASS_SEAM_COLOR = mix(PAL.glass.top, 0xffffff, 0.45);
 
 export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas, t: Terrain): void {
-  paintRoadMask(mask, atlasOf(t));
+  paintRoadMask(mask, atlasOf(t), roadHoles(t));
   const pixel = S / mask.res / PIXEL_SPLIT;
   const uniforms = {
     roadMask: { value: maskTexture(mask) },
@@ -50,6 +55,7 @@ export function drawRoads(material: THREE.MeshLambertMaterial, mask: PaintCanvas
     roadTone: { value: imageTexture(paintRoadTone(), THREE.LinearFilter, THREE.NoColorSpace) },
     roadPixel: { value: pixel },
     laneColor: { value: new THREE.Color(PAL.laneLine) },
+    asphaltColor: { value: new THREE.Color(PAL.highwayAsphalt) },
     roadOrigin: { value: mask.from * S },
     roadMaskMeters: { value: (mask.size / mask.res) * S },
     roadDetailMeters: { value: ROAD_DETAIL_SIDE * pixel },
@@ -99,6 +105,7 @@ uniform sampler2D roadDetail;
 uniform sampler2D roadTone;
 uniform float roadPixel;
 uniform vec3 laneColor;
+uniform vec3 asphaltColor;
 uniform float roadOrigin;
 uniform float roadMaskMeters;
 uniform float roadDetailMeters;
@@ -200,6 +207,8 @@ const ROAD_FRAGMENT = `{
     float dirtShade = mix(${DIRT_SHOULDER}, 1.0, smoothstep(dirtEdge, dirtEdge + ${DIRT_SOFT}, dirtCover));
     diffuseColor.rgb = mix(diffuseColor.rgb, dirtColor * dirtShade, dirtIn);
   }
+  float bandCover = smoothstep(${BAND_FROM}, ${BAND_FULL}, laneCover);
+  if (bandCover > 0.0) diffuseColor.rgb = mix(diffuseColor.rgb, asphaltColor * (0.94 + 0.12 * roadWander) * (0.96 + 0.08 * roadLook.a), bandCover);
   if (laneCover > ${LANE_EDGE} && roadLook.a > ${LANE_FADE}) diffuseColor.rgb = mix(diffuseColor.rgb, laneColor * (0.9 + 0.2 * roadWander), ${LANE_MIX});
 #if PAD_COUNT > 0
   for (int i = 0; i < PAD_COUNT; i++) {
@@ -212,6 +221,13 @@ const ROAD_FRAGMENT = `{
   }
 #endif
 }`;
+
+function roadHoles(t: Terrain): RoadHole[] {
+  const key = t.atlas;
+  if (key.kind !== 'highway') return [];
+  const inset = HIGHWAY.road.paint.holeInset;
+  return windowCraters(key.seed, key.window).map((c) => ({ pos: fromRoad(key.window, c.at.n, c.at.u), radius: Math.max(inset, c.radius - inset) }));
+}
 
 function padUniforms(atlas: Atlas, pixel: number) {
   const centers: THREE.Vector2[] = [];

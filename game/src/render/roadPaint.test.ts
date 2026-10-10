@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { HIGHWAY } from '../data/fury-road';
 import { REGION } from '../data/region';
 import { TERRITORIES } from '../data/territory';
 import { deckAt } from '../sim/bridge';
@@ -6,7 +7,7 @@ import { siteGap } from '../sim/sites';
 import { isTerritory, territoryRoads } from '../sim/territory';
 import { dist, polylineDist, type Vec } from '../sim/vec';
 import { TERRAIN_MARGIN, type PaintCanvas } from './groundPaint';
-import { DIRT_ROAD_STYLE, LANE_STYLE, laneLines, paintRoadMask, REGION_ROAD_STYLE } from './roadPaint';
+import { ASPHALT_STYLE, DIRT_ROAD_STYLE, LANE_STYLE, laneLines, paintRoadMask, REGION_ROAD_STYLE, type RoadHole } from './roadPaint';
 import { highwayAtlas } from '../sim/highway';
 import { ICARUS_DECKS } from '../sim/bridge';
 import { icarusAtlas, type Atlas } from '../sim/atlas';
@@ -29,8 +30,16 @@ class RecordingContext {
   canvas = {};
   private lines: Vec[][] = [];
 
+  fills: { style: unknown; x: number; y: number; r: number }[] = [];
   fillRect() {}
   drawImage() {}
+  private disc: { x: number; y: number; r: number } | null = null;
+  arc(x: number, y: number, r: number) {
+    this.disc = { x, y, r };
+  }
+  fill() {
+    if (this.disc) this.fills.push({ style: this.fillStyle, ...this.disc });
+  }
   beginPath() {
     this.lines = [];
   }
@@ -45,7 +54,7 @@ class RecordingContext {
   }
 }
 
-function paintedMask(atlas: Atlas = icarusAtlas()): { canvas: PaintCanvas; strokes: Stroke[] } {
+function paintedMask(atlas: Atlas = icarusAtlas(), holes: RoadHole[] = []): { canvas: PaintCanvas; strokes: Stroke[]; fills: RecordingContext['fills'] } {
   const res = 2;
   const from = -TERRAIN_MARGIN;
   const ctx = new RecordingContext();
@@ -56,8 +65,8 @@ function paintedMask(atlas: Atlas = icarusAtlas()): { canvas: PaintCanvas; strok
     from,
     toPx: (tiles) => (tiles - from) * res,
   };
-  paintRoadMask(canvas, atlas);
-  return { canvas, strokes: ctx.strokes };
+  paintRoadMask(canvas, atlas, holes);
+  return { canvas, strokes: ctx.strokes, fills: ctx.fills };
 }
 
 function channelAt(mask: { canvas: PaintCanvas; strokes: Stroke[] }, style: string, p: Vec): number {
@@ -141,6 +150,16 @@ describe('highway lane paint', () => {
 
     expect(lines.map((l) => l.offset)).toEqual([-4, 4, -2, 0, 2]);
     expect(lines.map((l) => l.dashed)).toEqual([false, false, true, true, true]);
+  });
+
+  it('paints the highway asphalt as a smooth band past the tile edge, and leaves crater holes in it', () => {
+    const hole = { pos: highway.roads[0].points[40], radius: 2 };
+    const mask = paintedMask(highway, [hole]);
+    const band = mask.strokes.find((s) => s.style === ASPHALT_STYLE)!;
+
+    expect(band.width).toBeCloseTo((10 + 2 * HIGHWAY.road.paint.bandSpread) * mask.canvas.res, 6);
+    expect(mask.fills).toEqual([{ style: '#000', x: mask.canvas.toPx(hole.pos.x), y: mask.canvas.toPx(hole.pos.y), r: 2 * mask.canvas.res }]);
+    expect(paintedMask().strokes.some((s) => s.style === ASPHALT_STYLE)).toBe(false);
   });
 
   it('paints lanes and no dirt road on the highway, and no lanes on Icarus', () => {

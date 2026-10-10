@@ -95,8 +95,8 @@ describe('a highway window', () => {
           expect(typeAt(map, at(side * 30))).toBe('scree');
           const road = roadHeight(seed, n);
           for (const d of [3, 8, 14]) expect(heightAt(map.terrain, at(side * d).x, at(side * d).y)).toBeCloseTo(road, 1);
-          const ridge = at(side * 37);
-          expect(heightAt(map.terrain, ridge.x, ridge.y) - road).toBeGreaterThan(ROAD.ridge.rise - 3);
+          const ridge = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((k) => at(side * (ROAD.badlands + 0.5 * k)));
+          expect(ridge.some((p) => isCliff(map.terrain, Math.floor(p.y) * SIZE + Math.floor(p.x))), `seed ${seed} n ${n} side ${side}`).toBe(true);
           for (let d = 0; d <= ROAD.verge; d += 1.5) {
             const p = at(side * d);
             expect(isCliff(map.terrain, Math.floor(p.y) * SIZE + Math.floor(p.x)), `seed ${seed} n ${n} d ${d}`).toBe(false);

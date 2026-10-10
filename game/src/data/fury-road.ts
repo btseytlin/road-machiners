@@ -74,11 +74,11 @@ export const HIGHWAY = {
     badlands: 26,
     flatTo: 15,
     blend: 7,
-    ridge: { rise: 10, run: 10 },
+    ridge: { rise: 3, run: 4 },
     bend: { amplitude: 8, wavelength: 520, seedOffset: 101 },
     profile: { amplitude: 1.5, wavelength: 300, seedOffset: 103 },
     sample: 2,
-    paint: { dash: 3, gap: 3, line: 0.22, wear: 0.12 },
+    paint: { dash: 3, gap: 3, line: 0.2, wear: 0.02, band: 0.3, bandSpread: 0.75, holeInset: 0.75 },
   },
   relief: { amplitude: 2.4, octaves: [{ freq: 1 / 56, amp: 1, seedOffset: 201 }, { freq: 1 / 17, amp: 0.3, seedOffset: 202 }] },
   ground: {

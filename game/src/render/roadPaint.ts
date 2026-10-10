@@ -33,7 +33,9 @@ export const REGION_ROAD_STYLE = "#f00";
 export const DIRT_ROAD_STYLE = "#0f0";
 export const LANE_STYLE = "#00f";
 
-export function paintRoadMask(c: PaintCanvas, atlas: Atlas): void {
+export type RoadHole = { pos: Vec; radius: number };
+
+export function paintRoadMask(c: PaintCanvas, atlas: Atlas, holes: readonly RoadHole[] = []): void {
   const ctx = c.ctx;
   ctx.fillStyle = "#000";
   ctx.fillRect(0, 0, c.size, c.size);
@@ -55,8 +57,36 @@ export function paintRoadMask(c: PaintCanvas, atlas: Atlas): void {
     for (const spur of spurs) strokeSpur(c, spur, fade, offDeck);
   }
   ctx.filter = "none";
-  for (const road of atlas.roads.filter((r) => r.lanes > 0)) paintLanes(c, road);
-  ctx.globalCompositeOperation = "source-over";
+  paintHighways(c, atlas.roads.filter((r) => r.lanes > 0), holes);
+}
+
+function paintHighways(c: PaintCanvas, roads: readonly AtlasRoad[], holes: readonly RoadHole[]): void {
+  for (const road of roads) {
+    paintAsphalt(c, road);
+    paintLanes(c, road);
+  }
+  c.ctx.globalCompositeOperation = "source-over";
+  paintHoles(c, holes);
+}
+
+export const ASPHALT_STYLE = `rgb(0, 0, ${Math.round(HIGHWAY.road.paint.band * 255)})`;
+
+function paintAsphalt(c: PaintCanvas, road: AtlasRoad): void {
+  const ctx = c.ctx;
+  ctx.globalCompositeOperation = "lighten";
+  ctx.strokeStyle = ASPHALT_STYLE;
+  ctx.lineCap = "butt";
+  strokeRuns(c, [evenPoints(road.points)], road.width + 2 * HIGHWAY.road.paint.bandSpread);
+}
+
+function paintHoles(c: PaintCanvas, holes: readonly RoadHole[]): void {
+  const ctx = c.ctx;
+  ctx.fillStyle = "#000";
+  for (const hole of holes) {
+    ctx.beginPath();
+    ctx.arc(c.toPx(hole.pos.x), c.toPx(hole.pos.y), hole.radius * c.res, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 type LaneLine = { offset: number; dashed: boolean };
