@@ -91,7 +91,7 @@ export class PartRows {
     return el(
       "span",
       { class: "part-name" },
-      el("b", {}, partName(part.defId)),
+      el("b", { title: partName(part.defId) }, partName(part.defId)),
       conditionTag(part),
       showStatus ? el("span", { class: status.tone }, status.text) : null,
     );

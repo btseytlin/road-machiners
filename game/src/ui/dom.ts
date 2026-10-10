@@ -148,6 +148,10 @@ export function overlaps(a: Box, b: Box): boolean {
   return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
 }
 
+export function intersect(a: Box, b: Box): Box {
+  return { left: Math.max(a.left, b.left), top: Math.max(a.top, b.top), right: Math.min(a.right, b.right), bottom: Math.min(a.bottom, b.bottom) };
+}
+
 export function pairOverlaps(boxes: readonly Box[]): [number, number][] {
   const pairs: [number, number][] = [];
   boxes.forEach((a, i) => boxes.slice(i + 1).forEach((b, k) => {
@@ -240,9 +244,18 @@ function controls(root: Element): HTMLElement[] {
   return [...(modal ?? root).querySelectorAll<HTMLElement>(CONTROLS)].filter(isShown);
 }
 
+function scrolledBox(el: Element): Box {
+  let box: Box = el.getBoundingClientRect();
+  for (let node = el.parentElement; node; node = node.parentElement) {
+    const style = getComputedStyle(node);
+    if (scrolls(style.overflowX) || scrolls(style.overflowY)) box = intersect(box, node.getBoundingClientRect());
+  }
+  return box;
+}
+
 function overlapFaults(root: Element): LayoutFault[] {
   const list = controls(root);
-  const boxes = list.map((el) => el.getBoundingClientRect());
+  const boxes = list.map(scrolledBox);
   return pairOverlaps(boxes)
     .filter(([a, b]) => !list[a].contains(list[b]) && !list[b].contains(list[a]))
     .map(([a, b]) => ({ kind: "control-overlap", path: `${cssPath(list[a])} | ${cssPath(list[b])}`, text: `${list[a].innerText} | ${list[b].innerText}`.trim(), sizes: `${sizeOf(boxes[a])} | ${sizeOf(boxes[b])}` }));
