@@ -1,0 +1,102 @@
+#ui .log {
+  right: var(--space-7);
+  bottom: 112px;
+  width: var(--dock-width);
+  height: var(--log-height);
+  display: flex;
+  flex-direction: column;
+}
+/* The one owner of the stack above the log: the contracts at the old contracts spot, the radio in the space above.
+   Panels in it carry no position numbers of their own. */
+#ui .right-dock {
+  position: absolute;
+  right: var(--space-7);
+  bottom: 246px;
+  width: var(--dock-width);
+  display: flex;
+  flex-direction: column;
+  gap: var(--hud-gap);
+}
+#ui .right-dock > .panel {
+  position: static;
+}
+#ui .right-dock > .radio {
+  order: 0;
+}
+#ui .right-dock > .contracts {
+  order: 1;
+}
+/* Waste Of Time Radio: a pager screen over a faceplate of volume knobs, at the top of the right dock. The drawn parts are in drawings.css. */
+#ui .radio {
+  --radio-line: 14px;
+  --radio-lines: 3;
+  --knob-size: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--steel-2);
+  box-shadow: inset 0 1px 0 var(--bevel-light);
+}
+.radio-text {
+  position: relative;
+}
+.radio-text.streaming::after {
+  content: "\2588";
+  animation: radio-cursor 0.5s steps(1) infinite;
+}
+@keyframes radio-cursor {
+  50% {
+    opacity: 0;
+  }
+}
+.radio-faceplate {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 0;
+}
+.radio-mute {
+  display: flex;
+  align-items: center;
+  margin-left: var(--space-2);
+}
+.radio-keys {
+  display: flex;
+  justify-content: flex-end;
+}
+.contract-line {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-1) 0;
+  color: var(--ink-muted);
+}
+#ui .log .panel-title {
+  margin: 0;
+}
+.log-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-2);
+}
+.log-time {
+  white-space: nowrap;
+  margin-right: var(--space-3);
+  font: var(--text-dense) var(--font-mono);
+  color: var(--ink-muted);
+}
+.log-lines {
+  overflow-anchor: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.log-lines > div {
+  padding: var(--space-1) 0;
+  overflow-wrap: anywhere;
+}

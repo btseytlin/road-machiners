@@ -26,7 +26,7 @@ async function enter(page, spot) {
       for (let i = 0; i < 40 && !guns(w); i++) w = c.randomKit(w, 5);
     }
     g.apply(w);
-    g.town.open();
+    g.screens.town.open();
   }, spot);
   await page.waitForSelector('.town-shop .tabs button', { timeout: 90000 });
 }
@@ -40,7 +40,7 @@ try {
   await page.waitForFunction(() => window.__ROAM__?.state, null, { timeout: 120000 });
   for (const spot of ['nose', 'bowl']) {
     await enter(page, spot);
-    await page.locator('.town-screen .tabs button', { hasText: 'Buy Parts' }).click();
+    await page.locator('.town-screen [data-tab="buyParts"]').click();
     const gun = () => page.locator('.inv-item.mounted', { hasText: /turret|rifle|cannon|shotgun|MG/i }).first();
     await gun().click();
     await page.waitForTimeout(500);
@@ -66,7 +66,7 @@ try {
     r = await read(page);
     assert(r.deltas > 0, `${spot}: Enter must select and compare`);
     assert(!r.chips.includes('Free cargo cells'), `${spot}: garage header must not show free cells`);
-    for (const t of ['Money', 'Mass against rated load']) assert(r.chips.includes(t), `${spot}: header must keep the ${t} chip`);
+    for (const t of ["M's", 'Mass against rated load']) assert(r.chips.includes(t), `${spot}: header must keep the ${t} chip`);
     assert(!r.repair.includes('Nothing broken'), `${spot}: no idle Nothing broken label`);
     await page.evaluate(async () => {
       const g = window.__ROAM__;
@@ -79,17 +79,17 @@ try {
     await page.waitForTimeout(300);
     r = await read(page);
     assert(/\d+ broken/.test(r.repair), `${spot}: repair bar must show the broken count, got ${r.repair}`);
-    await page.locator('.town-repair button', { hasText: 'Repair all' }).waitFor();
-    await page.evaluate(() => window.__ROAM__.town.close());
+    await page.locator('.town-repair [data-key="repairAll"]').waitFor();
+    await page.evaluate(() => window.__ROAM__.screens.town.close());
   }
   await enter(page, 'salvage-yard');
   assert((await read(page)).chips.includes('Free cargo cells'), 'stall header must keep free cells');
-  await page.evaluate(() => window.__ROAM__.town.close());
+  await page.evaluate(() => window.__ROAM__.screens.town.close());
   await page.keyboard.press('i');
   assert((await read(page).then(() => page.locator('.modal:visible h3 .chip[title="Free cargo cells"]').count())) === 1, 'inventory header must keep free cells');
   await page.keyboard.press('Escape');
   await enter(page, 'nose');
-  await page.locator('.town-screen .tabs button', { hasText: 'Buy Parts' }).click();
+  await page.locator('.town-screen [data-tab="buyParts"]').click();
   await mkdir('.playtest', { recursive: true });
   for (const width of [1280, 1024, 800]) {
     await page.setViewportSize({ width, height: 730 });

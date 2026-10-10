@@ -22,6 +22,11 @@ import { chooseOn } from './tracks';
 import { addVehicle, emptyWorld, forceOption, npcBrain, practiceOf, testDrive } from './testkit';
 import type { GridItem, Vehicle, World } from './types';
 import { endTurn } from './world';
+import { lineKey } from '../text/names';
+import { entryText } from '../text/resolve';
+
+// A line's English words, so the tests read like the talk they check.
+const en = (line: Parameters<typeof lineKey>[0]): string => entryText('en', lineKey(line));
 
 function strandedAmbush(): { w: World; raider: Vehicle } {
   const w = emptyWorld({ x: 30, y: 30 });
@@ -37,7 +42,7 @@ function strandedAmbush(): { w: World; raider: Vehicle } {
 const shotsAtPlayer = (w: World, raider: Vehicle) => w.events.filter((e) => e.t === 'shot' && e.shooter === raider.id && e.target === w.player.vehicleId);
 
 function pick(w: World, text: string): World {
-  const index = currentOptions(w).findIndex((o) => o.text === text);
+  const index = currentOptions(w).findIndex((o) => en(o.line) === text);
   if (index < 0) throw new Error(`No option "${text}"`);
   return chooseOption(w, index);
 }
@@ -111,7 +116,7 @@ describe('surrender offer to a stranded player', () => {
     const me = playerVehicle(w);
     const mugger = w.vehicles.find((v) => v.id === raider.id)!;
     w.player.talked[mugger.id] = { surrender: 'refused' };
-    mugger.brain!.goals.push({ kind: 'fight', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'test' });
+    mugger.brain!.goals.push({ kind: 'fight', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'tripToSite' });
     chooseOn(w, mugger, me.id, me.pos, 'fight', true);
     expect(w.player.call?.topic).not.toBe('surrender');
     expect(CONDITIONS.demandsSurrender(w, mugger, {})).toBe(false);
@@ -141,7 +146,7 @@ describe('plain surrender to a stranded player', () => {
     const { w: start, lawman } = strandedByLawman();
     const w = endTurn(start, testDrive);
     expect(w.player.call).toMatchObject({ with: lawman.id, topic: 'giveUp' });
-    expect(currentOptions(w).map((o) => o.text)).toContain('Standing down.');
+    expect(currentOptions(w).map((o) => en(o.line))).toContain('Standing down.');
   });
 
   it('accepting ends the fight, holds a truce and takes nothing', () => {
@@ -186,7 +191,7 @@ describe('a stranded player not worth the trouble', () => {
   it('a driver that judges the player not worth it says so, makes peace and never offers', () => {
     const { w: start, lawman } = strandedByLawman('spare');
     const w = endTurn(start, testDrive);
-    expect(w.events).toContainEqual({ t: 'say', speaker: lawman.id, text: SPARE_LINE, vars: {} });
+    expect(w.events).toContainEqual({ t: 'say', speaker: lawman.id, line: SPARE_LINE, vars: {} });
     expect(w.player.call?.topic).not.toBe('giveUp');
     expect(isHostile(w, w.vehicles.find((v) => v.id === lawman.id)!, playerVehicle(w))).toBe(false);
   });
@@ -204,6 +209,7 @@ function npcAmbush(answer: 'accept' | 'refuse'): { w: World; raider: Vehicle; tr
   addState(w, 'feud', raider.id, trader.id, { kind: 'feud', robbery: true });
   forceOption('hostileSeen', 'fight');
   forceOption('surrenderOffered', answer);
+  forceOption('threatened', 'fightBack');
   return { w, raider, trader };
 }
 
@@ -246,7 +252,7 @@ describe('the player demands a beaten NPC give up', () => {
   }
 
   const npcOf = (w: World, npc: Vehicle) => w.vehicles.find((v) => v.id === npc.id)!;
-  const asks = (w: World) => currentOptions(w).some((o) => o.text === DEMAND);
+  const asks = (w: World) => currentOptions(w).some((o) => en(o.line) === DEMAND);
 
   it('is offered only while the foe is weak', () => {
     const { w, npc } = beaten();
@@ -361,7 +367,7 @@ describe('a beggar offers to stand down and be stripped', () => {
 
   it('offers the strip beside cargo and no mercy', () => {
     const { w } = begging();
-    expect(currentOptions(w).map((o) => o.text)).toEqual([CARGO, STRIP, 'No mercy.', 'Hang up.']);
+    expect(currentOptions(w).map((o) => en(o.line))).toEqual([CARGO, STRIP, 'No mercy.', 'Hang up.']);
   });
 
   it('is not offered once the driver answered a stand-down demand', () => {
@@ -369,7 +375,7 @@ describe('a beggar offers to stand down and be stripped', () => {
     w.player.call = null;
     npcOf(w, npc).brain!.noticed[`surrenderOffered:${w.player.vehicleId}`] = 1;
     raiseCalls(w);
-    expect(currentOptions(w).map((o) => o.text)).toEqual([CARGO, 'No mercy.', 'Hang up.']);
+    expect(currentOptions(w).map((o) => en(o.line))).toEqual([CARGO, 'No mercy.', 'Hang up.']);
   });
 
   it('accepting leaves the truck lying with all its gear, and makes peace', () => {
@@ -411,7 +417,7 @@ describe('a beggar offers to stand down and be stripped', () => {
     expect(mountedParts(after).length).toBe(parts);
     expect(pleaEvents(w)).toContainEqual(expect.objectContaining({ plea: 'mercy', accepted: false }));
     corePart(after, 'cab').hp = 1;
-    const ask = currentOptions(callVehicle(w, npc.id)).some((o) => o.text.startsWith('Your truck is finished'));
+    const ask = currentOptions(callVehicle(w, npc.id)).some((o) => en(o.line).startsWith('Your truck is finished'));
     expect(ask).toBe(false);
   });
 

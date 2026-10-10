@@ -52,6 +52,15 @@ import { defaultSetup } from "./settings";
 const bowl = REGION.towns.find((t) => t.id === "bowl")!;
 const nose = REGION.towns.find((t) => t.id === "nose")!;
 const startAtBowl = () => emptyWorld(sitePads(bowl)[0]);
+
+const pristineAtBowl = () => {
+  const w = startAtBowl();
+  for (const part of mountedParts(w.vehicles[0])) {
+    part.wear = 0;
+    part.hp = maxHp(part);
+  }
+  return w;
+};
 const longbedAtBowl = () => {
   const start = startAtBowl();
   const money = start.player.money;
@@ -73,11 +82,9 @@ describe("trade", () => {
   it("enforces cargo capacity and money", () => {
     const w = startAtBowl();
     w.player.money = 333333;
-    expect(() => buyGood(w, "scrap", freeCells(w.vehicles[0]) + 1)).toThrow(
-      /cargo space/,
-    );
+    expect(() => buyGood(w, "scrap", freeCells(w.vehicles[0]) + 1)).toThrow("Refused: noCargoRoom");
     w.player.money = 10000;
-    expect(() => buyGood(w, "meds", 10)).toThrow(/money/);
+    expect(() => buyGood(w, "meds", 10)).toThrow('Refused: noMoney');
   });
 
   it("the salt route from Nose to Bowl pays and trains Social", () => {
@@ -217,7 +224,7 @@ describe("garage", () => {
     expect(one.player.money).toBe(w.player.money - part);
 
     const basics = repairBasics(w);
-    expect(corePart(basics.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
+    expect(corePart(basics.vehicles[0], "cab").hp).toBe(maxHp(cab));
     expect(basics.player.money).toBe(w.player.money - basicsRepairCost(w));
 
     const all = repairAll(w);
@@ -281,7 +288,7 @@ describe("garage", () => {
     corePart(w.vehicles[0], "cab").hp = 10;
     mountedParts(w.vehicles[0])[0].hp = 0;
     const r = repairAll(w);
-    expect(corePart(r.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
+    expect(corePart(r.vehicles[0], "cab").hp).toBe(maxHp(corePart(w.vehicles[0], "cab")));
     expect(mountedParts(r.vehicles[0])[0].hp).toBeGreaterThan(0);
     expect(r.player.money).toBeLessThan(w.player.money);
   });
@@ -295,7 +302,7 @@ describe("garage", () => {
 
     const r = repairBasics(w);
 
-    expect(corePart(r.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
+    expect(corePart(r.vehicles[0], "cab").hp).toBe(maxHp(corePart(w.vehicles[0], "cab")));
     expect(mountedParts(r.vehicles[0])[0].hp).toBe(1);
     expect(mountedParts(r.vehicles[0])[0].wear).toBe(gun.wear);
     expect(r.player.money).toBe(w.player.money - price);
@@ -347,7 +354,7 @@ describe("garage", () => {
     const r = repairAll(w);
 
     expect(mountedParts(r.vehicles[0])[0].hp).toBe(0);
-    expect(corePart(r.vehicles[0], "cab").hp).toBe(partDef("cab").hp);
+    expect(corePart(r.vehicles[0], "cab").hp).toBe(maxHp(corePart(w.vehicles[0], "cab")));
   });
 
   it("rebuilds a junk part with the Rebuild perk at the full repair price of its last wear step", () => {
@@ -403,9 +410,7 @@ describe("garage", () => {
 
     const repaired = repairPart(w, cab.id);
 
-    expect(corePart(repaired.vehicles[0], "cab").hp).toBe(
-      partDef(cab.defId).hp,
-    );
+    expect(corePart(repaired.vehicles[0], "cab").hp).toBe(maxHp(cab));
     expect(coreParts(repaired.vehicles[0], "wheel")[0].hp).toBe(1);
     expect(repaired.player.money).toBe(w.player.money - cost);
     expect(cab.hp).toBe(10);
@@ -419,7 +424,7 @@ describe("garage", () => {
     w.player.storage.push({ ...cab, id: "stored" });
     expect(() => repairPart(w, "stored")).toThrow(/part/);
     w.player.money = 0;
-    expect(() => repairPart(w, cab.id)).toThrow(/money/);
+    expect(() => repairPart(w, cab.id)).toThrow('Refused: noMoney');
     expect(cab.hp).toBe(10);
   });
 
@@ -432,7 +437,7 @@ describe("garage", () => {
   });
 
   it("chassis swap keeps fitting parts and stores the rest", () => {
-    let w = startAtBowl();
+    let w = pristineAtBowl();
     w.player.money = 66667;
     w = buyChassis(w, "hauler");
     const me = w.vehicles[0];
@@ -472,7 +477,7 @@ describe("garage", () => {
   });
 
   it("trade-in drops with worn built-in parts, even at full health", () => {
-    const w = startAtBowl();
+    const w = pristineAtBowl();
     const whole = chassisTradeIn(w);
     for (const wheel of coreParts(w.vehicles[0], "wheel")) wheel.wear = 2;
     expect(chassisTradeIn(w)).toBeLessThan(whole);
@@ -646,7 +651,7 @@ describe("locations", () => {
     expect(canUseOasis(w)).toBe(true);
     const after = useOasis(w);
     expect(after.player.supplies).toBe(RULES.baseSupplies);
-    expect(after?.events).toContainEqual({ t: "info", text: `Filled supplies at ${oasis.name}` });
+    expect(after?.events).toContainEqual({ t: "info", note: { id: "filledSupplies", site: oasis.id } });
   });
 
   it("rejects refilling away from an oasis", () => {
@@ -704,12 +709,12 @@ describe("debt", () => {
     const w = startAtBowl();
     w.player.money = -3333;
     w.player.fuel = CHASSIS.scout.fuelCap - 1;
-    expect(() => buyGood(w, "scrap", 1)).toThrow(/money/);
-    expect(() => buySupply(w, "fuel", 1)).toThrow(/money/);
-    expect(() => buyStockPart(w, w.shops.bowl.stock[0].id)).toThrow(/money/);
-    expect(() => repairAll(w)).toThrow(/money/);
+    expect(() => buyGood(w, "scrap", 1)).toThrow('Refused: noMoney');
+    expect(() => buySupply(w, "fuel", 1)).toThrow('Refused: noMoney');
+    expect(() => buyStockPart(w, w.shops.bowl.stock[0].id)).toThrow('Refused: noMoney');
+    expect(() => repairAll(w)).toThrow('Refused: noMoney');
     w.player.money = -1;
-    expect(() => buyChassis(w, "courier")).toThrow(/money/);
+    expect(() => buyChassis(w, "courier")).toThrow('Refused: noMoney');
   });
 
   it("sales pay the debt down", () => {
@@ -758,7 +763,7 @@ describe("garage storage at a stall", () => {
     w.player.money = 0;
     const part = w.shops["pump-station"].stock[0];
     fillGrid(w, part.defId);
-    expect(() => buyStockPart(w, part.id)).toThrow(/money/);
+    expect(() => buyStockPart(w, part.id)).toThrow('Refused: noMoney');
   });
 
   it("buys a stored part into the stall stock", () => {

@@ -51,7 +51,7 @@ describe('utility orders', () => {
     part.hp = 0;
 
     expect(utilityBlock(w, v, part)).toBe('disabled');
-    expect(utilityOrderError(w, v, part.id, { kind: 'self' })).toMatch(/disabled/);
+    expect(utilityOrderError(w, v, part.id, { kind: 'self' })).toMatchObject({ id: 'utilityBlocked', block: 'disabled' });
   });
 
   it('refuses a utility that is not mounted', () => {
@@ -61,7 +61,7 @@ describe('utility orders', () => {
     mountPart(w, v, part, ['F', 'B', 'L', 'R']);
 
     expect(utilityBlock(w, v, part)).toBe('unmounted');
-    expect(utilityOrderError(w, v, part.id, { kind: 'self' })).toMatch(/unmounted/);
+    expect(utilityOrderError(w, v, part.id, { kind: 'self' })).toMatchObject({ id: 'utilityBlocked', block: 'unmounted' });
   });
 
   it('refuses a recharging utility', () => {
@@ -69,15 +69,15 @@ describe('utility orders', () => {
     part.charge = { reload: 3 };
 
     expect(utilityBlock(w, v, part)).toBe('cooldown');
-    expect(utilityOrderError(w, v, part.id, { kind: 'self' })).toMatch(/cooldown/);
+    expect(utilityOrderError(w, v, part.id, { kind: 'self' })).toMatchObject({ id: 'utilityBlocked', block: 'cooldown' });
   });
 
   it('refuses a passive utility and an order of the wrong kind', () => {
     const crane = withUtility('patcherCrane');
     const sprout = withUtility('sprout');
 
-    expect(utilityOrderError(crane.w, crane.v, crane.part.id, { kind: 'self' })).toMatch(/passive/);
-    expect(utilityOrderError(sprout.w, sprout.v, sprout.part.id, { kind: 'point', pos: { x: 45, y: 30 } })).toMatch(/self/);
+    expect(utilityOrderError(crane.w, crane.v, crane.part.id, { kind: 'self' })).toMatchObject({ id: 'utilityPassive' });
+    expect(utilityOrderError(sprout.w, sprout.v, sprout.part.id, { kind: 'point', pos: { x: 45, y: 30 } })).toMatchObject({ id: 'utilityOrder', order: 'self' });
   });
 
   it('refuses a part the truck does not carry', () => {
@@ -94,7 +94,7 @@ describe('utility orders', () => {
     expect(setUtilityOrder(ordered, part.id, null).vehicles[0].utilityOrders).toEqual({});
 
     part.hp = 0;
-    expect(() => setUtilityOrder(w, part.id, { kind: 'self' })).toThrow(/disabled/);
+    expect(() => setUtilityOrder(w, part.id, { kind: 'self' })).toThrow('Refused: utilityBlocked');
   });
 });
 

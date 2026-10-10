@@ -2,7 +2,7 @@
 // radio works in sight only. A player call opens on the hub, which lists the topics this NPC can take up. An
 // NPC call opens on the topic it raises. Turns wait while a call is open. Topic content lives in
 
-import { BUSY_LINE, END, HONK_RANGE, HUB, REFUSED, TOPICS, TRAIT_TALK, type DialogueOption, type Topic, type TopicId, type Voice } from '../data/dialogue';
+import { BUSY_LINE, END, handoffQuest, HANG_UP_LINE, HONK_RANGE, HUB, REFUSED, TOPICS, TRAIT_TALK, type DialogueOption, type LineId, type Topic, type TopicId, type Voice } from '../data/dialogue';
 import { inCombat, inCombatWithOther, inFeud, isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
 import { isKnockedOut } from './defeat';
@@ -11,10 +11,12 @@ import type { Call, CallVars, GameEvent, Vehicle, World } from './types';
 import { dist } from './vec';
 import { npcTraits } from './npc-decisions';
 import { practice } from './progress';
+import { openQuest, QUESTS } from './quests';
 import { canVehicleSee } from './vision';
 import { playerCommand, requireActivePlayer, update } from './world';
 
-export type OfferedOption = { text: string; topic: TopicId | null; option: DialogueOption | null };
+// An option the player can pick now. The hub lists topics, and a topic node lists its own options.
+export type OfferedOption = { line: LineId; topic: TopicId | null; option: DialogueOption | null };
 
 export function talkOf(npc: Vehicle): Voice & { topics: TopicId[] } {
   const talks = npcTraits(npc).map((id) => TRAIT_TALK[id]);
@@ -49,31 +51,25 @@ function askable(world: World, npc: Vehicle): Topic[] {
 export function currentOptions(world: World): OfferedOption[] {
   const call = openCall(world);
   const npc = vehicleById(world, call.with);
-  const hangUp: OfferedOption = { text: 'Hang up.', topic: null, option: null };
+  const hangUp: OfferedOption = { line: HANG_UP_LINE, topic: null, option: null };
   if (isRefused(call)) return [hangUp];
-  if (!call.topic) return [...askable(world, npc).map((t) => ({ text: t.ask!.text, topic: t.id, option: null })), hangUp];
+  if (!call.topic) return [...askable(world, npc).map((t) => ({ line: t.ask!.say, topic: t.id, option: null })), hangUp];
   const node = TOPICS[call.topic].nodes[call.node];
-  const options = node.options.filter((o) => holds(world, npc, o.when, call.vars)).map((o) => ({ text: o.text, topic: call.topic, option: o }));
+  const options = node.options.filter((o) => holds(world, npc, o.when, call.vars)).map((o) => ({ line: o.say, topic: call.topic, option: o }));
   return [...options, hangUp];
 }
 
-export function currentLine(world: World): string {
+// The line the NPC says at the current node.
+export function currentLine(world: World): LineId {
   const call = openCall(world);
-  if (isRefused(call)) return call.line.text;
+  if (isRefused(call)) return call.line.line;
   if (!call.topic) return talkOf(vehicleById(world, call.with)).greeting;
   return TOPICS[call.topic].nodes[call.node].line;
 }
 
-function say(world: World, speaker: string, text: string, vars: CallVars): void {
-  for (const name of placeholders(text)) {
-    if (!vars[name]) throw new Error(`Line "${text}" needs the call value ${name}`);
-  }
-  world.events.push({ t: 'say', speaker, text, vars });
-  if (world.player.call?.with === speaker) world.player.call.line = { text, vars };
-}
-
-export function placeholders(text: string): string[] {
-  return [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+function say(world: World, speaker: string, line: LineId, vars: CallVars): void {
+  world.events.push({ t: 'say', speaker, line, vars });
+  if (world.player.call?.with === speaker) world.player.call.line = { line, vars };
 }
 
 function enter(world: World, call: Call, topic: TopicId | null, node: string): void {
@@ -94,9 +90,10 @@ function endCall(world: World, call: Call): void {
   world.events.push({ t: 'call', with: call.with, outcome: 'ended' });
 }
 
-function begin(world: World, npc: Vehicle): Call {
+// line: what the driver says first, which enter() says again for a call it takes.
+function begin(world: World, npc: Vehicle, line: LineId): Call {
   if (world.player.call) throw new Error('A call is already open');
-  const call: Call = { with: npc.id, topic: null, node: HUB, vars: {}, line: { text: '', vars: {} } };
+  const call: Call = { with: npc.id, topic: null, node: HUB, vars: {}, line: { line, vars: {} } };
   world.player.call = call;
   world.events.push({ t: 'call', with: npc.id, outcome: 'opened' });
   return call;
@@ -110,15 +107,19 @@ export function callVehicle(world: World, npcId: string): World {
     if (!npc.brain) throw new Error(`${npcId} has no driver to call`);
     if (isKnockedOut(npc)) throw new Error(`${npcId} has a knocked-out driver`);
     if (!canVehicleSee(w, playerVehicle(w), npc.pos)) throw new Error(`${npcId} is out of sight`);
-    const refusal = refusalOf(w, npc);
-    const call = begin(w, npc);
-    if (!refusal) return enter(w, call, null, HUB);
-    call.node = REFUSED;
-    call.line = { text: refusal, vars: {} };
+    answer(w, npc, refusalOf(w, npc));
   });
 }
 
-function refusalOf(world: World, npc: Vehicle): string | null {
+// The driver takes the call on the hub, or refuses it with the line it says.
+function answer(world: World, npc: Vehicle, refusal: LineId | null): void {
+  if (!refusal) return enter(world, begin(world, npc, talkOf(npc).greeting), null, HUB);
+  const call = begin(world, npc, refusal);
+  call.node = REFUSED;
+}
+
+// The line a driver answers with instead of taking the player's call, or null when it takes the call.
+function refusalOf(world: World, npc: Vehicle): LineId | null {
   if (busyElsewhere(world, npc, playerVehicle(world))) return BUSY_LINE;
   if (inFeud(world, npc, playerVehicle(world)) && askable(world, npc).length === 0) return talkOf(npc).refusal;
   return null;
@@ -128,8 +129,9 @@ function busyElsewhere(world: World, npc: Vehicle, me: Vehicle): boolean {
   return inCombatWithOther(world, npc, me.id) && !isHostile(world, npc, me);
 }
 
-function reply(world: World, call: Call, text: string): void {
-  if (!isRefused(call)) say(world, world.player.vehicleId, text, call.vars);
+// The player's reply goes to the log only on a call the driver took.
+function reply(world: World, call: Call, line: LineId): void {
+  if (!isRefused(call)) say(world, world.player.vehicleId, line, call.vars);
 }
 
 export function chooseOption(world: World, index: number): World {
@@ -138,7 +140,7 @@ export function chooseOption(world: World, index: number): World {
     if (!offered) throw new Error(`No option ${index} on offer`);
     const call = openCall(w);
     const npc = vehicleById(w, call.with);
-    reply(w, call, offered.text);
+    reply(w, call, offered.line);
     if (offered.option) return follow(w, npc, call, offered.option);
     if (offered.topic) return askTopic(w, npc, call, TOPICS[offered.topic]);
     hangUpCall(w, npc, call);
@@ -152,6 +154,11 @@ function askTopic(world: World, npc: Vehicle, call: Call, topic: Topic): void {
 
 function follow(world: World, npc: Vehicle, call: Call, option: DialogueOption): void {
   for (const id of option.effects) EFFECTS[id](world, npc, call);
+  const quest = handoffQuest(option.go);
+  if (quest) {
+    endCall(world, call);
+    return openQuest(world, QUESTS, quest, 'start');
+  }
   if (option.go === END) return endCall(world, call);
   if (option.go === HUB) return enter(world, call, null, HUB);
   enter(world, call, call.topic, option.go);
@@ -206,7 +213,7 @@ function hangUpCall(world: World, npc: Vehicle, call: Call): void {
 export function hangUp(world: World): World {
   return update(world, (w) => {
     const call = openCall(w);
-    reply(w, call, 'Hang up.');
+    reply(w, call, HANG_UP_LINE);
     hangUpCall(w, vehicleById(w, call.with), call);
   });
 }
@@ -217,7 +224,7 @@ export function raiseCalls(world: World): void {
   for (const npc of world.vehicles) {
     const topic = raisedTopic(world, npc, me);
     if (!topic) continue;
-    enterTopic(world, npc, begin(world, npc), topic);
+    enterTopic(world, npc, begin(world, npc, topic.nodes[topic.start].line), topic);
     return;
   }
 }

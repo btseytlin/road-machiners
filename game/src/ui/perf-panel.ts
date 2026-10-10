@@ -8,21 +8,8 @@ const REFRESH_MS = 500;
 const WINDOW_FRAMES = 120;
 const TIMERS = ["turn", "preview", "route", "fog"];
 
-const STYLE = [
-  "position: absolute",
-  "left: 56px",
-  "top: 8px",
-  "background: rgba(30, 22, 16, 0.88)",
-  "border: 1px solid #6a5238",
-  "border-radius: 4px",
-  "padding: 6px 8px",
-  "font: 11px/1.35 ui-monospace, Menlo, monospace",
-  "color: #f0e0b8",
-  "white-space: pre",
-].join("; ");
-
 export function mountPerfPanel(host: HTMLElement): { toggle(): boolean } {
-  const box = el("div", { class: "perf-panel", style: STYLE });
+  const box = el("div", { class: "perf-panel" });
   box.hidden = true;
   host.append(box);
 

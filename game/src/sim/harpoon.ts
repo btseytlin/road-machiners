@@ -1,6 +1,8 @@
 // Harpoon lines. The harpoon is a gun of one round (WeaponDef.line). A round of it that strikes its target ties a line
 // to the part it hit first; the fire phase calls attachLine(). The line is a world object that ends after its turns
-// (advanceUtilityEffects ages it), when it tears, or when either anchor part leaves its truck or the harpoon breaks.
+// (advanceUtilityEffects ages it), when it tears, when the shooter cuts it, or when either anchor part leaves its truck or the harpoon breaks.
+// Physics reads the holding lines at turn start through lineAnchors() and pulls the two trucks together while the line
+// is stretched. A stretch pull above HARPOON.tearForce tears it, and physics reports the tear for tearLine().
 
 import { PHYSICS } from '../data/physics';
 import { HARPOON } from '../data/utilities';
@@ -26,8 +28,8 @@ export function attachLine(world: World, ends: Ends, turns: number): void {
 }
 
 function anchorGap(ends: Ends): number {
-  const a = mapPoint(ends.from, anchorOf(ends.from, ends.fromPart));
-  const b = mapPoint(ends.to, anchorOf(ends.to, ends.toPart));
+  const a = mapPoint(ends.from, anchorOf(ends.from, ends.fromPart, BRACED));
+  const b = mapPoint(ends.to, anchorOf(ends.to, ends.toPart, HELD));
   return Math.hypot(b.x - a.x, b.z - a.z);
 }
 
@@ -37,11 +39,14 @@ function mapPoint(v: Vehicle, at: BodyPoint): { x: number; z: number } {
   return { x: v.pos.x * S + cos * at.x - sin * at.z, z: v.pos.y * S + sin * at.x + cos * at.z };
 }
 
-function anchorOf(v: Vehicle, partId: string): BodyPoint {
+const BRACED = -PHYSICS.truck.comBelow;
+const HELD = 0;
+
+function anchorOf(v: Vehicle, partId: string, y: number): BodyPoint {
   const item = mountedItem(v, partId);
-  if (!item) throw new Error(`${v.name} has no mounted part ${partId}`);
+  if (!item) throw new Error(`${v.id} has no mounted part ${partId}`);
   const r = cellRect(v.chassisId, itemCells(item));
-  return { x: (r.x0 + r.x1) / 2, y: 0, z: (r.z0 + r.z1) / 2 };
+  return { x: (r.x0 + r.x1) / 2, y, z: (r.z0 + r.z1) / 2 };
 }
 
 function mountedItem(v: Vehicle, partId: string): PartItem | undefined {
@@ -65,8 +70,14 @@ export function lineAnchors(world: World): LineAnchor[] {
   return world.lines.flatMap((line) => {
     const ends = holdsEnds(world, line);
     if (!ends) return [];
-    return [{ id: line.id, from: line.from, to: line.to, fromAt: anchorOf(ends.from, ends.fromPart), toAt: anchorOf(ends.to, ends.toPart), length: line.length }];
+    return [{ id: line.id, from: line.from, to: line.to, fromAt: anchorOf(ends.from, ends.fromPart, BRACED), toAt: anchorOf(ends.to, ends.toPart, HELD), length: line.length }];
   });
+}
+
+export function cutLine(world: World, shooter: Vehicle, harpoonId: string): void {
+  const line = world.lines.find((l) => l.from === shooter.id && l.fromPart === harpoonId);
+  if (!line) throw new Error(`${shooter.id} has no line out from ${harpoonId}`);
+  world.lines = world.lines.filter((l) => l !== line);
 }
 
 export function tearLine(world: World, lineId: string): void {

@@ -1,0 +1,349 @@
+/* Town screen: the truck stays on the left and the shop tabs on the right. Each column scrolls on its own.
+   The inventory screen shares the header and the column that fits the truck to the window height. */
+#ui .modal.town-screen,
+#ui .modal.inventory-screen {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* Header chips: truck, money, free cells and load. */
+#ui .town-screen > h3,
+#ui .inventory-screen > h3,
+#ui .character-screen > h3,
+#ui .journal-screen > h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  margin-bottom: var(--space-2);
+}
+.inv-body {
+  flex: 1;
+  min-height: 0;
+  margin-top: var(--space-4);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.inv-body .inv-wrap {
+  margin-top: 0;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  font: var(--text-dense) var(--font-mono);
+  color: var(--ink);
+}
+.chip .icon,
+.price .icon,
+.note > .icon {
+  width: var(--icon-m);
+  height: var(--icon-m);
+}
+.town-shop table {
+  margin: var(--space-1) 0;
+}
+.town-shop td,
+.town-shop th {
+  padding: var(--space-1) var(--space-3);
+}
+.town-shop h3 {
+  margin: var(--space-5) 0 0;
+}
+.town-split {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(var(--panel-l), 1fr);
+  gap: var(--space-9);
+  margin-top: var(--space-4);
+}
+.town-truck,
+.town-shop {
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.town-shop {
+  container-type: inline-size;
+}
+.town-truck {
+  padding-right: var(--space-9);
+  border-right: 1px solid var(--line-soft);
+}
+.town-truck .inv-wrap {
+  margin-top: 0;
+  justify-content: flex-start;
+  gap: var(--space-9);
+}
+.town-shop > .tabs {
+  padding: 0 0 var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.modal .tabs.sub {
+  border-bottom: none;
+  padding: 0 0 var(--space-2);
+  margin-bottom: 0;
+}
+.modal .tabs.sub button {
+  min-width: 0;
+}
+.inv-wrap {
+  display: flex;
+  gap: var(--space-10);
+  align-items: flex-start;
+  justify-content: center;
+  margin-top: var(--space-7);
+}
+.inv-truck {
+  flex: none;
+}
+.inv-target h3 {
+  margin: 0 0 var(--space-6);
+}
+/* Room for the truck outline, which reaches past the grid. */
+.truck-shell {
+  padding: var(--space-9) 0;
+}
+.inv-grid {
+  position: relative;
+  background: var(--cell-none);
+}
+/* The truck's outline from above. The condition panel fills it behind its parts. The inventory draws only its line,
+   over the cells and under the items. */
+.truck-outline {
+  position: absolute;
+  pointer-events: none;
+  --plan-line: var(--map-side);
+  --plan-fill: var(--cell-none);
+}
+.inv-grid .truck-outline {
+  --plan-line: var(--cell-plan-line);
+  --plan-fill: none;
+}
+.truck-outline svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.inv-cell {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--cell-line);
+  font: var(--text-caption) var(--font-mono);
+  color: var(--cell-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.inv-cell.c-plain {
+  background: var(--cell-plain);
+}
+.inv-cell.c-D {
+  background: var(--cell-deck);
+}
+.inv-cell.c-E {
+  background: var(--cell-engine);
+}
+.inv-cell.c-F,
+.inv-cell.c-B,
+.inv-cell.c-L,
+.inv-cell.c-R {
+  background: var(--cell-side);
+}
+.inv-cell.c-X {
+  background: var(--cell-none);
+}
+/* Rows of a broken cargo part: they hold nothing until the part is repaired. */
+.inv-cell.c-dead {
+  border-color: var(--cell-side);
+  background: repeating-linear-gradient(45deg, var(--cell-none) 0 var(--space-2), var(--cell-plain) var(--space-2) var(--space-3));
+}
+.inv-item {
+  position: absolute;
+  box-sizing: border-box;
+  margin: 0;
+  border: 2px solid var(--cell-none);
+  font-size: var(--text-dense);
+  padding: var(--space-1);
+  overflow: hidden;
+  cursor: grab;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.inv-item > * {
+  pointer-events: none;
+}
+.inv-item .icon {
+  width: 100%;
+  height: 100%;
+}
+.inv-item:has(.meter) {
+  padding-bottom: var(--space-3);
+}
+.inv-item-name {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.inv-item.mounted {
+  border-color: var(--mark-own);
+}
+.inv-item.spare {
+  border-color: var(--ink-label);
+}
+.inv-item:hover {
+  border-color: var(--line-hover);
+}
+.inv-item.fixed {
+  cursor: pointer;
+  border-color: var(--line-strong);
+}
+.inv-fan {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.inv-fan path {
+  fill: var(--accent-wash);
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.inv-item.blocking {
+  outline: 2px solid var(--danger);
+  outline-offset: -2px;
+}
+.inv-item.selected,
+.inv-item.holding,
+.inv-chip.selected {
+  border-color: var(--accent);
+  background-image: linear-gradient(var(--accent-wash), var(--accent-wash));
+}
+/* Item boxes, chips and standalone item icons sit on their category tone, set inline as --tone by toneStyle() in
+   cards.ts from ITEM_TONES in src/render/palette.ts. A grid icon inherits its box's tone, so nothing doubles.
+   The weapon panel is the one exception: its gun icons draw without the tile. */
+.inv-item,
+.inv-chip,
+.item-icon {
+  background: var(--tone);
+}
+.item-icon {
+  box-sizing: border-box;
+  padding: var(--space-1);
+  border-radius: var(--radius-s);
+}
+.inv-item .item-icon {
+  padding: 0;
+  border-radius: 0;
+}
+.inv-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  width: var(--inv-side-width);
+  min-width: var(--inv-side-min);
+}
+.inv-inspection {
+  border-top: 1px solid var(--line-strong);
+  padding-top: var(--space-7);
+}
+.inv-inspection:empty {
+  display: none;
+}
+.inv-inspection > .icon {
+  width: var(--icon-hero);
+  height: var(--icon-hero);
+  margin-bottom: var(--space-5);
+}
+.inv-inspection p {
+  font-size: var(--text-dense);
+  line-height: 1.5;
+}
+.inv-storage {
+  min-height: calc(var(--icon-hero) + var(--space-7));
+  background: var(--surface-well);
+  border: 1px solid var(--line-soft);
+  padding: var(--space-5);
+}
+.inv-chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin: var(--space-2) 0;
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  border: 1px solid var(--line-soft);
+  cursor: grab;
+  user-select: none;
+  font-size: var(--text-dense);
+}
+.inv-chip > span {
+  flex: 1;
+}
+.inv-chip > .cond {
+  flex: none;
+  font-size: var(--text-dense);
+}
+.inv-chip > .icon {
+  flex: none;
+  width: var(--icon-l);
+  height: var(--icon-l);
+}
+.inv-item > .meter,
+.inv-chip > .meter {
+  position: absolute;
+  left: var(--space-1);
+  right: var(--space-1);
+  bottom: var(--space-1);
+  height: var(--meter-s);
+}
+.inv-dump {
+  background: var(--surface-well);
+  border: 1px solid var(--line-soft);
+  color: var(--danger-ink);
+  padding: var(--space-6);
+  text-align: center;
+  font-size: var(--text-dense);
+}
+.inv-item.refitting {
+  border: 2px dashed var(--accent);
+}
+.inv-ghost.held {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+.inv-refit {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-well);
+  border: 1px solid var(--line-soft);
+  font-size: var(--text-dense);
+}
+.inv-ghost {
+  position: fixed;
+  pointer-events: none;
+  z-index: var(--z-drag);
+  box-sizing: border-box;
+  border: 2px solid var(--ink-overlay);
+  background: var(--accent-wash);
+  color: var(--ink-overlay);
+  font: var(--text-dense) var(--font-mono);
+  padding: var(--space-1);
+}
+.inv-ghost.ok {
+  border-color: var(--good-bright);
+  background: var(--good-wash);
+}
+.inv-ghost.no {
+  border-color: var(--danger-ink);
+  background: var(--danger-wash);
+}

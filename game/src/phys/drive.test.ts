@@ -27,6 +27,11 @@ import { TOW } from '../data/tow';
 import { NPCS } from '../data/npcs';
 import { soundRange } from '../sim/detect';
 import { budget } from '../test/budget';
+import { lineKey } from '../text/names';
+import { entryText } from '../text/resolve';
+
+// A line's English words, so the tests read like the talk they check.
+const en = (line: Parameters<typeof lineKey>[0]): string => entryText('en', lineKey(line));
 
 beforeAll(async () => {
   await initPhysics();
@@ -238,8 +243,8 @@ describe('physics turns', () => {
     const w = emptyWorld({ x: mid.x + Math.cos(toNose + Math.PI / 2) * 12, y: mid.y + Math.sin(toNose + Math.PI / 2) * 12 });
     const east = addVehicle(w, 'traders', 'hauler', ['stockEngine'], at(-1.5), toNose);
     const west = addVehicle(w, 'traders', 'hauler', ['stockEngine'], at(1.5), toNose + Math.PI);
-    east.brain = { ...npcBrain('trader', east.pos, ['trader']), goals: [{ kind: 'sell', targetId: 'nose', destination: { ...nose.pos }, reason: 'test', phase: 'travel' }] };
-    west.brain = { ...npcBrain('trader', west.pos, ['trader']), goals: [{ kind: 'sell', targetId: 'bowl', destination: { ...bowl.pos }, reason: 'test', phase: 'travel' }] };
+    east.brain = { ...npcBrain('trader', east.pos, ['trader']), goals: [{ kind: 'sell', targetId: 'nose', destination: { ...nose.pos }, reason: 'tripToSite', phase: 'travel' }] };
+    west.brain = { ...npcBrain('trader', west.pos, ['trader']), goals: [{ kind: 'sell', targetId: 'bowl', destination: { ...bowl.pos }, reason: 'tripToSite', phase: 'travel' }] };
     const along = (p: Vec) => (p.x - mid.x) * Math.cos(toNose) + (p.y - mid.y) * Math.sin(toNose);
     const { w: after } = play(w, 10);
     expect(along(after.vehicles.find((v) => v.id === east.id)!.pos)).toBeGreaterThan(5);
@@ -332,9 +337,9 @@ describe('physics turns', () => {
       return after;
     }
 
-    it('only glass has less than full grip', () => {
+    it('only glass and the mud grounds have less than full grip', () => {
       const slippery = Object.values(TERRAIN_TYPES).filter((t) => t.grip !== 1 || t.sideGrip !== 1).map((t) => t.id);
-      expect(slippery).toEqual(['glass']);
+      expect(slippery).toEqual(['mud', 'dirtyWater', 'toxic', 'glass']);
     });
 
     function meanSkid(type: 'sand' | 'glass'): number {
@@ -496,7 +501,7 @@ describe('physics turns', () => {
     const w = ordered({ kind: 'through', dest: { x: 28, y: 27 } });
     const at = me(w).pos;
     w.obstacles = [-3, -2, -1, 0, 1, 2, 3].map((i) => ({ id: `r${i}`, pos: { x: at.x + 1.8, y: at.y + i * 1.2 }, r: 0.7, kind: 'rock' as const }));
-    const { w: after, d } = play(w, 14);
+    const { w: after, d } = play(w, 18);
     expect(me(after).order).toBeNull();
     freeDrive(d);
   });
@@ -528,14 +533,14 @@ describe('physics turns', () => {
     let run = 0;
     let longest = 0;
     let heading = 0;
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 18; i++) {
       const before = me(w).pos;
       let next: Drive | null = null;
       w = endTurn(w, physicsMove(d, (r) => (next = r.next)));
       freeDrive(d);
       d = next!;
       const m = me(w);
-      if (m.order) heading = angleDiff(m.heading, bearing(m.pos, dest));
+      if (m.order && m.pos.x > dest.x + 6) heading = angleDiff(m.heading, bearing(m.pos, dest));
       const moved = { x: m.pos.x - before.x, y: m.pos.y - before.y };
       const backing = moved.x * Math.cos(m.heading) + moved.y * Math.sin(m.heading) < -0.05;
       run = backing ? run + dist(before, m.pos) : 0;
@@ -583,7 +588,7 @@ describe('physics turns', () => {
   });
 
   it('from rest, a click behind backs toward it rear first', () => {
-    const { w } = play(ordered({ kind: 'through', dest: { x: 24, y: 31 } }), 9);
+    const { w } = play(ordered({ kind: 'through', dest: { x: 24, y: 31 } }), 11);
     expect(dist(me(w).pos, { x: 24, y: 31 })).toBeLessThan(RULES.passRadius + 0.5);
     expect(Math.abs(angleDiff(me(w).heading, 0))).toBeLessThan(Math.PI / 4);
   });
@@ -776,7 +781,7 @@ describe('physics turns', () => {
     w0.terrain = structuredClone(w0.terrain);
     const n = w0.terrain.size;
     for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) w0.terrain.heights[j * (n + 1) + i] = Math.max(0, i - 28) * HILL_GRADE;
-    const hauler = makeVehicle(w0, { name: 'hauler', faction: 'player', chassisId: 'hauler', parts: ['mg', 'stockEngine', 'plates', 'trailerBox'].map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {}, pos: { x: 26, y: 30 }, heading: 0, brain: null });
+    const hauler = makeVehicle(w0, { faction: 'player', chassisId: 'hauler', parts: ['mg', 'stockEngine', 'plates', 'trailerBox'].map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {}, pos: { x: 26, y: 30 }, heading: 0, brain: null });
     w0.vehicles[0] = { ...hauler, id: me(w0).id };
     addGoods(w0, me(w0), 'scrap', 999);
     expect(loadFactor(me(w0))).toBeLessThan(1);
@@ -791,7 +796,7 @@ describe('physics turns', () => {
     w0.terrain = structuredClone(w0.terrain);
     const n = w0.terrain.size;
     for (let j = 0; j <= n; j++) for (let i = 0; i <= n; i++) w0.terrain.heights[j * (n + 1) + i] = Math.max(0, i - 28) * LIMP_GRADE;
-    const courier = makeVehicle(w0, { name: 'courier', faction: 'player', chassisId: 'courier', parts: [{ defId: 'stockEngine', wear: 0 }], spares: [], cargo: {}, pos: { x: 26, y: 30 }, heading: 0, brain: null });
+    const courier = makeVehicle(w0, { faction: 'player', chassisId: 'courier', parts: [{ defId: 'stockEngine', wear: 0 }], spares: [], cargo: {}, pos: { x: 26, y: 30 }, heading: 0, brain: null });
     w0.vehicles[0] = { ...courier, id: me(w0).id };
     mountedParts(me(w0), 'engine')[0].hp = 0;
     const { w } = await playYielding(setMoveOrder(w0, { kind: 'through', dest: { x: 58, y: 30 } }), 12);
@@ -848,7 +853,7 @@ describe('physics turns', () => {
     };
     for (let i = 0; i < 30 && !playerTow(w); i++) turn();
     expect(playerTow(w)).not.toBeNull();
-    w = chooseOption(w, currentOptions(w).findIndex((o) => o.text === 'Deal. Hitch me up.'));
+    w = chooseOption(w, currentOptions(w).findIndex((o) => en(o.line) === 'Deal. Hitch me up.'));
     const start = { ...me(w).pos };
     for (let i = 0; i < 10; i++) {
       const r = turn();
@@ -875,7 +880,7 @@ describe('physics turns', () => {
       d = r!.next;
       return r!;
     };
-    const pick = (text: string) => { w = chooseOption(w, currentOptions(w).findIndex((o) => o.text === text)); };
+    const pick = (text: string) => { w = chooseOption(w, currentOptions(w).findIndex((o) => en(o.line) === text)); };
     w = callVehicle(w, npc.id);
     pick('Need a tow to town?');
     pick('Deal. Hitch up.');

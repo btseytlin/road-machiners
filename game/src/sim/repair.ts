@@ -12,7 +12,7 @@ import type { Job, PartInstance, Vehicle, World } from './types';
 
 function findRepairPart(v: Vehicle, partId: string): PartInstance {
   const part = mountedParts(v).find((p) => p.id === partId);
-  if (!part) throw new Error(`${partId} is not a mounted part on ${v.name}`);
+  if (!part) throw new Error(`${partId} is not a mounted part on ${v.id}`);
   return part;
 }
 
@@ -38,7 +38,7 @@ function fieldCapShare(world: World, v: Vehicle): number {
 }
 
 export function planPartRepair(part: PartInstance, capShare: number, mult: number, partsHeld: number, maxParts: number): RepairPlan {
-  if (isJunk(part)) throw new Error(`${partDef(part.defId).name} is junk and cannot be rebuilt`);
+  if (isJunk(part)) throw new Error(`${part.defId} is junk and cannot be rebuilt`);
   const max = maxHp(part);
   const cap = Math.min(max, max * capShare);
   const gap = Math.max(0, cap - part.hp);

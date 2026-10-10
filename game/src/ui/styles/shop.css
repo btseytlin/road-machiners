@@ -1,0 +1,993 @@
+#ui .dialogue {
+  min-width: var(--panel-m);
+  max-width: var(--panel-l);
+  background: var(--surface-raised);
+  border-left: 4px solid var(--line-strong);
+}
+.dialogue .dialogue-speaker {
+  color: var(--ink-muted);
+  margin-bottom: var(--space-2);
+}
+.dialogue .dialogue-line {
+  margin-bottom: var(--space-5);
+}
+.dialogue .dialogue-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.dialogue .dialogue-option {
+  text-align: left;
+}
+
+#ui .trade button,
+#ui button.buy-rank {
+  font-family: var(--font-mono);
+}
+
+/* People tab: the town's locals as buttons. */
+.people {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+#ui .people .person {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  text-align: left;
+}
+.people .person .icon,
+.quest-screen .talk-head .icon {
+  width: var(--icon-l);
+  height: var(--icon-l);
+}
+
+/* Talk window: over every other screen while a quest is live. Older exchanges stay above, fully shown. */
+#ui .modal.quest-screen {
+  z-index: var(--z-log-open);
+  top: 64px;
+  width: min(var(--talk-width), calc(100vw - var(--space-10)));
+  height: auto;
+  max-height: calc(100dvh - var(--modal-reserve));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  overflow: hidden;
+  border-left: 4px solid var(--line);
+}
+.quest-screen .talk-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.quest-screen .quest-log {
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  scrollbar-width: thin;
+}
+.quest-screen .qt-line {
+  line-height: 1.45;
+  margin-bottom: var(--space-2);
+}
+.quest-screen .qt-speaker {
+  color: var(--ink-muted);
+  font-weight: 600;
+}
+.quest-screen .talk-ask {
+  color: var(--ink-muted);
+  margin-bottom: var(--space-2);
+}
+.quest-screen .talk-ask::before {
+  content: "> ";
+}
+.quest-screen .talk-offer {
+  margin: var(--space-2) 0 var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  background: var(--surface-raised);
+}
+.quest-screen .quest-choices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+#ui .quest-screen .quest-choice {
+  text-align: left;
+  padding: var(--space-2) var(--space-5);
+  min-height: 0;
+}
+.quest-screen .error:empty {
+  display: none;
+}
+#ui .quest-screen .quest-choice:disabled {
+  color: var(--ink-muted);
+  opacity: 0.6;
+  cursor: default;
+}
+.quest-screen .quest-held {
+  float: right;
+}
+.quest-screen .qt-table {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: var(--text-dense);
+  margin: var(--space-1) 0 var(--space-5);
+}
+.quest-screen .qt-table th,
+.quest-screen .qt-table td {
+  padding: var(--space-1) var(--space-8) var(--space-1) 0;
+  text-align: left;
+  font-weight: 400;
+}
+.quest-screen .qt-table th {
+  color: var(--ink-muted);
+  border-bottom: 1px solid var(--line);
+}
+.quest-screen .qt-img {
+  display: block;
+  max-width: var(--panel-s);
+  margin: var(--space-2) 0 var(--space-4);
+  border: 1px solid var(--line);
+}
+
+/* Page view: art, one page of text with its choices, and the quest's numbers and facts. */
+#ui .modal.quest-screen.quest-page {
+  top: 40px;
+  width: min(var(--quest-page-width), calc(100vw - var(--space-10) * 2));
+  height: min(var(--quest-page-height), calc(100dvh - var(--quest-page-clearance)));
+  max-height: none;
+  display: grid;
+  grid-template-columns: minmax(0, 33%) minmax(0, 1fr) 230px;
+  gap: 0;
+  padding: 0;
+  border-left: 2px solid var(--line);
+  box-shadow: 0 0 0 100vmax var(--scrim);
+}
+.quest-page .quest-art {
+  padding: var(--space-7);
+  border-right: 1px solid var(--surface-raised);
+}
+.quest-page .quest-frame {
+  height: 100%;
+  border: 1px solid var(--surface-raised);
+  background: repeating-linear-gradient(135deg, var(--surface-raised) 0 var(--space-5), var(--surface-highlight) var(--space-5) var(--space-8));
+}
+.quest-page .quest-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.quest-page .quest-text {
+  padding: var(--space-9) var(--space-10) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.quest-page .quest-place {
+  margin: 0 0 var(--space-6);
+  font-size: var(--text-heading);
+  font-weight: 600;
+}
+.quest-page .qt-line {
+  margin-bottom: var(--space-5);
+}
+.quest-page .quest-choices {
+  margin-top: auto;
+  padding-top: var(--space-6);
+}
+#ui .quest-page .quest-choice {
+  padding: var(--space-3) var(--space-6);
+}
+#ui .quest-page .quest-next {
+  margin-top: auto;
+  align-self: flex-start;
+  padding: var(--space-3) var(--space-9);
+}
+.quest-page .quest-side {
+  padding: var(--space-8) var(--space-7);
+  border-left: 1px solid var(--surface-raised);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+#ui .quest-page .quest-side .close {
+  position: static;
+  align-self: flex-end;
+}
+.quest-page .quest-stat {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: var(--text-dense);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--surface-raised);
+}
+.quest-page .quest-stat b {
+  font-weight: 400;
+  color: var(--ink-label);
+}
+.quest-page .quest-fact {
+  font-size: var(--text-dense);
+  color: var(--ink-muted);
+  padding: var(--space-2) 0 var(--space-2) var(--space-5);
+  margin-bottom: var(--space-4);
+  border-left: 2px solid var(--line);
+}
+.quest-page .quest-fact .qt-line {
+  margin: 0;
+}
+.quest-page .quest-fact.new {
+  color: var(--ink);
+  border-left-color: var(--ink-label);
+}
+
+/* Quest text: each word or letter fades in after its delay. Marks add a look or a motion. */
+.qt-unit {
+  opacity: 0;
+  animation: qt-in 140ms ease-out forwards;
+}
+.qt-done .qt-unit {
+  animation: none;
+  opacity: 1;
+}
+.qt-b {
+  font-weight: 700;
+  color: var(--ink-bright);
+}
+.qt-i {
+  font-style: italic;
+}
+.qt-shake,
+.qt-pop {
+  display: inline-block;
+  white-space: pre;
+}
+.qt-shake {
+  animation:
+    qt-in 140ms ease-out forwards,
+    qt-shake 90ms linear 6 alternate;
+}
+.qt-pop {
+  animation: qt-pop 260ms ease-out forwards;
+}
+.qt-color-rust { color: var(--danger); }
+.qt-color-sand { color: var(--ink-label); }
+.qt-color-blood { color: var(--danger-deep); }
+.qt-color-sky { color: var(--ink-title); }
+.qt-color-ash { color: var(--ink-muted); }
+@keyframes qt-in {
+  to { opacity: 1; }
+}
+@keyframes qt-shake {
+  from { opacity: 1; transform: translateX(-1px); }
+  to { opacity: 1; transform: translateX(1px); }
+}
+@keyframes qt-pop {
+  0% { opacity: 0; transform: scale(1.6); }
+  100% { opacity: 1; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qt-unit {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* Journal: one card per note, newest first. */
+#ui .modal.journal-screen {
+  max-width: var(--talk-width);
+}
+.journal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  margin-top: var(--space-4);
+}
+.journal-note {
+  padding: var(--space-4) var(--space-6);
+  background: var(--surface-raised);
+  border-left: 4px solid var(--line);
+  line-height: 1.4;
+}
+.journal-note .journal-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-6);
+  margin-bottom: var(--space-2);
+}
+
+/* Shop tabs carry an icon beside the label. */
+.town-shop > .tabs .icon {
+  width: var(--icon-m);
+  height: var(--icon-m);
+}
+.modal .tabs.sub .icon {
+  width: var(--icon-m);
+  height: var(--icon-m);
+}
+.tabs.sub .count {
+  font: var(--text-dense) var(--font-mono);
+  color: var(--ink-muted);
+}
+
+/* Cards: one part or truck with its icon stats. The box comes from .tile. */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--panel-m), 1fr));
+  gap: var(--space-5);
+  margin-top: var(--space-4);
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+}
+.card.k-utility {
+  border-left-color: var(--accent-dim);
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.card-head > .icon {
+  width: var(--icon-2xl);
+  height: var(--icon-2xl);
+}
+.card-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.card-name b {
+  font-size: var(--text-body);
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.card-name .dim {
+  font-size: var(--text-dense);
+}
+.card-cond {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-1) 0 var(--space-2);
+  font-size: var(--text-dense);
+}
+.cond {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.cond .icon {
+  width: var(--icon-xs);
+  height: var(--icon-xs);
+}
+.cond .icon svg {
+  width: var(--icon-xs);
+  height: var(--icon-xs);
+}
+.cond-pristine {
+  color: var(--cond-pristine);
+}
+.cond-pristine .icon svg {
+  fill: var(--cond-pristine);
+  stroke: var(--cond-pristine);
+}
+.cond-w1 {
+  color: var(--cond-w1);
+}
+.cond-w2 {
+  color: var(--cond-w2);
+}
+.cond-w3 {
+  color: var(--cond-w3);
+}
+.cond-w4 {
+  color: var(--cond-w4);
+}
+.cond-junk {
+  color: var(--cond-junk);
+}
+.card-compare {
+  margin: var(--space-2) 0 var(--space-3);
+  font-size: var(--text-dense);
+  text-align: left;
+}
+.card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-top: auto;
+  font-size: var(--text-dense);
+}
+/* Shop part list: one row per part with its price and action at the end, the open one shows its detail below. The box comes from .tile. */
+.part-rows {
+  list-style: none;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.part-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--col-profit) var(--col-name);
+  align-items: center;
+  gap: var(--space-4);
+  padding-right: var(--space-4);
+}
+.part-line > .price {
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+.part-line > button {
+  justify-self: end;
+}
+#ui button.part-sum {
+  display: grid;
+  grid-template-columns: var(--icon-xs) var(--icon-xl) minmax(0, 1fr) auto var(--icon-l);
+  grid-template-areas: "chev icon name stat foot";
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  width: 100%;
+  padding: var(--space-1) var(--space-4) var(--space-1) var(--space-3);
+  border: 0;
+  background: transparent;
+  text-align: left;
+  font-size: var(--text-dense);
+}
+.part-sum > .icon {
+  grid-area: icon;
+  width: var(--icon-xl);
+  height: var(--icon-xl);
+}
+.part-name {
+  grid-area: name;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  font-size: var(--text-dense);
+}
+.part-name b {
+  font-size: var(--text-body);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+}
+.part-name > span {
+  white-space: nowrap;
+}
+.stat-chip {
+  grid-area: stat;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+}
+.stat-chip .icon {
+  width: var(--icon-s);
+  height: var(--icon-s);
+}
+.part-sum .footprint {
+  grid-area: foot;
+  justify-self: end;
+}
+.part-sum .chevron {
+  grid-area: chev;
+  width: var(--space-3);
+  height: var(--space-3);
+  border-right: 2px solid var(--ink-muted);
+  border-bottom: 2px solid var(--ink-muted);
+  transform: rotate(-45deg);
+}
+.part-sum[aria-expanded="true"] .chevron {
+  transform: rotate(45deg);
+}
+.part-detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-1) var(--space-5) var(--space-4);
+}
+.part-hp {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.part-hp > .meter {
+  flex: 1;
+}
+@container (max-width: 440px) {
+  .part-line {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      "sum sum sum"
+      ". price action";
+  }
+  .part-line > .part-sum {
+    grid-area: sum;
+  }
+  .part-line > .price {
+    grid-area: price;
+  }
+  .part-line > button:not(.part-sum) {
+    grid-area: action;
+  }
+  #ui button.part-sum {
+    grid-template-columns: var(--icon-xs) var(--icon-xl) minmax(0, 1fr) auto;
+    grid-template-areas:
+      "chev icon name name"
+      ". . stat foot";
+  }
+}
+
+/* Character screen: one table row per skill. Rows share the head's columns through subgrid. */
+#ui .modal.character-screen {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.skill-table {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+  align-content: start;
+  display: grid;
+  grid-template-columns: max-content max-content repeat(2, minmax(var(--panel-s), 1fr)) minmax(var(--panel-s), 1fr) max-content;
+  gap: var(--space-2) var(--space-7);
+  align-items: center;
+  margin-top: var(--space-4);
+  font-size: var(--text-dense);
+}
+.skill-head,
+.skill-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+}
+.skill-head {
+  color: var(--ink-label);
+  font-size: var(--text-caption);
+}
+.skill-row {
+  padding: var(--space-3) 0;
+  border-left: 2px solid transparent;
+}
+.skill-row.pending {
+  border-left-color: var(--accent);
+  background: var(--accent-wash);
+}
+.skill-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  font-size: var(--text-body);
+  color: var(--ink-title);
+  cursor: help;
+}
+.skill-level {
+  display: flex;
+  gap: var(--space-1);
+}
+.skill-level i {
+  width: var(--pip);
+  height: var(--pip);
+  background: var(--steel-3);
+  border: 1px solid var(--steel-5);
+}
+.skill-level i.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.skill-today {
+  display: grid;
+  grid-template-columns: 1fr var(--icon-xl);
+  align-items: center;
+  gap: var(--space-4);
+}
+.skill-today .num {
+  text-align: right;
+}
+.skill-buy {
+  justify-self: end;
+}
+.perk-cell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.perk-cell.picked {
+  color: var(--ink-bright);
+}
+.perk-cell.locked {
+  color: var(--ink-faint);
+}
+.perk-choice {
+  gap: var(--space-2);
+}
+.perk {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-dense);
+  text-align: left;
+}
+#ui button.perk {
+  padding: var(--space-2) var(--space-4);
+}
+.chip.xp-pool {
+  color: var(--accent);
+}
+.footprint {
+  display: grid;
+  gap: var(--space-1);
+  flex: none;
+}
+.footprint i {
+  width: var(--pip);
+  height: var(--pip);
+  background: var(--steel-7);
+}
+
+/* Stat cells: icon, value and the change against the player's own. */
+.stat-grid {
+  display: grid;
+  grid-template-columns: var(--icon-m) 1fr auto calc(var(--icon-3xl) + var(--space-4));
+  gap: var(--space-1) var(--space-4);
+  align-items: center;
+}
+.stat {
+  display: contents;
+  font: var(--text-dense) / 1.15 var(--font-mono);
+}
+.stat .icon {
+  width: var(--icon-m);
+  height: var(--icon-m);
+}
+.stat-name {
+  font-size: var(--text-dense);
+  color: var(--ink-muted);
+}
+.stat-val {
+  font: var(--text-dense) var(--font-mono);
+  text-align: right;
+}
+.stat .delta {
+  text-align: right;
+}
+.stat .icon svg,
+.chip .icon svg {
+  fill: none;
+}
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font: var(--text-dense) var(--font-mono);
+}
+.delta.better {
+  color: var(--good-bright);
+}
+.delta.worse {
+  color: var(--danger-ink);
+}
+.delta.same {
+  color: var(--ink-muted);
+}
+
+/* Market: one row per good, buy and sell each beside their price. The line under each row comes from .row. */
+.goods {
+  display: flex;
+  flex-direction: column;
+}
+.goods-head,
+.good-row {
+  display: grid;
+  grid-template-columns: minmax(var(--col-name), 1fr) var(--col-trade) var(--col-trade) var(--icon-3xl) var(--col-profit);
+  gap: var(--space-5);
+  align-items: center;
+}
+.goods.truck .goods-head,
+.goods.truck .good-row {
+  grid-template-columns:
+    minmax(calc(var(--col-name) - var(--space-8)), 1fr) calc(var(--icon-3xl) + var(--space-2)) var(--col-trade) var(--col-trade)
+    var(--icon-3xl) var(--col-profit);
+}
+.goods-head {
+  font-size: var(--text-dense);
+}
+.goods-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.goods-head .end {
+  justify-content: flex-end;
+}
+.goods-head .price-head {
+  justify-content: flex-end;
+  width: var(--icon-3xl);
+}
+.good-row:hover {
+  background: var(--surface-highlight);
+}
+.good-name {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+.good-name .icon {
+  width: var(--icon-xl);
+  height: var(--icon-xl);
+}
+.trade {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.trade.wide {
+  grid-column: span 2;
+}
+.good-name.supply {
+  min-width: 0;
+}
+.good-name.supply .service-meter {
+  flex: 1;
+  min-width: 0;
+}
+.trade > .amount,
+.job > .amount {
+  min-width: var(--icon-3xl);
+  font: var(--text-dense) var(--font-mono);
+}
+.price {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: var(--icon-3xl);
+  font: var(--text-dense) var(--font-mono);
+}
+.trade > .price {
+  justify-content: flex-end;
+}
+.price.good {
+  color: var(--good-bright);
+}
+.price.bad {
+  color: var(--danger-ink);
+}
+.count,
+.profit {
+  text-align: right;
+  white-space: nowrap;
+}
+.cap {
+  display: none;
+  align-items: center;
+  gap: var(--space-1);
+  margin-right: var(--space-2);
+  font-size: var(--text-dense);
+  color: var(--ink-muted);
+}
+@container (max-width: 620px) {
+  .goods-head {
+    display: none;
+  }
+  .good-row {
+    grid-template-columns: 1fr auto auto;
+    grid-template-areas:
+      "name held profit"
+      "buy buy sell";
+    row-gap: var(--space-3);
+  }
+  .goods.truck .good-row {
+    grid-template-columns: 1fr auto auto auto;
+    grid-template-areas:
+      "name theirs held profit"
+      "buy buy sell sell";
+  }
+  .good-row .good-name {
+    grid-area: name;
+  }
+  .good-row .count.theirs {
+    grid-area: theirs;
+  }
+  .good-row .count.held {
+    grid-area: held;
+  }
+  .good-row .profit {
+    grid-area: profit;
+  }
+  .good-row .trade.buy {
+    grid-area: buy;
+  }
+  .good-row .trade.sell {
+    grid-area: sell;
+    justify-self: end;
+  }
+  .cap {
+    display: inline-flex;
+  }
+}
+
+/* Garage repair bar and the meter of a fuel or supplies row. */
+.town-repair {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0 var(--space-5);
+  border-bottom: 1px solid var(--line-faint);
+  font: var(--text-dense) var(--font-mono);
+}
+.town-repair > button:first-of-type {
+  margin-left: auto;
+}
+.town-repair .bad {
+  flex: 1;
+}
+.service-meter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font: var(--text-dense) var(--font-mono);
+}
+.service-meter .meter {
+  height: var(--meter-l);
+}
+
+/* Trucks: the layout map beside the stats. */
+.cards.trucks {
+  grid-template-columns: repeat(auto-fill, minmax(var(--card-truck-min), 1fr));
+}
+.truck-card {
+  flex-direction: row;
+  gap: var(--space-6);
+}
+.tile.on,
+.truck-card.own {
+  border-color: var(--accent);
+  border-left-color: var(--tone, var(--accent));
+  background: var(--accent-wash);
+}
+.tile.on:hover {
+  border-color: var(--accent);
+}
+.modal .tabs button.on {
+  background: var(--accent-wash);
+}
+.truck-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.truck-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+/* The truck's portrait beside its grid. */
+.truck-pics {
+  --map-cell: var(--pip);
+  --map-gap: 1px;
+  --map-pad: var(--space-1);
+  display: flex;
+  gap: var(--space-3);
+  align-self: flex-start;
+}
+.chassis-portrait {
+  display: block;
+  flex: none;
+  /* One box for every truck, so the garage lines them up. The drawing fits inside it, centered. */
+  width: var(--portrait-w);
+  height: var(--portrait-h);
+}
+.chassis-portrait svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.chassis-map {
+  display: grid;
+  gap: var(--map-gap);
+  align-self: flex-start;
+  width: max-content;
+  padding: var(--map-pad);
+  background: var(--surface-sunk);
+}
+.chassis-map i {
+  width: var(--map-cell);
+  height: var(--map-cell);
+}
+.chassis-map .hole {
+  background: none;
+}
+.chassis-map .c-plain {
+  background: var(--map-plain);
+}
+.chassis-map .c-D {
+  background: var(--map-deck);
+}
+.chassis-map .c-E {
+  background: var(--map-engine);
+}
+.chassis-map .c-X {
+  background: var(--map-none);
+}
+.chassis-map .c-F,
+.chassis-map .c-B,
+.chassis-map .c-L,
+.chassis-map .c-R {
+  background: var(--map-side);
+}
+
+/* Contracts: one row per job. */
+/* Rows share the list's columns, so a short due time or action never shifts the reward and clock. */
+.jobs {
+  display: grid;
+  grid-template-columns: var(--icon-xl) 1fr auto auto auto;
+  column-gap: var(--space-6);
+}
+.job {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line-faint);
+}
+.job > .icon {
+  width: var(--icon-l);
+  height: var(--icon-l);
+}
+/* A note in place of an action wraps, so it never squeezes the contract summary. */
+.job > .dim {
+  max-width: 11em;
+}
+
+/* A hovered shop card lights its mount cells on the truck grid and dims the items over them. */
+.inv-grid[data-hint] .inv-item {
+  opacity: 0.35;
+}
+.inv-grid[data-hint~="D"] .c-D,
+.inv-grid[data-hint~="E"] .c-E,
+.inv-grid[data-hint~="F"] .c-F,
+.inv-grid[data-hint~="B"] .c-B,
+.inv-grid[data-hint~="L"] .c-L,
+.inv-grid[data-hint~="R"] .c-R {
+  box-shadow: inset 0 0 0 2px var(--accent);
+  color: var(--accent);
+}
+
+/* The inspection panel reuses the card parts. */
+.inv-inspection .card-head {
+  margin-bottom: var(--space-3);
+}
+.inv-inspection .stat-grid {
+  margin: var(--space-4) 0;
+}
+.inv-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

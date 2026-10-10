@@ -5,7 +5,7 @@ import { bodyOf } from './body';
 import { partDef, type PartDef, type WeaponDef } from '../data/parts';
 import { wornDef } from './wear';
 import { damagePart } from './damage';
-import { cellKey, gridOf, itemCells, isMounted, itemSize, mountedItems, mountedParts, sideOf, type Grid, type SideLetter } from './grid';
+import { cellKey, facingOf, gridOf, itemCells, isMounted, itemSize, mountedItems, mountedParts, sideOf, type Grid, type SideLetter } from './grid';
 import type { GridItem, PartInstance, Vehicle, World } from './types';
 import { angleDiff, bearing, type Vec } from './vec';
 
@@ -267,120 +267,125 @@ function armorAgainst(def: PartDef, blast: boolean): number {
 
 export const SIDES: readonly Side[] = ['front', 'rear', 'left', 'right'];
 
-const STEP: Record<Side, { dx: number; dy: number }> = {
-  front: { dx: 0, dy: -1 },
-  rear: { dx: 0, dy: 1 },
-  left: { dx: -1, dy: 0 },
-  right: { dx: 1, dy: 0 },
-};
-
-export function openSides(v: Vehicle, item: GridItem): Side[] {
-  return openIn(gridOf(v), tallCells(v), item);
-}
-
-export function sideBlockers(v: Vehicle, item: GridItem): Partial<Record<Side, GridItem>> {
-  return blockersIn(gridOf(v), tallCells(v), item);
-}
-
-function openIn(g: Grid, tall: Map<number, GridItem>, item: GridItem): Side[] {
-  const blocked = blockersIn(g, tall, item);
-  return SIDES.filter((side) => !blocked[side]);
-}
-
-function blockersIn(g: Grid, tall: Map<number, GridItem>, item: GridItem): Partial<Record<Side, GridItem>> {
-  const out: Partial<Record<Side, GridItem>> = {};
-  if (tall.size === 0) return out;
-  const { w, h } = itemSize(item);
-  const center = { x: item.x + Math.floor(w / 2), y: item.y + Math.floor(h / 2) };
-  for (const side of SIDES) {
-    const { dx, dy } = STEP[side];
-    for (let x = center.x, y = center.y; inGrid(g, { x, y }); x += dx, y += dy) {
-      const blocker = tall.get(cellKey(x, y));
-      if (blocker && blocker.id !== item.id) {
-        out[side] = blocker;
-        break;
-      }
-    }
-  }
-  return out;
-}
-
-function tallCells(v: Vehicle): Map<number, GridItem> {
-  const tall = new Map<number, GridItem>();
-  for (const it of v.items) if (isTall(it)) paintCells(tall, it);
-  return tall;
-}
-
-function isTall(it: GridItem): boolean {
-  return it.kind === 'part' && Boolean(partDef(it.part.defId).tall);
-}
-
-function paintCells(cells: Map<number, GridItem>, it: GridItem): void {
-  const { w, h } = itemSize(it);
-  for (let dy = 0; dy < h; dy++) for (let dx = 0; dx < w; dx++) cells.set(cellKey(it.x + dx, it.y + dy), it);
-}
-
-export function everyGunFires(v: Vehicle): boolean {
-  const g = gridOf(v);
-  const tall = tallCells(v);
-  return mountedItems(v, 'weapon').every((item) => {
-    const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
-    return openIn(g, tall, item).some((side) => reach.includes(side));
-  });
-}
-
-export function gunLayoutScore(v: Vehicle): number {
-  const guns = mountedItems(v, 'weapon');
-  const g = gridOf(v);
-  const tall = tallCells(v);
-  const covered = new Set<Side>();
-  let sum = 0;
-  for (const item of guns) {
-    const reach = reachedSides(partDef(item.part.defId) as WeaponDef);
-    const open = openIn(g, tall, item).filter((side) => reach.includes(side));
-    for (const side of open) covered.add(side);
-    sum += open.length;
-  }
-  return covered.size * (SIDES.length * guns.length + 1) + sum;
-}
-
-export function reachedSides(def: WeaponDef): Side[] {
-  if (def.arc > 270) return [...SIDES];
-  if (def.arc > 90) return ['front', 'left', 'right'];
-  return ['front'];
-}
-
-function inGrid(g: Grid, c: { x: number; y: number }): boolean {
-  return c.x >= 0 && c.y >= 0 && c.x < g.w && c.y < g.h;
-}
-
 export type FireSpan = { from: number; to: number };
 
 const SIDE_CENTER: Record<Side, number> = { front: 0, right: 90, rear: 180, left: -90 };
 
-export function fireSpans(arc: number, sides: readonly Side[]): FireSpan[] {
-  const half = Math.min(arc, 360) / 2;
-  const pieces = sides
-    .flatMap((side) => splitAtBack(SIDE_CENTER[side] - 45, SIDE_CENTER[side] + 45))
-    .map((p) => ({ from: Math.max(p.from, -half), to: Math.min(p.to, half) }))
-    .filter((p) => p.to > p.from)
-    .sort((a, b) => a.from - b.from);
+export function gunSpans(v: Vehicle, item: GridItem): FireSpan[] {
+  return spansIn(tallItems(v), item);
+}
+
+export function gunBlockers(v: Vehicle, item: GridItem): GridItem[] {
+  const arc = arcPieces(item);
+  const out = new Set<GridItem>();
+  for (const s of shadowsOf(tallItems(v), item)) if (overlaps(s.pieces, arc)) out.add(s.blocker);
+  return [...out];
+}
+
+export function spanSides(spans: readonly FireSpan[]): Side[] {
+  const pieces = spans.flatMap((s) => splitAtBack(s.from, s.to));
+  return SIDES.filter((side) => {
+    const from = wrapFrom(SIDE_CENTER[side] - 45);
+    return overlaps(splitAtBack(from, from + 90), pieces);
+  });
+}
+
+function overlaps(a: readonly FireSpan[], b: readonly FireSpan[]): boolean {
+  return a.some((p) => b.some((q) => p.to > q.from && p.from < q.to));
+}
+
+export function spanDegrees(spans: readonly FireSpan[]): number {
+  return spans.reduce((sum, s) => sum + s.to - s.from, 0);
+}
+
+export function everyGunFires(v: Vehicle): boolean {
+  const tall = tallItems(v);
+  return mountedItems(v, 'weapon').every((item) => spansIn(tall, item).length > 0);
+}
+
+export function gunLayoutScore(v: Vehicle): number {
+  const guns = mountedItems(v, 'weapon');
+  const tall = tallItems(v);
+  const covered = new Set<Side>();
+  let sum = 0;
+  for (const item of guns) {
+    const spans = spansIn(tall, item);
+    for (const side of spanSides(spans)) covered.add(side);
+    sum += spanDegrees(spans);
+  }
+  return covered.size * (360 * guns.length + 1) + sum;
+}
+
+function spansIn(tall: readonly GridItem[], item: GridItem): FireSpan[] {
+  const shadows = shadowsOf(tall, item).flatMap((s) => s.pieces);
+  const open = arcPieces(item).flatMap((piece) => shadows.reduce((left, cut) => left.flatMap((p) => subtract(p, cut)), [piece]));
+  return joinAcrossBack(mergeSpans(open));
+}
+
+function arcPieces(item: GridItem): FireSpan[] {
+  if (item.kind !== 'part') throw new Error(`${item.id} is not a part`);
+  const { arc } = partDef(item.part.defId) as WeaponDef;
+  if (arc >= 360) return [{ from: -180, to: 180 }];
+  const from = wrapFrom(facingOf(item) - arc / 2);
+  return splitAtBack(from, from + arc);
+}
+
+function shadowsOf(tall: readonly GridItem[], item: GridItem): { blocker: GridItem; pieces: FireSpan[] }[] {
+  const { w, h } = itemSize(item);
+  const ox = item.x + w / 2;
+  const oy = item.y + h / 2;
+  return tall.filter((blocker) => blocker.id !== item.id).map((blocker) => ({
+    blocker,
+    pieces: itemCells(blocker).flatMap(({ x, y }) => {
+      const center = gridAngle(x + 0.5 - ox, y + 0.5 - oy);
+      const off = (a: number) => wrapDegrees(a - center);
+      const corners = [[x, y], [x + 1, y], [x, y + 1], [x + 1, y + 1]].map(([cx, cy]) => gridAngle(cx - ox, cy - oy));
+      const left = corners.reduce((best, a) => (off(a) < off(best) ? a : best));
+      const right = corners.reduce((best, a) => (off(a) > off(best) ? a : best));
+      const from = wrapFrom(left);
+      return splitAtBack(from, from + off(right) - off(left));
+    }),
+  }));
+}
+
+function gridAngle(dx: number, dy: number): number {
+  return (Math.atan2(dx, -dy) * 180) / Math.PI;
+}
+
+function wrapFrom(angle: number): number {
+  return angle >= 180 ? angle - 360 : angle < -180 ? angle + 360 : angle;
+}
+
+function subtract(p: FireSpan, cut: FireSpan): FireSpan[] {
+  if (cut.to <= p.from || cut.from >= p.to) return [p];
+  return [{ from: p.from, to: cut.from }, { from: cut.to, to: p.to }].filter((s) => s.to > s.from);
+}
+
+function mergeSpans(pieces: FireSpan[]): FireSpan[] {
   const merged: FireSpan[] = [];
-  for (const p of pieces) {
+  for (const p of [...pieces].sort((a, b) => a.from - b.from)) {
     const last = merged.at(-1);
     if (last && p.from <= last.to) last.to = Math.max(last.to, p.to);
     else merged.push({ ...p });
   }
-  return joinAcrossBack(merged);
+  return merged;
+}
+
+function tallItems(v: Vehicle): GridItem[] {
+  return v.items.filter((it) => it.kind === 'part' && Boolean(partDef(it.part.defId).tall));
 }
 
 export function aimWithin(spans: readonly FireSpan[], rel: number): number {
   if (spans.length === 0) throw new Error('aimWithin needs at least one span');
-  if (spans.some((span) => spanHolds(span, rel) || spanHolds(span, rel + 360))) return rel;
+  if (spansHold(spans, rel)) return rel;
   const edges = spans.flatMap((span) => [span.from, span.to]);
   const apart = (edge: number) => Math.abs(((edge - rel + 540) % 360) - 180);
   const nearest = edges.reduce((best, edge) => (apart(edge) < apart(best) ? edge : best));
   return wrapDegrees(nearest);
+}
+
+export function spansHold(spans: readonly FireSpan[], rel: number): boolean {
+  return spans.some((span) => spanHolds(span, rel) || spanHolds(span, rel + 360));
 }
 
 function spanHolds(span: FireSpan, angle: number): boolean {

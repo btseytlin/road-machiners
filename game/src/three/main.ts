@@ -21,18 +21,21 @@ import { DebugConsole, Noclip } from '../ui/console';
 import { BOOT_TEXT } from '../ui/boot-progress';
 import { BootScreen } from '../ui/boot-screen';
 import { uiRoot } from '../ui/dom';
+import { loadLanguage, relocalize } from '../text/language';
+import { t } from '../text/msg';
 import type { NewGameActions } from '../ui/new-game';
-import { chooseSaveFate, showCarryReport } from '../ui/save-screen';
+import { chooseSaveFate, saveErrorText, showCarryReport } from '../ui/save-screen';
 import { mountPerfPanel } from '../ui/perf-panel';
 import { SoundSettings } from '../ui/sound';
 import { RadioPanel, RadioStation } from '../ui/radio';
-import { installCrashScreen, keepRunningOnErrors, onEveryError, onReport, reportError } from './crash';
+import { bootStep, installCrashScreen, keepRunningOnErrors, onEveryError, onReport, reportError } from './crash';
 import { ErrorReporter } from './error-report';
 import { Game } from './game';
 import { clearGame, loadWorld, SAVE_KEY, SaveError, savedRunId, storedSave, writeSave } from './save';
 import { idbBackend, SaveSlots } from './save-db';
 import { RunLog } from './run-log';
 import { allSlots, newestSlot, requestBoot, takeBootRequest, type SlotId } from './save-slots';
+import { GAME_GL, openWebGL } from './webgl';
 import { rescueSave } from './save-rescue';
 import { loadModels } from './render/models';
 import { groundTexture } from './render/terrain';
@@ -88,7 +91,7 @@ function newGameSaved(setup: WorldSetup): Booted {
 async function rescuedOrNew(error: SaveError, slot: SlotId): Promise<Booted> {
   const stored = storedSave(slots, slot);
   const canMigrate = typeof stored === 'object' && stored !== null && !Array.isArray(stored);
-  await boot.aside(() => chooseSaveFate(error.message, canMigrate, stored, newGameActions));
+  await boot.aside(() => chooseSaveFate(saveErrorText(error), canMigrate, stored, newGameActions));
   const rescued = rescueSave(slots, slot, map, startKit(CONFIG.startKit), freshSeed, freshRunId, Date.now());
   if (!rescued) throw new Error('The save became unreadable while migrating');
   await boot.aside(() => showCarryReport(rescued.report));
@@ -101,20 +104,40 @@ async function persistSaves(): Promise<void> {
 }
 
 function newGame(setup: WorldSetup): World {
-  return newWorld(CONFIG.seed ?? freshSeed(), startKit(CONFIG.startKit), map, setup);
+  return newWorld(CONFIG.seed ?? urlSeed() ?? freshSeed(), startKit(CONFIG.startKit), map, setup);
+}
+
+// In dev, ?seed=<n> starts a new game on a fixed seed, so a check like npm run layout sees the same world each run.
+function urlSeed(): number | null {
+  const seed = import.meta.env.DEV ? new URLSearchParams(window.location.search).get('seed') : null;
+  if (seed === null) return null;
+  if (!/^-?\d+$/.test(seed)) throw new Error(`?seed=${seed} is no whole number`);
+  return Number(seed);
 }
 
 installCrashScreen();
+// The language comes first, so the boot screens already speak it. A switch rewrites bound text in place, then the game
+// redraws what it draws with resolved words.
+const language = loadLanguage(window.localStorage, window.location.search, import.meta.env.DEV, document.documentElement);
+let relocalizeGame: (() => void) | null = null;
+language.subscribe(() => {
+  relocalize(uiRoot());
+  relocalize(element('overlay'));
+  relocalizeGame?.();
+});
 const boot = BootScreen.adopt();
 const reporter = ERROR_REPORT_URL ? new ErrorReporter(ERROR_REPORT_URL, ERROR_REPORT_BUILD, GAME_VERSION) : null;
 if (reporter) onReport((err) => void reporter.report(err));
+const surface = openWebGL(document.createElement('canvas'), GAME_GL);
 const mixer = new Mixer(MIX);
 mixer.unlockOn(window);
+bootStep('loading physics, models and sounds');
 const loading = Promise.all([
   boot.track('physics', initPhysics()),
   boot.track('models', loadModels(undefined, boot.count('models'))),
   boot.track('sounds', loadBank(mixer.ctx, SOUNDS, boot.count('sounds'))),
 ]);
+bootStep('loading the map');
 const map = await boot.track('map', fetchMap());
 const slots = await SaveSlots.open(await idbBackend(SAVE_KEY), window.localStorage, SAVE_KEY, allSlots(CONFIG.saveSlots));
 persistSaves().catch(reportError);
@@ -124,28 +147,38 @@ const newGameActions: NewGameActions = {
   confirm: (text) => window.confirm(text),
 };
 // The world and its ground build while physics, models and sounds load, since those wait mostly on the network and decoders.
+bootStep('loading the save');
 const { world, runId, loadedFrom, fresh } = await bootWorld();
 const log = new RunLog(slots.backend, runId, (err) => slots.onError(err));
 log.begin(world, loadedFrom);
+bootStep('building the ground');
 await boot.track('ground', () => groundTexture(world));
+bootStep('waiting for physics, models and sounds');
 const [, , bank] = await loading;
+bootStep('starting the game');
 const radio = new RadioPanel(new RadioStation(Math.random));
 const soundSettings = new SoundSettings(mixer, window.localStorage, radio.faceplate, radio.keys, () => game.loops.nextTrack());
 radio.hear(world);
 const overlay = element('overlay');
-const game = await boot.track('scene', () => new Game(world, { slots, runId, log }, element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute(), radio));
+const game = await boot.track('scene', () => new Game(world, { slots, runId, log }, element('game'), overlay, new SoundPlayer(mixer, bank, SOUNDS), () => soundSettings.toggleMute(), radio, surface));
+relocalizeGame = () => {
+  radio.relocalize();
+  game.uiStale = true;
+};
 const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game.follow.keyPan.setSpeed(factor) };
 const opening = startKit(CONFIG.startKit).opening;
-if (fresh && opening) game.hud.note(world, opening.log, "");
+if (fresh && opening) game.hud.note(world, t(`opening.${opening.log}`), "");
 const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
 keepRunningOnErrors((text) => debugConsole.error(text));
 onEveryError(() => game.holdSaves());
+bootStep('running');
 reporter?.watch({ world: () => game.state, log: () => game.logTexts(), slots });
 performance.mark('roam:ready');
 void boot.finish();
 setTimeout(() => warmAfterBoot(routeRadii(game.state)));
 if (import.meta.env.DEV) {
-  (window as any).__ROAM__ = game;
+  // The layout check and the playtest switch the language through it.
+  (window as any).__ROAM__ = Object.assign(game, { language });
   (window as any).__ROAM_PERF__ = { snapshot: perfSnapshot, reset: resetPerf };
 }
 

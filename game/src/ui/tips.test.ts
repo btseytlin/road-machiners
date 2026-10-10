@@ -6,6 +6,7 @@ import { vehicleStats } from "../sim/stats";
 import { refreshVision } from "../sim/vision";
 import { endTurn, newWorld, setMoveOrder, startPose } from "../sim/world";
 import { startKit } from "../data/start";
+import { CONDITION } from "../data/wear";
 import { findSpot, gridOf, isMounted, MOUNT_CELLS, mountedParts, type Spot } from "../sim/grid";
 import { moveItem } from "../sim/inventory";
 import { startRepair } from "../sim/jobs";
@@ -14,7 +15,7 @@ import { OPENING_WRECK_ID } from "../sim/opening";
 import { startSearch } from "../sim/search";
 import type { World } from "../sim/types";
 import { TEST_MAP } from "../test/map";
-import { doneTips, openingStep, tipToShow, type TipId } from "./tips";
+import { clearTips, doneTips, openingStep, setTipsOff, tipsOff, tipToShow, type TipId } from "./tips";
 
 describe("driving tips", () => {
   it("walks the player from a waypoint to Space, stopping, stop waypoints and manual mode", () => {
@@ -228,6 +229,14 @@ describe("opening tips", () => {
     expect([...seen]).toEqual(["wreck", "search", "loot", "patch", "install"]);
   });
 
+  it("drops the patch step once the engine is junk, as no patch fixes it", () => {
+    const w = looted();
+    const engine = mountedParts(playerVehicle(w)).find((p) => p.id === engineId(w))!;
+    engine.wear = CONDITION.maxWear + 1;
+    engine.hp = 0;
+    expect(refresh(w, new Set<TipId>())).not.toBe("patch");
+  });
+
   it("skips a step the player closes and lets the driving tips show", () => {
     const w = opening();
     expect(tipToShow(w, false, new Set(), null)).toBe("wreck");
@@ -268,5 +277,41 @@ describe("opening tips", () => {
 
   it("has no opening step in a game without the opening wreck, like an old save", () => {
     expect(openingStep(emptyWorld())).toBeNull();
+  });
+});
+
+function memoryStorage(): Storage {
+  const m = new Map<string, string>();
+  return {
+    getItem: (k: string) => m.get(k) ?? null,
+    setItem: (k: string, v: string) => void m.set(k, v),
+    removeItem: (k: string) => void m.delete(k),
+  } as Storage;
+}
+
+describe("tips switch", () => {
+  it("reads absent as on and 1 as off, and throws on anything else", () => {
+    const s = memoryStorage();
+    expect(tipsOff(s)).toBe(false);
+    s.setItem("roam.tipsOff", "1");
+    expect(tipsOff(s)).toBe(true);
+    s.setItem("roam.tipsOff", "yes");
+    expect(() => tipsOff(s)).toThrow();
+  });
+
+  it("round-trips through storage", () => {
+    const s = memoryStorage();
+    setTipsOff(s, true);
+    expect(tipsOff(s)).toBe(true);
+    setTipsOff(s, false);
+    expect(s.getItem("roam.tipsOff")).toBeNull();
+  });
+
+  it("clears with the seen tips for a new game", () => {
+    const s = memoryStorage();
+    s.setItem("roam.tips", "[]");
+    setTipsOff(s, true);
+    clearTips(s);
+    expect([s.getItem("roam.tips"), s.getItem("roam.tipsOff")]).toEqual([null, null]);
   });
 });

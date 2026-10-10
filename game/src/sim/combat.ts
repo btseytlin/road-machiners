@@ -8,7 +8,7 @@ import { isDefeated, isKnockedOut, knockOutNpc } from './defeat';
 import { RULES } from '../data/rules';
 import { chassisDef } from '../data/chassis';
 import { PHYSICS } from '../data/physics';
-import { blastLanes, heldPart, laneCount, lanePoint, partLane, planLane, sideToward, walkLane, type PartHit, type Round, type Side } from './armor';
+import { blastLanes, heldPart, laneCount, lanePoint, partLane, planLane, sideToward, spansHold, walkLane, type FireSpan, type PartHit, type Round, type Side } from './armor';
 import { wholeDamage } from './damage';
 import { bodyOf } from './body';
 import { rollCabKnock } from "./cab-knock";
@@ -94,21 +94,21 @@ function isLawman(v: Vehicle): boolean {
 }
 
 export type ShotSource = { def: WeaponDef };
-export type AimedSource = ShotSource & { sides: Side[] };
+export type AimedSource = ShotSource & { spans: FireSpan[]; facing: number };
 
 
 export function inArc(shooter: Vehicle, mw: AimedSource, target: Vehicle): boolean {
-  return inGunArc(shooter, mw, target) && sideOpen(shooter, mw, target);
+  return inGunArc(shooter, mw, target) && clearOfTall(shooter, mw, target);
 }
 
-function inGunArc(shooter: Vehicle, src: ShotSource, target: Vehicle): boolean {
+function inGunArc(shooter: Vehicle, src: AimedSource, target: Vehicle): boolean {
   const { arc } = src.def;
   if (arc >= 360) return true;
-  return Math.abs(angleDiff(shooter.heading, bearing(shooter.pos, target.pos))) <= (arc / 2) * DEG;
+  return Math.abs(angleDiff(shooter.heading + src.facing * DEG, bearing(shooter.pos, target.pos))) <= (arc / 2) * DEG;
 }
 
-function sideOpen(shooter: Vehicle, mw: AimedSource, target: Vehicle): boolean {
-  return mw.sides.includes(sideToward(shooter, target.pos));
+function clearOfTall(shooter: Vehicle, mw: AimedSource, target: Vehicle): boolean {
+  return spansHold(mw.spans, angleDiff(shooter.heading, bearing(shooter.pos, target.pos)) / DEG);
 }
 
 export function fireBlock(
@@ -178,7 +178,7 @@ export function targetBlock(world: World, shooter: Vehicle, mw: AimedSource, tar
 
 function arcBlock(shooter: Vehicle, mw: AimedSource, target: Vehicle): FireBlock | null {
   if (!inGunArc(shooter, mw, target)) return "arc";
-  return sideOpen(shooter, mw, target) ? null : "blocked";
+  return clearOfTall(shooter, mw, target) ? null : "blocked";
 }
 
 export type HitOdds = {
@@ -328,12 +328,32 @@ export function hitOdds(
   target: Vehicle,
   aim: Aim,
 ): HitOdds {
+  return oddsOf(world, shooter, src.def, target, aim, spreadCauses(world, shooter, src.def, target));
+}
+
+type Cause = keyof HitOdds["causes"];
+export type ChanceStep = { cause: Cause; chance: number };
+
+export function chanceSteps(world: World, shooter: Vehicle, src: ShotSource, target: Vehicle, aim: Aim): ChanceStep[] {
+  const full = spreadCauses(world, shooter, src.def, target);
+  const keys = Object.keys(full) as Cause[];
+  const bySize = (x: Cause, y: Cause) => Math.abs(full[y]) - Math.abs(full[x]);
+  const order = [...keys.filter((k) => full[k] > 0 && k !== "weapon").sort(bySize), ...keys.filter((k) => full[k] < 0).sort(bySize)];
+  const causes = { ...Object.fromEntries(keys.map((k) => [k, 0])), weapon: full.weapon } as HitOdds["causes"];
+  const step = (cause: Cause): ChanceStep => ({ cause, chance: oddsOf(world, shooter, src.def, target, aim, { ...causes }).damageChance });
+  const steps = [step("weapon")];
+  for (const k of order) {
+    causes[k] = full[k];
+    steps.push(step(k));
+  }
+  return steps;
+}
+
+function oddsOf(world: World, shooter: Vehicle, shot: WeaponDef, target: Vehicle, aim: Aim, causes: HitOdds["causes"]): HitOdds {
   const distance = shotDistance(shooter, target);
   const a = aiming(shooter, target, aim);
   const width = a.width;
   const halfAngle = width / (2 * distance);
-  const shot = src.def;
-  const causes = spreadCauses(world, shooter, shot, target);
   const spread = totalSpread(shot, causes);
   const chance = clamp(
     rawChance({ halfAngle, spread }),

@@ -11,7 +11,7 @@ import type { CameraRig } from "./render/camera";
 describe("stingOf", () => {
   it("plays the most important result only", () => {
     const events: GameEvent[] = [
-      { t: "money", amount: 20, reason: "sale" },
+      { t: "money", amount: 20, reason: { kind: "contract" } },
       { t: "skillUp", skill: "driving", level: 2 },
       { t: "discover", location: "oasis" },
     ];
@@ -19,14 +19,14 @@ describe("stingOf", () => {
   });
   it("ignores spending and arrivals", () => {
     const events: GameEvent[] = [
-      { t: "money", amount: -5, reason: "fuel" },
+      { t: "money", amount: -5, reason: { kind: "failedHaul" } },
       { t: "arrived", vehicle: "npc1" },
     ];
     expect(stingOf(events, "p")).toBeNull();
     expect(stingOf([{ t: "arrived", vehicle: "p" }], "p")).toBeNull();
   });
-  it("plays the defeat cue on a knockout", () => {
-    expect(stingOf([{ t: "skillUp", skill: "driving", level: 2 }, { t: "knockout" }], "p")).toBe("defeat");
+  it("plays no sting on a knockout, which is only a log line and a mark", () => {
+    expect(stingOf([{ t: "knockout" }], "p")).toBeNull();
   });
 });
 
