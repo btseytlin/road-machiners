@@ -14,10 +14,11 @@ import { addGoods, cargoRoom } from './inventory';
 import { cancelJob } from './jobs';
 import { isFree } from './spawn';
 import { bodyStop } from './meeting-stop';
+import { huntsOffRoad } from './hunt-style';
 import {
   tradeOffers, tradeSpend, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolStopsOf, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, npcSenses, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  canStartFight, lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, noteStripped, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition, firepower,
+  passReason, canStartFight, lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, noteStripped, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition, firepower,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -585,8 +586,13 @@ type HostileDecision = 'hostileSeen' | 'contactHeard';
 function rollOnHostile<D extends HostileDecision>(world: World, vehicle: Vehicle, decision: D, id: string, at: Vec): DecisionOptions[D] {
   if (!offersChoice(world, vehicle, decision, id)) return 'keep' as DecisionOptions[D];
   const seen = decision === 'hostileSeen';
-  const option = decide(world, vehicle, decision, id, seen ? perceiveDanger(world, vehicle, vehicleById(world, id)) : null);
+  const prey = vehicleById(world, id);
+  const danger = seen ? perceiveDanger(world, vehicle, prey) : null;
+  const option = decide(world, vehicle, decision, id, danger);
   chooseOn(world, vehicle, id, at, option, seen);
+  if (danger !== null && option === 'keep' && huntsPrey(vehicle) && huntsOffRoad(vehicle.brain ?? undefined)) {
+    world.events.push({ t: 'preyPassed', vehicle: vehicle.id, prey: id, reason: passReason(world, vehicle, prey, danger) });
+  }
   return option;
 }
 
@@ -619,12 +625,13 @@ function interrupt(world: World, vehicle: Vehicle, goal: NpcActivity): void {
     dropTow(world, tow, 'danger');
     if (popGoal(world, vehicle, 'droppedTow').kind !== 'tow') throw new Error(`${vehicle.id} held a tow without a tow goal on top`);
   }
-  if (goal.kind === 'flee') dropChases(world, vehicle, goal.targetId);
+  if (goal.kind === 'flee') dropChases(world, vehicle, goal.targetId, 'ranFromIt');
+  if (goal.kind === 'fight') dropChases(world, vehicle, goal.targetId, 'spottedHeard');
   pushGoal(world, vehicle, goal);
 }
 
-function dropChases(world: World, vehicle: Vehicle, threatId: string | null): void {
-  for (const goal of goalsOf(vehicle).filter((g) => g.kind === 'investigate' && g.targetId === threatId)) dropGoal(world, vehicle, goal, 'ranFromIt');
+function dropChases(world: World, vehicle: Vehicle, targetId: string | null, reason: GoalReason): void {
+  for (const goal of goalsOf(vehicle).filter((g) => g.kind === 'investigate' && g.targetId === targetId)) dropGoal(world, vehicle, goal, reason);
 }
 
 function fleeFrom(world: World, vehicle: Vehicle, profile: NpcProfile, threatId: string, threatPos: Vec, reason: GoalReason): NpcActivity {
@@ -652,7 +659,7 @@ function onContactsHeard(world: World, vehicle: Vehicle, profile: NpcProfile, co
   for (const contact of hostileContacts(world, vehicle, contacts)) {
     const option = reactHeard(world, vehicle, contact);
     if (option === null || option === 'keep') continue;
-    if (option === 'investigate') interrupt(world, vehicle, createActivity('investigate', contact.vehicleId, { ...contact.center }, 'heardHostile'));
+    if (option === 'investigate') interrupt(world, vehicle, createActivity('investigate', contact.vehicleId, { ...contact.center }, isWatching(vehicle) ? 'springOnPrey' : 'heardHostile'));
     else interrupt(world, vehicle, fleeFrom(world, vehicle, profile, contact.vehicleId, contact.center, 'heardHostile'));
     return;
   }
@@ -842,7 +849,15 @@ const STEERS: Partial<Record<NpcActivity['kind'], Steer>> = {
   tow: (world, vehicle, goal) => { if (!heldTow(world, vehicle)) steerToStranded(world, vehicle, goal); },
   meet: (world, _vehicle, goal) => { if (goal.destination) goal.destination = { ...vehicleById(world, goal.targetId!).pos }; },
   follow: steerFollow,
+  investigate: steerInvestigate,
 };
+
+// An investigation follows the newest centre of the sound it heard, never the true position of its target.
+function steerInvestigate(_world: World, _vehicle: Vehicle, goal: NpcActivity, _profile: NpcProfile, contacts: Contact[]): void {
+  if (!goal.targetId) throw new Error('An investigation has no target');
+  const contact = contacts.find((c) => c.vehicleId === goal.targetId);
+  if (contact) goal.destination = { ...contact.center };
+}
 
 function steerFlee(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[], goal: NpcActivity): void {
   const threat = fleeThreat(world, vehicle, contacts, goal);
@@ -876,9 +891,9 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   onGrievances(world, vehicle);
   onParley(world, vehicle);
   dropInvalidGoals(world, vehicle, contacts);
-  onContactSpotted(world, vehicle);
   onAttacked(world, vehicle, profile);
   onHostilesSeen(world, vehicle, profile);
+  onContactSpotted(world, vehicle);
   onContactsHeard(world, vehicle, profile, contacts);
   onPreySeen(world, vehicle);
   onHoldUp(world, vehicle);

@@ -12,7 +12,7 @@ import {
 } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
-import { fightsAgainst, huntsForLoot, inCombatWithOther, isHostile } from './combat';
+import { fightsAgainst, huntsForLoot, inCombatWithOther, inFeud, isHostile } from './combat';
 import { ramFactor, ramImpact } from './crash-contact';
 import { isDefeated, isKnockedOut } from './defeat';
 import { fightOdds, type FightOdds } from './fight-odds';
@@ -38,10 +38,11 @@ import { territoryAt, territoryGrounds } from './territory';
 import { addState, boundTo, endState, givesWord, isRobberyFeud, robbing, stateOf, statesHeld } from './states';
 import { fuelCap, isStranded, suppliesCap, vehicleStats } from './stats';
 import { canHire, canTakeEscort, declineFactor, inTowReach, isOnRope, strandedAt, towSite, unguardedLeader } from './tow';
-import type { Contact, GoalReason, NpcActivity, SalvageStock, Vehicle, World } from './types';
+import type { Contact, GoalReason, NpcActivity, PassReason, SalvageStock, Vehicle, World } from './types';
 import { clamp, dist, type Vec } from './vec';
 import { canVehicleSee } from './vision';
-import { isWatching, postsOf } from './watch-posts';
+import { huntsOffRoad } from './hunt-style';
+import { postsOf } from './watch-posts';
 
 export type NpcProfile = {
   towns: string[];
@@ -671,12 +672,17 @@ function threatFlee(world: World, vehicle: Vehicle, decision: DecisionId, subjec
   return odds.getaway > 0 && odds.getaway >= odds.win ? NPC_BEHAVIOR.threatFlee : NPC_BEHAVIOR.trappedFlee;
 }
 
+// A raider rarely runs from prey it can manage, since weaker prey is what it hunts. Outmatched or weak, it flees like any truck.
+function hunterFlee(vehicle: Vehicle, manageable: boolean): number {
+  return huntsPrey(vehicle) && manageable ? NPC_BEHAVIOR.hunterFlee : 1;
+}
+
 function fleeSeenFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
-  return threatFlee(world, vehicle, decision, subject, danger) * weakFlee(world, vehicle);
+  return threatFlee(world, vehicle, decision, subject, danger) * weakFlee(world, vehicle) * hunterFlee(vehicle, danger !== null && isManageable(vehicle, danger));
 }
 
 function fleeHeardFactor(world: World, vehicle: Vehicle): number {
-  return weakFlee(world, vehicle);
+  return weakFlee(world, vehicle) * hunterFlee(vehicle, true);
 }
 
 function fleeAttackedFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
@@ -718,11 +724,25 @@ function guardFactor(vehicle: Vehicle, subject: Vehicle, nearGuards: number): nu
   return nearLawGate(vehicle.pos) || nearLawGate(subject.pos) ? nearGuards : 1;
 }
 
+export function huntCurve(vehicle: Vehicle): AppealCurve {
+  return huntsOffRoad(vehicle.brain ?? undefined) ? NPC_BEHAVIOR.lootAppeal.hunt : NPC_BEHAVIOR.lootAppeal.raid;
+}
+
+// Why a hunting raider that judges `other` at `danger` would let it pass. The one owner of the pass reasons, read by the
+// sighting roll, which records the reason, and by the hover, which shows it.
+export function passReason(world: World, hunter: Vehicle, other: Vehicle, danger: number): PassReason {
+  if (!huntsPrey(hunter)) throw new Error(`${hunter.id} is not a raider, so it has no pass reason`);
+  if (!hasLoot(other) && !inFeud(world, hunter, other)) return 'nothing';
+  if (inCombatWithOther(world, hunter, other.id)) return 'busy';
+  if (!isManageable(hunter, danger)) return 'outgunned';
+  return appealOf(world, hunter, other, huntCurve(hunter)) < 1 ? 'poorLoad' : 'chance';
+}
+
 function fightFactor(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null, danger: number | null): number {
   const target = subjectOf(world, decision, subject);
   const eager = !isBusy(vehicle) && danger !== null && isManageable(vehicle, danger);
   const lootOnly = decision === 'hostileSeen' && huntsForLoot(world, vehicle, target);
-  const appeal = lootOnly ? appealOf(world, vehicle, target, NPC_BEHAVIOR.lootAppeal.raid) : 1;
+  const appeal = lootOnly ? appealOf(world, vehicle, target, huntCurve(vehicle)) : 1;
   return (eager ? NPC_BEHAVIOR.manageableFight : 1) * appeal * guardFactor(vehicle, target, NPC_BEHAVIOR.fightNearGuards);
 }
 
@@ -734,11 +754,7 @@ function keepFactor(world: World, vehicle: Vehicle, decision: DecisionId, subjec
   if (decision !== 'hostileSeen' && decision !== 'contactHeard') return 1;
   const other = subjectOf(world, decision, subject);
   const restrained = isBusy(vehicle) && !isWeak(world, vehicle) && !threatens(world, vehicle, other);
-  return (restrained ? NPC_BEHAVIOR.keepWork : 1) * lyingLow(vehicle, decision);
-}
-
-function lyingLow(vehicle: Vehicle, decision: DecisionId): number {
-  return decision === 'contactHeard' && isWatching(vehicle) ? NPC_BEHAVIOR.watchKeep : 1;
+  return restrained ? NPC_BEHAVIOR.keepWork : 1;
 }
 
 function ramWeight(world: World, vehicle: Vehicle, decision: DecisionId, subject: string | null): number {

@@ -11,7 +11,7 @@ import { MEMORY, MIN_CHANCE, NPC_BEHAVIOR, NPC_UPKEEP, NPCS, TRAITS, type TraitI
 import { SHOPS } from '../data/market';
 import { partDef } from '../data/parts';
 import { damagePart } from './wear';
-import { getKnownSite, getUpkeepReserve, judgeDanger, noteStripped, optionChances, optionWeights, tradeOffers, tradeSpend, tripFuelCost, visibleDowned, visibleSalvage } from './npc-decisions';
+import { getKnownSite, getUpkeepReserve, judgeDanger, noteStripped, optionChances, optionWeights, tradeOffers, tradeSpend, tripFuelCost, usefulContacts, visibleDowned, visibleSalvage } from './npc-decisions';
 import { affordableBuyCount, getLotTradePrice, getTradePrice } from './economy';
 import { cargoRoom } from './inventory';
 import { ECONOMY, GOODS } from '../data/goods';
@@ -1007,7 +1007,10 @@ describe('NPC activities', () => {
       for (let i = 0; i < 5; i++) {
         player.pos = { x: raider.pos.x - TERRAIN.vision.radius - 4, y: raider.pos.y + i };
         thinkNpc(w, raider);
-        expect(topGoal(raider)).toMatchObject({ kind: 'investigate', destination: { x: 30, y: 30 } });
+        const goal = topGoal(raider)!;
+        expect(goal.kind).toBe('investigate');
+        expect(goal.destination).not.toEqual(player.pos);
+        if (i === 0) expect(goal.destination).toEqual(usefulContacts(w, raider).find((c) => c.vehicleId === player.id)!.center);
         w.turn += 1;
       }
       expect(trackOf(raider, player.id)).toMatchObject({ sighted: false, choice: 'investigate', chosenInSight: false });
@@ -1107,18 +1110,16 @@ describe('NPC activities', () => {
     expect(topGoal(raider)?.targetId).toBe(trader.id);
   });
 
-  it('a distant contact remains audible without redirecting a raider', () => {
+  it('a distant contact remains audible without redirecting a trader', () => {
     const w = emptyWorld({ x: 180, y: 300 });
     const player = w.vehicles[0];
     player.speed = 4;
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 220, y: 300 });
-    raider.brain = npcBrain('buggy', raider.pos, ['raider']);
-    forceOption('contactHeard', 'investigate');
-    forceOption('idle', 'raid');
+    const trader = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 220, y: 300 });
+    trader.brain = npcBrain('trader', trader.pos, ['trader']);
+    forceOption('contactHeard', 'flee');
     planNpcOrders(w);
-    expect(contactsOf(w, raider, Infinity).some((c) => c.vehicleId === player.id)).toBe(true);
-    expect(topGoal(raider)?.kind).toBe('raid');
-    expect(topGoal(raider)?.targetId).toBeNull();
+    expect(contactsOf(w, trader, Infinity).some((c) => c.vehicleId === player.id)).toBe(true);
+    expect(topGoal(trader)?.kind).not.toBe('flee');
   });
 
   it('a trader turns away from a heard raider', () => {

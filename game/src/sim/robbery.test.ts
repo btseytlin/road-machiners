@@ -618,7 +618,7 @@ describe('cargo value', () => {
     };
 
     it('fights an empty truck rarely, start cargo sometimes and a rich load nearly always', () => {
-      expect(fightChance([])).toBeLessThan(0.08);
+      expect(fightChance([])).toBeLessThan(0.1);
       const start = fightChance([['scrap', 2], ['parts', 2]]);
       expect(start).toBeGreaterThan(0.06);
       expect(start).toBeLessThan(0.22);

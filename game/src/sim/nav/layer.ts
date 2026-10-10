@@ -25,6 +25,7 @@ export type TerrainNav = {
   tileCost: Float64Array;
   flatCost: Float64Array;
   roadTile: Uint8Array;
+  roadShy: Float32Array;
   slow: Float32Array;
 };
 
@@ -74,7 +75,7 @@ function terrainEntry(t: Terrain) {
   return e;
 }
 
-function tileLayers(t: Terrain): Pick<TerrainNav, 'cliffTile' | 'tileCost' | 'flatCost' | 'roadTile'> {
+function tileLayers(t: Terrain): Pick<TerrainNav, 'cliffTile' | 'tileCost' | 'flatCost' | 'roadTile' | 'roadShy'> {
   const cliffTile = new Uint8Array(t.size * t.size);
   const tileCost = new Float64Array(t.size * t.size);
   const flatCost = new Float64Array(t.size * t.size);
@@ -86,7 +87,42 @@ function tileLayers(t: Terrain): Pick<TerrainNav, 'cliffTile' | 'tileCost' | 'fl
     tileCost[i] = flatCost[i] * slopeCost(t, i);
     roadTile[i] = t.types[i] === 'road' && !bySite ? 1 : 0;
   }
-  return { cliffTile, tileCost, flatCost, roadTile };
+  return { cliffTile, tileCost, flatCost, roadTile, roadShy: roadShyField(t.size, roadTile) };
+}
+
+// The cost multiplier of a hunter off the road: roadShyCost on a road tile, falling linearly to 1 at roadShyBand tiles
+// from the nearest road tile. A two-pass chamfer distance gives the tile distance.
+function roadShyField(size: number, roadTile: Uint8Array): Float32Array {
+  const { roadShyCost, roadShyBand } = REGION.navigation;
+  const far = size * 2;
+  const d = new Float32Array(size * size);
+  for (let i = 0; i < d.length; i++) d[i] = roadTile[i] === 1 ? 0 : far;
+  const relax = (i: number, j: number, step: number): void => { if (d[j] + step < d[i]) d[i] = d[j] + step; };
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      if (x > 0) relax(i, i - 1, 1);
+      if (y > 0) {
+        relax(i, i - size, 1);
+        if (x > 0) relax(i, i - size - 1, Math.SQRT2);
+        if (x < size - 1) relax(i, i - size + 1, Math.SQRT2);
+      }
+    }
+  }
+  for (let y = size - 1; y >= 0; y--) {
+    for (let x = size - 1; x >= 0; x--) {
+      const i = y * size + x;
+      if (x < size - 1) relax(i, i + 1, 1);
+      if (y < size - 1) {
+        relax(i, i + size, 1);
+        if (x < size - 1) relax(i, i + size + 1, Math.SQRT2);
+        if (x > 0) relax(i, i + size - 1, Math.SQRT2);
+      }
+    }
+  }
+  const shy = new Float32Array(size * size);
+  for (let i = 0; i < shy.length; i++) shy[i] = 1 + (roadShyCost - 1) * Math.max(0, 1 - d[i] / (roadShyBand + 1));
+  return shy;
 }
 
 function routeCost(type: TerrainTypeId, bySite: boolean): number {
@@ -406,7 +442,7 @@ function components(count: number, edgeStart: Int32Array, edges: Int32Array): In
   return comp;
 }
 
-export type Taste = { seed: number; side: number; values: Float32Array; roads: Uint8Array | null; size: number };
+export type Taste = { seed: number; side: number; values: Float32Array; shy: Float32Array | null; size: number };
 
 const TASTES_MAX = 256;
 const tastes = new Map<string, Taste>();
@@ -430,11 +466,11 @@ export function makeTaste(seed: number, size: number): Taste {
   const side = Math.ceil(size / scale) + 2;
   const values = new Float32Array(side * side);
   for (let y = 0; y < side; y++) for (let x = 0; x < side; x++) values[y * side + x] = 1 + strength * (hashRandom(seed, x, y) - 0.5);
-  return { seed, side, values, roads: null, size };
+  return { seed, side, values, shy: null, size };
 }
 
 export function offRoadTaste(taste: Taste, nav: TerrainNav): Taste {
-  return { ...taste, roads: nav.roadTile, size: nav.size };
+  return { ...taste, shy: nav.roadShy, size: nav.size };
 }
 
 export function tasteAt(t: Taste, x: number, y: number): number {
@@ -455,12 +491,12 @@ export function tasteAt(t: Taste, x: number, y: number): number {
 export function tasted(t: Taste | null, cost: number, x: number, y: number): number {
   if (!t) return cost;
   const c = cost * tasteAt(t, x, y);
-  return t.roads && t.roads[tileIndex(t.size, x, y)] === 1 ? c * REGION.navigation.roadShyCost : c;
+  return t.shy ? c * t.shy[tileIndex(t.size, x, y)] : c;
 }
 
 export function tasteKey(t: Taste | null): string {
   if (!t) return 'plain';
-  return t.roads ? `${t.seed}:off` : String(t.seed);
+  return t.shy ? `${t.seed}:off` : String(t.seed);
 }
 
 function smooth(f: number): number {
