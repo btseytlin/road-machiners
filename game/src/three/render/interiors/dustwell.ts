@@ -3,6 +3,7 @@ import { PAL } from '../../../render/palette';
 import { model, socket } from '../models';
 import { rock } from '../site-motion';
 import type { SiteBuilder } from '../sites';
+import { addMarket } from './market';
 import { addShed } from './shed';
 
 const PUMP = { x: -1.6, z: 0.3, yaw: Math.PI / 2 };
@@ -15,6 +16,7 @@ const TANKS = [
 const TANK_OUTLET = (2.6 + 0.45) / 4;
 const SQUAT = { x: -0.1, z: 1.9, height: 0.42 };
 const SHED = { x: 0.3, z: -0.3, yaw: -Math.PI / 2 };
+const MARKET = { x: 2.3, z: 1.6, drums: { u: 0.2, v: 1.7 } };
 const PIPE = { size: 0.08, lift: 0.12, support: 0.6 };
 const PUMP_LANTERN = { x: -1.7, z: 1.4, yaw: -Math.PI / 2 };
 
@@ -25,6 +27,7 @@ export function buildDustwell(b: SiteBuilder): void {
   addShed(b, 'dustwell', SHED);
   addPipes(b);
   b.addLantern(PUMP_LANTERN.x, PUMP_LANTERN.z, PUMP_LANTERN.yaw);
+  addMarket(b, 'dustwell', MARKET);
 }
 
 function addPumpjack(b: SiteBuilder): void {

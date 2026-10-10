@@ -197,8 +197,6 @@ export const BROKEN_WING = {
   deckHalf: 19.5,
   mound: { gap: 4.5, flat: 2, bank: 14, height: 1.8 },
   hoopAt: -44,
-  siteAt: 44,
-  siteSide: 14,
   trench: { side: -22, half: 30, width: 3, bank: 6, depth: 2 },
 };
 
@@ -207,7 +205,6 @@ export function BROKEN_WING_POINT(along: number, across: number): Vec {
   const s = Math.sin(BROKEN_WING.yaw);
   return { x: BROKEN_WING.road.x + c * along - s * across, y: BROKEN_WING.road.y + s * along + c * across };
 }
-export const BROKEN_WING_SITE: Vec = BROKEN_WING_POINT(BROKEN_WING.siteAt, BROKEN_WING.siteSide);
 
 export const REGION = {
   name: "Icarus",
@@ -241,27 +238,6 @@ export const REGION = {
       radius: 6,
     },
     {
-      id: "burnt-convoy",
-      edge: "wrecks",
-      kind: "convoy",
-      pos: scalePoint({ x: 60, y: 18.8 }),
-      radius: 6,
-    },
-    {
-      id: "podfield",
-      edge: "wrecks",
-      kind: "convoy",
-      pos: scalePoint({ x: 78.2, y: 21 }),
-      radius: 6,
-    },
-    {
-      id: "canyon-bridge",
-      edge: "fence",
-      kind: "landmark",
-      pos: scalePoint({ x: 106.2, y: 70 }),
-      radius: 6,
-    },
-    {
       id: "glass-flats",
       kind: "territory",
       pos: GLASS_FLATS_POS,
@@ -272,19 +248,6 @@ export const REGION = {
       id: "green-pit",
       kind: "oasis",
       pos: scalePoint({ x: 71.8, y: 89 }),
-      radius: 6,
-    },
-    {
-      id: "south-lock",
-      kind: "landmark",
-      pos: scalePoint({ x: 56.8, y: 94 }),
-      radius: 6,
-    },
-    {
-      id: "ridge-wrecks",
-      edge: "wrecks",
-      kind: "convoy",
-      pos: scalePoint({ x: 41, y: 90.2 }),
       radius: 6,
     },
     {
@@ -304,13 +267,6 @@ export const REGION = {
       id: "salvage-yard",
       kind: "convoy",
       pos: scalePoint({ x: 82, y: 52.2 }),
-      radius: 6,
-    },
-    {
-      id: "broken-wing",
-      edge: "wrecks",
-      kind: "landmark",
-      pos: BROKEN_WING_SITE,
       radius: 6,
     },
     {
@@ -396,15 +352,9 @@ export const REGION = {
       { x: 103, y: 70 },
     ]),
     [scalePoint({ x: 28, y: 64 }), edgePoint(scalePoint({ x: 28, y: 64 }), { x: ORCHARD_POS.x + ORCHARD_SOUTH.x, y: ORCHARD_POS.y + ORCHARD_SOUTH.y }, ORCHARD_POS, ORCHARD_OUTLINE)],
-    [BROKEN_WING_POINT(BROKEN_WING.siteAt, 0), BROKEN_WING_SITE],
     scaleRoad([{ x: 37, y: 32 }, { x: 33.8, y: 32 }], [0]),
     scaleRoad([{ x: 50, y: 36 }, { x: 50, y: 32.8 }], [0]),
-    scaleRoad([{ x: 63, y: 20 }, { x: 60, y: 18.8 }], [0]),
-    scaleRoad([{ x: 77, y: 24 }, { x: 78.2, y: 21 }], [0]),
-    scaleRoad([{ x: 103, y: 70 }, { x: 106.2, y: 70 }], [0]),
     scaleRoad([{ x: 73, y: 92 }, { x: 71.8, y: 89 }], [0]),
-    scaleRoad([{ x: 58, y: 91 }, { x: 56.8, y: 94 }], [0]),
-    scaleRoad([{ x: 41, y: 87 }, { x: 41, y: 90.2 }], [0]),
     scaleRoad([{ x: 43, y: 54 }, { x: 40.7, y: 51.7 }], [0]),
     scaleRoad([{ x: 82, y: 49 }, { x: 82, y: 52.2 }], [0]),
     ...GLASS_FLATS_APPROACHES,

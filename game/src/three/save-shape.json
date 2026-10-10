@@ -1,5 +1,5 @@
 {
- "format": "2.43",
+ "format": "2.44",
  "shape": {
   "broken": [],
   "craters": [],
@@ -1205,6 +1205,73 @@
      }
     ]
    },
+   "dustwell": {
+    "contracts": [
+     {
+      "deadline": "number",
+      "defId": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number",
+      "window": "number"
+     },
+     {
+      "deadline": "number",
+      "fulfilled": "boolean",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "template": "string",
+      "tier": "number",
+      "window": "number"
+     },
+     {
+      "deadline": "number",
+      "good": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "rush": "boolean",
+      "shop": "string",
+      "tier": "number",
+      "to": "string",
+      "units": "number",
+      "window": "number"
+     }
+    ],
+    "pressure": {
+     "meds": "number",
+     "scrap": "number",
+     "tools": "number",
+     "water": "number"
+    },
+    "restockAt": "number",
+    "stock": [
+     {
+      "charge": {
+       "reload": "number"
+      },
+      "defId": "string",
+      "hp": "number",
+      "id": "string",
+      "wear": "number"
+     },
+     {
+      "defId": "string",
+      "gun": {
+       "ammo": "number",
+       "cooldown": "number",
+       "reloadWork": "number"
+      },
+      "hp": "number",
+      "id": "string",
+      "wear": "number"
+     }
+    ]
+   },
    "granary": {
     "contracts": [
      {
@@ -1246,6 +1313,73 @@
      "grain": "number",
      "salt": "number",
      "textiles": "number"
+    },
+    "restockAt": "number",
+    "stock": [
+     {
+      "charge": {
+       "reload": "number"
+      },
+      "defId": "string",
+      "hp": "number",
+      "id": "string",
+      "wear": "number"
+     },
+     {
+      "defId": "string",
+      "gun": {
+       "ammo": "number",
+       "cooldown": "number",
+       "reloadWork": "number"
+      },
+      "hp": "number",
+      "id": "string",
+      "wear": "number"
+     }
+    ]
+   },
+   "green-pit": {
+    "contracts": [
+     {
+      "deadline": "number",
+      "defId": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "tier": "number",
+      "window": "number"
+     },
+     {
+      "deadline": "number",
+      "fulfilled": "boolean",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "shop": "string",
+      "template": "string",
+      "tier": "number",
+      "window": "number"
+     },
+     {
+      "deadline": "number",
+      "good": "string",
+      "id": "string",
+      "kind": "string",
+      "reward": "number",
+      "rush": "boolean",
+      "shop": "string",
+      "tier": "number",
+      "to": "string",
+      "units": "number",
+      "window": "number"
+     }
+    ],
+    "pressure": {
+     "grain": "number",
+     "salt": "number",
+     "textiles": "number",
+     "water": "number"
     },
     "restockAt": "number",
     "stock": [

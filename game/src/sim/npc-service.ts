@@ -11,11 +11,10 @@ import { scrapFuel, serviceAtCamp, serviceAtStall, serviceVehicle } from './econ
 import { dropGoal, finishGoal, isBroke, noteShop, popGoal, pushGoal, reachSite, topGoal } from './npc-activities';
 import { fitToHunt, getKnownSite, huntsPrey, npcProfile, type NpcProfile } from './npc-decisions';
 import { route } from './path';
-import { getResources } from './resources';
 import { randRange } from './rng';
 import { canUseSite, type Site } from './sites';
 import { isFree } from './spawn';
-import { isStranded, suppliesCap, vehicleStats } from './stats';
+import { isStranded, vehicleStats } from './stats';
 import { isOnRope } from './tow';
 import type { GoalReason, NpcActivity, Vehicle, World } from './types';
 import { dist, type Vec } from './vec';
@@ -56,8 +55,7 @@ export function resolveResupply(world: World, vehicle: Vehicle, activity: NpcAct
 
 function serviceAt(world: World, vehicle: Vehicle, site: Site): void {
   const kind = 'kind' in site ? site.kind : null;
-  if (kind === 'oasis') getResources(world, vehicle).supplies = suppliesCap(vehicle);
-  else if (kind === 'camp') serviceAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
+  if (kind === 'camp') serviceAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else if (shopDef(site.id).kind === 'stall') serviceAtStall(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else serviceVehicle(world, vehicle, site.id, NPC_UPKEEP.repairParts);
 }

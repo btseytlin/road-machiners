@@ -25,7 +25,7 @@ import { standingPressures } from './market';
 import { remember } from './memory';
 import { chance, hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
-import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, isSiteStock, lootTruckTurn, searchTarget, STRIPPED, oldSpotOf, oldSpotsNear, oldStockId } from './salvage';
+import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, lootClaimedBy, lootTruckTurn, searchTarget, STRIPPED, oldSpotOf, oldSpotsNear, oldStockId } from './salvage';
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
@@ -148,10 +148,7 @@ function fleeDestination(world: World, vehicle: Vehicle, profile: NpcProfile, th
   return { x: clamp(destination.x, 1, world.size - 1), y: clamp(destination.y, 1, world.size - 1) };
 }
 
-// ---- Goal builders.
-
-// Why an NPC needs service, whether low supplies are its only need, and whether it needs repairs.
-type ServiceNeed = { reason: GoalReason; suppliesOnly: boolean };
+type ServiceNeed = { reason: GoalReason };
 
 function unfitHunter(world: World, vehicle: Vehicle): boolean {
   return huntsPrey(vehicle) && !fitToHunt(world, vehicle);
@@ -192,7 +189,7 @@ function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): Servi
   ];
   const held = needs.filter(([, need]) => need).map(([reason]) => reason);
   if (held.length === 0) return null;
-  return { reason: held[0], suppliesOnly: held.length === 1 && held[0] === 'lowSupplies' };
+  return { reason: held[0] };
 }
 
 export function isBroke(world: World, vehicle: Vehicle): boolean {
@@ -202,8 +199,6 @@ export function isBroke(world: World, vehicle: Vehicle): boolean {
 function serviceGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity | null {
   const need = serviceNeed(world, vehicle, profile);
   if (!need) return null;
-  const oasis = need.suppliesOnly ? chooseNearestSite(vehicle, profile.supplySites) : undefined;
-  if (oasis) return createSiteActivity('resupply', oasis.id, 'lowSupplies');
   if (isBroke(world, vehicle)) return brokeServiceGoal(world, vehicle, profile, need);
   return serviceTrip(world, vehicle, profile, need);
 }
@@ -782,7 +777,7 @@ function onStrandedSeen(world: World, vehicle: Vehicle): void {
 function onSalvageSeen(world: World, vehicle: Vehicle): void {
   const top = topGoal(vehicle);
   if (inCombat(world, vehicle) || !top || top.phase !== 'travel' || INTERRUPTIONS.includes(top.kind)) return;
-  const stocks = visibleSalvage(world, vehicle).filter((stock) => !isSiteStock(stock));
+  const stocks = visibleSalvage(world, vehicle);
   const passed = [...stocks, ...visibleDowned(world, vehicle)].filter((s) => s.id !== top.targetId).sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   const loot = passed.find((s) => react(world, vehicle, 'salvageSeen', s.id) === 'loot');
   if (loot) pushGoal(world, vehicle, createActivity('loot', loot.id, { ...loot.pos }, 'lootOnTheWay'));

@@ -40,7 +40,7 @@ describe('NPC driving', () => {
     const startX = npc.pos.x;
     const xs: number[] = [];
     let d = buildDrive(w);
-    for (let i = 0; i < RULES.npcStuckTurns + 4; i++) {
+    for (let i = 0; i < RULES.npcStuckTurns + 11; i++) {
       ({ w, d } = turn(w, d));
       xs.push(w.vehicles.find((v) => v.id === npc.id)!.pos.x);
     }

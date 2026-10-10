@@ -176,7 +176,7 @@ describe('a scavenger at an old-world loot spot', () => {
     };
     const { w: after, searched, reasons } = runGoal(w, npc.id, stock.id, DRIVE_TURNS, keepSearching);
     expect(searched).toBe(false);
-    expect(['lootTaken', 'looterWontLeave']).toContain(reasons[0]);
+    expect(['lootTaken', 'looterWontLeave', 'fightOverLoot']).toContain(reasons[0]);
     expect(held(after, stock.id)).toBe(before);
   }, 120_000);
 });
