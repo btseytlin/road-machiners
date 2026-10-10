@@ -496,6 +496,7 @@ export const SCREENS: Translation<typeof EN> = {
   'inv.salvage': 'Добыча',
   'inv.salvageAt': 'Добыча: {site}',
   'inv.nothingLeft': 'Здесь ничего не осталось.',
+  'inv.searchMore': 'Искать ещё',
   'inv.takeAll': 'Взять всё, что влезет',
   'inv.dragToGrid': 'Перетащите предметы на сетку.',
   'inv.truckGone': 'Грузовик ушёл',

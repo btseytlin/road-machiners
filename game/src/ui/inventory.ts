@@ -29,7 +29,7 @@ import { vehicleHasPerk } from "../sim/progress";
 import { PERK_NUMBERS } from "../data/skills";
 import { repairPlan, type RepairPlan } from "../sim/repair";
 import { shopAt } from "../sim/market";
-import { takeAllLoot, takeLoot, takeStores } from "../sim/locations";
+import { needsSearch, takeAllLoot, takeLoot, takeStores } from "../sim/locations";
 import { canLootTruck, hasStores, hiddenUnits, takeFromTruck } from "../sim/salvage";
 import { gaveUp, isKnockedOut } from "../sim/defeat";
 import { REGION } from "../data/region";
@@ -63,7 +63,7 @@ import {
 } from "./inventory-draw";
 import { fuelLiters, kg, moneyEl, moneyMsg, pricedEl } from "./units";
 import { maxSpeedSteps } from "../sim/stats";
-import { powerChip } from "./hud-readout";
+import { getSearchAction, powerChip } from "./hud-readout";
 import {
   doubleClickCommand,
   HOLD_TO_DRAG_MS,
@@ -555,6 +555,7 @@ export class InventoryView {
       ...(chips.length
         ? chips
         : [el("div", { class: "dim" }, hiddenUnits(stock) > 0 ? t("inv.nothingFound") : t("inv.nothingLeft"))]),
+      ...(needsSearch(w, stock) ? [this.searchButton(w, stock)] : []),
       ...(chips.length
         ? [
             el(
@@ -566,6 +567,15 @@ export class InventoryView {
             ),
           ]
         : []),
+    );
+  }
+
+  private searchButton(w: World, stock: SalvageStock): HTMLElement {
+    const action = getSearchAction(w, stock);
+    return el(
+      "button",
+      { class: "inv-search", disabled: !action.ready && action.combat === undefined, onclick: () => this.host.searchStock(stock.id) },
+      t("inv.searchMore"),
     );
   }
 

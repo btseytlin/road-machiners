@@ -129,7 +129,7 @@ function getStockActions(world: World, stock: SalvageStock): ContextAction[] {
   return actions;
 }
 
-function getSearchAction(world: World, stock: SalvageStock): ContextAction {
+export function getSearchAction(world: World, stock: SalvageStock): ContextAction {
   const combat = combatTurnsLeft(world, playerVehicle(world)) ?? undefined;
   const ready = combat === undefined && canReachSalvage(playerVehicle(world), stock);
   return withBlocker(world, stock, { label: stockLabel('search', stock), ready, combat, target: { kind: 'stock', id: stock.id } });

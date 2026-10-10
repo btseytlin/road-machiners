@@ -441,6 +441,7 @@ describe("weapon panel keys and the turn button", () => {
       pressTurn: vi.fn(),
       releaseTurn: vi.fn(),
       runKey: vi.fn(),
+      searchStock: vi.fn(),
       autoTravel: () => auto,
       getTurnPhase: () => null,
     } satisfies UiHost;
@@ -591,7 +592,7 @@ describe("disabled reasons on the weapon bar", () => {
     setup(world);
     const host = {
       world: () => world, apply: vi.fn(), announce: vi.fn(), selectedWeapon: () => null, selectWeapon: vi.fn(), selectedUtility: () => null, selectUtility: vi.fn(),
-      pressTurn: vi.fn(), releaseTurn: vi.fn(), runKey: vi.fn(), autoTravel: () => false, getTurnPhase: () => phase,
+      searchStock: vi.fn(), pressTurn: vi.fn(), releaseTurn: vi.fn(), runKey: vi.fn(), autoTravel: () => false, getTurnPhase: () => phase,
     } satisfies UiHost;
     new WeaponPanel(host).render();
     const find = (text: string) => (ui.children as FakeNode[]).map((n) => n.find((b) => b.tag === "button" && b.text().includes(text))).find(Boolean)!;
@@ -643,6 +644,7 @@ describe("the utility row", () => {
       pressTurn: vi.fn(),
       releaseTurn: vi.fn(),
       runKey: vi.fn(),
+      searchStock: vi.fn(),
       autoTravel: () => false,
       getTurnPhase: vi.fn<() => "moving" | null>(() => null),
     } satisfies UiHost;

@@ -522,6 +522,7 @@ export const SCREENS = {
   'inv.salvage': 'Salvage',
   'inv.salvageAt': m('Salvage: {site}', { site: 'text' }),
   'inv.nothingLeft': 'Nothing left here.',
+  'inv.searchMore': 'Search for more',
   'inv.takeAll': 'Take all that fits',
   'inv.dragToGrid': 'Drag items onto the grid.',
   'inv.truckGone': 'The truck got away',
