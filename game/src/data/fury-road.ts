@@ -46,7 +46,6 @@ export const FURY_ROAD = {
       { from: 'ahead', templates: ['gunwagon', 'gunwagon'], level: 'loaded' },
     ],
   ] as GroupPlan[][],
-  groupSpread: [0.2, 0.85] as [number, number],
   spawnLead: 32,
   aheadGap: 22,
   behindGap: 24,
@@ -97,9 +96,56 @@ export const HIGHWAY = {
     { kind: 'deadTree', count: [0, 2], r: [0.35, 0.35], across: [18.5, 34] },
   ] as BandRule[],
   powerLine: { spacing: 12, across: 14, r: 0.3 },
-  billboard: { chance: 0.14, r: 1.6, across: [17.6, 21] as [number, number] },
+  billboard: { chance: 0.14, r: 1.6, across: [19.6, 22] as [number, number] },
   ditched: { chance: 0.4, kinds: ['carWreck', 'deadTruck'] as PropKind[], r: [0.6, 0.75] as [number, number], across: [12.8, 16.2] as [number, number], yaw: 25 },
   milestoneClear: { south: 34, north: 24, across: 34 },
+  sceneClear: { along: 4, across: 24 },
   propGap: 0.3,
   startLane: 2,
+};
+
+export type SceneKind = 'pileup' | 'jackknife' | 'checkpoint' | 'tankline' | 'rockfall' | 'craters' | 'ramp';
+export type Range = [number, number];
+export type SceneWeights = { upTo: number; weights: Record<SceneKind, number> };
+
+export const HAZARDS = {
+  arenaMin: 36,
+  clearAfterOutpost: 24,
+  clearBeforeOutpost: 30,
+  scenes: { first: 3, every: 2, max: 4 },
+  lanesCovered: { early: 2, late: 3, upTo: 2 },
+  tiers: [
+    { upTo: 2, weights: { pileup: 4, rockfall: 3, craters: 3, jackknife: 2, ramp: 2, checkpoint: 1, tankline: 1 } },
+    { upTo: 5, weights: { pileup: 3, rockfall: 2, craters: 2, jackknife: 2, ramp: 2, checkpoint: 2, tankline: 2 } },
+    { upTo: Number.MAX_SAFE_INTEGER, weights: { pileup: 2, rockfall: 1, craters: 1, jackknife: 2, ramp: 2, checkpoint: 3, tankline: 3 } },
+  ] as SceneWeights[],
+  pieceR: { carWreck: 0.7, deadTruck: 0.75, drums: 0.44, junk: 0.6, barrier: 0.5, sandbags: 0.6, tankTrap: 0.25, armyTruck: 1.1, tank: 1.2 } as Partial<Record<PropKind, number>>,
+  pileup: {
+    lanes: [1, 2] as Range,
+    vehicles: [3, 6] as Range,
+    hulkShare: 0.45,
+    hulks: ['bus', 'van', 'courier', 'hauler', 'wagon'],
+    cars: ['carWreck', 'deadTruck'] as PropKind[],
+    length: [6, 12] as Range,
+    yaw: [20, 80] as Range,
+    spill: [2, 4] as Range,
+    spillKinds: ['drums', 'junk'] as PropKind[],
+    spillAhead: [2, 6] as Range,
+  },
+  jackknife: { lanes: [2, 3] as Range, hulks: ['bus', 'hauler'], yaw: [60, 90] as Range, cars: [1, 2] as Range, carYaw: 15, behind: [2.2, 3.2] as Range },
+  checkpoint: { lines: [2, 3] as Range, spacing: 10, inner: 1, barrierStep: 1, lineYaw: 3, sandbags: [1, 2] as Range, behind: 0.9, bagStep: 1.2, traps: [3, 6] as Range, trapFrom: 5.6, trapStep: 0.9, truckAcross: [8.5, 11] as Range, truckYaw: 10 },
+  tankline: { lanes: [1, 2] as Range, tankAcross: [8, 12] as Range, tankYaw: 20, traps: [6, 10] as Range, step: [3, 4] as Range },
+  rockfall: { crag: { across: [17, 18.5] as Range, r: [1.6, 2.2] as Range }, rocks: [6, 12] as Range, reach: 3, r: [0.4, 1.3] as Range, fan: 4 },
+  craters: { count: [2, 4] as Range, radius: [1.5, 2.5] as Range, depth: [0.3, 0.5] as Range, spacing: [3.5, 5] as Range, junk: [1, 2] as Range },
+  ramp: { width: 3, length: 5, rise: 0.35, craterChance: 0.5, craterGap: 3 },
+  passage: 3,
+  inflate: 0.5,
+  onAsphalt: 1,
+  pieceGap: 0.05,
+  placeTries: 12,
+  maxTries: 60,
+  closures: {
+    north: { gap: 16, reach: 30, rows: 2, rowGap: 1.4, sandbags: 4, traps: 10, trapsAhead: 2.5 },
+    south: { at: 45, reach: 30, rows: 2, rowGap: 2, yaw: 15, hulkShare: 0.5 },
+  },
 };

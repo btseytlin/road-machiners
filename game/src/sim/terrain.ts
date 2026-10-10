@@ -125,7 +125,7 @@ export function isCliff(t: Terrain, tile: number): boolean {
 
 export const PROP_KINDS = ['rock', 'crag', 'ruin', 'house', 'silo', 'waterTower', 'gasStation', 'bridgeSpan', 'pole', 'billboard', 'tank', 'shack', 'fence', 'junk', 'carWreck', 'hullChunk', 'shipCache', 'reactor', 'deadTree', 'farmhouse', 'barn', 'armyCache', 'bunker', 'armyTruck', 'sandbags', 'quonset', 'guardPost', 'barrier', 'drums', 'woodpile', 'shipWing', 'hullCache', 'shipBow', 'shipCage', 'shipHub', 'hullShell', 'hullDrum', 'hullShard', 'hullTower', 'hullGantry', 'rimRock', 'tankTrap', 'fortMasonryWall', 'fortMasonryTower', 'fortMasonryGate', 'fortMasonryBastion', 'fortMasonryInner', 'fortShipWall', 'fortShipTower', 'fortShipGate', 'fortScrapWall', 'fortScrapTower', 'fortScrapGate', 'fortScrapBastion', 'fortScrapInner', 'fortPatchworkWall', 'fortPatchworkTower', 'fortPatchworkGate', 'fortCompoundWall', 'fortCompoundTower', 'fortCompoundGate', 'fortRingWall', 'fortRingGate', 'fortYardWall', 'fortYardTower', 'fortYardGate', 'noseRise', 'noseCrag', 'engineNozzle', 'engineFrame', 'watchtower', 'ruinCompound', 'deadTruck', 'glassSpire', 'scrapWall', 'escapePod', 'habitat', 'wingShard', 'powerCell'] as const;
 export type PropKind = (typeof PROP_KINDS)[number];
-export type BakedProp = { kind: PropKind; pos: Vec; r: number; yaw: number; group: number; step: number };
+export type BakedProp = { kind: PropKind; pos: Vec; r: number; yaw: number; group: number; step: number; hulk?: string };
 export type BakedMap = { hash: string; seed: number; terrain: Terrain; props: BakedProp[] };
 export type MapGrid = { size: number; heights: Float32Array; types: Uint8Array; props: BakedProp[] };
 

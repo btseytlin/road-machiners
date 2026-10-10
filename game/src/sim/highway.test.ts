@@ -7,6 +7,7 @@ import { REGION } from '../data/region';
 import { fortressProps } from './fortress';
 import { acrossOf, centerU, fromRoad, highwayMap, highwayStart, milestoneAt, outpostFort, roadHeading, roadHeight, roadPoint, STRIDE, toRoad, windowSpan } from './highway';
 import { isBakedObstacle, mapObstacles } from './mapgen';
+import { northClosureAt, sceneAt, southClosureAt } from './road-hazards';
 import { canUseSite, sitePads } from './sites';
 import { CELL, componentOf, navLayer } from './nav/layer';
 import { groundAt, heightAt, isCliff, type BakedMap, type BakedProp } from './terrain';
@@ -22,10 +23,6 @@ function propKey(p: BakedProp, shift: number): string {
 
 function inSquare(p: BakedProp, from: number, to: number): boolean {
   return [p.pos.x, p.pos.y].every((v) => v >= from + 2 && v <= to - 2);
-}
-
-function propsAcross(map: BakedMap, seed: number, window: number): { p: BakedProp; d: number }[] {
-  return map.props.map((p) => ({ p, d: Math.abs(acrossOf(seed, toRoad(window, p.pos))) }));
 }
 
 function typeAt(map: BakedMap, p: { x: number; y: number }): string {
@@ -63,7 +60,7 @@ describe('a highway window', () => {
     expect(highwayMap(5, 0)).toEqual(highwayMap(5, 0));
   });
 
-  it('agrees with the next window in their overlap square', () => {
+  it('agrees with the next window in their overlap square, but for the two closures', () => {
     for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
       for (const k of [0, 1, 2, 3, 4]) {
         const a = highwayMap(seed, k);
@@ -76,8 +73,9 @@ describe('a highway window', () => {
           const ta = a.terrain.types.slice(y * SIZE, y * SIZE + OVERLAP);
           if (y < OVERLAP) expect(ta).toEqual(b.terrain.types.slice((y + STRIDE) * SIZE + STRIDE, (y + STRIDE) * SIZE + SIZE));
         }
-        const fromA = a.props.filter((p) => inSquare(p, 0, OVERLAP));
-        const fromB = b.props.filter((p) => inSquare(p, STRIDE, SIZE));
+        const open = (window: number) => (p: BakedProp) => [northClosureAt(k), southClosureAt(k + 1)].every((n) => Math.abs(toRoad(window, p.pos).n - n) > 5);
+        const fromA = a.props.filter((p) => inSquare(p, 0, OVERLAP)).filter(open(k));
+        const fromB = b.props.filter((p) => inSquare(p, STRIDE, SIZE)).filter(open(k + 1));
         expect(fromB.map((p) => propKey(p, -STRIDE)).sort(), `seed ${seed} window ${k}`).toEqual(fromA.map((p) => propKey(p, 0)).sort());
       }
     }
@@ -88,7 +86,7 @@ describe('a highway window', () => {
       const map = highwayMap(seed, 1);
       const span = windowSpan(1);
       for (let n = span.from + 60; n < span.to - 60; n += 9) {
-        if ([1, 2].some((j) => Math.abs(n - milestoneAt(j)) < 14)) continue;
+        if ([1, 2].some((j) => Math.abs(n - milestoneAt(j)) < 14) || sceneAt(seed, n, 4) !== null) continue;
         const at = (d: number) => roadPoint(seed, 1, n, d);
         for (const side of [-1, 1]) {
           expect(typeAt(map, at(side * 4.2))).toBe('asphalt');
@@ -104,15 +102,6 @@ describe('a highway window', () => {
             expect(isCliff(map.terrain, Math.floor(p.y) * SIZE + Math.floor(p.x)), `seed ${seed} n ${n} d ${d}`).toBe(false);
           }
         }
-      }
-    }
-  });
-
-  it('keeps blocking scenery out of the lanes and the near verge', () => {
-    for (const seed of [1, 2, 3]) {
-      for (const k of [0, 1, 2]) {
-        const near = propsAcross(highwayMap(seed, k), seed, k).filter(({ p, d }) => d - p.r < 12 && !p.kind.startsWith('fort'));
-        expect(near.map(({ p }) => p.kind), `seed ${seed} window ${k}`).toEqual([]);
       }
     }
   });

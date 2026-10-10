@@ -4,6 +4,7 @@ import type { TerrainTypeId } from '../data/terrain';
 import type { Atlas } from './atlas';
 import { NO_DECKS } from './bridge';
 import { fortressProps } from './fortress';
+import { closurePieces, craterDip, sceneAt, scenePieces, stretchLayout, windowCraters, windowStretches, type Crater } from './road-hazards';
 import { INDEX_CELL, RoadIndex } from './road-index';
 import { hashRandom, nextRandom, randInt, randRange, type Rng } from './rng';
 import type { BakedMap, BakedProp, PropKind, Terrain } from './terrain';
@@ -161,17 +162,21 @@ function windowForts(seed: number, window: number): SiteLocationDef[] {
 
 type FortFrame = { out: number; lat: number };
 
-function fortFrame(seed: number, at: RoadPos): FortFrame | null {
-  const j = nearestMilestone(at.n);
+type FortAxes = { center: RoadPos; cos: number; sin: number };
+
+function fortAxes(seed: number, j: number): FortAxes | null {
   if (j < 1) return null;
   const site = outpostSite(seed, j);
-  const dn = at.n - site.center.n;
-  const du = at.u - site.center.u;
+  return { center: site.center, cos: Math.cos(site.out), sin: Math.sin(site.out) };
+}
+
+function fortFrame(axes: FortAxes | null, at: RoadPos): FortFrame | null {
+  if (!axes) return null;
+  const dn = at.n - axes.center.n;
+  const du = at.u - axes.center.u;
   const dx = (du - dn) / ROOT2;
   const dy = -(du + dn) / ROOT2;
-  const cos = Math.cos(site.out);
-  const sin = Math.sin(site.out);
-  return { out: dx * cos + dy * sin, lat: dy * cos - dx * sin };
+  return { out: dx * axes.cos + dy * axes.sin, lat: dy * axes.cos - dx * axes.sin };
 }
 
 function fortFlat(f: FortFrame | null): number {
@@ -211,9 +216,10 @@ export function ridgeRise(d: number): number {
   return ROAD.ridge.rise * smooth01((d - ROAD.badlands) / ROAD.ridge.run);
 }
 
-function cornerHeight(seed: number, at: RoadPos, d: number, flat: number): number {
+function cornerHeight(seed: number, at: RoadPos, line: LineSample, flat: number, craters: readonly Crater[]): number {
+  const d = Math.abs(at.u - line.c) / line.len;
   const lift = smooth01((d - ROAD.flatTo) / ROAD.blend) * relief(seed, at);
-  return roadHeight(seed, at.n) + (1 - flat) * (lift + ridgeRise(d));
+  return line.h + (1 - flat) * (lift + ridgeRise(d)) - craterDip(craters, at);
 }
 
 function bandOf(bands: GroundBand[], v: number): TerrainTypeId {
@@ -222,7 +228,8 @@ function bandOf(bands: GroundBand[], v: number): TerrainTypeId {
   return band.type;
 }
 
-function tileType(seed: number, at: RoadPos, d: number, concrete: boolean): TerrainTypeId {
+function tileType(seed: number, at: RoadPos, d: number, concrete: boolean, craters: readonly Crater[]): TerrainTypeId {
+  if (craterDip(craters, at) > 0) return 'gravel';
   if (d <= ROAD.asphalt) return 'asphalt';
   if (concrete) return 'concrete';
   const g = HIGHWAY.ground;
@@ -231,26 +238,42 @@ function tileType(seed: number, at: RoadPos, d: number, concrete: boolean): Terr
   return bandOf(d <= ROAD.verge ? g.verge : g.badlands, v);
 }
 
+type LineSample = { n: number; c: number; len: number; h: number; fort: FortAxes | null };
+
+function lineSamples(seed: number, window: number): LineSample[] {
+  const forts = new Map<number, FortAxes | null>();
+  return Array.from({ length: 2 * SIZE + 1 }, (_, sum) => {
+    const n = (2 * SIZE - sum + 2 * window * STRIDE) / ROOT2;
+    const j = nearestMilestone(n);
+    if (!forts.has(j)) forts.set(j, fortAxes(seed, j));
+    return { n, c: centerU(seed, n), len: Math.hypot(1, centerSlope(seed, n)), h: roadHeight(seed, n), fort: forts.get(j) ?? null };
+  });
+}
+
 function landOf(seed: number, window: number): Pick<Terrain, 'heights' | 'types'> {
   const row = SIZE + 1;
   const heights = new Array<number>(row * row);
   const types = new Array<TerrainTypeId>(SIZE * SIZE);
+  const craters = windowCraters(seed, window);
+  const lines = lineSamples(seed, window);
   for (let y = 0; y <= SIZE; y++) {
     for (let x = 0; x <= SIZE; x++) {
-      const at = toRoad(window, { x, y });
-      heights[y * row + x] = cornerHeight(seed, at, Math.abs(acrossOf(seed, at)), fortFlat(fortFrame(seed, at)));
+      const line = lines[x + y];
+      const at = { n: line.n, u: (x - y) / ROOT2 };
+      heights[y * row + x] = cornerHeight(seed, at, line, fortFlat(fortFrame(line.fort, at)), craters);
     }
   }
   for (let y = 0; y < SIZE; y++) {
     for (let x = 0; x < SIZE; x++) {
-      const at = toRoad(window, { x: x + 0.5, y: y + 0.5 });
-      types[y * SIZE + x] = tileType(seed, at, Math.abs(acrossOf(seed, at)), onFortConcrete(fortFrame(seed, at)));
+      const line = lines[x + y + 1];
+      const at = { n: line.n, u: (x - y) / ROOT2 };
+      types[y * SIZE + x] = tileType(seed, at, Math.abs(at.u - line.c) / line.len, onFortConcrete(fortFrame(line.fort, at)), craters);
     }
   }
   return { heights, types };
 }
 
-export type RoadPiece = { kind: PropKind; at: RoadPos; r: number; yaw: number; group: number; step: number };
+export type RoadPiece = { kind: PropKind; at: RoadPos; r: number; yaw: number; group: number; step: number; hulk?: string };
 
 export function roadPiece(kind: PropKind, at: RoadPos, r: number, yaw: number): RoadPiece {
   return { kind, at, r, yaw, group: 0, step: 0 };
@@ -340,13 +363,19 @@ export function sceneryPieces(seed: number, from: number, to: number, keep: Keep
   return out;
 }
 
+function clearOfScenes(seed: number): Keep {
+  const clear = HIGHWAY.sceneClear;
+  return (p) => Math.abs(acrossOf(seed, p.at)) - p.r >= clear.across || sceneAt(seed, p.at.n, clear.along + p.r) === null;
+}
+
 function windowPieces(seed: number, window: number): RoadPiece[] {
   const span = windowSpan(window);
-  return sceneryPieces(seed, span.from, span.to, () => true);
+  const scenes = windowStretches(window).flatMap((j) => stretchLayout(seed, j).scenes.flatMap(scenePieces));
+  return [...sceneryPieces(seed, span.from, span.to, clearOfScenes(seed)), ...scenes, ...closurePieces(seed, window)];
 }
 
 function bakedProps(seed: number, window: number): BakedProp[] {
-  const pieces = windowPieces(seed, window).map((p) => ({ kind: p.kind, pos: fromRoad(window, p.at.n, p.at.u), r: p.r, yaw: p.yaw, group: p.group, step: p.step }));
+  const pieces = windowPieces(seed, window).map((p): BakedProp => ({ kind: p.kind, pos: fromRoad(window, p.at.n, p.at.u), r: p.r, yaw: p.yaw, group: p.group, step: p.step, ...(p.hulk ? { hulk: p.hulk } : {}) }));
   const forts = windowForts(seed, window).flatMap(fortressProps);
   return [...pieces, ...forts].filter((p) => p.pos.x >= p.r && p.pos.x <= SIZE - p.r && p.pos.y >= p.r && p.pos.y <= SIZE - p.r);
 }

@@ -11,7 +11,8 @@ import { mapObstacles } from './mapgen';
 import { rollPartStock } from './market';
 import { fightCornered, topGoal } from './npc-activities';
 import { generateNpcLoadout } from './npc-loadout';
-import { randRange } from './rng';
+import { randInt } from './rng';
+import { stretchLayout } from './road-hazards';
 import { modeRules } from './settings';
 import { isFree, spawnAt } from './spawn';
 import { declareFeud } from './states';
@@ -50,11 +51,9 @@ export function waveOf(j: number): (typeof FURY_ROAD.waves)[number] {
 
 export function planStretch(seed: number, j: number): WaveGroup[] {
   const rng = stretchStream(seed, j, 'groups');
-  const from = milestoneAt(j - 1);
-  const span = milestoneAt(j) - from;
-  const [lo, hi] = FURY_ROAD.groupSpread;
+  const arenas = stretchLayout(seed, j).arenas.slice(1);
   const wave = waveOf(j);
-  const anchors = wave.map(() => from + span * randRange(rng, lo, hi)).sort((a, b) => a - b);
+  const anchors = wave.map(() => arenas[randInt(rng, 0, arenas.length - 1)]).map((a) => (a.from + a.to) / 2).sort((a, b) => a - b);
   return wave.map((plan, i) => ({
     id: `g${j}-${i}`,
     stretch: j,

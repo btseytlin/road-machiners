@@ -10,6 +10,7 @@ import { isFortress, siteGap } from './sites';
 import { TERRAIN } from '../data/terrain';
 import { randInt, randRange } from './rng';
 import { hulkBoxes } from './body';
+import { chassisDef } from '../data/chassis';
 import { propBase, underDeck } from './bridge';
 import { atlasOf, atlasSites, type Atlas } from './atlas';
 import { modeRules } from './settings';
@@ -42,12 +43,18 @@ export function mapObstacles(map: BakedMap): Obstacle[] {
 }
 
 export function propObstacle(p: BakedProp, k: number): Obstacle {
+  if (p.hulk !== undefined) return hulkObstacle(p, k, p.hulk);
   if (p.kind === 'rock') return { id: `rock${k}`, pos: { ...p.pos }, r: p.r, kind: 'rock' };
   const id = p.kind === 'pole' ? `${p.kind}-${p.group}-${p.step}` : `${p.kind}-${k}`;
   return { id, pos: { ...p.pos }, r: p.r, kind: 'landmark', look: p.kind, yaw: p.yaw };
 }
 
-const BAKED_ID = new RegExp(`^(rock\\d+|pole-\\d+-\\d+|(${PROP_KINDS.filter((k) => k !== 'rock' && k !== 'pole').join('|')})-\\d+)$`);
+function hulkObstacle(p: BakedProp, k: number, chassisId: string): Obstacle {
+  chassisDef(chassisId);
+  return { id: `hulk-${k}`, pos: { ...p.pos }, r: p.r, kind: 'wreck', hulk: { chassisId, yaw: p.yaw } };
+}
+
+const BAKED_ID = new RegExp(`^(rock\\d+|hulk-\\d+|pole-\\d+-\\d+|(${PROP_KINDS.filter((k) => k !== 'rock' && k !== 'pole').join('|')})-\\d+)$`);
 
 export function isBakedObstacle(o: Obstacle): boolean {
   return BAKED_ID.test(o.id);
