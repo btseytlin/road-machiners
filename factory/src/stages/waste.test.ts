@@ -11,13 +11,16 @@ const HOME = resolve('tmp/factory-waste-test');
 const NOW = new Date('2026-10-10T09:00:00Z');
 const BRIEF = 'BOTTLENECK: Cards waited 204 min for the verify queue.\nCHANGE:\nSet FACTORY_VERIFY_WORKERS to 2 in factory/settings.env.';
 
-type Seen = { runs: AgentRun[]; numbers: string; inputs: string[]; issues: { title: string; body: string; labels: string[] }[]; calls: string[] };
+const CHANGE_ID = 1791571868706;
 
-function fakeCtx(brief: string | null): { ctx: Ctx; seen: Seen } {
-  const seen: Seen = { runs: [], numbers: '', inputs: [], issues: [], calls: [] };
+type Seen = { runs: AgentRun[]; numbers: string; inputs: string[]; issues: { title: string; body: string; labels: string[] }[]; calls: string[]; lookups: number[] };
+type Faults = { now?: Date; agent?: boolean; lookup?: boolean; close?: boolean };
+
+function fakeCtx(brief: string | null, faults: Faults = {}): { ctx: Ctx; seen: Seen } {
+  const seen: Seen = { runs: [], numbers: '', inputs: [], issues: [], calls: [], lookups: [] };
   const ctx = {
     cfg: { home: HOME, repo: 'o/r', committeeChat: '-5', buildModel: 'sonnet', wasteReviewDays: 7 },
-    statePath: `${HOME}/state/state.json`, now: () => NOW, log: () => undefined,
+    statePath: `${HOME}/state/state.json`, now: () => faults.now ?? NOW, log: () => undefined,
     repo: {
       fetch: async () => undefined,
       prepareWorkClone: async (branch: string, base: string, dir: string) => { seen.calls.push(`clone ${branch} ${base}`); mkdirSync(`${dir}/factory`, { recursive: true }); },
@@ -28,14 +31,22 @@ function fakeCtx(brief: string | null): { ctx: Ctx; seen: Seen } {
         seen.numbers = readFileSync(`${run.clone}/${run.dir}/.factory/numbers.md`, 'utf8');
         const issue = `${run.clone}/${run.dir}/.factory/issues/issue-7.md`;
         seen.inputs = [existsSync(issue) ? readFileSync(issue, 'utf8') : '', readFileSync(`${run.clone}/${run.dir}/.factory/earlier-reviews.md`, 'utf8')];
+        if (faults.agent) throw new Error('The agent exited with code 1');
         if (brief !== null) writeFileSync(`${run.clone}/${run.dir}/.factory/brief.md`, brief);
       },
     },
     github: {
-      issue: async (n: number) => ({ number: n, title: `Issue ${n}`, body: 'Make the horn louder.', labels: [] }),
+      issue: async (n: number) => {
+        seen.lookups.push(n);
+        if (faults.lookup || n === CHANGE_ID) throw new Error(`gh issue view ${n} failed: Could not resolve to an Issue`);
+        return { number: n, title: `Issue ${n}`, body: 'Make the horn louder.', labels: [] };
+      },
       comments: async () => [{ login: 'bot', body: 'Verify finished after 16 min.' }],
       createIssue: async (title: string, body: string, labels: string[]) => { seen.issues.push({ title, body, labels }); return 301; },
-      close: async (n: number, reason: string) => { seen.calls.push(`close ${n} ${reason}`); },
+      close: async (n: number, reason: string) => {
+        if (faults.close) throw new Error('gh issue close failed: connection reset');
+        seen.calls.push(`close ${n} ${reason}`);
+      },
     },
     telegram: {
       sendMessage: async (_chat: string, text: string) => { seen.calls.push(`message ${text}`); return 1; },
@@ -106,10 +117,79 @@ describe('waste review', () => {
     expect(existsSync(reviewPendingPath(HOME))).toBe(true);
   });
 
-  it('fails loud when the agent wrote no brief, and still waits a full period for the next review', async () => {
-    const { ctx } = fakeCtx(null);
+  it('fails loud when the agent wrote no brief, and keeps the period for the retry', async () => {
+    const { ctx, seen } = fakeCtx(null);
     await expect(runStage(ctx)).rejects.toThrow('wrote no .factory/brief.md');
+    expect(readState(ctx.statePath).lastWasteReview).toBe('2026-10-03T09:00:00Z');
+    expect(seen.issues).toEqual([]);
+  });
+
+  it('counts a factory change in the numbers but looks up only real issues', async () => {
+    appendLedger(HOME, { kind: 'job', id: 'c', stage: 'change', issue: CHANGE_ID, startedAt: '2026-10-06T10:00:00Z', endedAt: '2026-10-06T11:00:00Z', outcome: 'done', agents: [{ model: 'opus', costUsd: 9, minutes: 60 }] });
+    const { ctx, seen } = fakeCtx(BRIEF);
+    await runStage(ctx);
+    expect(seen.lookups).toEqual([7]);
+    expect(seen.numbers).toContain('- change: 1 runs, 0 failed, 60 min of job time, 60 min of agent time, $9.00');
+    expect(seen.numbers).not.toContain(`#${CHANGE_ID}`);
+    expect(seen.issues).toHaveLength(1);
     expect(readState(ctx.statePath).lastWasteReview).toBe(NOW.toISOString());
+  });
+
+  it('keeps the period when an issue lookup fails, so the retry reviews the same period', async () => {
+    const failed = fakeCtx(BRIEF, { lookup: true });
+    await expect(runStage(failed.ctx)).rejects.toThrow('gh issue view 7 failed');
+    expect(failed.seen.runs).toEqual([]);
+    expect(readState(failed.ctx.statePath).lastWasteReview).toBe('2026-10-03T09:00:00Z');
+    const later = new Date('2026-10-11T09:00:00Z');
+    const retry = fakeCtx(BRIEF, { now: later });
+    await runStage(retry.ctx);
+    expect(retry.seen.numbers).toContain('Factory numbers for 2026-10-03 to 2026-10-11.');
+    expect(readState(retry.ctx.statePath).lastWasteReview).toBe(later.toISOString());
+  });
+
+  it('keeps the period when the agent fails', async () => {
+    const { ctx, seen } = fakeCtx(BRIEF, { agent: true });
+    await expect(runStage(ctx)).rejects.toThrow('exited with code 1');
+    expect(seen.issues).toEqual([]);
+    expect(existsSync(reviewPendingPath(HOME))).toBe(false);
+    expect(readState(ctx.statePath).lastWasteReview).toBe('2026-10-03T09:00:00Z');
+  });
+
+  it('advances the period once, after the review is published, so the next review starts there', async () => {
+    const first = fakeCtx(BRIEF);
+    await runStage(first.ctx);
+    expect(first.seen.issues).toHaveLength(1);
+    expect(readState(first.ctx.statePath).lastWasteReview).toBe(NOW.toISOString());
+    const next = fakeCtx(BRIEF, { now: new Date('2026-10-17T09:00:00Z') });
+    await runStage(next.ctx);
+    expect(next.seen.numbers).toContain('Factory numbers for 2026-10-10 to 2026-10-17.');
+  });
+
+  it('finishes a half-published review on retry, with no second issue and no second agent run', async () => {
+    const failed = fakeCtx(BRIEF, { close: true });
+    await expect(runStage(failed.ctx)).rejects.toThrow('gh issue close failed');
+    expect(failed.seen.issues).toHaveLength(1);
+    expect(existsSync(reviewPendingPath(HOME))).toBe(false);
+    expect(readState(failed.ctx.statePath).lastWasteReview).toBe('2026-10-03T09:00:00Z');
+    const retry = fakeCtx(BRIEF, { now: new Date('2026-10-11T09:00:00Z') });
+    await runStage(retry.ctx);
+    expect(retry.seen.runs).toEqual([]);
+    expect(retry.seen.issues).toEqual([]);
+    expect(retry.seen.calls).toContain('close 301 completed');
+    expect(readFileSync(reviewPendingPath(HOME), 'utf8')).toBe('#301 https://github.com/o/r/issues/301\n');
+    expect(readFileSync(`${HOME}/waste-reviews.md`, 'utf8').match(/## 2026-10-10, #301/g)).toHaveLength(1);
+    expect(readState(retry.ctx.statePath).lastWasteReview).toBe(NOW.toISOString());
+  });
+
+  it('fixes the start of a first review run by hand, so its retry finishes the same issue', async () => {
+    writeState(`${HOME}/state/state.json`, { ...structuredClone(EMPTY_STATE), lastWasteReview: null });
+    const failed = fakeCtx(BRIEF, { close: true });
+    await expect(runStage(failed.ctx)).rejects.toThrow('gh issue close failed');
+    expect(readState(failed.ctx.statePath).lastWasteReview).toBe('2026-10-03T09:00:00.000Z');
+    const retry = fakeCtx(BRIEF, { now: new Date('2026-10-11T09:00:00Z') });
+    await runStage(retry.ctx);
+    expect(retry.seen.issues).toEqual([]);
+    expect(readState(retry.ctx.statePath).lastWasteReview).toBe(NOW.toISOString());
   });
 
   it('refuses to start without a ledger', async () => {

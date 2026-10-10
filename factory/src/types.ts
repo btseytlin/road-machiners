@@ -118,6 +118,12 @@ export const QUEUE_OF: Record<JobStage, Queue> = {
   approve: 'branch', merge: 'branch', 'catch-up': 'branch', remove: 'branch', ship: 'branch', release: 'branch', candidate: 'branch', dev: 'branch', incident: 'branch',
   playtest: 'verify',
 };
+export const JOB_ISSUE: Record<JobStage, 'github-issue' | 'change-id' | 'none'> = {
+  triage: 'github-issue', design: 'github-issue', implement: 'github-issue', verify: 'github-issue', harden: 'github-issue', checks: 'github-issue', adhoc: 'github-issue',
+  approve: 'github-issue', 'catch-up': 'github-issue', remove: 'github-issue', ship: 'github-issue', playtest: 'github-issue', candidate: 'github-issue', incident: 'github-issue',
+  change: 'change-id',
+  release: 'none', merge: 'none', dev: 'none', waste: 'none',
+};
 export type Route = 'answer' | 'patch' | 'redesign';
 export type Failure = { stage: Stage; issue: number | null; error: string; log: string | null; at: string; batch?: number[]; decision?: boolean };
 export type ChangeRequest ={ id: number; text: string; by: string };

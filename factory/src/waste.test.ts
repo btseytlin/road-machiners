@@ -60,6 +60,18 @@ describe('wasteNumbers', () => {
     expect(n.issues[1].issue).toBe(7);
   });
 
+  it('counts a factory change in the totals but never as an issue, since its id is no GitHub issue', () => {
+    const change = 1791571868706;
+    const cheap = [1, 2, 3, 4, 5].map((issue) => job('triage', issue, '2026-10-04T00:00:00Z', '2026-10-04T00:01:00Z', [sonnet(0.01, 1)]));
+    const lines = [...cheap, job('change', change, '2026-10-04T01:00:00Z', '2026-10-04T02:00:00Z', [opus(50, 60)]), job('change', change, '2026-10-04T03:00:00Z', '2026-10-04T04:00:00Z', [opus(50, 60)])];
+    const mixed = wasteNumbers([...LEDGER, ...lines], FROM, TO);
+    expect(mixed.costUsd).toBeCloseTo(114.45);
+    expect(mixed.stages[0]).toMatchObject({ stage: 'change', runs: 2, costUsd: 100 });
+    expect(mixed.issues.map((item) => item.issue)).toEqual([131, 7, 1, 2, 3]);
+    expect(mixed.reruns.map((item) => item.issue)).toEqual([7]);
+    expect(mixed.waits.every((wait) => wait.worstIssue !== change)).toBe(true);
+  });
+
   it('formats every number for the agent and the post', () => {
     const text = formatNumbers(n);
     expect(text).toContain('2026-10-01 to 2026-10-08');

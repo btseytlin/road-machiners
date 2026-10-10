@@ -136,6 +136,7 @@ function releaseJob(state: FactoryState, cards: Card[], releaseHead: string | nu
 
 function wasteReview(state: FactoryState, now: Date, cfg: Due): Candidate[] {
   if (state.lastWasteReview === null || !isDue(state.lastWasteReview, now, cfg.wasteReviewDays * DAY_MS)) return [];
+  if (state.failures.some((failure) => failure.stage === 'waste')) return [];
   return [{ stage: 'waste', issue: null, pastCardLimit: false }];
 }
 
