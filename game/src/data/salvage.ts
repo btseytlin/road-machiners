@@ -59,7 +59,7 @@ export const SALVAGE = {
     goods: { scrap: [1, 2], salt: [0, 1], meds: [0, 1] },
     parts: [1, 2],
     sparePartChance: 0.2,
-    spareParts: ['stockEngine', 'plates', 'cage', 'mg', 'emitter', 'emitter', 'scrapersKnife', 'scrapersKnife'],
+    spareParts: ['stockEngine', 'plates', 'cage', 'mg', 'emitter', 'emitter', 'scrapersKnife', 'scrapersKnife', 'patcherCrane', 'patcherCrane'],
     rare: null,
     fuel: [0, 8],
     supplies: [0, 3],
@@ -117,15 +117,6 @@ export const SALVAGE = {
     rare: null,
     fuel: [0, 2],
     supplies: [0, 2],
-  } as LootTable,
-  convoy: {
-    goods: { scrap: [1, 3], meds: [0, 1] },
-    parts: [1, 2],
-    sparePartChance: 0.3,
-    spareParts: ['tunedEngine', 'cannon', 'ram', 'trailerBox', 'patcherCrane', 'patcherCrane'],
-    rare: null,
-    fuel: [4, 12],
-    supplies: [2, 6],
   } as LootTable,
 };
 

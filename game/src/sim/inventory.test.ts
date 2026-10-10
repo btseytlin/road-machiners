@@ -268,7 +268,6 @@ describe('spots for double click moves', () => {
 describe('garage work at every shop', () => {
   const pump = sitePads(siteOf('pump-station'))[0];
   const noShop: [string, { x: number; y: number }][] = [
-    ['an oasis', sitePads(siteOf('dustwell'))[0]],
     ['a raider camp', sitePads(siteOf('scrapjaw'))[0]],
     ['open ground', { x: 30, y: 30 }],
   ];

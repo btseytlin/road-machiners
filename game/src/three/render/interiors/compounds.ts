@@ -20,6 +20,7 @@ const TANK_OUTLET = (2.6 + 0.45) / 4;
 const SQUAT = { x: -0.1, z: 1.9, height: 0.42 };
 const SHED = { x: 0.3, z: -0.3, yaw: -Math.PI / 2 };
 const SHED_SCALE = 1.5;
+const MARKET = { x: 2.3, z: 1.6, drums: { u: 0.2, v: 1.7 } };
 const SHED_DOOR = {
   reach: (2.03 * SHED_SCALE) / 4 + 0.01,
   width: (0.9 * SHED_SCALE) / 4 - 0.04,
@@ -34,6 +35,15 @@ export function buildDustwell(b: SiteBuilder): void {
   b.addModel('storage_tank', SQUAT.x, SQUAT.z, 0.6, new THREE.Vector3(1, SQUAT.height, 1)).name = 'dustwell-tank';
   addShed(b, 'dustwell', SHED);
   addPipes(b);
+  addMarket(b, 'dustwell', MARKET);
+}
+
+export function addMarket(b: SiteBuilder, site: string, at: { x: number; z: number; drums: { u: number; v: number } }): void {
+  const yaw = Math.atan2(at.z, -at.x);
+  b.addModel('lean_to', at.x, at.z, yaw).name = `${site}-market`;
+  const u = { x: Math.cos(yaw), z: -Math.sin(yaw) };
+  const v = { x: -Math.sin(yaw), z: -Math.cos(yaw) };
+  b.addModel('drums', at.x + u.x * at.drums.u + v.x * at.drums.v, at.z + u.z * at.drums.u + v.z * at.drums.v, yaw).name = `${site}-water-drums`;
 }
 
 function addPumpjack(b: SiteBuilder): void {

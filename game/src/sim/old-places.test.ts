@@ -7,7 +7,7 @@ import { START_KITS } from '../data/start';
 import { TEST_MAP } from '../test/map';
 import { clearOfSites, mapObstacles, propReach } from './mapgen';
 import { navLayer } from './nav/layer';
-import { makeOldSpotPicks, MAX_RADIUS, oldPlaces, oldSpotOf, oldSpotPicks, oldStockId, offRoad, placeSpot, reachable, siteLootTable } from './salvage';
+import { makeOldSpotPicks, MAX_RADIUS, oldPlaces, oldSpotOf, oldSpotPicks, oldStockId, offRoad, placeSpot, reachable } from './salvage';
 import { isLootSpot, spotTable, territoryAt } from './territory';
 import type { PropKind } from './terrain';
 import type { Obstacle, SalvageStock } from './types';
@@ -155,12 +155,11 @@ describe('old-world loot spot economy', () => {
     expect(oldValue).toBeLessThanOrEqual(0.15 * otherValue);
   });
 
-  it('refills by at most 15% of what sites and territory spots refill', () => {
+  it('refills by at most 15% of what territory spots refill', () => {
     const daily = (table: LootTable): number => SALVAGE.restockShare * (midValue(table) + table.sparePartChance * meanSpareValue(table));
     const oldDaily = oldSpotPicks(TEST_MAP).reduce((sum, p) => sum + daily(OLD_TABLES[p.type]), 0);
     const w = worlds[0];
-    const sites = REGION.locations.flatMap((site) => (siteLootTable(site) ? [siteLootTable(site)!] : []));
-    const otherDaily = [...sites, ...w.obstacles.filter(isLootSpot).map(spotTable)].reduce((sum, t) => sum + daily(t), 0);
+    const otherDaily = [...w.obstacles.filter(isLootSpot).map(spotTable)].reduce((sum, t) => sum + daily(t), 0);
     expect(oldDaily).toBeLessThanOrEqual(0.15 * otherDaily);
   });
 

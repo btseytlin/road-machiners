@@ -40,11 +40,11 @@ import {
 import { makePart } from "./factory";
 import { maxHp, partValue } from "./wear";
 import { addGoods, canStowPart, spareParts, stowPart } from "./inventory";
-import { canScavenge, canUseOasis, salvageNear, scavenge, useOasis } from "./locations";
+import { canScavenge, salvageNear, scavenge } from "./locations";
 import { consumeSupplies } from "./supplies";
 import { heatAt } from "./sun";
 import { sitePads, townAt, townNear } from "./sites";
-import { addVehicle, emptyWorld, testDrive } from "./testkit";
+import { addVehicle, emptyWorld, spotWorld, testDrive } from "./testkit";
 import { endTurn, newWorld } from "./world";
 import { TEST_MAP } from "../test/map";
 import { defaultSetup } from "./settings";
@@ -196,7 +196,7 @@ describe("garage", () => {
     expect(() => buySupply(w, "supplies", 1)).toThrow();
   });
 
-  const STALLS = ["salvage-yard", "granary", "pump-station"];
+  const STALLS = ["salvage-yard", "granary", "pump-station", "dustwell", "green-pit"];
   const atSite = (id: string) => emptyWorld({ ...sitePads(REGION.locations.find((l) => l.id === id)!)[0] });
 
   it.each(STALLS)("sells fuel and supplies at the %s at the town prices", (id) => {
@@ -264,7 +264,7 @@ describe("garage", () => {
     expect(mountedParts(repairAll(town).vehicles[0])[0]).toMatchObject({ rebuilt: true });
   });
 
-  it.each(["scrapjaw", "dustwell", "orchard", "podfield"])("sells and repairs nothing at %s", (id) => {
+  it.each(["scrapjaw", "orchard"])("sells and repairs nothing at %s", (id) => {
     const w = atSite(id);
     corePart(w.vehicles[0], "cab").hp = 10;
     w.player.fuel = 0;
@@ -277,10 +277,39 @@ describe("garage", () => {
     expect(JSON.stringify(w)).toBe(before);
   });
 
-  it("still fills supplies free at an oasis", () => {
-    const w = atSite("dustwell");
+  it.each(["dustwell", "green-pit"])("sells supplies, fuel, water and a stock part at %s for the shown prices", (id) => {
+    const w = atSite(id);
+    w.player.money = 333333;
+    w.player.fuel = 0;
     w.player.supplies = 0;
-    expect(useOasis(w).player.supplies).toBeGreaterThan(0);
+    const supplies = buySupply(w, "supplies", 3);
+    expect(supplies.player.supplies).toBe(3);
+    expect(supplies.player.money).toBe(w.player.money - 3 * ECONOMY.supplyPrice.supplies);
+    const fuel = buySupply(w, "fuel", 3);
+    expect(fuel.player.fuel).toBe(3);
+    expect(fuel.player.money).toBe(w.player.money - 3 * ECONOMY.supplyPrice.fuel);
+    const price = getLotTradePrice(w, w.vehicles[0], id, "water", 2, "buy");
+    const water = buyGood(w, "water", 2);
+    expect(goodsCount(water.vehicles[0]).water).toBe((goodsCount(w.vehicles[0]).water ?? 0) + 2);
+    expect(water.player.money).toBe(w.player.money - price);
+    const part = shopState(w, id).stock[0];
+    const bought = buyStockPart(w, part.id);
+    expect(bought.player.money).toBe(w.player.money - partTradePrice(w, w.vehicles[0], part, "buy"));
+    expect([...bought.vehicles[0].items.map((it) => (it.kind === "part" ? it.part.id : "")), ...bought.player.storage.map((p) => p.id)]).toContain(part.id);
+  });
+
+  it.each(["dustwell", "green-pit"])("refuses a buy at %s beyond money or room and changes nothing", (id) => {
+    const w = atSite(id);
+    w.player.money = 0;
+    w.player.supplies = 0;
+    const before = JSON.stringify(w);
+    expect(() => buySupply(w, "supplies", 1)).toThrow();
+    expect(() => buyGood(w, "water", 1)).toThrow();
+    expect(() => buyStockPart(w, shopState(w, id).stock[0].id)).toThrow();
+    expect(JSON.stringify(w)).toBe(before);
+    w.player.money = 333333;
+    w.player.supplies = RULES.baseSupplies;
+    expect(() => buySupply(w, "supplies", 1)).toThrow();
   });
 
   it("repairs parts for money", () => {
@@ -615,15 +644,6 @@ describe("supplies", () => {
 });
 
 describe("locations", () => {
-  it("oasis refills supplies", () => {
-    const oasis = REGION.locations.find((l) => l.kind === "oasis")!;
-    const w = emptyWorld({ ...sitePads(oasis)[0] });
-    w.player.supplies = 1;
-    const after = useOasis(w);
-    expect(after.player.supplies).toBe(RULES.baseSupplies);
-    expect(w.player.supplies).toBe(1);
-  });
-
   it.each(REGION.locations.filter((site) => site.kind === "oasis"))("$name does not refill automatically", (oasis) => {
     const w = emptyWorld({ x: oasis.pos.x + 2, y: oasis.pos.y });
     w.player.supplies = 10;
@@ -631,42 +651,13 @@ describe("locations", () => {
     expect(after.player.supplies).toBeLessThanOrEqual(10);
   });
 
-  it("requires stopping before refilling at an oasis", () => {
-    const oasis = REGION.locations.find((site) => site.kind === "oasis")!;
-    const w = emptyWorld({ ...sitePads(oasis)[0] });
-    w.player.supplies = 1;
-    w.vehicles[0].speed = RULES.parkedSpeed + 1;
-    expect(() => useOasis(w)).toThrow("Stop the truck first");
-    expect(w.player.supplies).toBe(1);
-  });
-
-  it.each(REGION.locations.filter((site) => site.kind === "oasis"))("interacts with $name only while stopped", (oasis) => {
-    const w = emptyWorld({ ...sitePads(oasis)[0] });
-    w.player.supplies = 1;
-    w.vehicles[0].speed = RULES.parkedSpeed + 1;
-    expect(canUseOasis(w)).toBe(false);
-    expect(() => useOasis(w)).toThrow("Stop the truck first");
-    expect(w.player.supplies).toBe(1);
-    w.vehicles[0].speed = 0;
-    expect(canUseOasis(w)).toBe(true);
-    const after = useOasis(w);
-    expect(after.player.supplies).toBe(RULES.baseSupplies);
-    expect(after?.events).toContainEqual({ t: "info", note: { id: "filledSupplies", site: oasis.id } });
-  });
-
-  it("rejects refilling away from an oasis", () => {
-    const w = emptyWorld({ x: 0, y: 0 });
-    expect(() => useOasis(w)).toThrow("Not at an oasis");
-  });
-
-  it("convoy starts a timed search, and a second search cannot start while it runs", () => {
-    const convoy = REGION.locations.find((l) => l.kind === "convoy")!;
-    const w = emptyWorld({ ...sitePads(convoy)[0] });
-    const after = scavenge(w, convoy.id);
+  it("a loot spot starts a timed search, and a second search cannot start while it runs", () => {
+    const { w, spot } = spotWorld();
+    const after = scavenge(w, spot.id);
     expect(after.vehicles[0].job).toEqual(
-      expect.objectContaining({ kind: "search", stockId: convoy.id }),
+      expect.objectContaining({ kind: "search", stockId: spot.id }),
     );
-    expect(() => scavenge(after, convoy.id)).toThrow();
+    expect(() => scavenge(after, spot.id)).toThrow();
   });
 
   it("a town in reach needs a stop before it can be used", () => {
@@ -678,28 +669,27 @@ describe("locations", () => {
   });
 
   it("salvage in range needs a stop before it can be searched", () => {
-    const convoy = REGION.locations.find((l) => l.kind === "convoy")!;
-    const w = emptyWorld({ ...sitePads(convoy)[0] });
+    const { w, spot } = spotWorld();
     w.vehicles[0].speed = RULES.parkedSpeed + 1;
-    expect(canScavenge(w, convoy.id)).toBe(false);
-    expect(salvageNear(w)?.id).toBe(convoy.id);
+    expect(canScavenge(w, spot.id)).toBe(false);
+    expect(salvageNear(w)?.id).toBe(spot.id);
   });
 
   it("driving near a site discovers it once, with XP", () => {
     let w = newWorld(5, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
-    const convoy = REGION.locations.find((l) => l.kind === "convoy")!;
+    const dustwell = REGION.locations.find((l) => l.id === "dustwell")!;
     w.vehicles.find((v) => v.faction === "player")!.pos = {
-      x: convoy.pos.x + 3.5,
-      y: convoy.pos.y + 3.5,
+      x: dustwell.pos.x + 3.5,
+      y: dustwell.pos.y + 3.5,
     };
     w = endTurn(w, testDrive);
-    expect(w.player.discovered).toContain("burnt-convoy");
+    expect(w.player.discovered).toContain("dustwell");
     expect(
-      w.events.filter((e) => e.t === "discover" && e.location === convoy.id),
+      w.events.filter((e) => e.t === "discover" && e.location === dustwell.id),
     ).toHaveLength(1);
     w = endTurn(w, testDrive);
     expect(
-      w.events.filter((e) => e.t === "discover" && e.location === convoy.id),
+      w.events.filter((e) => e.t === "discover" && e.location === dustwell.id),
     ).toHaveLength(0);
   });
 });
