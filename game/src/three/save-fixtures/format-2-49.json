@@ -1,0 +1,17 @@
+{
+  "turn": 412,
+  "setup": { "mode": "furyRoad", "settings": { "damage": 1, "fuelUse": 1, "supplyUse": 1 } },
+  "furyRoad": {
+    "window": 1,
+    "outposts": [
+      { "milestone": 1, "stock": [], "paid": true },
+      { "milestone": 2, "stock": [{ "id": "p91", "defId": "plates", "wear": 1, "hp": 40 }], "paid": false }
+    ],
+    "groups": [
+      { "id": "g-2-0", "stretch": 2, "at": 471.5, "from": "ahead", "templates": ["buggy"], "level": "light", "spawned": true, "vehicles": ["v801"], "wrecked": 0, "retryUntil": null },
+      { "id": "g-2-1", "stretch": 2, "at": 540.25, "from": "behind", "templates": ["buggy"], "level": "light", "spawned": false, "vehicles": [], "wrecked": 0, "retryUntil": null }
+    ],
+    "earned": 300,
+    "wrecks": 2
+  }
+}

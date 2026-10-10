@@ -18,6 +18,7 @@ import type { PartInstance, Vehicle, World } from './types';
 import { DEG } from './vec';
 import { weatherOn } from './weather';
 import { fuelUseScale } from './settings';
+import { catchingUp } from './catch-up';
 
 export type MountedWeapon = { part: PartInstance; def: WeaponDef; spans: FireSpan[]; facing: number };
 
@@ -247,7 +248,8 @@ function templateSpeedShare(v: Vehicle): number {
 }
 
 export function inOverdrive(world: World, v: Vehicle): boolean {
-  return v.id === world.player.vehicleId && world.player.overdrive && canOverdrive(v);
+  const wants = v.id === world.player.vehicleId ? world.player.overdrive : catchingUp(world, v);
+  return wants && canOverdrive(v);
 }
 
 export function canOverdrive(v: Vehicle): boolean {

@@ -25,7 +25,8 @@ export const WORLD_SETTINGS: Record<keyof WorldSettings, WorldSettingDef> = {
   supplyUse: { default: 1, min: 0.5, max: 2, step: 0.25 },
 };
 
-export type GroupPlan = { from: 'ahead' | 'behind'; templates: string[]; level: GearLevel };
+export type WavePlan = { sizes: number[]; level: GearLevel };
+export type PoolTier = { upTo: number; weights: Record<string, number> };
 export type Curve = { first: number; step: number; max: number };
 
 export const FURY_ROAD = {
@@ -38,40 +39,26 @@ export const FURY_ROAD = {
     flat: { back: 6, half: 8, blend: 4 },
   },
   waves: [
-    [{ from: 'ahead', templates: ['buggy'], level: 'light' }],
-    [
-      { from: 'ahead', templates: ['buggy'], level: 'light' },
-      { from: 'behind', templates: ['buggy'], level: 'light' },
-    ],
-    [
-      { from: 'ahead', templates: ['buggy'], level: 'light' },
-      { from: 'behind', templates: ['buggy'], level: 'light' },
-    ],
-    [
-      { from: 'ahead', templates: ['buggy'], level: 'standard' },
-      { from: 'behind', templates: ['buggy'], level: 'standard' },
-    ],
-    [
-      { from: 'ahead', templates: ['buggy', 'buggy'], level: 'standard' },
-      { from: 'behind', templates: ['buggy'], level: 'standard' },
-    ],
-    [
-      { from: 'ahead', templates: ['gunwagon', 'buggy'], level: 'standard' },
-      { from: 'behind', templates: ['buggy', 'buggy'], level: 'standard' },
-    ],
-    [
-      { from: 'ahead', templates: ['gunwagon', 'buggy', 'buggy'], level: 'heavy' },
-      { from: 'behind', templates: ['gunwagon', 'buggy'], level: 'heavy' },
-    ],
-    [
-      { from: 'ahead', templates: ['gunwagon', 'gunwagon', 'buggy'], level: 'loaded' },
-      { from: 'behind', templates: ['gunwagon', 'gunwagon', 'buggy'], level: 'loaded' },
-      { from: 'ahead', templates: ['gunwagon', 'gunwagon'], level: 'loaded' },
-    ],
-  ] as GroupPlan[][],
-  spawnLead: 32,
-  aheadGap: 22,
-  behindGap: 24,
+    { sizes: [1], level: 'light' },
+    { sizes: [1, 1], level: 'light' },
+    { sizes: [1, 1], level: 'light' },
+    { sizes: [1, 1], level: 'standard' },
+    { sizes: [2, 1], level: 'standard' },
+    { sizes: [2, 2], level: 'standard' },
+    { sizes: [3, 2], level: 'heavy' },
+    { sizes: [3, 3, 2], level: 'loaded' },
+  ] as WavePlan[],
+  pool: [
+    { upTo: 2, weights: { buggy: 4, courier: 2, scavenger: 2, roamer: 2, trader: 1 } },
+    { upTo: 5, weights: { buggy: 3, courier: 1, scavenger: 2, roamer: 2, trader: 1, gunwagon: 3, vulture: 2, merc: 2, bowlFarmer: 1 } },
+    {
+      upTo: Number.MAX_SAFE_INTEGER,
+      weights: { buggy: 2, courier: 1, scavenger: 1, roamer: 1, trader: 1, gunwagon: 3, vulture: 2, merc: 3, bowlFarmer: 1, noseArmy: 2, convoyGuard: 2, convoy: 1 },
+    },
+  ] as PoolTier[],
+  sides: { ahead: 22, behind: 24, flank: { along: 6, across: 22, step: 3 } },
+  pacing: { quiet: 20, near: 30 },
+  catchUp: { engageAt: 12 },
   spawnStagger: 3,
   maxAlive: 8,
   spawnRetryTurns: 20,

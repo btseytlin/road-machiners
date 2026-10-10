@@ -736,6 +736,13 @@ function renamedFuryRoad_48_49(world: SavedJson): SavedJson {
   return { ...rest, setup: { ...setup, mode: setup.mode === 'gauntlet' ? 'furyRoad' : setup.mode }, furyRoad: gauntlet };
 }
 
+function withRunPacing_49_50(world: SavedJson): SavedJson {
+  const run = world.furyRoad as SavedJson | null;
+  if (run === null) return world;
+  const groups = (run.groups as SavedJson[]).map(({ at: _at, ...group }) => ({ ...group, engaged: [] }));
+  return { ...world, furyRoad: { ...run, groups, quietFrom: world.turn } };
+}
+
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, player: { ...(world.player as SavedJson), townPatched: false } }),
   (world) => {
@@ -830,6 +837,7 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, gauntlet: null }),
   withoutIcarusRun_47_48,
   renamedFuryRoad_48_49,
+  withRunPacing_49_50,
 ];
 
 type SavedQuests = { world: SavedJson; local: Record<string, SavedJson>; session: { quest: string; checkpoint: string; seed: number } | null };

@@ -145,7 +145,7 @@ function foeInSight(world: World, v: Vehicle, activity: NpcActivity): Vehicle | 
 
 function computeFightGoal(world: World, v: Vehicle, target: Vehicle, seen: Vehicle): Vec | null {
   const b = v.brain!;
-  if (rams(world, v, target)) {
+  if (charges(world, v, target)) {
     b.ramTarget = target.id;
     return leadOf(target);
   }
@@ -172,6 +172,10 @@ export function noteTarget(world: World, v: Vehicle, target: Vehicle): void {
 function rams(world: World, v: Vehicle, target: Vehicle): boolean {
   const b = v.brain!;
   return b.whim?.kind === "rush" || (b.ramChoice === target.id && ramImpact(world, v, target) !== null);
+}
+
+function charges(world: World, v: Vehicle, target: Vehicle): boolean {
+  return rams(world, v, target) || vehicleStats(world, v).weapons.length === 0;
 }
 
 function shortestRange(world: World, v: Vehicle): number {

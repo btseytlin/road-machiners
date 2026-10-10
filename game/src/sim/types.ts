@@ -516,16 +516,17 @@ export type OutpostFacts = { milestone: number; stock: PartInstance[]; paid: boo
 export type WaveGroup = {
   id: string;
   stretch: number;
-  at: number;
-  from: 'ahead' | 'behind';
+  from: GroupSide;
   templates: string[];
   level: GearLevel;
   spawned: boolean;
   vehicles: string[];
+  engaged: string[];
   wrecked: number;
   retryUntil: number | null;
 };
-export type FuryRoadRun = { window: number; outposts: OutpostFacts[]; groups: WaveGroup[]; earned: number; wrecks: number };
+export type GroupSide = 'ahead' | 'behind' | 'left' | 'right';
+export type FuryRoadRun = { window: number; outposts: OutpostFacts[]; groups: WaveGroup[]; earned: number; wrecks: number; quietFrom: number };
 export type WorldSettings = { damage: number; fuelUse: number; supplyUse: number };
 export type WorldSetup = { mode: GameModeId; settings: WorldSettings };
 

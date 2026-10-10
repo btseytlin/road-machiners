@@ -6,7 +6,6 @@ import { boxDistance, mapObstacles, propBoxes, propObstacle, type PosedBox } fro
 import { CELL, componentOf, navLayer } from './nav/layer';
 import { closurePieces, highwayDecks, lanesCoveredOf, leavesPassage, northClosureAt, scenesOf, southClosureAt, stretchLayout, type Scene } from './road-hazards';
 import { sitePads, siteGap } from './sites';
-import { planStretch } from './fury-road';
 import type { BakedMap, BakedProp } from './terrain';
 import type { Vec } from './vec';
 import type { RoadPiece } from './highway';
@@ -264,14 +263,13 @@ describe('a hull-plate ramp', () => {
 });
 
 describe('a stretch with its scenes turned off', () => {
-  it('is one open arena, where the groups of the stretch start', () => {
+  it('is one open arena', () => {
     const scenes = { ...HAZARDS.scenes };
     Object.assign(HAZARDS.scenes, { first: 0, max: 0 });
     try {
       const layout = stretchLayout(77, 3);
       expect(layout.scenes).toEqual([]);
       expect(layout.arenas).toHaveLength(1);
-      for (const g of planStretch(77, 3)) expect(g.at).toBeCloseTo((layout.arenas[0].from + layout.arenas[0].to) / 2, 6);
     } finally {
       Object.assign(HAZARDS.scenes, scenes);
     }

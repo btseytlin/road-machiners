@@ -51,6 +51,7 @@ import FORMAT_2_43 from './save-fixtures/format-2-43.json';
 import FORMAT_2_44 from './save-fixtures/format-2-44.json';
 import FORMAT_2_47 from './save-fixtures/format-2-47.json';
 import FORMAT_2_48 from './save-fixtures/format-2-48.json';
+import FORMAT_2_49 from './save-fixtures/format-2-49.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -1055,6 +1056,21 @@ describe('save migration 47 to 48', () => {
     const roaming = { ...FORMAT_2_47, setup: { ...FORMAT_2_47.setup, mode: 'roaming' }, gauntlet: null };
 
     expect(MIGRATIONS[47](structuredClone(roaming))).toEqual(roaming);
+  });
+});
+
+describe('save migration 49 to 50', () => {
+  it('drops each group anchor, starts each engaged list empty and dates the quiet from the saved turn', () => {
+    const run = structuredClone(FORMAT_2_49.furyRoad);
+    const groups = run.groups.map(({ at: _at, ...group }) => ({ ...group, engaged: [] }));
+
+    expect(MIGRATIONS[49](structuredClone(FORMAT_2_49))).toEqual({ ...FORMAT_2_49, furyRoad: { ...run, groups, quietFrom: 412 } });
+  });
+
+  it('keeps a world with no run as it is', () => {
+    const roaming = { ...structuredClone(FORMAT_2_49), setup: { ...FORMAT_2_49.setup, mode: 'roaming' }, furyRoad: null };
+
+    expect(MIGRATIONS[49](structuredClone(roaming))).toEqual(roaming);
   });
 });
 
