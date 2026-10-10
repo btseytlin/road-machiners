@@ -16,6 +16,8 @@ export const CONFIG = {
   combatFireSpreadMs: 300,
   combatBurstMaxMs: 450,
   combatReadMs: 1100,
+  playEaseMs: 350,
+  fxFillScreens: 8,
   saveTurns: 20,
   saveSlots: 3,
   travelHoldMs: 250,

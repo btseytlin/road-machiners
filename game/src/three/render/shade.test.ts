@@ -5,6 +5,7 @@ import { shadeCasters, sunAt, sunHeatAt } from '../../sim/sun';
 import { emptyWorld } from '../../sim/testkit';
 import * as THREE from 'three';
 import type { TerrainChunk } from './terrain';
+import { PlayClock } from '../play-clock';
 import { cornerLook, ShadeView } from './shade';
 
 function turnFor(hour: number): number {
@@ -78,7 +79,7 @@ describe('shade patch over frames', () => {
   };
   const build = (w: ReturnType<typeof emptyWorld>) => {
     const ground = [{ mesh: new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshLambertMaterial()) }] as unknown as TerrainChunk[];
-    return new ShadeView(w, ground);
+    return new ShadeView(w, ground, new PlayClock(1));
   };
   const dump = (v: ShadeView) => ({
     pos: Array.from(v.mesh.geometry.getAttribute('position').array),

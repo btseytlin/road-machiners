@@ -14,6 +14,7 @@ import { deckSegments, heightAt, type DeckSegment, type Terrain } from '../../si
 import { pointInPolygon, segmentDist } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
+import type { PlayClock } from '../play-clock';
 import { SiteMotion, type Motion } from './site-motion';
 import { buildBowl } from './interiors/bowl';
 import { buildCamp } from './interiors/camp';
@@ -487,7 +488,7 @@ export function buildSites(t: Terrain): BuiltSite {
   return { root, movers, lights, lamps };
 }
 
-export function addSites(t: Terrain, scope: RenderScope): { lights: SiteLight[]; lamps: PoolLamp[] } {
+export function addSites(t: Terrain, scope: RenderScope, play: PlayClock): { lights: SiteLight[]; lamps: PoolLamp[] } {
   const motion = new SiteMotion();
   const lights: SiteLight[] = [];
   const lamps: PoolLamp[] = [];
@@ -499,9 +500,9 @@ export function addSites(t: Terrain, scope: RenderScope): { lights: SiteLight[];
     const phase = hash2(site.pos.x, site.pos.y) * MOTION_PHASE_SPAN;
     for (const mover of built.movers) motion.add(mover.node, (seconds, node, rest) => mover.motion(seconds + phase, node, rest));
   }
-  let last = performance.now();
+  let last = play.nowMs();
   scope.onFrame(() => {
-    const now = performance.now();
+    const now = play.nowMs();
     motion.tick((now - last) / 1000);
     last = now;
   });
