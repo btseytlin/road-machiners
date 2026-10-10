@@ -8,7 +8,7 @@ import { isMounted, type Spot } from "../sim/grid";
 import { installSpot, moveItem, planItemMove, storePart, stowSpot, takeFromStorage, type RefitLayout } from "../sim/inventory";
 import { takeFromTruck } from "../sim/salvage";
 import { takeLoot } from "../sim/locations";
-import { shopAt } from "../sim/market";
+import { atGarage } from "../sim/garage";
 import type { GridItem, Vehicle, World } from "../sim/types";
 
 export const HOLD_TO_DRAG_MS = 300;
@@ -70,7 +70,7 @@ function gridCommand(w: World, c: ClickedItem): ((w: World) => World) | null {
 
 function gridDoubleClick(w: World, c: ClickedItem, instant: boolean): ((w: World) => World) | null {
   if (instant) return instantGridCommand(w, c);
-  return shopAt(w) ? gridCommand(w, c) : null;
+  return atGarage(w) ? gridCommand(w, c) : null;
 }
 
 function instantGridCommand(w: World, c: ClickedItem): ((w: World) => World) | null {

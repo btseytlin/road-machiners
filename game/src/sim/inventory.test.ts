@@ -298,9 +298,9 @@ describe('garage work at every shop', () => {
 
   it.each(noShop)('refuses storage and starts a refit job on %s', (_, pos) => {
     const w = emptyWorld(pos);
-    expect(() => storePart(w, item(w, 'mg').id)).toThrow('Not parked at a shop');
+    expect(() => storePart(w, item(w, 'mg').id)).toThrow('Not parked at a garage');
     const stored = update(w, (d) => { d.player.storage.push(makePart(d, 'mg', 0)); });
-    expect(() => takeFromStorage(stored, stored.player.storage[0].id, { x: 4, y: rackRow, rot: 1 })).toThrow('Not parked at a shop');
+    expect(() => takeFromStorage(stored, stored.player.storage[0].id, { x: 4, y: rackRow, rot: 1 })).toThrow('Not parked at a garage');
     const off = moveItem(w, item(w, 'mg').id, { x: 5, y: rackRow, rot: 1 });
     expect(off.vehicles[0].job).toMatchObject({ kind: 'refit' });
   });

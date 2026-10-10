@@ -1,11 +1,11 @@
 import { FURY_ROAD } from '../data/modes';
 import { ECONOMY, GOODS } from '../data/goods';
 import { playerVehicle } from './damage';
-import { basicParts, basicsRepairCost, garageParts, garageRepair, partTradePrice, pay, repairCost, supplyRoom, type Supply } from './economy';
+import { basicParts, basicsRepairCost, garageParts, garageRepair, partTradePrice, pay, receiveBoughtPart, repairCost, supplyRoom, type Supply } from './economy';
 import { outpostFactsAt, reachedOutpostAt, type Outpost } from './fury-road';
-import { addGoods, canStowPart, cargoRoom, stowPart } from './inventory';
+import { addGoods, cargoRoom } from './inventory';
 import type { PartInstance, Vehicle, World } from './types';
-import { playerCommand, Refused } from './world';
+import { playerCommand } from './world';
 
 const REPAIR_GOOD = 'parts';
 
@@ -52,12 +52,10 @@ export function outpostBuyPart(world: World, partId: string): World {
     const post = requireOutpost(w);
     const part = post.stock.find((p) => p.id === partId);
     if (!part) throw new Error(`Outpost ${post.milestone} has no part ${partId}`);
-    const me = playerVehicle(w);
-    if (!canStowPart(me, part)) throw new Refused({ id: 'noCargoRoom' });
     pay(w, outpostPartPrice(w, part));
     const facts = outpostFactsAt(w, post.milestone);
     facts.stock = facts.stock.filter((p) => p.id !== partId);
-    stowPart(w, me, part);
+    receiveBoughtPart(w, part);
   });
 }
 

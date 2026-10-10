@@ -2,7 +2,6 @@ import { partDef, type PartKind } from "../data/parts";
 import { playerVehicle } from "../sim/damage";
 import { canWaitForRoad, reachedOutpostAt, waitForRoad, type Outpost } from "../sim/fury-road";
 import { goodsCount, MOUNT_CELLS } from "../sim/grid";
-import { canStowPart } from "../sim/inventory";
 import { outpostBuyGood, outpostBuyPart, outpostBuySupply, outpostGoodPrice, outpostGoodRoom, outpostPartPrice, outpostRepairAll, outpostRepairBasics } from "../sim/outposts";
 import type { PartInstance, World } from "../sim/types";
 import { num, SPACE, t, type Msg } from "../text/msg";
@@ -142,14 +141,13 @@ export class OutpostScreen {
   private partRow(w: World, p: PartInstance): PartRow {
     const price = outpostPartPrice(w, p);
     const short = shortBy(w.player.money, price);
-    const reason = short ?? (canStowPart(playerVehicle(w), p) ? null : t("trade.noRoom"));
     return {
       world: w,
       part: p,
       base: compareBase(this.inventory.selectedPart(), p),
       price,
       payable: short === null,
-      action: this.button(t("goods.buy"), (x) => outpostBuyPart(x, p.id), reason),
+      action: this.button(t("goods.buy"), (x) => outpostBuyPart(x, p.id), short),
       onHover: this.hintMounts(partDef(p.defId).kind),
     };
   }

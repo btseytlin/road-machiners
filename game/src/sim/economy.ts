@@ -486,8 +486,12 @@ export function buyStockPart(world: World, partId: string): World {
     const shopId = requireShop(w);
     const part = takeStockPart(shopState(w, shopId), partId);
     pay(w, partTradePrice(w, playerVehicle(w), part, "buy"));
-    if (!stowPart(w, playerVehicle(w), part)) w.player.storage.push(part);
+    receiveBoughtPart(w, part);
   });
+}
+
+export function receiveBoughtPart(world: World, part: PartInstance): void {
+  if (!stowPart(world, playerVehicle(world), part)) world.player.storage.push(part);
 }
 
 export function sellPart(world: World, partId: string): World {

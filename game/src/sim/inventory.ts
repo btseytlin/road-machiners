@@ -7,7 +7,7 @@ import { playerVehicle } from './damage';
 import { newId } from './factory';
 import { cabShieldWith, gunLayoutScore } from './armor';
 import { findSpot, freeCells, gridOf, isMounted, itemCells, MOUNT_CELLS, mountSpots, placementError, type Cell, type Spot } from './grid';
-import { requireShop, shopAt } from './market';
+import { atGarage, requireGarage } from './garage';
 import { disarm } from './claymore';
 import { workTimeMult } from './utility';
 import { startJob } from './jobs';
@@ -139,7 +139,7 @@ export function startRefit(world: World, layout: RefitLayout): World {
 
 export function plannedRefitTurns(world: World, v: Vehicle, layout: RefitLayout): number {
   const { turns } = layoutPlan(v, layout);
-  return turns > 0 && !shopAt(world) ? refitTurns(world, v, turns) : 0;
+  return turns > 0 && !atGarage(world) ? refitTurns(world, v, turns) : 0;
 }
 
 function layoutPlan(v: Vehicle, layout: RefitLayout): RefitPlan {
@@ -160,7 +160,7 @@ function commitRefit(w: World, me: Vehicle, plan: RefitPlan): void {
     const moving = findItem(me, move.itemId);
     if (moving.kind === 'part') disarm(moving.part);
   }
-  if (plan.turns > 0 && !shopAt(w)) {
+  if (plan.turns > 0 && !atGarage(w)) {
     const work = refitTurns(w, me, plan.turns);
     startJob(w, me, { kind: 'refit', moves: plan.moves, pickup: null, turnsLeft: work, total: work });
   } else applyRefitLayout(w, me, plan.items);
@@ -176,7 +176,7 @@ export function lootRefitTurns(world: World, v: Vehicle, planned: number): numbe
 
 export function storePart(world: World, itemId: string): World {
   return playerCommand(world, (w) => {
-    requireShop(w);
+    requireGarage(w);
     const me = playerVehicle(w);
     requireIdleRefit(me);
     const item = findItem(me, itemId);
@@ -191,7 +191,7 @@ export function storePart(world: World, itemId: string): World {
 
 export function takeFromStorage(world: World, partId: string, to: Spot): World {
   return playerCommand(world, (w) => {
-    requireShop(w);
+    requireGarage(w);
     const me = playerVehicle(w);
     requireIdleRefit(me);
     const i = w.player.storage.findIndex((p) => p.id === partId);

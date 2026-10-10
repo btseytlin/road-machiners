@@ -10,7 +10,8 @@ import { corePart, goodsCount, mountedParts } from './grid';
 import { startRepair } from './jobs';
 import { repairPlan } from './repair';
 import { outpostBuyGood, outpostBuyPart, outpostBuySupply, outpostGoodPrice, outpostPartPrice, outpostRepairAll, outpostRepairBasics } from './outposts';
-import type { World } from './types';
+import { canStowPart } from './inventory';
+import type { PartInstance, World } from './types';
 import { maxHp } from './wear';
 import { endTurn } from './world';
 
@@ -22,6 +23,12 @@ function atOutpost(): World {
   me.pos = outpostPad(w, 1);
   me.speed = 0;
   return endTurn(w, still);
+}
+
+function fittingStock(w: World): PartInstance {
+  const part = w.furyRoad!.outposts[0].stock.find((p) => canStowPart(playerVehicle(w), p));
+  if (!part) throw new Error('Nothing in stock fits the truck');
+  return part;
 }
 
 function batter(w: World): void {
@@ -66,8 +73,7 @@ describe('outpost services', () => {
   it('sells a stock part onto the truck and off the shelf', () => {
     const w = atOutpost();
     w.player.money = 10_000_000;
-    const post = w.furyRoad!.outposts[0];
-    const part = post.stock[0];
+    const part = fittingStock(w);
     const price = outpostPartPrice(w, part);
 
     const after = outpostBuyPart(w, part.id);
@@ -91,7 +97,7 @@ describe('outpost services', () => {
   it('carries a bought part into the next stretch', () => {
     let w = atOutpost();
     w.player.money = 10_000_000;
-    const part = w.furyRoad!.outposts[0].stock[0];
+    const part = fittingStock(w);
     w = waitForRoad(outpostBuyPart(w, part.id));
     const me = playerVehicle(w);
     me.pos = roadPoint(w.seed, w.furyRoad!.window, milestoneAt(1) + 30, HIGHWAY.road.lanes[1]);

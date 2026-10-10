@@ -16,7 +16,7 @@ import { startJob } from './jobs';
 import { beginSearch } from './search';
 import { practice } from './progress';
 import { isFortress, siteGap, type Site } from './sites';
-import { shopAt } from './market';
+import { atGarage } from './garage';
 import type { GridItem, PartInstance, SalvageStock, Vehicle, World } from './types';
 import { tileCenter } from './vision';
 import { playerCommand, Refused } from './world';
@@ -135,7 +135,7 @@ export function takeLoot(world: World, stockId: string, pick: LootPick, to: Spot
 
 function transferLoot(world: World, stock: SalvageStock, item: GridItem, to: Spot): void {
   const me = playerVehicle(world);
-  if (item.kind === 'part' && isMounted(me.chassisId, item) && !shopAt(world)) {
+  if (item.kind === 'part' && isMounted(me.chassisId, item) && !atGarage(world)) {
     const work = lootRefitTurns(world, me, RULES.refitTurnsPerPart);
     startJob(world, me, {
       kind: 'refit', moves: [],
