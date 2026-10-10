@@ -4,7 +4,6 @@ import { CHASSIS } from './chassis';
 import { RULES } from './rules';
 
 export type StartKit = {
-  name: string;
   chassis: string;
   parts: string[];
   storage: string[];
@@ -18,14 +17,13 @@ export type StartKit = {
 };
 
 export type Opening = {
-  log: string;
+  log: 'stranded';
   condition: Record<string, number>;
   stock: { goods: Record<string, number>; parts: string[] };
 };
 
 export const START_KITS: Record<string, StartKit> = {
   standard: {
-    name: 'Your truck',
     chassis: 'scout',
     parts: ['panniers', 'mg', 'stockEngine'],
     storage: [],
@@ -36,13 +34,12 @@ export const START_KITS: Record<string, StartKit> = {
     costBasis: { scrap: 333 },
     autoRepair: false,
     opening: {
-      log: 'You find yourself stranded in an unfamiliar land. Not your finest moment.',
+      log: 'stranded',
       condition: { stockEngine: 0.18, cabPickup: 0.3 },
       stock: { goods: { scrap: 0, parts: 3 }, parts: ['cage'] },
     },
   },
   combat: {
-    name: 'Your truck',
     chassis: 'hauler',
     parts: ['cannon', 'mg', 'stockEngine', 'ram', 'plates', 'plates', 'rack'],
     storage: ['plates', 'cage', 'mg'],
@@ -55,7 +52,6 @@ export const START_KITS: Record<string, StartKit> = {
     opening: null,
   },
   midgame: {
-    name: 'Your truck',
     chassis: 'hauler',
     parts: ['trailerBox', 'autocannon', 'mg', 'workhorseDiesel', 'plates', 'plates'],
     storage: [],
@@ -68,7 +64,6 @@ export const START_KITS: Record<string, StartKit> = {
     opening: null,
   },
   snowball: {
-    name: 'Your truck',
     chassis: 'convertible',
     parts: ['mg', 'mg', 'slugCannon', 'shotgun', 'plowRam', 'workhorseDiesel', 'plates', 'plates', 'cage'],
     storage: [],

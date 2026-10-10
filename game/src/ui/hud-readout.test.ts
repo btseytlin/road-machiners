@@ -5,11 +5,15 @@ import { corePart, mountedParts } from "../sim/grid";
 import { knockOutNpc } from "../sim/defeat";
 import { STATE_TURNS } from "../data/npcs";
 import { addVehicle, emptyWorld, npcBrain, spotWorld, startCombat } from "../sim/testkit";
-import { npcName } from "../sim/spawn";
 import { maxHealthOf } from "../sim/health";
+import { suppliesCap } from "../sim/stats";
 import { addState, towData } from "../sim/states";
 import { playerAid } from "../sim/aid";
-import { aidGoods, clockLabel } from "./format";
+import { aidGoods, clock } from "./format";
+import { t, verbatim, type Msg } from "../text/msg";
+import { chassisName, driverName, professionName, siteName } from "../text/names";
+import { resolve } from "../text/resolve";
+import type { Vehicle } from "../sim/types";
 import { bugReportUrl, ContextPicker, featureRequestUrl, getContextActions, getHudReadout, getRescueReadout, overdriveSwitch, versionLabel } from "./hud-readout";
 import type { ContextAction } from "./hud";
 import { GAME_VERSION } from "../config";
@@ -28,28 +32,38 @@ import { isLootSpot, territoryAt } from "../sim/territory";
 import { propReach } from "../sim/mapgen";
 import type { Obstacle, World } from "../sim/types";
 
+const en = (msg: Msg): string => resolve(msg, "en");
+const siteEn = (id: string): string => en(siteName(id));
+const npcName = (v: Vehicle): string =>
+  en(v.brain ? t("vehicle.npc", { profession: professionName(v.brain.templateId), driver: driverName(v) }) : chassisName(v.chassisId));
+
+// The actions in reach with their words in English.
+function actions(w: World) {
+  return getContextActions(w, false).map((a) => ({ ...a, label: en(a.label), ...(a.hint ? { hint: en(a.hint) } : {}) }));
+}
+
 describe('knocked-out truck interaction', () => {
   it('offers looting a knocked-out truck in reach only while stopped', () => {
     const w = emptyWorld();
     const gap = chassisDef('scout').radius + chassisDef('buggy').radius + 0.2;
     const buggy = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 30 + gap, y: 30 });
     buggy.brain = npcBrain('buggy', buggy.pos, ['raider']);
-    expect(getContextActions(w, false)).toEqual([]);
+    expect(actions(w)).toEqual([]);
     corePart(buggy, 'cab').hp = 0;
     knockOutNpc(w, buggy);
-    expect(getContextActions(w, false)[0]).toMatchObject({ label: `Loot ${npcName(buggy)}`, ready: true });
+    expect(actions(w)[0]).toMatchObject({ label: `Loot ${npcName(buggy)}`, ready: true });
     w.vehicles[0].speed = RULES.parkedSpeed + 1;
-    expect(getContextActions(w, false)[0]).toMatchObject({ label: `Loot ${npcName(buggy)}`, ready: false });
+    expect(actions(w)[0]).toMatchObject({ label: `Loot ${npcName(buggy)}`, ready: false });
   });
 });
 
 describe('outpost interaction', () => {
-  it.each(REGION.locations.filter((site) => site.kind === 'oasis'))('offers the shop at $name only while stopped, and no free refill', (site) => {
+  it.each(REGION.locations.filter((site) => site.kind === 'oasis'))('offers the shop at $id only while stopped, and no free refill', (site) => {
     const w = emptyWorld({ ...sitePads(site)[0] });
-    expect(getContextActions(w, false)[0]).toMatchObject({ label: `Enter ${site.name}`, ready: true });
+    expect(actions(w)[0]).toMatchObject({ label: `Enter ${siteEn(site.id)}`, ready: true });
     w.vehicles[0].speed = RULES.parkedSpeed + 1;
-    expect(getContextActions(w, false)[0]).toMatchObject({ label: `Enter ${site.name}`, ready: false });
-    expect(getContextActions(w, false).map((a) => a.label).join()).not.toMatch(/Refill/);
+    expect(actions(w)[0]).toMatchObject({ label: `Enter ${siteEn(site.id)}`, ready: false });
+    expect(actions(w).map((a) => a.label).join()).not.toMatch(/Refill/);
   });
 
   it('hides interaction during playback and while knocked out', () => {
@@ -57,7 +71,7 @@ describe('outpost interaction', () => {
     const w = emptyWorld({ ...sitePads(site)[0] });
     expect(getContextActions(w, true)).toEqual([]);
     w.player.state = 'knockedOut';
-    expect(getContextActions(w, false)).toEqual([]);
+    expect(actions(w)).toEqual([]);
   });
 });
 
@@ -66,25 +80,39 @@ describe('salvage interaction', () => {
     const { w, spot } = spotWorld();
     const site = { id: spot.id, pos: spot.pos, radius: propReach(spot) };
     w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [], hidden: emptyHidden() }];
-    expect(getContextActions(w, false)[0]).toMatchObject({ label: 'Search', ready: true, combat: undefined });
+    expect(actions(w)[0]).toMatchObject({ label: 'Search', ready: true, combat: undefined });
     w.salvage[0].goods.scrap = 0;
-    expect(getContextActions(w, false)[0]).toMatchObject({ label: 'Picked clean', ready: false, hint: 'No loot left' });
+    expect(actions(w)[0]).toMatchObject({ label: 'Picked clean', ready: false, hint: 'No loot left' });
   });
 
   it('offers a search while units stay hidden and the revealed loot once searched, both at once', () => {
     const { w, spot } = spotWorld();
     const site = { id: spot.id, pos: spot.pos, radius: propReach(spot) };
     w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [], hidden: { ...emptyHidden(), goods: { scrap: 2 } } }];
-    expect(getContextActions(w, false).map((a) => a.label)).toEqual(['Search']);
+    expect(actions(w).map((a) => a.label)).toEqual(['Search']);
     w.player.scavenged.push(site.id);
-    expect(getContextActions(w, false)).toEqual([
+    expect(actions(w)).toEqual([
       expect.objectContaining({ label: 'Search', ready: true, target: { kind: 'stock', id: site.id } }),
       expect.objectContaining({ label: 'Loot', ready: true, target: { kind: 'loot', id: site.id } }),
     ]);
     w.salvage[0].hidden = emptyHidden();
-    expect(getContextActions(w, false).map((a) => a.label)).toEqual(['Loot']);
+    expect(actions(w).map((a) => a.label)).toEqual(['Loot']);
     w.salvage[0].goods.scrap = 0;
-    expect(getContextActions(w, false)[0]).toMatchObject({ label: 'Picked clean' });
+    expect(actions(w)[0]).toMatchObject({ label: 'Picked clean' });
+  });
+
+  it('keeps offering a search beside revealed supplies the full tank cannot take', () => {
+    const { w, spot } = spotWorld();
+    const site = { id: spot.id, pos: spot.pos, radius: propReach(spot) };
+    w.player.supplies = suppliesCap(w.vehicles[0]);
+    w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: {}, parts: [], supplies: 20, hidden: { ...emptyHidden(), goods: { scrap: 2 } } }];
+    w.player.scavenged.push(site.id);
+    expect(actions(w)).toEqual([
+      expect.objectContaining({ label: 'Search', ready: true }),
+      expect.objectContaining({ label: 'Loot', ready: true }),
+    ]);
+    w.salvage[0].hidden = emptyHidden();
+    expect(actions(w).map((a) => a.label)).toEqual(['Loot']);
   });
 
   it('picks the loot of a stock beside its search with the arrows', () => {
@@ -93,9 +121,9 @@ describe('salvage interaction', () => {
     w.salvage = [{ id: site.id, pos: { ...site.pos }, radius: site.radius, goods: { scrap: 1 }, parts: [], hidden: { ...emptyHidden(), goods: { scrap: 2 } } }];
     w.player.scavenged.push(site.id);
     const picker = new ContextPicker();
-    expect(picker.pick(getContextActions(w, false))?.label).toBe('Search');
+    expect(en(picker.pick(getContextActions(w, false))!.label)).toBe('Search');
     picker.cycle(getContextActions(w, false), 1);
-    expect(picker.pick(getContextActions(w, false))?.label).toBe('Loot');
+    expect(en(picker.pick(getContextActions(w, false))!.label)).toBe('Loot');
   });
 
   it('blocks both the search and the loot while another truck loots the stock', () => {
@@ -105,9 +133,9 @@ describe('salvage interaction', () => {
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 31.5, y: 30 });
     npc.speed = 0;
     beginSearch(w, npc, 'wreck901');
-    expect(getContextActions(w, false)).toEqual([
-      expect.objectContaining({ label: 'Search the wreck', ready: false, hint: `${npc.name} is looting it` }),
-      expect.objectContaining({ label: 'Loot the wreck', ready: false, hint: `${npc.name} is looting it` }),
+    expect(actions(w)).toEqual([
+      expect.objectContaining({ label: 'Search the wreck', ready: false, hint: `${npcName(npc)} is looting it` }),
+      expect.objectContaining({ label: 'Loot the wreck', ready: false, hint: `${npcName(npc)} is looting it` }),
     ]);
   });
 });
@@ -127,7 +155,7 @@ function spotOf(territory: string, look: string): (o: Obstacle) => boolean {
 }
 
 function stockLabel(w: World, id: string, kind: 'stock' | 'loot' = 'stock'): string | undefined {
-  return getContextActions(w, false).find((a) => a.target.kind === kind && a.target.id === id)?.label;
+  return actions(w).find((a) => a.target.kind === kind && a.target.id === id)?.label;
 }
 
 function reveal(w: World, id: string): void {
@@ -150,7 +178,7 @@ describe('loot spot wording', () => {
     stock.parts = [];
     stock.fuel = 0;
     stock.supplies = 0;
-    expect(getContextActions(w, false).map((a) => a.label)).toEqual(['Picked clean']);
+    expect(actions(w).map((a) => a.label)).toEqual(['Picked clean']);
   }, 30_000);
 
   it.each([
@@ -186,10 +214,10 @@ describe('loot spot wording', () => {
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
     npc.speed = 0;
     beginSearch(w, npc, id);
-    expect(getContextActions(w, false).find((a) => a.target.kind === 'stock' && a.target.id === id)).toMatchObject({
+    expect(actions(w).find((a) => a.target.kind === 'stock' && a.target.id === id)).toMatchObject({
       label: 'Search',
       ready: false,
-      hint: `${npc.name} is looting it`,
+      hint: `${npcName(npc)} is looting it`,
     });
   }, 30_000);
 });
@@ -200,8 +228,8 @@ describe('every interaction in reach', () => {
     const w = emptyWorld({ ...sitePads(town)[0] });
     const me = w.vehicles[0];
     dumpOnPile(w, me, me.items.find((item) => item.kind === 'good') ?? me.items[0]);
-    const labels = getContextActions(w, false).map((a) => a.label);
-    expect(labels).toEqual([`Enter ${town.name}`, 'Loot the pile']);
+    const labels = actions(w).map((a) => a.label);
+    expect(labels).toEqual([`Enter ${siteEn(town.id)}`, 'Loot the pile']);
   });
 
   it('lists a pile on a wreck beside the wreck', () => {
@@ -209,7 +237,7 @@ describe('every interaction in reach', () => {
     w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [], hidden: emptyHidden() });
     const me = w.vehicles[0];
     const pile = dumpOnPile(w, me, me.items.find((item) => item.kind === 'good') ?? me.items[0]);
-    expect(getContextActions(w, false).map((a) => a.target)).toEqual([
+    expect(actions(w).map((a) => a.target)).toEqual([
       { kind: 'stock', id: 'wreck901' },
       { kind: 'loot', id: pile.id },
     ]);
@@ -225,14 +253,14 @@ describe('every interaction in reach', () => {
       knockOutNpc(w, buggy);
       return buggy;
     });
-    expect(getContextActions(w, false).map((a) => a.target)).toEqual(buggies.map((b) => ({ kind: 'downed', id: b.id })));
+    expect(actions(w).map((a) => a.target)).toEqual(buggies.map((b) => ({ kind: 'downed', id: b.id })));
   });
 
   it('lists no stock action while the truck is busy', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     w.salvage.push({ id: 'wreck901', pos: { x: 30.5, y: 30 }, radius: 1, goods: { scrap: 3 }, parts: [], hidden: emptyHidden() });
     beginSearch(w, w.vehicles[0], 'wreck901');
-    expect(getContextActions(w, false)).toEqual([]);
+    expect(actions(w)).toEqual([]);
   });
 });
 
@@ -243,9 +271,9 @@ describe('shared wreck', () => {
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 31.5, y: 30 });
     npc.brain = npcBrain('scavenger', npc.pos, ['scavenger']);
     npc.speed = 0;
-    expect(getContextActions(w, false)[0]).toMatchObject({ label: 'Search the wreck', ready: true, combat: undefined });
+    expect(actions(w)[0]).toMatchObject({ label: 'Search the wreck', ready: true, combat: undefined });
     beginSearch(w, npc, 'wreck901');
-    expect(getContextActions(w, false)[0]).toMatchObject({ label: 'Search the wreck', ready: false, hint: `${npc.name} is looting it` });
+    expect(actions(w)[0]).toMatchObject({ label: 'Search the wreck', ready: false, hint: `${npcName(npc)} is looting it` });
   });
 });
 
@@ -262,13 +290,13 @@ describe('search in combat', () => {
 
   it('does not block a search beside a hostile that has not attacked', () => {
     const { w } = siteScene();
-    expect(getContextActions(w, false)[0]).toMatchObject({ label: 'Search', combat: undefined });
+    expect(actions(w)[0]).toMatchObject({ label: 'Search', combat: undefined });
   });
 
   it('blocks a search in combat and says how many turns are left', () => {
     const { w, raider } = siteScene();
     startCombat(w, raider, playerVehicle(w));
-    expect(getContextActions(w, false)[0]).toMatchObject({ label: 'Search', ready: false, combat: STATE_TURNS.combat });
+    expect(actions(w)[0]).toMatchObject({ label: 'Search', ready: false, combat: STATE_TURNS.combat });
   });
 });
 
@@ -278,8 +306,8 @@ describe("critical vehicle readout", () => {
     w.player.money = 123450;
     w.player.fuel = 18.5;
     w.player.supplies = 7.25;
-    expect(getHudReadout(w).resources.map((r) => r.label)).toEqual([
-      "M's",
+    expect(getHudReadout(w).resources.map((r) => en(r.label))).toEqual([
+      "Money",
       "Fuel",
       "Supplies",
       "Driver",
@@ -287,13 +315,13 @@ describe("critical vehicle readout", () => {
     expect(
       getHudReadout(w)
         .resources.slice(0, 3)
-        .map((r) => r.value),
+        .map((r) => en(r.value)),
     ).toEqual(["1,235 M's", "93 L", "7 kg"]);
   });
   it("shows fractional driver health as a whole number", () => {
     const w = emptyWorld();
     w.player.health = 41.123456789;
-    const [, , , driver] = getHudReadout(w).resources.map((r) => r.value);
+    const [, , , driver] = getHudReadout(w).resources.map((r) => en(r.value));
     expect(driver).toBe('42');
   });
   it("warns at the actual fuel speed-limit threshold", () => {
@@ -317,8 +345,8 @@ describe("critical vehicle readout", () => {
     const w = emptyWorld();
     w.player.ranks.toughness = 5;
     w.player.health = RULES.maxHealth;
-    const driver = getHudReadout(w).resources.find((r) => r.label === "Driver")!;
-    expect(driver).toMatchObject({ label: "Driver", value: String(RULES.maxHealth), warning: true });
+    const driver = getHudReadout(w).resources.find((r) => r.id === "driver")!;
+    expect({ id: driver.id, label: en(driver.label), value: en(driver.value), warning: driver.warning }).toEqual({ id: "driver", label: "Driver", value: String(RULES.maxHealth), warning: true });
     expect(maxHealthOf(w)).toBeGreaterThan(RULES.maxHealth);
   });
 
@@ -330,37 +358,38 @@ describe("critical vehicle readout", () => {
       turnsLeft: 2,
       total: 4,
     };
-    expect(getHudReadout(w).survival.map((r) => r.label)).toEqual(["Heat", "Engine"]);
+    expect(getHudReadout(w).survival.map((r) => en(r.label))).toEqual(["Heat", "Engine"]);
   });
   it("shows the weather only when it is not clear", () => {
     const w = emptyWorld();
-    expect(getHudReadout(w).survival.map((r) => r.label)).not.toContain("Weather");
+    expect(getHudReadout(w).survival.map((r) => r.id)).not.toContain("weather");
     w.weather = [{ id: "h", kind: "heatwave", turnsLeft: 9, born: w.turn } as World["weather"][number]];
-    expect(getHudReadout(w).survival).toContainEqual({ label: "Weather", value: "Heat wave", warning: false });
+    const weather = getHudReadout(w).survival.find((r) => r.id === "weather")!;
+    expect({ label: en(weather.label), value: en(weather.value), warning: weather.warning }).toEqual({ label: "Weather", value: "Heat wave", warning: false });
   });
   it("marks low fuel on the fuel readout with its cause", () => {
     const w = emptyWorld();
     w.player.fuel = 1;
     const fuel = getHudReadout(w).resources[1];
     expect(fuel).toMatchObject({ warning: true, icon: "fuel" });
-    expect(fuel.tip).toMatch(/^Low fuel: max \d+ km\/h$/);
+    expect(en(fuel.tip!)).toMatch(/^Low fuel: max \d+ km\/h$/);
   });
   it("shows the game clock once, outside the survival instruments", () => {
     const w = emptyWorld();
     w.turn = 5;
     const before = getHudReadout(w);
-    expect(before.clock).toBe(clockLabel(w.turn));
-    expect(before.survival.some((r) => r.label === "Time")).toBe(false);
+    expect(en(before.clock.full)).toBe(en(clock(w.turn).full));
+    expect(before.survival.some((r) => r.id === "time")).toBe(false);
     w.turn = 5 + 100000;
     const later = getHudReadout(w);
-    expect(later.clock).toBe(clockLabel(w.turn));
-    expect(later.clock).not.toBe(before.clock);
+    expect(en(later.clock.full)).toBe(en(clock(w.turn).full));
+    expect(en(later.clock.full)).not.toBe(en(before.clock.full));
   });
   it("keeps reverse speed and manual driving explicit", () => {
     const w = emptyWorld();
     w.vehicles[0].speed = -2;
     w.vehicles[0].direct = true;
-    expect(getHudReadout(w)).toMatchObject({ speed: "-29", manual: true });
+    expect(getHudReadout(w)).toMatchObject({ speed: -29, manual: true });
   });
 });
 
@@ -369,19 +398,23 @@ describe("act block", () => {
     const w = emptyWorld();
     expect(actBlock(w)).toBeNull();
     w.player.state = "knockedOut";
-    expect(actBlock(w)).toBe("Knocked out");
+    expect(actBlock(w)).toBe("knockedOut");
   });
 });
+
+function rescue(w: World) {
+  const r = getRescueReadout(w);
+  if (r?.kind === "stranded") return { ...r, reason: r.reason && en(r.reason) };
+  if (r?.kind === "towed") return { ...r, tower: en(r.tower), town: en(r.town) };
+  return r;
+}
 
 describe("rescue readout", () => {
   it("shows negative money as a negative amount with a warning", () => {
     const w = emptyWorld();
     w.player.money = -120050;
-    expect(getHudReadout(w).resources[0]).toMatchObject({
-      value: "−1,201 M's",
-      balance: -120050,
-      warning: true,
-    });
+    const money = getHudReadout(w).resources[0];
+    expect({ value: en(money.value), balance: money.balance, warning: money.warning }).toEqual({ value: "\u22121,201 M's", balance: -120050, warning: true });
   });
   it("gives only the M's entry a balance", () => {
     const { resources } = getHudReadout(emptyWorld());
@@ -394,20 +427,20 @@ describe("rescue readout", () => {
     const engine = me.items.find((it) => it.kind === "part" && partDef(it.part.defId).kind === "engine");
     if (!engine || engine.kind !== "part") throw new Error("Expected an engine");
     me.items = me.items.filter((it) => it.kind === "part" && partDef(it.part.defId).kind === "core");
-    expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine." });
+    expect(rescue(w)).toMatchObject({ kind: "stranded", reason: "No working engine." });
     expect(stowPart(w, me, engine.part)).toBe(true);
-    expect(getRescueReadout(w)).toMatchObject({ kind: "stranded", reason: "No working engine." });
+    expect(rescue(w)).toMatchObject({ kind: "stranded", reason: "No working engine." });
   });
   it("follows the player from stranded to tow, and leaves an open offer to the radio", () => {
     const w = emptyWorld();
     expect(getRescueReadout(w)).toBeNull();
     w.player.fuel = 0;
-    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: false, reason: "Out of fuel." });
+    expect(rescue(w)).toEqual({ kind: "stranded", beacon: false, reason: "Out of fuel." });
     w.player.beacon = true;
-    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true, reason: "Out of fuel." });
+    expect(rescue(w)).toEqual({ kind: "stranded", beacon: true, reason: "Out of fuel." });
     w.player.money = 10;
     const tow = addState(w, "tow", w.vehicles[0].id, w.player.vehicleId, { kind: "tow", site: "bowl", fee: 50, waived: 0, hitched: false });
-    expect(getRescueReadout(w)).toEqual({ kind: "stranded", beacon: true, reason: "Out of fuel." });
+    expect(rescue(w)).toEqual({ kind: "stranded", beacon: true, reason: "Out of fuel." });
     towData(tow).hitched = true;
     expect(getRescueReadout(w)).toMatchObject({ kind: "towed", fee: 50 });
     w.player.state = "knockedOut";
@@ -431,12 +464,12 @@ describe('trade interaction', () => {
 
   it('offers the trade over the town once both trucks are parked side by side', () => {
     const { w, npc } = atTownWithTrader(0);
-    expect(getContextActions(w, false)[0]).toMatchObject({ label: `Trade with ${npcName(npc)}`, ready: true });
+    expect(actions(w)[0]).toMatchObject({ label: `Trade with ${npcName(npc)}`, ready: true });
   });
 
   it('offers the town while the trader still drives', () => {
     const { w, town } = atTownWithTrader(RULES.parkedSpeed + 1);
-    expect(getContextActions(w, false)[0]).toMatchObject({ label: `Enter ${town.name}`, ready: true });
+    expect(actions(w)[0]).toMatchObject({ label: `Enter ${siteEn(town.id)}`, ready: true });
   });
 });
 
@@ -483,23 +516,23 @@ describe('aid handover action', () => {
   it('offers giving fuel unready while the trucks move in reach, ready once parked side by side', () => {
     const moving = aidScene(34, 'player');
     moving.npc.speed = RULES.parkedSpeed + 1;
-    expect(getContextActions(moving.w, false)[0]).toMatchObject({ label: `Give ${aidGoods(playerAid(moving.w)!)} to ${npcName(moving.npc)}`, ready: false, target: { kind: 'aid', id: moving.npc.id } });
+    expect(actions(moving.w)[0]).toMatchObject({ label: `Give ${en(aidGoods(playerAid(moving.w)!))} to ${npcName(moving.npc)}`, ready: false, target: { kind: 'aid', id: moving.npc.id } });
     const near = aidScene(34, 'player');
-    expect(getContextActions(near.w, false)[0]).toMatchObject({ label: expect.stringContaining('Give'), ready: true, target: { kind: 'aid', id: near.npc.id } });
+    expect(actions(near.w)[0]).toMatchObject({ label: expect.stringContaining('Give'), ready: true, target: { kind: 'aid', id: near.npc.id } });
   });
 
   it('shows no aid action while the agreed driver is out of reach, even beside another driver', () => {
     const { w, npc } = aidScene(60, 'player');
     addVehicle(w, 'traders', 'scout', [], { x: 34, y: 30 });
-    const actions = getContextActions(w, false);
-    expect(actions.filter((a) => a.target.kind === 'aid')).toEqual([]);
-    expect(actions.some((a) => a.label.includes(npcName(npc)))).toBe(false);
+    const all = actions(w);
+    expect(all.filter((a) => a.target.kind === 'aid')).toEqual([]);
+    expect(all.some((a) => a.label.includes(npcName(npc)))).toBe(false);
   });
 
   it('shows one aid action naming the agreed driver when another is also in reach', () => {
     const { w, npc } = aidScene(34, 'player');
     addVehicle(w, 'traders', 'scout', [], { x: 26, y: 30 });
-    const aids = getContextActions(w, false).filter((a) => a.target.kind === 'aid');
+    const aids = actions(w).filter((a) => a.target.kind === 'aid');
     expect(aids).toHaveLength(1);
     expect(aids[0]).toMatchObject({ target: { kind: 'aid', id: npc.id }, label: expect.stringContaining(npcName(npc)) });
   });
@@ -514,7 +547,7 @@ describe('aid handover action', () => {
     const site = REGION.locations.find((s) => s.kind === 'oasis')!;
     w.vehicles[0].pos = { ...sitePads(site)[0] };
     npc.pos = { x: w.vehicles[0].pos.x + 4, y: w.vehicles[0].pos.y };
-    expect(getContextActions(w, false)[0]).toMatchObject({ label: `Take ${aidGoods(playerAid(w)!)} from ${npcName(npc)}`, ready: true });
+    expect(actions(w)[0]).toMatchObject({ label: `Take ${en(aidGoods(playerAid(w)!))} from ${npcName(npc)}`, ready: true });
   });
 });
 
@@ -525,14 +558,14 @@ describe('several trades', () => {
     const near = addVehicle(w, 'traders', 'scout', [], { x: 34, y: 30 });
     addState(w, 'trade', far.id, w.player.vehicleId, { kind: 'none' });
     addState(w, 'trade', near.id, w.player.vehicleId, { kind: 'none' });
-    const trades = getContextActions(w, false).filter((a) => a.target.kind === 'trade');
+    const trades = actions(w).filter((a) => a.target.kind === 'trade');
     expect(trades).toEqual([{ label: `Trade with ${npcName(near)}`, ready: true, target: { kind: 'trade', id: near.id } }]);
   });
 });
 
-const shop: ContextAction = { label: 'Enter', ready: true, target: { kind: 'shop' } };
-const pile: ContextAction = { label: 'Loot the pile', ready: true, target: { kind: 'loot', id: 'p1' } };
-const wreck: ContextAction = { label: 'Search the wreck', ready: true, target: { kind: 'stock', id: 'w1' } };
+const shop: ContextAction = { label: verbatim('Enter'), ready: true, target: { kind: 'shop' } };
+const pile: ContextAction = { label: verbatim('Loot the pile'), ready: true, target: { kind: 'loot', id: 'p1' } };
+const wreck: ContextAction = { label: verbatim('Search the wreck'), ready: true, target: { kind: 'stock', id: 'w1' } };
 
 describe('context picker', () => {
   it('picks the first action by default', () => {
@@ -585,13 +618,14 @@ describe('overdrive switch', () => {
     const w = wornTo(6);
     w.player.overdrive = true;
     const s = overdriveSwitch(w);
-    const reason = `Repair engine above ${RULES.overdriveMinEngineShare * 100}%`;
-    expect(s).toEqual({ checked: false, reason, title: reason });
+    const reason = `Engine too worn for overdrive: repair it above ${RULES.overdriveMinEngineShare * 100}% [O]`;
+    expect({ checked: s.checked, reason: s.reason && en(s.reason), title: en(s.title) }).toEqual({ checked: false, reason, title: reason });
   });
 
   it('is open one HP above 15% and shows the flag', () => {
     const w = wornTo(7);
-    expect(overdriveSwitch(w)).toEqual({ checked: false, reason: null, title: 'Faster, but the engine heats fast [O]' });
+    const s = overdriveSwitch(w);
+    expect({ checked: s.checked, reason: s.reason, title: en(s.title) }).toEqual({ checked: false, reason: null, title: 'Faster, but the engine heats fast [O]' });
     w.player.overdrive = true;
     expect(overdriveSwitch(w).checked).toBe(true);
   });

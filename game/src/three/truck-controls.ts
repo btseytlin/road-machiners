@@ -1,5 +1,6 @@
 // The player's truck switches (manual driving, auto patch, overdrive, headlights, dousing the engine) and the E-key context action.
 
+import type { Msg } from '../text/msg';
 import { readyAid, startAid } from "../sim/aid";
 import { playerVehicle } from "../sim/damage";
 import { canDouse, douseEngine } from "../sim/engine-heat";
@@ -65,7 +66,7 @@ export type ContextHost = {
   playing: () => boolean;
   apply: (next: World) => void;
   pushEvents: () => void;
-  note: (text: string) => void;
+  note: (text: Msg) => void;
   openTrade: (npcId: string) => void;
   openTown: () => void;
   openDowned: (vehicleId: string) => void;
@@ -116,7 +117,7 @@ export class TruckContext {
     this.host.pushEvents();
   }
 
-  private searchStock(stockId: string, combat: number | undefined): void {
+  searchStock(stockId: string, combat?: number): void {
     const w = this.host.world();
     if (isBusy(playerVehicle(w))) return;
     if (combat !== undefined) return;

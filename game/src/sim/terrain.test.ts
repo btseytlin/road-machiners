@@ -1,6 +1,8 @@
 import { START_KITS } from "../data/start";
 import { describe, expect, it } from "vitest";
 import { REGION } from "../data/region";
+import { siteName } from "../text/names";
+import { resolve } from "../text/resolve";
 import { TERRAIN, TERRAIN_TYPES, type DeckSpec, type TerrainTypeId } from "../data/terrain";
 import { route } from "./path";
 import { PHYSICS } from "../data/physics";
@@ -96,8 +98,8 @@ describe("terrain grid", () => {
     expect(w.size).toBe(600);
     expect(w.terrain.heights).toHaveLength(601 * 601);
     expect(REGION.name).toBe('Icarus');
-    expect(REGION.towns.map((town) => town.name)).toEqual(['Bowl', 'Nose']);
-    expect(REGION.locations.map((site) => site.name)).toEqual([
+    expect(REGION.towns.map((town) => resolve(siteName(town.id), 'en'))).toEqual(['Bowl', 'Nose']);
+    expect(REGION.locations.map((site) => resolve(siteName(site.id), 'en'))).toEqual([
       'Old Orchard', 'Dustwell', 'The Granary', 'Glass Flats', 'Green Pit',
       'Pump Station', 'Fallen Sun', 'Salvage Yard', 'Scrapjaw Camp', 'Kiln Camp',
     ]);

@@ -6,6 +6,8 @@ import type { SaveSlots } from './save-db';
 import { parseSetup } from '../sim/settings';
 import type { WorldSetup } from '../sim/types';
 
+import { t, type Msg } from '../text/msg';
+
 export type SlotId = 'auto' | 'day' | `slot${number}`;
 
 export function manualSlots(count: number): SlotId[] {
@@ -20,10 +22,10 @@ export function slotKey(base: string, slot: SlotId): string {
   return slot === 'auto' ? base : `${base}:${slot}`;
 }
 
-export function slotLabel(slot: SlotId): string {
-  if (slot === 'auto') return 'Autosave';
-  if (slot === 'day') return 'Day start';
-  return `Slot ${slot.slice('slot'.length)}`;
+export function slotLabel(slot: SlotId): Msg {
+  if (slot === 'auto') return t('save.slot.auto');
+  if (slot === 'day') return t('save.slot.day');
+  return t('save.slot.manual', { n: Number(slot.slice('slot'.length)) });
 }
 
 export type SlotInfo = { slot: SlotId; savedAt: number; turn: number | null };

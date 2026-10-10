@@ -43,6 +43,7 @@ import FORMAT_2_32 from './save-fixtures/format-2-32.json';
 import FORMAT_2_33 from './save-fixtures/format-2-33.json';
 import FORMAT_2_35 from './save-fixtures/format-2-35.json';
 import FORMAT_2_36 from './save-fixtures/format-2-36.json';
+import FORMAT_2_37 from './save-fixtures/format-2-37.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
@@ -784,8 +785,49 @@ describe('save migration 35 to 36', () => {
 });
 
 describe('save migration 36 to 37', () => {
-  const before = structuredClone(FORMAT_2_36);
-  const next = MIGRATIONS[36](FORMAT_2_36) as {
+  type Goal = { reason: string };
+  type Saved = {
+    vehicles: { id: string; name?: string; brain: { goals: Goal[] } | null }[];
+    player: { call: { line: unknown; vars: Record<string, unknown> } | null; contracts: Record<string, unknown>[] };
+    shops: Record<string, { contracts: Record<string, unknown>[] }>;
+  };
+  const next = MIGRATIONS[36](FORMAT_2_36) as unknown as Saved;
+  const reasons = (v: { brain: { goals: Goal[] } | null }) => v.brain?.goals.map((g) => g.reason);
+
+  it('turns known goal reasons into ids, an old phrase into the id that replaced it, and an unknown one into legacy', () => {
+    expect(reasons(next.vehicles[1])).toEqual(['buyCargo', 'lowFuel']);
+    expect(reasons(next.vehicles[2])).toEqual(['explore', 'legacy']);
+    expect(reasons(next.vehicles[3])).toEqual(['raid']);
+  });
+
+  it('removes the names of trucks and bounty targets', () => {
+    expect(next.vehicles.some((v) => 'name' in v)).toBe(false);
+    expect(next.player.contracts.map((c) => 'targetName' in c)).toEqual([false, false]);
+    expect('targetName' in next.shops.nose.contracts[0]).toBe(false);
+    expect(next.player.contracts[0]).toEqual({ id: 'c1', shop: 'bowl', kind: 'bounty', template: 'buggy', reward: 400, deadline: 990, window: 300, tier: 2 });
+  });
+
+  it('keeps an open call on a known line as its id', () => {
+    expect(next.player.call?.line).toEqual({ line: 'dealTerms', vars: FORMAT_2_36.player.call.line.vars });
+  });
+
+  it('turns the warning line of an open loot call into its id', () => {
+    const call = { ...FORMAT_2_36.player.call, topic: 'lootWarning', line: { text: '{warnLine}', vars: {} }, vars: { warnLine: { kind: 'line', text: "That's my pick. Roll on." } } };
+    const saved = { ...FORMAT_2_36, player: { ...FORMAT_2_36.player, call } };
+    const migrated = MIGRATIONS[36](saved) as unknown as Saved;
+    expect(migrated.player.call?.vars).toEqual({ warnLine: { kind: 'line', line: 'thatsMyPick' } });
+    expect(migrated.player.call?.line).toEqual({ line: 'warnTerms', vars: {} });
+  });
+
+  it('hangs up a call on a line no table knows', () => {
+    const unknown = { ...FORMAT_2_36, player: { ...FORMAT_2_36.player, call: { ...FORMAT_2_36.player.call, line: { text: 'Words from a mod', vars: {} } } } };
+    expect((MIGRATIONS[36](unknown) as unknown as Saved).player.call).toBeNull();
+  });
+});
+
+describe('save migration 37 to 38', () => {
+  const before = structuredClone(FORMAT_2_37);
+  const next = MIGRATIONS[37](FORMAT_2_37) as {
     salvage: { id: string }[];
     shops: Record<string, { contracts: unknown[]; pressure: Record<string, number>; stock: unknown[]; restockAt: number }>;
     obstacles: { id: string }[];
@@ -805,14 +847,14 @@ describe('save migration 36 to 37', () => {
   it('adds both outpost shops empty, to roll their stock on the next turn, and leaves the old shops', () => {
     expect(next.shops.dustwell).toEqual({ contracts: [], pressure: { water: 0, scrap: 0, tools: 0, meds: 0 }, stock: [], restockAt: 1200 });
     expect(next.shops['green-pit']).toEqual({ contracts: [], pressure: { water: 0, grain: 0, salt: 0, textiles: 0 }, stock: [], restockAt: 1200 });
-    expect(next.shops.bowl).toEqual(FORMAT_2_36.shops.bowl);
-    expect(next.shops.nose).toEqual(FORMAT_2_36.shops.nose);
+    expect(next.shops.bowl).toEqual(FORMAT_2_37.shops.bowl);
+    expect(next.shops.nose).toEqual(FORMAT_2_37.shops.nose);
   });
 
   it('ends a search or a refit pickup of a retired stock and keeps other jobs', () => {
     expect(next.vehicles[0].job).toBeNull();
     expect(next.vehicles[1].job).toBeNull();
-    expect(next.vehicles[2].job).toEqual(FORMAT_2_36.vehicles[2].job);
+    expect(next.vehicles[2].job).toEqual(FORMAT_2_37.vehicles[2].job);
   });
 
   it('drops goals, stripped memories, unfit entries and noticed marks of retired stocks', () => {
@@ -829,6 +871,6 @@ describe('save migration 36 to 37', () => {
   });
 
   it('does not mutate its input', () => {
-    expect(FORMAT_2_36).toEqual(before);
+    expect(FORMAT_2_37).toEqual(before);
   });
 });

@@ -161,7 +161,7 @@ describe('trades', () => {
       addGoods(w, me, 'scrap', freeCells(me));
     });
     const part = spareParts(find(w0, npc.id))[0];
-    expect(() => buyTruckPart(w0, npc.id, part.id)).toThrow('No room');
+    expect(() => buyTruckPart(w0, npc.id, part.id)).toThrow('Refused: noCargoRoom');
   });
 
   it('the driver sells fuel only above its reserve', () => {

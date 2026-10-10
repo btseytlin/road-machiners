@@ -20,7 +20,7 @@ function fighting(world: World, raider: Vehicle): Vehicle {
   const me = world.player.vehicleId;
   raider.brain = npcBrain('buggy', raider.pos, ['raider']);
   chooseOn(world, raider, me, world.vehicles[0].pos, 'fight', true);
-  raider.brain.goals.push({ kind: 'fight', targetId: me, destination: { x: 35, y: 30 }, phase: 'travel', reason: 'test', worn: { turn: world.turn, condition: 1 } });
+  raider.brain.goals.push({ kind: 'fight', targetId: me, destination: { x: 35, y: 30 }, phase: 'travel', reason: 'tripToSite', worn: { turn: world.turn, condition: 1 } });
   return raider;
 }
 

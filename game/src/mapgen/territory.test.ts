@@ -721,7 +721,7 @@ describe('the orchard farm', () => {
 });
 
 describe('a third territory', () => {
-  const flats: TerritoryDef = { id: 'test-flats', name: 'Test Flats', kind: 'territory', pos: { x: 200, y: 380 }, radius: 22, outline: null };
+  const flats: TerritoryDef = { id: 'test-flats', kind: 'territory', pos: { x: 200, y: 380 }, radius: 22, outline: null };
   function flatsRules(): TerritoryRules {
     return {
       seed: 2,

@@ -1,4 +1,4 @@
-import { el } from "../dom";
+import { devEl as el } from "../dom";
 import { moneyEl } from "../units";
 
 export interface Piece {

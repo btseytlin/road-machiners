@@ -2,20 +2,29 @@ import { chanceSteps, fireBlock, hitOdds, type ChanceStep, type HitOdds } from '
 import { playerVehicle } from '../sim/damage';
 import { vehicleStats, type MountedWeapon } from '../sim/stats';
 import type { Aim, Vehicle, World } from '../sim/types';
+import { partName, vehicleTitle } from '../text/names';
+import { DASH, num, t, type Msg } from '../text/msg';
 import { el } from './dom';
 import { ammoText, blockText } from './weapons';
 
-export type TipRow = { name: string; delta: number };
+export type TipRow = { name: Msg; delta: number };
 export type ChanceTip = { base: number; rows: TipRow[] };
-export type HitRow = { key: number | null; name: string; ammo: string; odds: HitOdds | null; text: string; tip: ChanceTip | null };
-export type HitCardData = { name: string; mine: HitRow[]; theirs: HitRow[] };
+export type HitRow = { key: number | null; name: Msg; ammo: Msg; odds: HitOdds | null; text: Msg; tip: ChanceTip | null };
+export type HitCardData = { name: Msg; mine: HitRow[]; theirs: HitRow[] };
 
-type CauseNames = Record<ChanceStep['cause'], string>;
+type CauseNames = Record<ChanceStep['cause'], Msg>;
 
-const SHARED_NAMES = { weapon: 'Loose gun', range: 'Far', recoil: 'Gun kick', skill: 'Driver perception', weather: 'Bad weather', smoke: 'Smoke' };
+const SHARED_NAMES = {
+  weapon: t('hitTip.weapon'),
+  range: t('hitTip.range'),
+  recoil: t('hitTip.recoil'),
+  skill: t('hitTip.skill'),
+  weather: t('hitTip.weather'),
+  smoke: t('hitTip.smoke'),
+};
 
-const MY_NAMES: CauseNames = { ...SHARED_NAMES, crossing: 'Target crossing fast', own: 'You are moving', still: 'Target is parked' };
-const THEIR_NAMES: CauseNames = { ...SHARED_NAMES, crossing: 'You are crossing fast', own: 'It is moving', still: 'You are parked' };
+const MY_NAMES: CauseNames = { ...SHARED_NAMES, crossing: t('hitTip.mine.crossing'), own: t('hitTip.mine.own'), still: t('hitTip.mine.still') };
+const THEIR_NAMES: CauseNames = { ...SHARED_NAMES, crossing: t('hitTip.theirs.crossing'), own: t('hitTip.theirs.own'), still: t('hitTip.theirs.still') };
 
 function chanceTip(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim, names: CauseNames): ChanceTip {
   const steps = chanceSteps(world, shooter, mw, target, aim);
@@ -25,11 +34,11 @@ function chanceTip(world: World, shooter: Vehicle, mw: MountedWeapon, target: Ve
 }
 
 function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim, key: number | null, names: CauseNames): HitRow {
-  const gun = { key, name: mw.def.name, ammo: ammoText(mw) };
+  const gun = { key, name: partName(mw.def.id), ammo: ammoText(mw) };
   const block = fireBlock(world, shooter, mw, target);
   if (block !== null) return { ...gun, odds: null, text: blockText(mw, block), tip: null };
   const odds = hitOdds(world, shooter, mw, target, aim);
-  return { ...gun, odds, text: `${Math.round(odds.damageChance * 100)}%`, tip: chanceTip(world, shooter, mw, target, aim, names) };
+  return { ...gun, odds, text: t('hit.chance', { pct: Math.round(odds.damageChance * 100) }), tip: chanceTip(world, shooter, mw, target, aim, names) };
 }
 
 function aimAt(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): Aim {
@@ -43,7 +52,7 @@ export function hitCardRows(world: World, hoveredId: string): HitCardData | null
   const it = world.vehicles.find((v) => v.id === hoveredId);
   if (!it) throw new Error(`No vehicle ${hoveredId} to hover`);
   return {
-    name: it.name,
+    name: vehicleTitle(world, it),
     mine: vehicleStats(world, me).weapons.map((mw, i) => row(world, me, mw, it, aimAt(me, mw, it), i + 1, MY_NAMES)),
     theirs: vehicleStats(world, it).weapons.map((mw) => row(world, it, mw, me, aimAt(it, mw, me), null, THEIR_NAMES)),
   };
@@ -51,14 +60,14 @@ export function hitCardRows(world: World, hoveredId: string): HitCardData | null
 
 const HIGH_CHANCE = 50;
 
-function signed(delta: number): string {
-  return `${delta > 0 ? '+' : '−'}${Math.abs(delta)}%`;
+function signed(delta: number): Msg {
+  return t(delta > 0 ? 'hit.deltaUp' : 'hit.deltaDown', { n: Math.abs(delta) });
 }
 
 function tipOf(tip: ChanceTip): HTMLElement {
   return el('span', { class: 'tooltip hc-tip', role: 'tooltip' },
-    el('span', { class: 'base' }, 'Base'),
-    el('span', { class: 'v base' }, `${tip.base}%`),
+    el('span', { class: 'base' }, t('hitTip.base')),
+    el('span', { class: 'v base' }, t('hit.chance', { pct: tip.base })),
     ...tip.rows.flatMap((r) => [el('span', {}, r.name), el('span', { class: `v ${r.delta > 0 ? 'up' : 'down'}` }, signed(r.delta))]),
   );
 }
@@ -71,14 +80,14 @@ function chanceOf(r: HitRow, theirs: boolean): HTMLElement {
 }
 
 function gunRow(r: HitRow, theirs: boolean): HTMLElement {
-  const name = el('span', { class: 'hc-gun', title: `${r.name} ${r.ammo}` }, ...(r.key === null ? [] : [el('span', { class: 'hc-key' }, String(r.key))]), r.name);
+  const name = el('span', { class: 'hc-gun', title: t('hit.label', { name: r.name, ammo: r.ammo }) }, ...(r.key === null ? [] : [el('span', { class: 'hc-key' }, num(r.key, 'int'))]), r.name);
   return el('div', { class: `hc-row${r.odds ? '' : ' blocked'}` }, name, chanceOf(r, theirs));
 }
 
-function well(title: string, rows: HitRow[], theirs: boolean): HTMLElement {
+function well(title: Msg, rows: HitRow[], theirs: boolean): HTMLElement {
   return el('div', { class: `hc-well${theirs ? ' theirs' : ''}` },
     el('div', { class: 'hc-cap' }, title),
-    ...(rows.length === 0 ? [el('div', { class: 'hc-none' }, '–')] : rows.map((r) => gunRow(r, theirs))),
+    ...(rows.length === 0 ? [el('div', { class: 'hc-none' }, DASH)] : rows.map((r) => gunRow(r, theirs))),
   );
 }
 
@@ -96,7 +105,7 @@ export class HitCard {
       this.root.replaceChildren();
       return this.hide();
     }
-    this.root.replaceChildren(well('You', card.mine, false), well('Them', card.theirs, true));
+    this.root.replaceChildren(well(t('hit.wellYou'), card.mine, false), well(t('hit.wellThem'), card.theirs, true));
   }
 
   hide(): void {

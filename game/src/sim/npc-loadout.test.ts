@@ -66,7 +66,7 @@ describe('NPC equipment generation', () => {
       const beforeId = world.nextId;
       const loadout = generateNpcLoadout(world, template);
       expect(world.nextId).toBe(beforeId);
-      const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+      const v = makeVehicle(world, { ...loadout, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
       expect(mountedParts(v, 'engine')).toHaveLength(1);
       expect(mountedParts(v, 'weapon').length).toBeGreaterThanOrEqual(1);
       for (const item of v.items) expect(placementError(gridOf(v), v.items, item, item.id)).toBeNull();
@@ -84,7 +84,7 @@ describe('NPC equipment generation', () => {
   const rolled = (template: NpcTemplate, level: GearLevel | null, seed: number): Vehicle => {
     const world = { ...fixture, rngState: seed, marketRng: { rngState: seed * 104729 + 1 } };
     const loadout = generateNpcLoadout(world, template, null, level);
-    return makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+    return makeVehicle(world, { ...loadout, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
   };
   const average = (template: NpcTemplate, level: GearLevel | null, of: (v: Vehicle) => number) => {
     let total = 0;
@@ -175,7 +175,7 @@ describe('NPC equipment generation', () => {
     for (let seed = 1; seed <= 32; seed++) {
       const world = { ...fixture, rngState: seed };
       const loadout = generateNpcLoadout(world, template);
-      const v = makeVehicle(world, { ...loadout, name: template.name, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
+      const v = makeVehicle(world, { ...loadout, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 });
       expect(everyGunFires(v), describeLoadout(v)).toBe(true);
     }
   });
@@ -326,7 +326,7 @@ describe('trader spare parts', () => {
     for (let i = 0; i < 10; i++) {
       template.loadout.goods = [{ value: { good: 'textiles', count: free }, weight: 1 }];
       const rolled = generateNpcLoadout({ ...fixture, rngState: 3 }, template);
-      const room = freeCells(makeVehicle(fixture, { ...rolled, spares: [], cargo: { parts: rolled.cargo.parts }, name: 'probe', faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 }));
+      const room = freeCells(makeVehicle(fixture, { ...rolled, spares: [], cargo: { parts: rolled.cargo.parts }, faction: template.faction, brain: null, pos: { x: 50, y: 50 }, heading: 0 }));
       if (room === free) break;
       free = room;
     }
@@ -628,6 +628,6 @@ describe('loadout fingerprint', () => {
 
   it('populates a new world the same way', () => {
     const w = newWorld(7, START_KITS.standard, TEST_MAP, defaultSetup('roaming'));
-    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('e07cfbf44d7df2e1');
+    expect(sha({ vehicles: w.vehicles, shops: w.shops, rng: [w.rngState, w.marketRng, w.nextId] })).toBe('23fa8a1444fe3cb0');
   }, budget(60_000));
 });

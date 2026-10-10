@@ -31,7 +31,7 @@ describe('NPC driving', () => {
     const second = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 103, y: 100 });
     second.brain = npcBrain('trader', second.pos, ['trader']);
     second.heading = Math.PI;
-    second.brain.goals.push({ kind: 'loot', targetId: 'cargo-gone', destination: { x: 130, y: 100 }, phase: 'travel', reason: 'take the handed-over cargo' });
+    second.brain.goals.push({ kind: 'loot', targetId: 'cargo-gone', destination: { x: 130, y: 100 }, phase: 'travel', reason: 'takeHandedCargo' });
     lowerIdFirst(first, second);
     planNpcOrders(w);
     expect(topGoal(second)?.kind).not.toBe('loot');
@@ -44,7 +44,7 @@ describe('face offs', () => {
     const first = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 100, y: 100 });
     first.brain = npcBrain('trader', first.pos, ['trader']);
     first.heading = 0;
-    first.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 150, y: 100 }, phase: 'travel', reason: 'test trip east' });
+    first.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 150, y: 100 }, phase: 'travel', reason: 'tripToSite' });
     const second = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 104, y: 100 });
     second.brain = npcBrain('trader', second.pos, ['trader']);
     second.heading = Math.PI;
@@ -54,7 +54,7 @@ describe('face offs', () => {
 
   it('of two parked trucks that both set off, only the higher id drives on the first turn', () => {
     const { w, first, second } = noseToNose();
-    second.brain!.goals.push({ kind: 'explore', targetId: null, destination: { x: 40, y: 100 }, phase: 'travel', reason: 'test trip west' });
+    second.brain!.goals.push({ kind: 'explore', targetId: null, destination: { x: 40, y: 100 }, phase: 'travel', reason: 'tripToSite' });
     planNpcOrders(w);
     expect(first.order?.kind).toBe('brake');
     expect(second.order?.kind).toBe('stopAt');
@@ -68,7 +68,7 @@ describe('face offs', () => {
 
   it('a driver does not wait for a parked truck ahead that holds no move order, like one waiting for a tow', () => {
     const { w, first, second } = noseToNose();
-    second.brain!.goals.push({ kind: 'resupply', targetId: 'bowl', destination: { x: 60, y: 100 }, phase: 'travel', reason: 'low fuel' });
+    second.brain!.goals.push({ kind: 'resupply', targetId: 'bowl', destination: { x: 60, y: 100 }, phase: 'travel', reason: 'lowFuel' });
     second.order = null;
     expect(trafficStops(w, first, { x: 150, y: 100 })).toBe(false);
   });
@@ -176,11 +176,11 @@ describe('oncoming NPCs', () => {
     first.brain = npcBrain('trader', first.pos, ['trader']);
     first.heading = 0;
     first.speed = 4;
-    first.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 150, y: 100 }, phase: 'travel', reason: 'test trip east' });
+    first.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 150, y: 100 }, phase: 'travel', reason: 'tripToSite' });
     const second = addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 114, y: 100.5 }, Math.PI);
     second.brain = npcBrain('trader', second.pos, ['trader']);
     second.speed = 4;
-    second.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 50, y: 100 }, phase: 'travel', reason: 'test trip west' });
+    second.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 50, y: 100 }, phase: 'travel', reason: 'tripToSite' });
     lowerIdFirst(first, second);
     return { w, first, second };
   }
@@ -196,11 +196,11 @@ describe('oncoming NPCs', () => {
     const w = emptyWorld({ x: 270, y: 190 });
     const first = addVehicle(w, 'scavengers', 'scout', ['mg', 'stockEngine'], { x: 268.77, y: 160.4 }, (-40.78 * Math.PI) / 180);
     first.brain = npcBrain('scavenger', first.pos, ['scavenger']);
-    first.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 317, y: 102.75 }, phase: 'travel', reason: 'test trip northeast' });
+    first.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 317, y: 102.75 }, phase: 'travel', reason: 'tripToSite' });
     const second = addVehicle(w, 'roamers', 'scout', ['mg', 'stockEngine'], { x: 270.6, y: 156.71 }, (141.44 * Math.PI) / 180);
     second.brain = npcBrain('roamer', second.pos, ['roamer']);
     second.speed = 3.22;
-    second.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 223.7, y: 194.2 }, phase: 'travel', reason: 'test trip southwest' });
+    second.brain.goals.push({ kind: 'explore', targetId: null, destination: { x: 223.7, y: 194.2 }, phase: 'travel', reason: 'tripToSite' });
     lowerIdFirst(first, second);
     planNpcOrders(w);
     expect(first.order?.kind).toBe('brake');
@@ -218,7 +218,7 @@ describe('oncoming NPCs', () => {
   it.each(['first', 'second'] as const)('a fleeing truck is not yielded to and does not yield: %s flees', (who) => {
     const { w, first, second } = headOn();
     const fleer = who === 'first' ? first : second;
-    fleer.brain!.goals.push({ kind: 'flee', targetId: null, destination: { x: 100, y: 60 }, phase: 'travel', reason: 'test flight' });
+    fleer.brain!.goals.push({ kind: 'flee', targetId: null, destination: { x: 100, y: 60 }, phase: 'travel', reason: 'escapeAttacker' });
     expect(trafficStops(w, first, DEST)).toBe(false);
   });
 
@@ -242,7 +242,7 @@ describe('getting unstuck', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const leader = addVehicle(w, 'convoys', 'hauler', ['mg', 'workhorseDiesel'], { x: 100, y: 100 });
     leader.brain = npcBrain('convoy', leader.pos, ['supplier']);
-    leader.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 170, y: 100 }, phase: 'travel', reason: 'test trip east' }];
+    leader.brain.goals = [{ kind: 'explore', targetId: null, destination: { x: 170, y: 100 }, phase: 'travel', reason: 'tripToSite' }];
     const guard = addVehicle(w, 'convoys', 'scout', ['mg', 'stockEngine'], { x: 60, y: 100 });
     guard.brain = npcBrain('convoyGuard', guard.pos, ['guard']);
     startEscort(w, guard, leader, null, 0);

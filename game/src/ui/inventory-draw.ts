@@ -10,16 +10,18 @@ import { el } from "./dom";
 import { truckOutline } from "./plans";
 import { conditionMeter, gridItemIcon, toneStyle } from "./cards";
 import { kg } from "./units";
+import { byId, t, type Msg } from "../text/msg";
+import { goodName, partName } from "../text/names";
 
-const CELL_TITLE: Record<Cell, string> = {
-  D: "deck mount for a weapon, scanner, utility, cargo frame or store",
-  E: "engine mount",
-  F: "front armor mount",
-  B: "back armor mount",
-  L: "left armor mount",
-  R: "right armor mount",
-  X: "built-in part",
-  ".": "",
+const CELL_TITLE: Record<Cell, Msg | undefined> = {
+  D: t("cell.deck"),
+  E: t("cell.engine"),
+  F: t("cell.front"),
+  B: t("cell.back"),
+  L: t("cell.left"),
+  R: t("cell.right"),
+  X: t("cell.builtIn"),
+  ".": undefined,
 };
 
 export function storageItem(part: PartInstance): GridItem {
@@ -50,7 +52,7 @@ function gridCellEl(g: Grid, x: number, y: number, cell: number): HTMLElement | 
   const c = g.cells[y][x];
   if (c !== null) return cellEl(c, x, y, cell);
   if (y < g.deadFrom) return null;
-  return el("div", { class: "inv-cell c-dead", style: pos(x, y, 1, 1, cell), title: "Broken cargo rows" });
+  return el("div", { class: "inv-cell c-dead", style: pos(x, y, 1, 1, cell), title: t("cell.deadRows") });
 }
 
 export function cellEl(c: Cell, x: number, y: number, cell: number): HTMLElement {
@@ -118,19 +120,19 @@ export function footprint(it: GridItem): { w: number; h: number } {
   };
 }
 
-export function itemLabel(it: GridItem): { short: string } {
-  if (it.kind === "good") return { short: GOODS[it.good].name.slice(0, 5) };
-  return { short: partDef(it.part.defId).name };
+export function itemLabel(it: GridItem): { short: Msg } {
+  if (it.kind === "good") return { short: byId(`good.${it.good}.short`) };
+  return { short: partName(it.part.defId) };
 }
 
-export function itemName(it: GridItem): string {
-  return it.kind === "good" ? GOODS[it.good].name : partDef(it.part.defId).name;
+export function itemName(it: GridItem): Msg {
+  return it.kind === "good" ? goodName(it.good) : partName(it.part.defId);
 }
 
-export function itemState(it: GridItem, mounted: boolean): string {
-  if (it.kind === "good") return `Cargo, ${kg(GOODS[it.good].mass)}`;
-  if (partDef(it.part.defId).kind === "core") return "Built in";
-  return mounted ? "Mounted" : "Spare";
+export function itemState(it: GridItem, mounted: boolean): Msg {
+  if (it.kind === "good") return t("item.cargo", { mass: kg(GOODS[it.good].mass) });
+  if (partDef(it.part.defId).kind === "core") return t("item.builtIn");
+  return mounted ? t("item.mounted") : t("item.spare");
 }
 
 const SVG = "http://www.w3.org/2000/svg";

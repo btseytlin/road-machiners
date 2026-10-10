@@ -9,10 +9,10 @@ import { MOUNT_CELLS } from "../sim/grid";
 import type { PartInstance, World } from "../sim/types";
 import { maxHp } from "../sim/wear";
 import { compareBase, createIcon, partCard } from "./cards";
-import { el, panel } from "./dom";
+import { devEl as el, panel } from "./dom";
 import type { UiHost } from "./host";
 import { InventoryView, truckChips } from "./inventory";
-import { FILTER_ICON, STOCK_FILTER_LABEL, STOCK_FILTERS, type StockFilter } from "./town";
+import { FILTER_ICON, STOCK_FILTERS, type StockFilter } from "./town";
 
 const KIND_ORDER = STOCK_FILTERS.filter((f): f is Exclude<StockFilter, "all"> => f !== "all");
 
@@ -20,7 +20,7 @@ function shopParts(): PartDef[] {
   const rank = (d: PartDef) => KIND_ORDER.indexOf(d.kind as Exclude<StockFilter, "all">);
   return Object.values(PARTS)
     .filter((d) => d.kind !== "core")
-    .sort((a, b) => rank(a) - rank(b) || a.tier - b.tier || a.name.localeCompare(b.name));
+    .sort((a, b) => rank(a) - rank(b) || a.tier - b.tier || a.id.localeCompare(b.id));
 }
 
 function sample(defId: string): PartInstance {
@@ -112,7 +112,7 @@ export class FullShopScreen {
         "button",
         {
           class: this.filter === f ? "on" : "",
-          title: STOCK_FILTER_LABEL[f],
+          title: f,
           onclick: () => {
             this.filter = f;
             this.render();

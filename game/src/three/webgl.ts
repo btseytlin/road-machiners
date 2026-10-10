@@ -1,5 +1,7 @@
 // Opens the game's one WebGL 2 context. A browser that cannot makes a WebGLUnavailable, which boot shows as a notice, not a crash.
 
+import { t, type Msg } from '../text/msg';
+
 export class WebGLUnavailable extends Error {
   readonly reason: string | null;
   constructor(reason: string | null, options?: { cause?: unknown }) {
@@ -40,14 +42,9 @@ export function openWebGL(canvas: HTMLCanvasElement, attributes: WebGLContextAtt
   }
 }
 
-export function noWebGLText(err: WebGLUnavailable, userAgent: string): { title: string; lines: string[]; detail: string | null } {
-  const lines = [
-    'Your browser could not start 3D graphics. Try one of these:',
-    '• Turn on hardware acceleration in the browser settings.',
-    '• Update the graphics driver.',
-    '• Open the game in another browser.',
-  ];
-  if (userAgent.includes('Firefox/')) lines.push('• In Firefox, about:support shows the WebGL status.');
-  lines.push('Your saves stay in this browser. The game loads them once WebGL works.');
-  return { title: 'Road Machiners needs WebGL', lines, detail: err.reason };
+export function noWebGLText(err: WebGLUnavailable, userAgent: string): { title: Msg; lines: Msg[]; detail: string | null } {
+  const lines = [t('webgl.intro'), t('webgl.acceleration'), t('webgl.driver'), t('webgl.browser')];
+  if (userAgent.includes('Firefox/')) lines.push(t('webgl.firefox'));
+  lines.push(t('webgl.saves'));
+  return { title: t('webgl.title'), lines, detail: err.reason };
 }

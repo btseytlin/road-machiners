@@ -62,13 +62,13 @@ describe('arming a claymore ram', () => {
     const { w, user, claymore } = setup();
     arm(w, user, claymore);
 
-    expect(utilityOrderError(w, user, claymore.id, { kind: 'self' })).toMatch(/armed/);
+    expect(utilityOrderError(w, user, claymore.id, { kind: 'self' })).toMatchObject({ id: 'utilityBlocked', block: 'armed' });
     claymore.charge = { reload: 0 };
     claymore.hp = 0;
-    expect(utilityOrderError(w, user, claymore.id, { kind: 'self' })).toMatch(/disabled/);
+    expect(utilityOrderError(w, user, claymore.id, { kind: 'self' })).toMatchObject({ id: 'utilityBlocked', block: 'disabled' });
     claymore.hp = 80;
     claymore.charge = { reload: 3 };
-    expect(utilityOrderError(w, user, claymore.id, { kind: 'self' })).toMatch(/cooldown/);
+    expect(utilityOrderError(w, user, claymore.id, { kind: 'self' })).toMatchObject({ id: 'utilityBlocked', block: 'cooldown' });
   });
 });
 
@@ -218,7 +218,7 @@ describe('claymore detonation', () => {
     applyContactCrash(w, user, other, other.id, CLAYMORE.minImpact, hit(side));
 
     for (let i = 0; i < CLAYMORE.reload - 1; i++) tickCharges(w);
-    expect(utilityOrderError(w, user, claymore.id, { kind: 'self' })).toMatch(/cooldown/);
+    expect(utilityOrderError(w, user, claymore.id, { kind: 'self' })).toMatchObject({ id: 'utilityBlocked', block: 'cooldown' });
     tickCharges(w);
     expect(utilityOrderError(w, user, claymore.id, { kind: 'self' })).toBeNull();
   });

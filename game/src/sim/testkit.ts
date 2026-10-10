@@ -81,7 +81,7 @@ export function spotWorld(): { w: World; spot: Obstacle; stock: SalvageStock } {
 }
 
 export function addVehicle(w: World, faction: Faction, chassisId: string, parts: string[], pos: Vec, heading = 0): Vehicle {
-  const v = makeVehicle(w, { name: chassisId, faction, chassisId, parts: parts.map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {}, pos, heading, brain: null });
+  const v = makeVehicle(w, { faction, chassisId, parts: parts.map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {}, pos, heading, brain: null });
   w.vehicles.push(v);
   return v;
 }
@@ -91,7 +91,7 @@ export function practiceOf(w: World, source: XpSource): Extract<GameEvent, { t: 
 }
 
 export function npcBrain(templateId: string, home: Vec, traits: TraitId[]): NpcBrain {
-  return { templateId, driver: 'Test Driver', traits, goals: [], noticed: {}, tracks: {}, hurt: 0, attackers: {}, goal: null, home: { ...home }, stepIndex: 0, memories: [] };
+  return { templateId, driver: 'Jed Cobb', traits, goals: [], noticed: {}, tracks: {}, hurt: 0, attackers: {}, goal: null, home: { ...home }, stepIndex: 0, memories: [] };
 }
 
 export function forceOption<D extends DecisionId>(decision: D, option: DecisionOptions[D]): void {

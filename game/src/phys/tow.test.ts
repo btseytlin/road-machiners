@@ -22,6 +22,11 @@ import { RULES } from '../data/rules';
 import { addState } from '../sim/states';
 import { buildDrive, freeDrive, initPhysics, TURN_STEPS, type Drive } from './drive';
 import { physicsMove } from './turn';
+import { lineKey } from '../text/names';
+import { entryText } from '../text/resolve';
+
+// A line's English words, so the tests read like the talk they check.
+const en = (line: Parameters<typeof lineKey>[0]): string => entryText('en', lineKey(line));
 
 beforeAll(async () => {
   await initPhysics();
@@ -73,7 +78,7 @@ describe('hitched tower traffic', () => {
     forceOption('strandedSeen', 'tow');
     const offer = runUntil(s.w, 30, (x) => playerTow(x) !== null);
     expect(playerTow(offer.w)).not.toBeNull();
-    const w = play(chooseOption(offer.w, currentOptions(offer.w).findIndex((o) => o.text === 'Deal. Hitch me up.')), 2).w;
+    const w = play(chooseOption(offer.w, currentOptions(offer.w).findIndex((o) => en(o.line) === 'Deal. Hitch me up.')), 2).w;
     const tower = find(w, s.trader.id);
     const goal = topGoal(tower)!.destination!;
     const a = Math.atan2(goal.y - tower.pos.y, goal.x - tower.pos.x);
@@ -102,7 +107,7 @@ describe('hitched tower traffic', () => {
     const behind = along(-30, 0);
     const other = withTower(w, 'scavenger', 'scavengers', 'hauler', start);
     other.heading = Math.atan2(behind.y - start.y, behind.x - start.x);
-    other.brain!.goals = [{ kind: 'raid', targetId: null, destination: behind, phase: 'travel', reason: 'drive past the tower' }];
+    other.brain!.goals = [{ kind: 'raid', targetId: null, destination: behind, phase: 'travel', reason: 'tripToSite' }];
     const passed = (x: World) => progress(find(x, other.id).pos) < 0 && progress(find(x, tower.id).pos) > 10;
     const r = runUntil(w, 20, passed);
     expect(crashes(r.events, tower.id)).toEqual([]);
@@ -140,7 +145,7 @@ describe('tow approach traffic', () => {
     const { w, tower, patrol } = patrolled((c) => ({ x: c.x + 5, y: c.y + 14 }));
     const to = { x: patrol.pos.x, y: patrol.pos.y - 28 };
     patrol.heading = -Math.PI / 2;
-    patrol.brain!.goals = [{ kind: 'raid', targetId: null, destination: to, phase: 'travel', reason: 'drive across the approach' }];
+    patrol.brain!.goals = [{ kind: 'raid', targetId: null, destination: to, phase: 'travel', reason: 'tripToSite' }];
     const r = runUntil(w, 40, settled);
     expect(crashes(r.events, tower.id)).toEqual([]);
     expect(feuds(r.events)).toEqual([]);
@@ -167,7 +172,7 @@ describe('emergency beacon', () => {
     expect(canVehicleSee(w, find(w, s.trader.id), playerVehicle(w).pos)).toBe(false);
     const r = runUntil(w, 150, (x) => playerTow(x) !== null);
     expect(playerTow(r.w)?.holder).toBe(s.trader.id);
-    expect(activitiesOf(r.events, s.trader.id)[0]).toMatchObject({ activity: 'tow', reason: 'help a stranded truck' });
+    expect(activitiesOf(r.events, s.trader.id)[0]).toMatchObject({ activity: 'tow', reason: 'helpStranded' });
   });
 
   it('a raider comes to a beaconing truck with cargo', () => {
@@ -193,10 +198,10 @@ describe('after a tow into town', () => {
     forceOption('idle', 'wait');
     forceOption('strandedSeen', 'tow');
     const offer = runUntil(s.w, 30, (x) => playerTow(x) !== null);
-    const hitched = chooseOption(offer.w, currentOptions(offer.w).findIndex((o) => o.text === 'Deal. Hitch me up.'));
+    const hitched = chooseOption(offer.w, currentOptions(offer.w).findIndex((o) => en(o.line) === 'Deal. Hitch me up.'));
     const arrived = runUntil(hitched, 120, (x) => playerTow(x) === null).w;
     expect(playerTow(arrived)).toBeNull();
-    find(arrived, s.trader.id).brain!.goals = [{ kind: 'travel', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'go on to town' }];
+    find(arrived, s.trader.id).brain!.goals = [{ kind: 'travel', targetId: town.id, destination: { ...town.pos }, phase: 'travel', reason: 'tripToSite' }];
     const parkedAt = { ...playerVehicle(arrived).pos };
 
     const r = runUntil(arrived, 15, () => false);
@@ -215,7 +220,7 @@ describe('a client that jumps home as its NPC tow ends', () => {
     client.brain = npcBrain('buggy', client.pos, ['raider']);
     client.defeat = { phase: 'retreat', turns: 3, unseen: RULES.retreatTeleportTurns, foes: [], gaveUp: true };
     tower.items = tower.items.filter((it) => !(it.kind === 'part' && partDef(it.part.defId).kind === 'engine'));
-    tower.brain!.goals = [{ kind: 'tow', targetId: client.id, destination: null, phase: 'act', reason: 'test' }];
+    tower.brain!.goals = [{ kind: 'tow', targetId: client.id, destination: null, phase: 'act', reason: 'tripToSite' }];
     addState(w, 'tow', tower.id, client.id, { kind: 'tow', site: npcHomeSite(client)!.id, fee: 0, waived: 0, hitched: true });
     const before = w;
 

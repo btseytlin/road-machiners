@@ -24,7 +24,7 @@ import { getResources } from './resources';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { inCombat } from './combat';
 import { cancelJob, startJob } from './jobs';
-import type { GridItem, HiddenLoot, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
+import type { GoalReason, GridItem, HiddenLoot, Refusal, NpcActivity, Obstacle, PartInstance, Pile, RefitPickup, SalvageStock, Vehicle, World } from './types';
 import { estimateCrashGeometry } from './crash-contact';
 import { walkLane } from './armor';
 import { shopAt } from './market';
@@ -32,7 +32,7 @@ import { isLootSpot, spotLookOf, spotTable, territoryAt, territoryOfStock } from
 import type { BakedMap, PropKind } from './terrain';
 import { inTowReach } from './tow';
 import { breakLootWarning, warnedOffTarget } from './loot-warning';
-import { playerCommand } from './world';
+import { playerCommand, Refused } from './world';
 import { clamp, dist, type Vec } from './vec';
 import { OPENING_WRECK_ID } from './opening';
 import { maxHp } from './wear';
@@ -167,11 +167,11 @@ export function canReachSalvage(vehicle: Vehicle, stock: SalvageStock): boolean 
   return vehicle.speed <= RULES.parkedSpeed && salvageInRange(vehicle, stock);
 }
 
-export function searchTarget(world: World, vehicle: Vehicle, stockId: string | null): { stock: SalvageStock } | { ended: string } {
+export function searchTarget(world: World, vehicle: Vehicle, stockId: string | null): { stock: SalvageStock } | { ended: GoalReason } {
   const stock = world.salvage.find((entry) => entry.id === stockId);
-  if (!stock) return { ended: 'salvage no longer available' };
+  if (!stock) return { ended: 'salvageGone' };
   const arrived = world.events.some((e) => e.t === 'arrived' && e.vehicle === vehicle.id);
-  return arrived && !salvageInRange(vehicle, stock) ? { ended: 'salvage out of reach' } : { stock };
+  return arrived && !salvageInRange(vehicle, stock) ? { ended: 'salvageOutOfReach' } : { stock };
 }
 
 export function salvageInRange(vehicle: Vehicle, stock: SalvageStock): boolean {
@@ -490,10 +490,11 @@ export function canLootTruck(looter: Vehicle, target: Vehicle): boolean {
   return looter.id !== target.id && isKnockedOut(target) && looter.speed <= RULES.parkedSpeed && inTowReach(looter, target);
 }
 
-export function takeError(target: Vehicle, item: GridItem): string | null {
-  if (item.kind === 'part' && partDef(item.part.defId).kind === 'core' && isMounted(target.chassisId, item)) return 'Built-in parts stay on the truck';
+// Why this item cannot leave the truck, or null. A built-in part stays, and a rack must be empty before it comes off.
+export function takeError(target: Vehicle, item: GridItem): Refusal | null {
+  if (item.kind === 'part' && partDef(item.part.defId).kind === 'core' && isMounted(target.chassisId, item)) return { id: 'builtInStays' };
   const left = getLayoutError(target, target.items.filter((it) => it.id !== item.id));
-  return left ? 'Empty that rack first' : null;
+  return left ? { id: 'emptyRackFirst' } : null;
 }
 
 function takeTurns(world: World, looter: Vehicle, target: Vehicle, item: GridItem, placed: GridItem): number {
@@ -505,7 +506,7 @@ function takeTurns(world: World, looter: Vehicle, target: Vehicle, item: GridIte
 export function takeItem(world: World, looter: Vehicle, target: Vehicle, item: GridItem, to: Spot): void {
   const placed: GridItem = { ...item, id: newId(world, 'i'), ...to };
   const error = takeError(target, item) ?? getLayoutError(looter, [...looter.items, placed]);
-  if (error) throw new Error(error);
+  if (error) throw new Refused(error);
   const work = takeTurns(world, looter, target, item, placed);
   if (work === 0) return moveNow(world, looter, target, item, placed);
   if (item.kind !== 'part') throw new Error('Only parts take a refit');
@@ -528,16 +529,17 @@ export function takeFromTruck(world: World, targetId: string, itemId: string, to
     requireLootFree(w, me, targetId);
     breakLootWarning(w, me, targetId);
     const item = target.items.find((it) => it.id === itemId);
-    if (!item) throw new Error(`No item ${itemId} on ${target.name}`);
+    if (!item) throw new Error(`No item ${itemId} on ${target.id}`);
     takeItem(w, me, target, item, to);
   });
 }
 
-export function truckPickupItem(world: World, looter: Vehicle, pickup: TruckPickup): GridItem | string {
+// The part a running refit takes off the truck, at its new spot, or why the refit cannot go on.
+export function truckPickupItem(world: World, looter: Vehicle, pickup: TruckPickup): GridItem | Refusal {
   const target = world.vehicles.find((v) => v.id === pickup.vehicleId);
-  if (!target || !canLootTruck(looter, target)) return 'The truck is out of reach';
+  if (!target || !canLootTruck(looter, target)) return { id: 'truckOutOfReach' };
   const item = target.items.find((it) => it.kind === 'part' && it.part.id === pickup.partId);
-  if (item?.kind !== 'part') return 'The part is no longer on the truck';
+  if (item?.kind !== 'part') return { id: 'truckPartGone' };
   return { kind: 'part', id: pickup.itemId, part: item.part, ...pickup.to };
 }
 
@@ -575,13 +577,13 @@ export function lootBlocker(world: World, looter: Vehicle, targetId: string): Ve
 
 export function requireLootFree(world: World, looter: Vehicle, targetId: string): void {
   const blocker = lootBlocker(world, looter, targetId);
-  if (blocker) throw new Error(lootBlockedError(world, blocker, targetId));
+  if (blocker) throw new Refused(lootBlockedError(world, blocker, targetId));
 }
 
-export function lootBlockedError(world: World, blocker: Vehicle, targetId: string): string {
+export function lootBlockedError(world: World, blocker: Vehicle, targetId: string): Refusal {
   const stock = world.salvage.find((s) => s.id === targetId);
-  if (stock) return `${blocker.name} is looting ${salvagePlace(stock) === 'spot' ? 'here' : 'this wreck'}`;
-  if (world.vehicles.some((v) => v.id === targetId)) return `${blocker.name} is looting this truck`;
+  if (stock) return { id: 'looting', by: blocker.id, place: salvagePlace(stock) === 'spot' ? 'here' : 'wreck' };
+  if (world.vehicles.some((v) => v.id === targetId)) return { id: 'looting', by: blocker.id, place: 'truck' };
   throw new Error(`No loot target ${targetId}`);
 }
 
@@ -619,16 +621,19 @@ export function inLootReach(world: World, v: Vehicle, targetId: string): boolean
   return stock ? canReachSalvage(v, stock) : canLootTruck(v, vehicleById(world, targetId));
 }
 
-export const CANNOT_HOLD = 'cargo cannot hold the loot';
+export const CANNOT_HOLD: GoalReason = 'cargoFullLoot';
 
-export const STRIPPED = 'salvage exhausted';
+export const STRIPPED: GoalReason = 'salvageExhausted';
 
-export function lootTruckTurn(world: World, looter: Vehicle, target: Vehicle): string | null {
+// One turn of an NPC looting a parked-beside truck. Every loose item that fits comes over at once, then one
+// installed part per refit, stowed as a spare. No refit starts with a foe in sight, so the looting ends then.
+// Returns why the loot ends, or null while work remains.
+export function lootTruckTurn(world: World, looter: Vehicle, target: Vehicle): GoalReason | null {
   if (looter.job?.kind === 'refit') return null;
   takeLooseItems(world, looter, target);
-  if (inCombat(world, looter)) return 'combat stops the looting';
+  if (inCombat(world, looter)) return 'combatStopsLooting';
   const next = nextInstalled(looter, target);
-  if (!next) return target.items.some((it) => takeError(target, it) === null) ? CANNOT_HOLD : 'nothing left to loot';
+  if (!next) return target.items.some((it) => takeError(target, it) === null) ? 'cargoFullLoot' : 'nothingToLoot';
   takeItem(world, looter, target, next.item, next.spot);
   return null;
 }

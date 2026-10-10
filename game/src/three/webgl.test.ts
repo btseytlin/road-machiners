@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { resolve } from '../text/resolve';
 import { GAME_GL, noWebGLText, openWebGL, WebGLUnavailable } from './webgl';
 
 type Listener = (e: { statusMessage?: string }) => void;
@@ -80,22 +81,23 @@ describe('noWebGLText', () => {
 
   it('names the problem, the fixes, the reason and the saves on Firefox', () => {
     const text = noWebGLText(err, FIREFOX);
-    expect(text.title).toContain('needs WebGL');
-    expect(text.lines.some((l) => l.includes('hardware acceleration'))).toBe(true);
-    expect(text.lines.some((l) => l.includes('about:support'))).toBe(true);
-    expect(text.lines.some((l) => l.includes('saves'))).toBe(true);
+    const lines = text.lines.map((l) => resolve(l, 'en'));
+    expect(resolve(text.title, 'en')).toContain('needs WebGL');
+    expect(lines.some((l) => l.includes('hardware acceleration'))).toBe(true);
+    expect(lines.some((l) => l.includes('about:support'))).toBe(true);
+    expect(lines.some((l) => l.includes('saves'))).toBe(true);
     expect(text.detail).toBe('BlockedByDriver');
   });
 
   it('has no Firefox line in another browser, and no detail without a reason', () => {
     const text = noWebGLText(new WebGLUnavailable(null), CHROME);
-    expect(text.lines.some((l) => l.includes('about:support'))).toBe(false);
+    expect(text.lines.map((l) => resolve(l, 'en')).some((l) => l.includes('about:support'))).toBe(false);
     expect(text.detail).toBeNull();
   });
 
   it('shows no stack and no crash wording', () => {
     for (const ua of [FIREFOX, CHROME]) {
-      const all = JSON.stringify(noWebGLText(err, ua));
+      const all = JSON.stringify(noWebGLText(err, ua).lines.map((l) => resolve(l, 'en')));
       expect(all).not.toContain('crashed');
       expect(all).not.toContain(err.stack ?? 'no stack');
     }

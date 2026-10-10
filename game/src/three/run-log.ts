@@ -51,7 +51,7 @@ function eventEntry(known: readonly Vehicle[], e: GameEvent): Body {
 }
 
 function truckOf(v: Vehicle | undefined): { name: string; faction: string; chassis: string } | null {
-  return v ? { name: v.name, faction: v.faction, chassis: v.chassisId } : null;
+  return v ? { name: v.brain ? v.brain.driver : v.id, faction: v.faction, chassis: v.chassisId } : null;
 }
 
 function changeEntry(prev: World | null, next: World): Body | null {

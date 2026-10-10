@@ -10,7 +10,7 @@ import { REGION, type TownDef } from '../../data/region';
 import { RULES } from '../../data/rules';
 import { TERRAIN } from '../../data/terrain';
 import { ENGINE_HEAT } from '../../data/wear';
-import { TOPICS, type TopicId } from '../../data/dialogue';
+import { TOPICS, type LineId, type TopicId } from '../../data/dialogue';
 import { isJunk, maxHp, partValue } from '../wear';
 import { inCombat, isHostile } from '../combat';
 import { startStrip, stripYield } from '../jobs';
@@ -40,7 +40,7 @@ import { canUseSite, isTerritory, nearestPad, reachedSite, nearestTown, siteGate
 import { fuelCap, hasWorkingEngine, isStranded, isWorking, suppliesCap, vehicleStats } from '../stats';
 import { escortsOf, inTowReach, playerTow, setBeacon } from '../tow';
 import { towData } from '../states';
-import type { Call, Faction, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
+import type { Call, Faction, GoalReason, GridItem, NpcState, PartInstance, SalvageStock, Vehicle, World } from '../types';
 import { dist, pointsAway, type Vec } from '../vec';
 import { canVehicleSee, playerExplored, playerSees } from '../vision';
 import { BIGGEST_PART_CELLS, mountBought, Orders, rearm, REPAIR_PARTS, upgradeGear, type BotTurn, type UpgradeStyle } from './orders';
@@ -139,18 +139,24 @@ function goalOf(world: World, archetype: Policy, options: BotOptions): Goal {
   return GOALS_PLAYED[Math.floor(hashRandom(world.seed ^ MARKOV_SALT, stretch) * GOALS_PLAYED.length)];
 }
 
-const DEFENDER_REPLIES: Partial<Record<TopicId, string>> = { demand: 'Come and get it.', surrender: 'Come and get it.' };
-const HUNTER_REPLIES: Partial<Record<TopicId, string>> = { ...DEFENDER_REPLIES, truceOffer: 'No. We finish this.', mercyPlea: 'Stand down and let me strip your truck.' };
-const REFUSE_TOW: Partial<Record<TopicId, string>> = { tow: 'No thanks.', towFree: 'No thanks.' };
-const YIELD_CARGO = 'Fine. Take it.';
+// ---- Calls and switches.
 
-function answerCall(o: Orders, replies: Partial<Record<TopicId, string>> = DEFENDER_REPLIES): void {
+// Replies that differ from the first one of a topic. Every bot defends against a demand for its cargo. The hunter also
+// refuses a truce and answers a plea for mercy with a demand to be stripped.
+const DEFENDER_REPLIES: Partial<Record<TopicId, LineId>> = { demand: 'comeAndGetIt', surrender: 'comeAndGetIt' };
+const HUNTER_REPLIES: Partial<Record<TopicId, LineId>> = { ...DEFENDER_REPLIES, truceOffer: 'noWeFinishThis', mercyPlea: 'standDownAndLet' };
+const REFUSE_TOW: Partial<Record<TopicId, LineId>> = { tow: 'noThanks', towFree: 'noThanks' };
+const YIELD_CARGO: LineId = 'fineTakeIt';
+
+// Every open call gets the first reply of each topic, unless the bot's replies name another. Every bot hands its
+// cargo to a demand from a foe that outmatches it. On the hub, the bot hangs up, which is the last option.
+function answerCall(o: Orders, replies: Partial<Record<TopicId, LineId>> = DEFENDER_REPLIES): void {
   const seen = new Set<string>();
   for (let call = o.world.player.call; call; call = o.world.player.call) {
     const at = `${call.with}:${call.topic}:${call.node}`;
     if (seen.has(at)) throw new Error(`Bot call loops back to ${at}`);
     seen.add(at);
-    const pick = call.topic ? Math.max(0, currentOptions(o.world).findIndex((option) => option.text === replyTo(o.world, call, replies))) : currentOptions(o.world).length - 1;
+    const pick = call.topic ? Math.max(0, currentOptions(o.world).findIndex((option) => option.line === replyTo(o.world, call, replies))) : currentOptions(o.world).length - 1;
     o.run((w) => chooseOption(w, pick));
   }
 }
@@ -159,11 +165,11 @@ function keepsOff(world: World, targetId: string): boolean {
   return warnedOffTarget(world, playerVehicle(world), targetId) !== null;
 }
 
-const OUTMATCHED_REPLIES: Partial<Record<TopicId, [string, string | undefined]>> = {
-  demand: [YIELD_CARGO, undefined], surrender: [YIELD_CARGO, undefined], lootWarning: ['Rolling on.', 'Find your own.'],
+const OUTMATCHED_REPLIES: Partial<Record<TopicId, [LineId, LineId | undefined]>> = {
+  demand: [YIELD_CARGO, undefined], surrender: [YIELD_CARGO, undefined], lootWarning: ['rollingOn', 'findYourOwn'],
 };
 
-function replyTo(world: World, call: Call, replies: Partial<Record<TopicId, string>>): string | undefined {
+function replyTo(world: World, call: Call, replies: Partial<Record<TopicId, LineId>>): LineId | undefined {
   if (!call.topic) return undefined;
   const pair = OUTMATCHED_REPLIES[call.topic];
   if (pair) return (outmatchedBy(world, vehicleById(world, call.with)) ? pair[0] : pair[1]) ?? replies[call.topic];
@@ -827,7 +833,7 @@ function demandYield(o: Orders, foe: Vehicle): boolean {
   const asks = foe.brain !== null && isHostile(o.world, foe, o.me) && isWeak(o.world, foe) && !offeredSurrenderBy(o.world, foe, o.me);
   if (!asks) return false;
   o.run((w) => callVehicle(w, foe.id));
-  const ask = currentOptions(o.world).findIndex((option) => option.text === TOPICS.yieldDemand.ask?.text);
+  const ask = currentOptions(o.world).findIndex((option) => option.line === TOPICS.yieldDemand.ask?.say);
   if (ask >= 0) o.run((w) => chooseOption(w, ask));
   answerCall(o, HUNTER_REPLIES);
   return true;
@@ -930,7 +936,12 @@ function visitStock(o: Orders, stock: SalvageStock): void {
   driveTo(o, site ? nearestPad(site, o.me.pos) : besideStop(o.world, stock.pos, stock.radius));
 }
 
-export const CARGO_REASONS: readonly string[] = ['deliver purchased cargo', 'sell carried cargo', 'buy profitable cargo', 'load cargo at its source'];
+// ---- Robbery.
+
+// The goal lines under a seen driver that say it carries cargo or goes to load it. They are the reasons
+// src/sim/npc-activities.ts gives the trade, sell and haul goals.
+export const CARGO_REASONS: readonly GoalReason[] = ['deliverCargo', 'sellCargo', 'buyCargo', 'loadCargo'];
+// The factions a robber demands cargo from.
 const ROB_FACTIONS: readonly Faction[] = ['traders', 'convoys'];
 function robPatrol(guarded: boolean): readonly string[] {
   return guarded ? [...TRAITS.supplier.haulSites, ...TRAITS.supplier.towns] : ['bowl', 'nose'];
