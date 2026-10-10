@@ -9,7 +9,7 @@ import { partDef } from '../../data/parts';
 import { SHOPS } from '../../data/market';
 import { CONDITION, ENGINE_HEAT } from '../../data/wear';
 import { playerVehicle, vehicleById } from '../damage';
-import { makePart } from '../factory';
+import { makePart, makeVehicle } from '../factory';
 import { freeCells, goodsCount, mountedParts } from '../grid';
 import { addGoods, mountPart, removeAllGoods, stowPart } from '../inventory';
 import { siteOf } from '../market';
@@ -59,6 +59,15 @@ function saltGlut(w: World): World {
   w.shops.nose.pressure.salt = -PRESSURE_MAX;
   w.shops.bowl.pressure.salt = PRESSURE_MAX;
   return w;
+}
+
+// A gun takes two deck cells, so three guns fill the scout's deck and leave it no cargo: the player drives a hauler.
+function withThreeGuns(w: World): Vehicle {
+  const old = playerVehicle(w);
+  const me = makeVehicle(w, { name: old.name, faction: 'player', chassisId: 'hauler', parts: ['mg', 'mg', 'mg', 'stockEngine'].map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {}, pos: old.pos, heading: old.heading, brain: null });
+  me.id = old.id;
+  w.vehicles[w.vehicles.indexOf(old)] = me;
+  return me;
 }
 
 describe('botOrders', () => {
@@ -404,6 +413,7 @@ describe('botOrders', () => {
 
   it('has a broke truck without an engine sell gear in town to buy one', () => {
     const w = withoutEngine(parkedAt('bowl'));
+    for (const part of mountedParts(playerVehicle(w))) part.wear = 0;
     w.player.money = 0;
     w.player.supplies = 0;
     w.shops.bowl.stock = [makePart(w, 'stockEngine', 0)];
@@ -662,7 +672,7 @@ describe('the hunter', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = playerVehicle(w);
     me.order = { kind: 'stopAt', dest: { x: me.pos.x + 60, y: me.pos.y } };
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'heavyDiesel'], { x: me.pos.x + 14, y: me.pos.y });
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'shotgun', 'heavyDiesel'], { x: me.pos.x + 14, y: me.pos.y });
     raider.brain = npcBrain('gunwagon', raider.pos, ['raider']);
     expect(Math.abs(judgeDanger(w, me, raider) - 1)).toBeLessThan(NPC_BEHAVIOR.dangerSpread / 2);
     const orders = Array.from({ length: 12 }, (_, i) => {
@@ -775,7 +785,7 @@ describe('the hunter', () => {
       return { w, order: playerVehicle(botOrders(w, 'hunter').world).order };
     };
     const weak = orderFacing([]);
-    const strong = orderFacing(['mg', 'mg', 'mg', 'mg']);
+    const strong = orderFacing(['mg', 'mg']);
 
     expect(weak.order).toEqual({ kind: 'stopAt', dest: { x: 120, y: 30 } });
     expect(strong.order?.kind === 'stopAt' && strong.order.dest.x === 120).toBe(false);
@@ -873,9 +883,7 @@ describe('the hunter', () => {
 
   it('has a climber with three guns trade between fights', () => {
     const w = saltGlut(parkedAt('nose'));
-    const me = playerVehicle(w);
-    expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
-    expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
+    withThreeGuns(w);
 
     const bought = botOrders(w, 'climber');
     const carried = botOrders(bought.world, 'climber');
@@ -888,9 +896,7 @@ describe('the hunter', () => {
   it('has a climber accept a truce that a pure hunter refuses', () => {
     const acceptsTruce = (archetype: 'climber' | 'hunter') => {
       const w = emptyWorld({ x: 30, y: 30 });
-      const me = playerVehicle(w);
-      expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
-      expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
+      const me = withThreeGuns(w);
       const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 34, y: 30 });
       raider.brain = npcBrain('buggy', raider.pos, ['raider']);
       plead(w, raider, me, 'truce');
@@ -906,10 +912,8 @@ describe('the hunter', () => {
 
   it('has a climber strip nearby loot before leaving for repairs', () => {
     const w = emptyWorld({ x: 30, y: 30 });
-    const me = playerVehicle(w);
+    const me = withThreeGuns(w);
     me.speed = 0;
-    expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
-    expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
     const engine = mountedParts(me, 'engine')[0];
     engine.hp = Math.floor(maxHp(engine) / 4);
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 });
@@ -1053,7 +1057,7 @@ describe('the hunter', () => {
     };
 
     expect(heardAt([])).toEqual({ kind: 'stopAt', dest: { x: 88, y: 32 } });
-    expect(heardAt(['mg', 'mg', 'mg'])).not.toEqual({ kind: 'stopAt', dest: { x: 88, y: 32 } });
+    expect(heardAt(['mg', 'mg'])).not.toEqual({ kind: 'stopAt', dest: { x: 88, y: 32 } });
   });
 
   it('has a stranded bot accept a strip offer only from a raider that outmatches it', () => {
