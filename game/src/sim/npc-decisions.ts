@@ -218,6 +218,7 @@ export function tradeSpend(world: World, vehicle: Vehicle): number {
 }
 
 export function tradeOffers(world: World, vehicle: Vehicle): Weighted<TradePlan>[] {
+  if (!modeRules(world).traffic) return [];
   const spend = tradeSpend(world, vehicle);
   const shops = Object.values(SHOPS);
   return shops.flatMap((source) => shops.filter((buyer) => buyer.id !== source.id).flatMap((buyer) => runOffers(world, vehicle, source, buyer, spend)));

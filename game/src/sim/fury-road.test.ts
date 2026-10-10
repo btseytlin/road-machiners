@@ -4,6 +4,8 @@ import { playerVehicle } from './damage';
 import { abandonRun, advanceFuryRoad, canAbandonRun, furyRoadReadout, moveWindow, outpostPad, payOf, reachedOutpostAt, runEarnings, stockSizeOf, waveOf, WINDOW_MOVE } from './fury-road';
 import { highwayHash, milestoneAt, roadPoint, STRIDE } from './highway';
 import { topGoal } from './npc-activities';
+import { optionWeights, tradeOffers } from './npc-decisions';
+import { getResources } from './resources';
 import { addState, stateOf } from './states';
 import { furyRoadWorld } from './testkit';
 import type { FuryRoadRun, World } from './types';
@@ -315,5 +317,19 @@ describe('ending a Fury Road run', () => {
     const ended = abandonRun(w);
 
     expect(() => endTurn(ended, still)).toThrow(/dead/);
+  });
+});
+
+describe('a Fury Road group truck between fights', () => {
+  it('weighs its idle options with no shops in the world, and finds no trade', () => {
+    const w = furyRoadWorld();
+    const group = runOf(w).groups[0];
+    moveTo(w, group.at);
+    advanceFuryRoad(w);
+    const npc = w.vehicles.find((v) => v.id === group.vehicles[0])!;
+    getResources(w, npc).money = 5000;
+
+    expect(tradeOffers(w, npc)).toEqual([]);
+    expect(() => optionWeights(w, npc, 'idle', null, null)).not.toThrow();
   });
 });
