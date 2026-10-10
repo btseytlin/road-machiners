@@ -20,10 +20,6 @@ export function buildPump(b: SiteBuilder): void {
 
 export function buildOasis(b: SiteBuilder): void {
   b.addTank(0, 0, 2.8, 0.04, PAL.waterLight);
-  for (let i = 0; i < 9; i++) {
-    const a = i * Math.PI * 2 / 9;
-    b.addModel('palm', Math.cos(a) * 4, Math.sin(a) * 4, a * 2.3);
-  }
   for (let i = 0; i < OASIS_LAMPS; i++) {
     const a = (i + 0.5) * Math.PI * 2 / OASIS_LAMPS;
     b.addLantern(Math.cos(a) * OASIS_LAMP_RING, Math.sin(a) * OASIS_LAMP_RING, -a);
