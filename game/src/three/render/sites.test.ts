@@ -231,6 +231,23 @@ describe('landmark scale', () => {
     node.updateMatrix();
   });
 
+  it('keeps palm trees out of Green Pit and Dustwell and leaves the Green Pit shacks standing', () => {
+    for (const id of ['green-pit', 'dustwell']) {
+      const names = new Set<string>();
+      sites.getObjectByName(`landmark-${id}`)!.traverse((o) => {
+        if (!(o instanceof Mesh)) return;
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) names.add(m.name);
+      });
+      expect(names.has('palm'), id).toBe(false);
+      expect(names.has('palm_dark'), id).toBe(false);
+    }
+    const shacks: Object3D[] = [];
+    sites.getObjectByName('landmark-green-pit')!.traverse((o) => {
+      if (o.name === 'green-pit-shack') shacks.push(o);
+    });
+    expect(shacks).toHaveLength(2);
+  });
+
   it('stands one pumpjack, three storage tanks and a shed with a shut door and a lit lantern inside Dustwell (IV22)', () => {
     const group = sites.getObjectByName('landmark-dustwell')!;
     const named = (name: string) => {
