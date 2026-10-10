@@ -4,7 +4,7 @@ import { NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { START_KITS } from '../data/start';
 import { hulkBoxes } from './body';
-import { fromRoad, milestoneAt, roadAt, roadHeading, roadPiece, stretchOf, stretchStream, windowSpan, type RoadPiece, type RoadPos } from './highway';
+import { fromRoad, milestoneAt, roadAt, roadHeading, roadPiece, stretchOf, stretchStream, type RoadPiece, type RoadPos } from './highway';
 import { boxDistance, propBoxes, propObstacle, type PosedBox } from './mapgen';
 import { hashRandom, nextRandom, randInt, randRange, type Rng } from './rng';
 import type { DeckSpec } from '../data/terrain';
