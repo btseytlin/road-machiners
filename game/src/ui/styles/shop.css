@@ -856,11 +856,15 @@
 
 /* Trucks: the layout map beside the stats. */
 .cards.trucks {
-  grid-template-columns: repeat(auto-fill, minmax(var(--card-truck-min), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--card-truck-min)), 1fr));
 }
 .truck-card {
   flex-direction: row;
+  flex-wrap: wrap;
   gap: var(--space-6);
+}
+.truck-card .card-foot {
+  flex-wrap: wrap;
 }
 .tile.on,
 .truck-card.own {
@@ -881,7 +885,7 @@
   gap: var(--space-4);
 }
 .truck-body {
-  flex: 1;
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -894,6 +898,7 @@
   display: flex;
   gap: var(--space-3);
   align-self: flex-start;
+  flex: none;
 }
 .chassis-portrait {
   display: block;
