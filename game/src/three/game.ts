@@ -366,6 +366,7 @@ export class Game {
   get busy(): boolean { return this.anim !== null; }
 
   private applyCommand(next: World): void {
+    if (this.saves.changeMapIfMoved(next)) return;
     this.apply(next);
     this.saves.afterCommand(next);
   }

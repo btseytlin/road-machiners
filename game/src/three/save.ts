@@ -329,11 +329,10 @@ export type Run = { slots: SaveSlots; runId: string; log: RunLog; mapHash: strin
 export function changeMapIfMoved(run: Run, world: World, hold: SaveHold, session: Storage, reload: () => void): boolean {
   if (world.mapHash === run.mapHash) return false;
   if (hold.held) throw new Error(`The map moved to ${world.mapHash} while saves are held, so a reboot would lose the turn`);
-  const arrival = world.events.find((e) => e.t === 'outpostReached');
-  if (!arrival) throw new Error(`The map moved to ${world.mapHash} with no outpost arrival`);
+  if (!world.events.some((e) => e.t === 'roadOpened')) throw new Error(`The map moved to ${world.mapHash} with no road opened`);
   writeSave(run.slots, 'auto', world, run.runId, Date.now());
   run.mapHash = world.mapHash;
-  requestBoot(session, SAVE_KEY, { slot: 'auto', reason: 'road', arrival: { milestone: arrival.milestone, pay: arrival.pay, wrecks: arrival.wrecks } });
+  requestBoot(session, SAVE_KEY, { slot: 'auto', reason: 'road' });
   Promise.all([run.slots.flush(), run.log.flush()]).then(reload, reportError);
   return true;
 }

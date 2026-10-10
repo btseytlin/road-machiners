@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { startKit } from '../data/start';
 import { defaultSetup } from '../sim/settings';
 import { playerVehicle } from '../sim/damage';
-import { outpostPad, payOf } from '../sim/fury-road';
+import { FURY_ROAD } from '../data/modes';
+import { betweenLevels, outpostPad, waitForRoad } from '../sim/fury-road';
 import { highwayHash } from '../sim/highway';
 import { furyRoadWorld } from '../sim/testkit';
 import type { World } from '../sim/types';
@@ -46,18 +47,42 @@ describe('a saved world by mode', () => {
     expect(loaded?.mapHash).toBe(highwayHash(21, 0));
   });
 
-  it('pays an outpost once across a save and a load, on the moved window, and awards nothing on load', () => {
+  it('gives back the same run mid-stretch, with a group racing in, and awards nothing on load', () => {
+    let world = furyRoadWorld(21);
+    for (let t = 0; t < FURY_ROAD.pacing.quiet + 2; t++) world = endTurn(world, () => {});
+    expect(world.furyRoad!.groups[0].spawned).toBe(true);
+
+    const loaded = loadWorld(saved(world), 'auto', TEST_MAP)!;
+
+    expect(loaded).toEqual({ ...world, events: [], removed: [] });
+    expect(loaded.furyRoad?.quietFrom).toBe(world.furyRoad!.quietFrom);
+    expect(loaded.furyRoad?.groups[0].engaged).toEqual(world.furyRoad!.groups[0].engaged);
+  });
+
+  it('pays an outpost once across a save and a load between levels, and awards nothing on load', () => {
     const world = arrived(furyRoadWorld(21));
 
     const loaded = loadWorld(saved(world), 'auto', TEST_MAP)!;
     const next = endTurn(loaded, () => {});
 
     expect(loaded).toEqual({ ...world, events: [], removed: [] });
-    expect(loaded.furyRoad?.window).toBe(1);
-    expect(loaded.mapHash).toBe(highwayHash(21, 1));
+    expect(loaded.furyRoad?.window).toBe(0);
+    expect(betweenLevels(loaded)).toBe(true);
     expect(next.player.money).toBe(world.player.money);
     expect(next.player.xp).toBe(world.player.xp);
     expect(next.events.some((e) => e.t === 'outpostReached' || e.t === 'money' || e.t === 'practice')).toBe(false);
+  });
+
+  it('loads the run right after the wait on the opened window', () => {
+    const world = waitForRoad(arrived(furyRoadWorld(21)));
+
+    const loaded = loadWorld(saved(world), 'auto', TEST_MAP)!;
+    const next = endTurn(loaded, () => {});
+
+    expect(loaded).toEqual({ ...world, events: [], removed: [] });
+    expect(loaded.mapHash).toBe(highwayHash(21, 1));
+    expect(next.player.money).toBe(world.player.money);
+    expect(next.events.some((e) => e.t === 'outpostReached' || e.t === 'money' || e.t === 'roadOpened')).toBe(false);
   });
 });
 
@@ -95,10 +120,13 @@ describe('the window swap in the game', () => {
     expect(changeMapIfMoved(run, world, new SaveHold(), storage, reload)).toBe(false);
     expect(takeBootRequest(storage, SAVE_KEY)).toBeNull();
 
-    const moved = arrived(world);
+    const paid = arrived(world);
+    expect(changeMapIfMoved(run, paid, new SaveHold(), storage, reload)).toBe(false);
+
+    const moved = waitForRoad(paid);
     expect(changeMapIfMoved(run, moved, new SaveHold(), storage, reload)).toBe(true);
     await vi.waitFor(() => expect(reload).toHaveBeenCalledOnce());
-    expect(takeBootRequest(storage, SAVE_KEY)).toEqual({ slot: 'auto', reason: 'road', arrival: { milestone: 1, pay: payOf(1, 0), wrecks: 0 } });
+    expect(takeBootRequest(storage, SAVE_KEY)).toEqual({ slot: 'auto', reason: 'road' });
     expect(loadWorld(run.slots, 'auto', TEST_MAP)?.furyRoad?.window).toBe(1);
   });
 
@@ -108,6 +136,13 @@ describe('the window swap in the game', () => {
     const hold = new SaveHold();
     hold.noteError();
 
-    expect(() => changeMapIfMoved(run, arrived(world), hold, {} as Storage, () => {})).toThrow(/held/);
+    expect(() => changeMapIfMoved(run, waitForRoad(arrived(world)), hold, {} as Storage, () => {})).toThrow(/held/);
+  });
+
+  it('throws on a map that moved with no road opened', () => {
+    const world = furyRoadWorld(21);
+    const run = runOn(world);
+
+    expect(() => changeMapIfMoved(run, { ...world, mapHash: highwayHash(21, 1) }, new SaveHold(), {} as Storage, () => {})).toThrow(/no road opened/);
   });
 });

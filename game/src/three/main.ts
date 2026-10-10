@@ -33,7 +33,7 @@ import { Game } from './game';
 import { clearGame, loadWorld, newMapFor, SAVE_KEY, SaveError, savedRunId, storedSave, writeSave } from './save';
 import { idbBackend, SaveSlots } from './save-db';
 import { RunLog } from './run-log';
-import { allSlots, newestSlot, requestBoot, takeBootRequest, type Arrival, type BootRequest, type SlotId } from './save-slots';
+import { allSlots, newestSlot, requestBoot, takeBootRequest, type BootRequest, type SlotId } from './save-slots';
 import { GAME_GL, openWebGL } from './webgl';
 import { rescueSave } from './save-rescue';
 import { loadModels } from './render/models';
@@ -52,7 +52,7 @@ async function fetchMap(): Promise<BakedMap> {
   return decodeMap(new Uint8Array(await response.arrayBuffer()));
 }
 
-type Booted = { world: World; runId: string; loadedFrom: SlotId | null; fresh: boolean; arrival?: Arrival };
+type Booted = { world: World; runId: string; loadedFrom: SlotId | null; fresh: boolean };
 
 async function bootWorld(): Promise<Booted> {
   const request = takeBootRequest(window.sessionStorage, SAVE_KEY);
@@ -64,7 +64,7 @@ async function bootWorld(): Promise<Booted> {
 
 async function bootRequested(request: Exclude<BootRequest, SlotId>): Promise<Booted> {
   if ('new' in request) return boot.track('world', () => freshRun(request.new), BOOT_TEXT.newGame);
-  return boot.track('world', async () => ({ ...(await bootSlot(request.slot)), arrival: request.arrival }), BOOT_TEXT.nextWindow);
+  return boot.track('world', () => bootSlot(request.slot), BOOT_TEXT.nextWindow);
 }
 
 async function bootSlot(slot: SlotId): Promise<Booted> {
@@ -152,7 +152,7 @@ const newGameActions: NewGameActions = {
   confirm: (text) => window.confirm(text),
 };
 bootStep('loading the save');
-const { world, runId, loadedFrom, fresh, arrival } = await bootWorld();
+const { world, runId, loadedFrom, fresh } = await bootWorld();
 const log = new RunLog(slots.backend, runId, (err) => slots.onError(err));
 log.begin(world, loadedFrom);
 bootStep('building the ground');
@@ -172,7 +172,6 @@ relocalizeGame = () => {
 const view = { focus: () => game.rig.focus(), setSpeed: (factor: number) => game.follow.keyPan.setSpeed(factor) };
 const opening = startKit(modeKit(world.setup.mode, CONFIG.startKit)).opening;
 if (fresh && opening) game.hud.note(world, t(`opening.${opening.log}`), "");
-if (arrival) game.hud.pushEvents({ ...world, events: [{ t: 'outpostReached', ...arrival }] });
 const debugConsole = new DebugConsole(uiRoot(), game, mountPerfPanel(overlay), new Noclip(game, view, PHYSICS.metersPerTile));
 keepRunningOnErrors((text) => debugConsole.error(text));
 onEveryError(() => game.holdSaves());

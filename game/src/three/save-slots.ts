@@ -46,8 +46,7 @@ export function newestSlot(slots: SaveSlots, count: number): SlotId | null {
   return listSaves(slots, count)[0]?.slot ?? null;
 }
 
-export type Arrival = { milestone: number; pay: number; wrecks: number };
-export type RoadBoot = { slot: SlotId; reason: 'road'; arrival: Arrival };
+export type RoadBoot = { slot: SlotId; reason: 'road' };
 export type BootRequest = SlotId | { new: WorldSetup } | RoadBoot;
 
 function requestKey(base: string): string {
@@ -69,22 +68,15 @@ export function takeBootRequest(session: Storage, base: string): BootRequest | n
   if (isSlotId(value)) return value;
   const request = parsedRequest(value);
   if ('new' in request) return { new: parseSetup(request.new) };
-  if (isRoadBoot(request)) return { slot: request.slot, reason: 'road', arrival: arrivalOf(request.arrival, value) };
+  if (isRoadBoot(request)) return { slot: request.slot, reason: 'road' };
   throw new Error(`Unknown boot request ${value}`);
 }
 
-function isRoadBoot(request: { slot?: unknown; reason?: unknown; arrival?: unknown }): request is { slot: SlotId; reason: 'road'; arrival: unknown } {
+function isRoadBoot(request: { slot?: unknown; reason?: unknown }): request is { slot: SlotId; reason: 'road' } {
   return request.reason === 'road' && typeof request.slot === 'string' && isSlotId(request.slot);
 }
 
-function arrivalOf(value: unknown, request: string): Arrival {
-  const a = (typeof value === 'object' && value !== null ? value : {}) as Partial<Record<keyof Arrival, unknown>>;
-  const counts = [a.milestone, a.pay, a.wrecks];
-  if (!counts.every((n) => typeof n === 'number' && Number.isInteger(n) && n >= 0)) throw new Error(`Road boot request ${request} names no arrival`);
-  return { milestone: a.milestone as number, pay: a.pay as number, wrecks: a.wrecks as number };
-}
-
-function parsedRequest(value: string): { new?: unknown; slot?: unknown; reason?: unknown; arrival?: unknown } {
+function parsedRequest(value: string): { new?: unknown; slot?: unknown; reason?: unknown } {
   let request: unknown;
   try {
     request = JSON.parse(value);
