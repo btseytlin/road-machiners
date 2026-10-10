@@ -224,6 +224,7 @@ export const UI = {
   'outpost.name': m('{word} {n}', { word: 'text', n: 'int' }),
   'outpost.word': 'Outpost',
   'outpost.soldOut': 'Sold out',
+  'outpost.waitForRoad': 'Wait for the road',
   'action.enterOutpost': m('Enter {site}', { site: 'text' }),
   'units.km': m('{n} km', { n: 'dec1' }),
   'units.m': m('{n} m', { n: 'int' }),

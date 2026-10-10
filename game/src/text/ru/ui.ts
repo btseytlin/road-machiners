@@ -224,6 +224,7 @@ export const UI: Translation<typeof EN> = {
   'outpost.name': '{word} {n}',
   'outpost.word': noun('m', 'аванпост', 'аванпоста', 'аванпосту', 'аванпост', 'аванпостом', 'аванпосте'),
   'outpost.soldOut': 'Всё раскуплено',
+  'outpost.waitForRoad': 'Ждать проезда',
   'action.enterOutpost': 'Въехать на {site, case, acc}',
   'units.km': '{n} км',
   'units.m': '{n} м',

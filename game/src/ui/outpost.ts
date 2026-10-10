@@ -1,6 +1,6 @@
 import { partDef, type PartKind } from "../data/parts";
 import { playerVehicle } from "../sim/damage";
-import { reachedOutpostAt, type Outpost } from "../sim/fury-road";
+import { canWaitForRoad, reachedOutpostAt, waitForRoad, type Outpost } from "../sim/fury-road";
 import { goodsCount, MOUNT_CELLS } from "../sim/grid";
 import { canStowPart } from "../sim/inventory";
 import { outpostBuyGood, outpostBuyPart, outpostBuySupply, outpostGoodPrice, outpostGoodRoom, outpostPartPrice, outpostRepairAll, outpostRepairBasics } from "../sim/outposts";
@@ -78,6 +78,7 @@ export class OutpostScreen {
       this.error ? el("div", { class: "bad" }, this.error) : null,
       el("div", { class: "goods" }, goodsHead(), supplyRow(w, "fuel", this, outpostBuySupply), supplyRow(w, "supplies", this, outpostBuySupply), this.goodRow(w)),
       this.stock(w, post),
+      this.roadButton(w),
     );
     this.root.replaceChildren(
       el("button", { class: "close", onclick: () => this.close() }, t("trade.leave")),
@@ -85,6 +86,17 @@ export class OutpostScreen {
       el("div", { class: "town-split" }, truck, shop),
     );
     this.inventory.fitTo(truck);
+  }
+
+  private roadButton(w: World): HTMLElement | null {
+    if (!canWaitForRoad(w)) return null;
+    return el("div", { class: "outpost-road" }, el("button", { class: "btn-l", onclick: () => this.waitForRoad() }, t("outpost.waitForRoad")));
+  }
+
+  private waitForRoad(): void {
+    const w = this.host.world();
+    this.close();
+    this.host.apply(waitForRoad(w));
   }
 
   private run(cmd: ShopCommand): void {
