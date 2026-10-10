@@ -14,6 +14,7 @@ import { budget } from '../test/budget';
 import { furyRoadWorld, PLAIN_KIT } from '../sim/testkit';
 import { defaultSetup } from '../sim/settings';
 import { ICARUS_DECKS } from '../sim/bridge';
+import { atlasOf } from '../sim/atlas';
 
 beforeAll(async () => {
   await initPhysics();
@@ -105,11 +106,14 @@ it('the terrain collider is a heightfield whose surface matches the corner grid'
   freeDrive(drive);
 });
 
-it('builds no deck on the Fury Road highway, and every Icarus deck on Icarus', () => {
-  const highway = buildDrive(furyRoadWorld(5));
+it('builds only the ramp decks on the Fury Road highway, and every Icarus deck on Icarus', () => {
+  const road = furyRoadWorld(5);
+  const highway = buildDrive(road);
   const icarus = buildDrive(newWorld(1337, PLAIN_KIT, TEST_MAP, defaultSetup('roaming')));
+  const ramps = atlasOf(road.terrain).decks.decks;
 
-  expect(highway.decks).toHaveLength(0);
+  expect(ramps.every((d) => d.id.startsWith('ramp-'))).toBe(true);
+  expect(highway.decks).toHaveLength(ramps.length);
   expect(icarus.decks).toHaveLength(ICARUS_DECKS.decks.length);
   freeDrive(highway);
   freeDrive(icarus);

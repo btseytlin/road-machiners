@@ -3,7 +3,7 @@ import { PARTS } from '../data/parts';
 import { RULES } from '../data/rules';
 import { mountedParts } from '../sim/grid';
 import { initPhysics } from '../phys/drive';
-import { parseLineup, parseTruck, runFight, setNumber, type Fight } from './combat-harness';
+import { parseLineup, parseRoad, parseTruck, runFight, setNumber, type Fight } from './combat-harness';
 
 beforeAll(async () => {
   await initPhysics();
@@ -131,5 +131,23 @@ describe('side b hp left', () => {
 
   it('is null for a fight that is not won', () => {
     expect(runFight({ ...FIGHT, maxTurns: 1 }).bHpLeft).toBeNull();
+  });
+});
+
+describe('combat harness on the Fury Road highway', () => {
+  const ROAD_FIGHT: Fight = { a: parseLineup('orbit:furyRoad'), b: parseLineup('buggy'), seed: 2, gap: 8, orbit: 6, maxTurns: 3, arena: null, road: 1 };
+
+  it('reads the map flag', () => {
+    expect([parseRoad(null), parseRoad('fury-road'), parseRoad('fury-road:7')]).toEqual([null, 1, 7]);
+    expect(() => parseRoad('icarus')).toThrow(/fury-road/);
+  });
+
+  it('fights on the highway and reports how far across the road the trucks went', () => {
+    const r = runFight(ROAD_FIGHT);
+
+    expect(r.a.rounds + r.b.rounds).toBeGreaterThan(0);
+    expect(r.spread).not.toBeNull();
+    expect(r.spread!).toBeGreaterThanOrEqual(0);
+    expect(runFight(FIGHT).spread).toBeNull();
   });
 });

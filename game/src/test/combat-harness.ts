@@ -29,6 +29,8 @@ import { cloneWorld, endTurn, newWorld, seedStreams, setAutoFire, setMoveOrder }
 import { TEST_MAP } from './map';
 import { defaultSetup } from '../sim/settings';
 import { ICARUS_KEY } from '../sim/atlas';
+import { acrossOf, highwayMap, roadHeading, roadPoint, toRoad } from '../sim/highway';
+import { stretchLayout } from '../sim/road-hazards';
 
 export type Policy = 'stand' | 'orbit' | 'charge' | 'kite';
 export const POLICIES: Policy[] = ['stand', 'orbit', 'charge', 'kite'];
@@ -47,12 +49,13 @@ export type Fight = {
   orbit: number;
   maxTurns: number;
   arena: number | null;
+  road?: number | null;
 };
 
 export type Side = { rounds: number; hits: number; odds: number; damage: number; speed: number };
 export type Outcome = 'won' | 'lost' | 'a fled' | 'b fled' | 'truce' | 'timeout';
 const OUTCOMES: Outcome[] = ['won', 'lost', 'a fled', 'b fled', 'truce', 'timeout'];
-export type FightReport = { fight: Fight; outcome: Outcome; turns: number; crashes: number; a: Side; b: Side; bHpLeft: number | null };
+export type FightReport = { fight: Fight; outcome: Outcome; turns: number; crashes: number; a: Side; b: Side; bHpLeft: number | null; spread: number | null };
 
 const CENTER: Vec = { x: TEST_MAP.terrain.size / 2, y: TEST_MAP.terrain.size / 2 };
 const FLED_RANGE = 40;
@@ -60,6 +63,7 @@ const PARKED: Vec = { x: CENTER.x, y: CENTER.y + TERRAIN.vision.radius + PERF.li
 const LINE_SPACING = 3;
 const ARENA_ROCK = 1;
 const ARENA_STEP = 1.6;
+const FIGHT_BEFORE_SCENE = 10;
 
 export function parseTruck(spec: string): Truck {
   const [driver, gearText, extra] = spec.split(':');
@@ -124,10 +128,52 @@ function subTable(obj: Table, key: string, path: string): Table {
 
 const BASES = new Map<string, World>();
 
-function baseWorld(kit: string, arena: number | null): World {
-  const key = `${kit}|${arena}`;
+type Ground = { center: Vec; axis: Vec; parked: Vec };
+
+const FLAT_GROUND: Ground = { center: CENTER, axis: { x: 1, y: 0 }, parked: PARKED };
+
+export function parseRoad(text: string | null): number | null {
+  if (text === null) return null;
+  const [name, seed] = text.split(':');
+  if (name !== 'fury-road') throw new Error(`--map takes fury-road or fury-road:<seed>, got "${text}"`);
+  const n = seed === undefined ? 1 : Number(seed);
+  if (!Number.isInteger(n)) throw new Error(`--map fury-road:<seed> needs a whole seed, got "${seed}"`);
+  return n;
+}
+
+function roadGround(seed: number): Ground {
+  const arena = stretchLayout(seed, 1).arenas[1];
+  const n = arena.to - FIGHT_BEFORE_SCENE;
+  const heading = roadHeading(seed, n);
+  return { center: roadPoint(seed, 0, n, 0), axis: { x: Math.cos(heading), y: Math.sin(heading) }, parked: roadPoint(seed, 0, n - TERRAIN.vision.radius - PERF.liveMargin, 0) };
+}
+
+function groundOf(fight: Fight): Ground {
+  return fight.road === undefined || fight.road === null ? FLAT_GROUND : roadGround(fight.road);
+}
+
+function roadBase(kit: string, seed: number): World {
+  const w = newWorld(seed, START_KITS[kit] ?? missing('kit', kit), highwayMap(seed, 0), defaultSetup('furyRoad'), false);
+  w.furyRoad!.groups = [];
+  w.vehicles = w.vehicles.filter((v) => v.id === w.player.vehicleId);
+  w.states = [];
+  const ground = roadGround(seed);
+  const me = w.vehicles[0];
+  me.pos = { ...ground.center };
+  me.heading = Math.atan2(ground.axis.y, ground.axis.x);
+  me.speed = 0;
+  return w;
+}
+
+function baseWorld(kit: string, arena: number | null, road: number | null): World {
+  const key = `${kit}|${arena}|${road}`;
   const cached = BASES.get(key);
   if (cached) return cached;
+  if (road !== null) {
+    const w = roadBase(kit, road);
+    BASES.set(key, w);
+    return w;
+  }
   const w = newWorld(0, START_KITS[kit] ?? missing('kit', kit), TEST_MAP, defaultSetup('roaming'), false);
   const terrain = { size: w.size, heights: new Array((w.size + 1) * (w.size + 1)).fill(0), types: new Array(w.size * w.size).fill('road'), atlas: ICARUS_KEY };
   Object.freeze(terrain.heights);
@@ -177,31 +223,37 @@ function setup(fight: Fight): { w: World; ids: Ids } {
   if (fight.arena !== null && fight.arena <= fight.gap / 2 + LINE_SPACING) throw new Error(`An arena of ${fight.arena} tiles leaves no room for a gap of ${fight.gap}`);
   if (fight.arena !== null && 2 * fight.arena > TERRAIN.vision.radius) throw new Error(`An arena of ${fight.arena} tiles is wider than sight, ${TERRAIN.vision.radius} tiles across`);
   const scripted = scriptedTruck(fight);
-  const w = Object.assign(cloneWorld(baseWorld(baseKit(scripted), fight.arena)), seedStreams(fight.seed));
+  const w = Object.assign(cloneWorld(baseWorld(baseKit(scripted), fight.arena, fight.road ?? null)), seedStreams(fight.seed));
+  const ground = groundOf(fight);
   const player = w.vehicles.find((v) => v.id === w.player.vehicleId)!;
   if (scripted?.gear.kind === 'outfit') outfit(w, player, scripted.gear.outfit);
-  if (scripted) player.pos = { x: CENTER.x - fight.gap / 2, y: CENTER.y };
-  else park(player);
+  if (scripted) player.pos = along(ground, -fight.gap / 2, 0);
+  else park(player, ground.parked);
   const npcA = scripted ? [] : fight.a;
   const ids: Ids = { a: scripted ? [player.id] : [], b: [] };
-  ids.a.push(...placeSide(w, npcA, CENTER.x - fight.gap / 2, 0));
-  ids.b.push(...placeSide(w, fight.b, CENTER.x + fight.gap / 2, Math.PI));
+  ids.a.push(...placeSide(w, npcA, ground, -fight.gap / 2, 0));
+  ids.b.push(...placeSide(w, fight.b, ground, fight.gap / 2, Math.PI));
   for (const a of ids.a) for (const b of ids.b) setAgainst(w, a, b);
   refreshVision(w);
   return { w: setAutoFire(w, true), ids };
 }
 
-function park(player: Vehicle): void {
-  player.pos = { ...PARKED };
+function along(ground: Ground, forward: number, side: number): Vec {
+  const { center, axis } = ground;
+  return { x: center.x + axis.x * forward - axis.y * side, y: center.y + axis.y * forward + axis.x * side };
+}
+
+function park(player: Vehicle, at: Vec): void {
+  player.pos = { ...at };
   player.items = player.items.filter((it) => it.kind === 'part' && isMounted(player.chassisId, it));
 }
 
-function placeSide(w: World, trucks: Truck[], x: number, heading: number): string[] {
+function placeSide(w: World, trucks: Truck[], ground: Ground, forward: number, turn: number): string[] {
   return trucks.map((t, i) => {
-    const pos = { x, y: CENTER.y + (i - (trucks.length - 1) / 2) * LINE_SPACING };
+    const pos = along(ground, forward, (i - (trucks.length - 1) / 2) * LINE_SPACING);
     const v = spawnAt(w, NPCS[t.driver], loadoutOf(w, t.gear), pos);
     if (t.gear.kind === 'outfit') outfit(w, v, t.gear.outfit);
-    v.heading = heading;
+    v.heading = Math.atan2(ground.axis.y, ground.axis.x) + turn;
     v.brain!.traits = v.brain!.traits.filter((trait) => trait !== 'coward');
     return v.id;
   });
@@ -273,7 +325,7 @@ export function turnLine(w: World, turn: number): string {
 const partHp = (v: Vehicle) => mountedParts(v).reduce((sum, p) => sum + p.hp, 0);
 const side = (): Side => ({ rounds: 0, hits: 0, odds: 0, damage: 0, speed: 0 });
 
-type Count = { ids: Ids; a: Side; b: Side; crashes: number; leaver: 'a' | 'b' | null };
+type Count = { ids: Ids; a: Side; b: Side; crashes: number; leaver: 'a' | 'b' | null; center: Vec; spread: number };
 
 function inFight(w: World, ids: string[]): Vehicle[] {
   return w.vehicles.filter((v) => ids.includes(v.id) && !isDefeated(v) && (v.id !== w.player.vehicleId || w.player.state === 'active'));
@@ -323,7 +375,7 @@ function outcomeOf(w: World, c: Count): Outcome | null {
   if (a.length === 0) return 'lost';
   if (b.length === 0) return 'won';
   if (!a.some((x) => b.some((y) => isHostile(w, x, y) || isHostile(w, y, x)))) return 'truce';
-  if (b.every((v) => dist(v.pos, nearest(v, a).pos) > FLED_RANGE)) return fledSide(a, b, c.leaver);
+  if (b.every((v) => dist(v.pos, nearest(v, a).pos) > FLED_RANGE)) return fledSide(a, b, c);
   return null;
 }
 
@@ -337,9 +389,9 @@ function noteLeaver(w: World, c: Count): void {
   if (aStays !== bStays) c.leaver = aStays ? 'b' : 'a';
 }
 
-function fledSide(a: Vehicle[], b: Vehicle[], leaver: 'a' | 'b' | null): Outcome {
-  if (leaver) return `${leaver} fled`;
-  const away = (side: Vehicle[]) => Math.max(...side.map((v) => dist(v.pos, CENTER)));
+function fledSide(a: Vehicle[], b: Vehicle[], c: Count): Outcome {
+  if (c.leaver) return `${c.leaver} fled`;
+  const away = (side: Vehicle[]) => Math.max(...side.map((v) => dist(v.pos, c.center)));
   return away(a) > away(b) ? 'a fled' : 'b fled';
 }
 
@@ -353,7 +405,14 @@ function playTurn(w: World, d: Drive, c: Count, arena: boolean): { w: World; d: 
   countDamage(w, c, before);
   countMoves(w, c);
   noteLeaver(w, c);
+  countSpread(w, c);
   return { w, d: next! };
+}
+
+function countSpread(w: World, c: Count): void {
+  if (w.terrain.atlas.kind !== 'highway') return;
+  const trucks = [...inFight(w, c.ids.a), ...inFight(w, c.ids.b)];
+  for (const v of trucks) c.spread = Math.max(c.spread, Math.abs(acrossOf(w.seed, toRoad(w.terrain.atlas.window, v.pos))));
 }
 
 function keepArenaFight(w: World, ids: Ids): void {
@@ -379,7 +438,7 @@ function steer(w: World, fight: Fight, c: Count): World {
 export function runFight(fight: Fight, watch?: (w: World, turn: number) => void): FightReport {
   const start = setup(fight);
   let w = start.w;
-  const c: Count = { ids: start.ids, a: side(), b: side(), crashes: 0, leaver: null };
+  const c: Count = { ids: start.ids, a: side(), b: side(), crashes: 0, leaver: null, center: groundOf(fight).center, spread: 0 };
   let d = buildDrive(w);
   let outcome: Outcome | null = null;
   let turns = 0;
@@ -392,7 +451,7 @@ export function runFight(fight: Fight, watch?: (w: World, turn: number) => void)
     outcome = outcomeOf(w, c);
   }
   freeDrive(d);
-  return { fight, outcome: outcome ?? 'timeout', turns, crashes: c.crashes, a: c.a, b: c.b, bHpLeft: outcome === 'won' ? hpLeft(w, c.ids.b) : null };
+  return { fight, outcome: outcome ?? 'timeout', turns, crashes: c.crashes, a: c.a, b: c.b, bHpLeft: outcome === 'won' ? hpLeft(w, c.ids.b) : null, spread: fight.road === undefined || fight.road === null ? null : c.spread };
 }
 
 function hpLeft(w: World, ids: string[]): number {
@@ -422,10 +481,10 @@ export function formatReport(reports: FightReport[], sets: string[]): string {
     `# Combat harness`,
     '',
     `${reports.length} fights. Changed numbers: ${sets.length ? sets.join(', ') : 'none'}.`,
-    'A truck is driver:gear. Won means every side b truck is out, lost every side a truck. A fled and b fled name the side that left the fight. Truce means no truck is hostile to the other side any more. Speed is tiles per turn. Hit is rounds that hit. Odds is the mean hit chance shown for those rounds. Damage is part HP the side takes off the other per turn. Crashes are per fight. B hp left is the mean share of max part HP the side b trucks keep in won fights.',
+    'A truck is driver:gear. On a road map, across is the largest distance any fighting truck reached from the centerline, in tiles. Won means every side b truck is out, lost every side a truck. A fled and b fled name the side that left the fight. Truce means no truck is hostile to the other side any more. Speed is tiles per turn. Hit is rounds that hit. Odds is the mean hit chance shown for those rounds. Damage is part HP the side takes off the other per turn. Crashes are per fight. B hp left is the mean share of max part HP the side b trucks keep in won fights.',
     '',
-    '| a | b | won | lost | a fled | b fled | truce | timeout | turns | crashes | a speed | a hit | a odds | a dmg/turn | b speed | b hit | b odds | b dmg/turn | b hp left |',
-    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
+    '| a | b | won | lost | a fled | b fled | truce | timeout | turns | crashes | a speed | a hit | a odds | a dmg/turn | b speed | b hit | b odds | b dmg/turn | b hp left | across |',
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|',
   ];
   for (const g of groups(reports)) lines.push(groupRow(g));
   return lines.join('\n') + '\n';
@@ -440,8 +499,13 @@ function groupRow(g: Group): string {
     const rounds = sum((r) => pick(r).rounds);
     return [(sum((r) => pick(r).speed) / turns).toFixed(1), pct(sum((r) => pick(r).hits), rounds), pct(sum((r) => pick(r).odds), rounds), (sum((r) => pick(r).damage) / turns).toFixed(1)];
   };
-  const cells = [g.a, g.b, ...OUTCOMES.map(count), (turns / rs.length).toFixed(1), (sum((r) => r.crashes) / rs.length).toFixed(1), ...sideCells((r) => r.a), ...sideCells((r) => r.b), hpLeftCell(rs)];
+  const cells = [g.a, g.b, ...OUTCOMES.map(count), (turns / rs.length).toFixed(1), (sum((r) => r.crashes) / rs.length).toFixed(1), ...sideCells((r) => r.a), ...sideCells((r) => r.b), hpLeftCell(rs), spreadCell(rs)];
   return `| ${cells.join(' | ')} |`;
+}
+
+function spreadCell(rs: FightReport[]): string {
+  const spreads = rs.flatMap((r) => (r.spread === null ? [] : [r.spread]));
+  return spreads.length > 0 ? `${Math.max(...spreads).toFixed(1)} max, ${(spreads.reduce((a, b) => a + b, 0) / spreads.length).toFixed(1)} mean` : '-';
 }
 
 function hpLeftCell(rs: FightReport[]): string {
