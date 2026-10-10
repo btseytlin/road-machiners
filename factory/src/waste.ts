@@ -1,5 +1,5 @@
 import { isFailedOutcome, lineTime, type AgentUsage, type LedgerLine } from './ledger';
-import { QUEUE_OF, type JobStage, type Queue, type Route } from './types';
+import { JOB_ISSUE, QUEUE_OF, type JobStage, type Queue, type Route } from './types';
 
 export type WasteNumbers = {
   from: string;
@@ -55,10 +55,14 @@ function modelNumbers(jobs: JobLine[]): WasteNumbers['models'] {
   return [...group(jobs.flatMap((line) => line.agents), (agent) => agent.model)].map(([model, runs]) => ({ model, runs: runs.length, costUsd: cost(runs) })).sort(byCost);
 }
 
+// Card jobs on a GitHub issue. A change job's id is no issue, so it counts only in the totals, stages and models.
+const cardJobs = (jobs: JobLine[]): (JobLine & { issue: number })[] =>
+  jobs.filter((line): line is JobLine & { issue: number } => line.issue !== null && QUEUE_OF[line.stage] !== 'branch' && JOB_ISSUE[line.stage] === 'issue');
+
 const POSTS: JobStage[] = ['verify', 'checks'];
 
 function handoffs(jobs: JobLine[]): { queue: Queue; issue: number; minutes: number }[] {
-  const card = jobs.filter((line): line is JobLine & { issue: number } => line.issue !== null && QUEUE_OF[line.stage] !== 'branch');
+  const card = cardJobs(jobs);
   return [...group(card, (line) => line.issue)].flatMap(([issue, lines]) => {
     const ordered = [...lines].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
     return ordered.slice(1).flatMap((line, index) => {
@@ -79,7 +83,7 @@ function queueWaits(jobs: JobLine[]): QueueWait[] {
 }
 
 function reruns(jobs: JobLine[]): WasteNumbers['reruns'] {
-  const card = jobs.filter((line): line is JobLine & { issue: number } => line.issue !== null && QUEUE_OF[line.stage] !== 'branch');
+  const card = cardJobs(jobs);
   return [...group(card, (line) => `${line.issue} ${line.stage}`)].filter(([, lines]) => lines.length > 1)
     .map(([, lines]) => ({ issue: lines[0].issue, stage: lines[0].stage, runs: lines.length })).sort((a, b) => b.runs - a.runs);
 }
@@ -91,7 +95,7 @@ function routeCounts(routes: RouteLine[]): Record<Route, number> {
 }
 
 function issueNumbers(jobs: JobLine[]): WasteNumbers['issues'] {
-  const card = jobs.filter((line): line is JobLine & { issue: number } => line.issue !== null && QUEUE_OF[line.stage] !== 'branch');
+  const card = cardJobs(jobs);
   return [...group(card, (line) => line.issue)].map(([issue, lines]) => ({
     issue, costUsd: cost(lines.flatMap((line) => line.agents)), jobs: lines.length,
     wallMinutes: lines.reduce((sum, line) => sum + minutesBetween(line.startedAt, line.endedAt), 0),
