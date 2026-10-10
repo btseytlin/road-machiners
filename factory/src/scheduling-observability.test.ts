@@ -4,7 +4,7 @@ import { EMPTY_STATE } from './state';
 import { STUCK_LABEL, NEEDS_INFO_LABEL, type Card, type Job } from './types';
 
 const now = new Date('2026-10-04T12:00:00Z');
-const config = { releaseDays: 7, wasteReviewDays: 7, maxJobsPerCard: 10, triageWorkers: 1, designWorkers: 1, implementWorkers: 1, verifyWorkers: 1, testWorkers: 1 };
+const config = { releaseDays: 7, wasteReviewDays: 7, maxJobsPerCard: 30, triageWorkers: 1, designWorkers: 1, implementWorkers: 1, verifyWorkers: 1, testWorkers: 1 };
 function createCard(issue: number, column: Card['column'], labels: string[] = []): Card { return { issue, column, labels, itemId: String(issue) }; }
 function createState() { return { ...structuredClone(EMPTY_STATE), lastRelease: now.toISOString() }; }
 
@@ -21,7 +21,7 @@ it('explains both slot contention and an already running issue without changing 
 it('explains author waits, failed work, approval waits and the card job limit', () => {
   expect(scheduling).toHaveProperty('evaluateSchedule');
   const state = createState();
-  state.cardStarts = { 4: Array.from({ length: 10 }, () => now.toISOString()) };
+  state.cardStarts = { 4: Array.from({ length: 30 }, () => now.toISOString()) };
   const result = scheduling.evaluateSchedule(state, [createCard(1, 'Triage', [NEEDS_INFO_LABEL]), createCard(2, 'Testing', [STUCK_LABEL]), createCard(3, 'Approval'), createCard(4, 'Design')], now, config);
   expect(result.picks).toEqual([]);
   expect(result.decisions.find(item => item.issue === 1)?.reasons).toContain('needs-info');
