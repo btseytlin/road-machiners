@@ -24,8 +24,8 @@ import { addStockPart, goodPrice, lotPrice, recordTrade, requireShop, shopAt, sh
 import { canUseSite, requireTown, townAt, townNear } from "./sites";
 import { corePart, coreParts, freeCells, goodsCount, mountedParts } from "./grid";
 import { addGoods, cargoRoom, mountPart, removeGoods, spareParts, stowPart } from "./inventory";
-import type { NpcState, PartInstance, Vehicle, World } from "./types";
-import { playerCommand, Refused } from "./world";
+import type { NpcState, PartInstance, Refusal, Vehicle, World } from "./types";
+import { cloneWorld, playerCommand, Refused } from "./world";
 import { tankLeaks } from "./supplies";
 import { fuelCap, isStranded, isWorking, suppliesCap } from "./stats";
 import { modeRules } from './settings';
@@ -566,7 +566,7 @@ export function driveRepairCost(world: World): number {
 }
 
 function payChassisCost(world: World, chassisId: string): void {
-  const cost = chassisDef(chassisId).value - chassisTradeIn(world);
+  const cost = chassisPrice(world, chassisId);
   if (cost >= 0) pay(world, cost);
   else world.player.money -= cost;
 }
@@ -576,41 +576,52 @@ export function buyChassis(world: World, chassisId: string): World {
     requireTown(w);
     if (!PLAYER_CHASSIS.includes(chassisId))
       throw new Error(`${chassisId} is not for sale`);
-    const me = playerVehicle(w);
-    if (me.chassisId === chassisId)
-      throw new Error("You already drive this chassis");
-    payChassisCost(w, chassisId);
-    const mounted = new Set(mountedParts(me).map((p) => p.id));
-    const goods = goodsCount(me);
-    const old = me.items;
-    me.chassisId = chassisId;
-    me.items = [];
-    addCoreParts(w, me);
-    const parts = old.flatMap((it) =>
-      it.kind === "part" && partDef(it.part.defId).kind !== "core"
-        ? [it.part]
-        : [],
-    );
-    parts.sort(
-      (a, b) =>
-        Number(partDef(b.defId).kind === "cargo") -
-        Number(partDef(a.defId).kind === "cargo"),
-    );
-    for (const part of parts) {
-      const placed = mounted.has(part.id)
-        ? mountPart(w, me, part) || stowPart(w, me, part)
-        : stowPart(w, me, part);
-      if (!placed) w.player.storage.push(part);
-    }
-    for (const [good, n] of Object.entries(goods)) {
-      if (addGoods(w, me, good, n) < n)
-        throw new Error(
-          "Cargo would not fit the new chassis. Sell some first.",
-        );
-    }
-    me.weaponOrders = {};
-    fitStores(w, me);
+    swapChassis(w, chassisId);
   });
+}
+
+export function swapChassis(world: World, chassisId: string): void {
+  const me = playerVehicle(world);
+  if (me.chassisId === chassisId)
+    throw new Error("You already drive this chassis");
+  payChassisCost(world, chassisId);
+  const mounted = new Set(mountedParts(me).map((p) => p.id));
+  const goods = goodsCount(me);
+  const parts = movableParts(me);
+  me.chassisId = chassisId;
+  me.items = [];
+  addCoreParts(world, me);
+  for (const part of parts) placeSwappedPart(world, me, part, mounted.has(part.id));
+  for (const [good, n] of Object.entries(goods)) {
+    if (addGoods(world, me, good, n) < n) throw new Refused({ id: "noCargoRoom" });
+  }
+  me.weaponOrders = {};
+  fitStores(world, me);
+}
+
+function movableParts(v: Vehicle): PartInstance[] {
+  const parts = v.items.flatMap((it) => (it.kind === "part" && partDef(it.part.defId).kind !== "core" ? [it.part] : []));
+  const isRack = (p: PartInstance) => Number(partDef(p.defId).kind === "cargo");
+  return parts.sort((a, b) => isRack(b) - isRack(a));
+}
+
+function placeSwappedPart(world: World, v: Vehicle, part: PartInstance, wasMounted: boolean): void {
+  const placed = (wasMounted && mountPart(world, v, part)) || stowPart(world, v, part);
+  if (!placed) world.player.storage.push(part);
+}
+
+export function chassisPrice(world: World, chassisId: string): number {
+  return chassisDef(chassisId).value - chassisTradeIn(world);
+}
+
+export function chassisSwapRefusal(world: World, chassisId: string): Refusal | null {
+  try {
+    swapChassis(cloneWorld(world), chassisId);
+    return null;
+  } catch (err) {
+    if (err instanceof Refused) return err.refusal;
+    throw err;
+  }
 }
 
 function isParked(v: Vehicle): boolean {

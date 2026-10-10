@@ -1,8 +1,8 @@
 import { FURY_ROAD } from '../data/modes';
 import { ECONOMY, GOODS } from '../data/goods';
 import { playerVehicle } from './damage';
-import { basicParts, basicsRepairCost, garageParts, garageRepair, partTradePrice, pay, receiveBoughtPart, repairCost, supplyRoom, type Supply } from './economy';
-import { outpostFactsAt, reachedOutpostAt, type Outpost } from './fury-road';
+import { basicParts, basicsRepairCost, garageParts, garageRepair, partTradePrice, pay, receiveBoughtPart, swapChassis, repairCost, supplyRoom, type Supply } from './economy';
+import { outpostFactsAt, outpostTrucks, reachedOutpostAt, type Outpost } from './fury-road';
 import { addGoods, cargoRoom } from './inventory';
 import type { PartInstance, Vehicle, World } from './types';
 import { playerCommand } from './world';
@@ -56,6 +56,15 @@ export function outpostBuyPart(world: World, partId: string): World {
     const facts = outpostFactsAt(w, post.milestone);
     facts.stock = facts.stock.filter((p) => p.id !== partId);
     receiveBoughtPart(w, part);
+  });
+}
+
+export function outpostBuyChassis(world: World, chassisId: string): World {
+  return playerCommand(world, (w) => {
+    const post = requireOutpost(w);
+    if (!outpostTrucks(w, post).includes(chassisId)) throw new Error(`Outpost ${post.milestone} offers no ${chassisId}`);
+    swapChassis(w, chassisId);
+    outpostFactsAt(w, post.milestone).trucksSold.push(chassisId);
   });
 }
 

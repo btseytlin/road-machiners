@@ -743,6 +743,14 @@ function withRunPacing_49_50(world: SavedJson): SavedJson {
   return { ...world, furyRoad: { ...run, groups, quietFrom: world.turn } };
 }
 
+function withOutpostTrucks_50_51(world: SavedJson): SavedJson {
+  const run = world.furyRoad as SavedJson | null;
+  if (run === null) return world;
+  const outposts = (run.outposts as SavedJson[]).map((post) => ({ ...post, trucksSold: [] }));
+  const groups = (run.groups as SavedJson[]).map((group) => ({ ...group, counted: [] }));
+  return { ...world, furyRoad: { ...run, outposts, groups } };
+}
+
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, player: { ...(world.player as SavedJson), townPatched: false } }),
   (world) => {
@@ -838,6 +846,7 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   withoutIcarusRun_47_48,
   renamedFuryRoad_48_49,
   withRunPacing_49_50,
+  withOutpostTrucks_50_51,
 ];
 
 type SavedQuests = { world: SavedJson; local: Record<string, SavedJson>; session: { quest: string; checkpoint: string; seed: number } | null };

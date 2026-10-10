@@ -513,7 +513,7 @@ export type GameModeId = 'roaming' | 'furyRoad';
 export type ModeRules = { traffic: boolean; looting: boolean; knockouts: boolean; yielding: boolean; radio: boolean; rescue: boolean; roadWrecks: boolean; run: boolean };
 export type MapKind = 'icarus' | 'highway';
 export type RunLossCause = 'wrecked' | 'abandoned';
-export type OutpostFacts = { milestone: number; stock: PartInstance[]; paid: boolean };
+export type OutpostFacts = { milestone: number; stock: PartInstance[]; paid: boolean; trucksSold: string[] };
 export type WaveGroup = {
   id: string;
   stretch: number;
@@ -524,6 +524,7 @@ export type WaveGroup = {
   vehicles: string[];
   engaged: string[];
   wrecked: number;
+  counted: string[];
   retryUntil: number | null;
 };
 export type GroupSide = 'ahead' | 'behind' | 'left' | 'right';

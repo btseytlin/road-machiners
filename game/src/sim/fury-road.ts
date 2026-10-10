@@ -63,6 +63,7 @@ export function planStretch(seed: number, j: number): WaveGroup[] {
       vehicles: [],
       engaged: [],
       wrecked: 0,
+      counted: [],
       retryUntil: null,
     };
   });
@@ -91,7 +92,19 @@ function drawSide(rng: Rng, last: GroupSide | null): GroupSide {
 
 function outpostFacts(world: World, j: number): OutpostFacts {
   const stock: PartInstance[] = rollPartStockPerKind(world, stretchStream(world.seed, j, 'stock'), GARAGE_STOCK, FURY_ROAD.stockPerKind, outpostId(j));
-  return { milestone: j, stock, paid: false };
+  return { milestone: j, stock, paid: false, trucksSold: [] };
+}
+
+export function truckOffers(seed: number, j: number): string[] {
+  const { offers, pool } = FURY_ROAD.trucks;
+  if (pool.length < offers) throw new Error(`The Fury Road truck pool holds ${pool.length} chassis, fewer than ${offers} offers`);
+  const rng = stretchStream(seed, j, 'trucks');
+  const left = [...pool];
+  return Array.from({ length: offers }, () => left.splice(randInt(rng, 0, left.length - 1), 1)[0]);
+}
+
+export function outpostTrucks(world: World, post: OutpostFacts): string[] {
+  return truckOffers(world.seed, post.milestone).filter((id) => !post.trucksSold.includes(id));
 }
 
 export function startRun(world: World): void {

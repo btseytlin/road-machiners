@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { playerVehicle } from '../sim/damage';
 import { mountedParts } from '../sim/grid';
 import { storePart, takeFromStorage } from '../sim/inventory';
-import { outpostBuyPart } from '../sim/outposts';
+import { outpostBuyChassis, outpostBuyPart } from '../sim/outposts';
+import { outpostTrucks } from '../sim/fury-road';
 import { fillCargo, parkedAtOutpost, stockOfKind } from '../sim/testkit';
 import type { World } from '../sim/types';
 import { endTurn } from '../sim/world';
@@ -43,5 +44,16 @@ describe('a saved outpost garage', () => {
     const after = takeFromStorage(cleared, armor.id, { x: fitted[0].x, y: fitted[0].y, rot: fitted[0].rot });
     expect(mountedParts(playerVehicle(after), 'armor').map((p) => p.id)).toContain(armor.id);
     expect(playerVehicle(after).job).toBeNull();
+  });
+
+  it('keeps the swapped truck and the outpost offer less the sold truck across a load', () => {
+    const w = parkedAtOutpost(21);
+    const offer = outpostTrucks(w, w.furyRoad!.outposts[0]);
+    const swapped = outpostBuyChassis(w, offer[0]);
+
+    const loaded = expectSameAndNoAward(swapped);
+
+    expect(playerVehicle(loaded).chassisId).toBe(offer[0]);
+    expect(outpostTrucks(loaded, loaded.furyRoad!.outposts[0])).toEqual(offer.slice(1));
   });
 });

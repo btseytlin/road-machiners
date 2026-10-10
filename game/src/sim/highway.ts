@@ -20,7 +20,7 @@ const BEND = ROAD.bend;
 const STRETCH_SALT = 0x68777374;
 const CHUNK_SALT = 0x6877636b;
 const LINE_SALT = 0x68776c6e;
-const STREAM_PARTS = { post: 1, scenes: 2, groups: 3, stock: 4, bends: 5, sides: 6 } as const;
+const STREAM_PARTS = { post: 1, scenes: 2, groups: 3, stock: 4, bends: 5, sides: 6, trucks: 7 } as const;
 export type StretchPart = keyof typeof STREAM_PARTS;
 
 export type RoadPos = { n: number; u: number };
