@@ -28,6 +28,7 @@ import { heatAt } from '../sun';
 import { getKnownSite, getUpkeepReserve, judgeDanger, tripFuelCost } from '../npc-decisions';
 import { maxHp } from '../wear';
 import { emptyHidden } from '../salvage';
+import { cargoHaul, haulVar, surrenderHaul } from '../haul';
 import { botOrders, CONVOY_ROB_PATROL, fuelReaches, haulMarginAt, robTarget, wouldRob } from './bot';
 
 function town(id: string) {
@@ -1057,7 +1058,7 @@ describe('the hunter', () => {
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     expect(vehicleStats(w, me).maxSpeed).toBeGreaterThan(vehicleStats(w, raider).maxSpeed);
     startCombat(w, raider, me);
-    w.player.call = { with: raider.id, topic: 'demand', node: 'demand', vars: {}, line: { line: 'demandCargo', vars: {} } };
+    w.player.call = { with: raider.id, topic: 'demand', node: 'demand', vars: { haul: haulVar(cargoHaul(raider, playerVehicle(w))) }, line: { line: 'demandCargo', vars: {} } };
 
     expect(goodsCount(playerVehicle(botOrders(w, 'trader').world)).salt ?? 0).toBe(0);
   });
@@ -1107,7 +1108,7 @@ describe('the hunter', () => {
       raider.brain = npcBrain('buggy', raider.pos, ['raider']);
       expect(vehicleStats(w, raider).maxSpeed).toBeGreaterThanOrEqual(vehicleStats(w, me).maxSpeed);
       startCombat(w, raider, me);
-      w.player.call = { with: raider.id, topic: 'demand', node: 'demand', vars: {}, line: { line: 'demandCargo', vars: {} } };
+      w.player.call = { with: raider.id, topic: 'demand', node: 'demand', vars: { haul: haulVar(cargoHaul(raider, playerVehicle(w))) }, line: { line: 'demandCargo', vars: {} } };
       return goodsCount(playerVehicle(botOrders(w, 'trader').world)).salt ?? 0;
     };
 
@@ -1138,7 +1139,7 @@ describe('the hunter', () => {
       const raider = addVehicle(w, 'raiders', 'buggy', [...weapons, 'stockEngine'], { x: 36, y: 30 });
       raider.brain = npcBrain('buggy', raider.pos, ['raider']);
       startCombat(w, raider, me);
-      w.player.call = { with: raider.id, topic: 'surrender', node: 'offer', vars: {}, line: { line: 'surrenderOffer', vars: {} } };
+      w.player.call = { with: raider.id, topic: 'surrender', node: 'offer', vars: { haul: haulVar(surrenderHaul(raider, playerVehicle(w))) }, line: { line: 'surrenderOffer', vars: {} } };
       return goodsCount(playerVehicle(botOrders(w, 'trader').world)).salt ?? 0;
     };
 

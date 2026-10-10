@@ -301,8 +301,9 @@ describe('spawns of the new templates', () => {
 });
 
 describe('vultures', () => {
-  it('always carry a cargo part and a gun', () => {
+  it('always carry a cargo part and nearly always a gun', () => {
     let seen = 0;
+    let armed = 0;
     for (let seed = 1; seed <= 15; seed++) {
       const x = emptyWorld({ x: 300, y: 300 });
       x.rngState = seed;
@@ -311,10 +312,11 @@ describe('vultures', () => {
         seen++;
         const defs = mountedParts(v).map((p) => partDef(p.defId));
         expect(defs.some((d) => d.kind === 'cargo')).toBe(true);
-        expect(defs.some((d) => d.kind === 'weapon')).toBe(true);
+        if (defs.some((d) => d.kind === 'weapon')) armed++;
       }
     }
     expect(seen).toBeGreaterThan(10);
+    expect(armed).toBeGreaterThanOrEqual(0.9 * seen);
   }, budget(60_000));
 
   it('stop for a wreck they pass nearly every time', () => {

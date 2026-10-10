@@ -94,7 +94,7 @@ describe('impact geometry', () => {
     if (!mountPart(w, w.vehicles[0], ram)) throw new Error('No front mount for the claymore ram');
     ram.charge = arm ? { reload: 0, armed: true } : { reload: 0 };
     if (into === 'rock') w.obstacles = [{ id: 'rock1', pos: { x: 37, y: 30 }, r: 0.8, kind: 'rock' }];
-    else addVehicle(w, 'raiders', 'hauler', ['mg', 'stockEngine'], { x: 37, y: 30 }, Math.PI / 2).brain = npcBrain('trader', { x: 37, y: 30 }, ['trader']);
+    else addVehicle(w, 'traders', 'hauler', ['mg', 'stockEngine'], { x: 37, y: 30 }, Math.PI / 2).brain = npcBrain('trader', { x: 37, y: 30 }, ['trader']);
     w = setDirect(w, true);
     return setMoveOrder(w, { kind: 'through', dest: { x: 45, y: 30 } });
   }
