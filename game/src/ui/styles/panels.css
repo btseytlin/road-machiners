@@ -166,11 +166,6 @@
   min-width: 0;
   color: var(--ink-muted);
 }
-.info-head .info-quiet {
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
 .info-body {
   flex: 1;
   min-height: 0;
