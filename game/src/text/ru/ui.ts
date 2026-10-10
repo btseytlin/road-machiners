@@ -149,6 +149,7 @@ export const UI: Translation<typeof EN> = {
   'help.does.mute': 'Звук',
   'help.does.inventory': 'Инвентарь',
   'help.does.character': 'Персонаж',
+  'help.does.journal': 'Журнал',
   'hitTip.weapon': 'Расшатанное оружие',
   'hitTip.range': 'Далеко',
   'hitTip.recoil': 'Отдача',

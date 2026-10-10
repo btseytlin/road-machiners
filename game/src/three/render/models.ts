@@ -67,6 +67,9 @@ const NAMES = [
   'gas_station',
   'ship_wing',
   'escape_pod',
+  'hull_bay',
+  'cargo_pod',
+  'engine_section',
   'habitat_cylinder',
   'wing_shard',
   'power_cell',
@@ -90,18 +93,20 @@ const NAMES = [
   'watchtower',
   'glass_spire',
   'scrap_wall',
-  'fort_masonry_wall',
-  'fort_masonry_tower',
-  'fort_masonry_gate',
-  'fort_masonry_bastion',
-  'fort_masonry_inner',
+  'fort_pumpworks_wall',
+  'fort_pumpworks_tower',
+  'fort_pumpworks_gate',
+  'fort_pumpworks_inner',
+  'fort_cistern_wall',
+  'fort_cistern_tower',
+  'fort_cistern_gate',
+  'fort_cistern_inner',
   'fort_ship_wall',
   'fort_ship_tower',
   'fort_ship_gate',
   'fort_scrap_wall',
   'fort_scrap_tower',
   'fort_scrap_gate',
-  'fort_scrap_bastion',
   'fort_scrap_inner',
   'fort_patchwork_wall',
   'fort_patchwork_tower',
@@ -354,6 +359,8 @@ export function instancedModel(name: ModelName, placements: THREE.Matrix4[], tin
 }
 
 const GLOW_MATERIAL = 'glow';
+const GLOW = { color: new THREE.Color(PAL.lamp.amber), strength: 0.4 };
+export const MODEL_GLOW = { color: GLOW.color.getHex(), emissive: GLOW.color.clone().multiplyScalar(GLOW.strength).getHex() };
 
 function toLambert(root: THREE.Object3D): THREE.Object3D {
   root.traverse((o) => {
@@ -362,7 +369,10 @@ function toLambert(root: THREE.Object3D): THREE.Object3D {
     const lambert = mats.map((m) => {
       if (!(m instanceof THREE.MeshStandardMaterial)) throw new Error(`Model mesh ${o.name} has unexpected material ${m.type}`);
       const l = new THREE.MeshLambertMaterial({ color: m.color, flatShading: true, name: m.name });
-      if (m.name === GLOW_MATERIAL) l.emissive.copy(m.color);
+      if (m.name === GLOW_MATERIAL) {
+        l.color.copy(GLOW.color);
+        l.emissive.copy(GLOW.color).multiplyScalar(GLOW.strength);
+      }
       m.dispose();
       return l;
     });

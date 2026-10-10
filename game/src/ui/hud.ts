@@ -10,6 +10,7 @@ import {
   heldContractDue,
   contractSummary,
   eventText,
+  formatNpcPass,
   workLabel,
   workProgress,
   formatNpcCargo,
@@ -40,7 +41,6 @@ export type ContextTarget =
   | { kind: 'trade'; id: string }
   | { kind: 'shop' }
   | { kind: 'downed'; id: string }
-  | { kind: 'oasis' }
   | { kind: 'stock'; id: string }
   | { kind: 'loot'; id: string }
   | { kind: 'empty' }
@@ -64,6 +64,7 @@ export const combatBlocked = (turns: number): Msg => t("hud.combatBlocked", { n:
 type HudActions = {
   openInventory: () => void;
   openCharacter: () => void;
+  openJournal: () => void;
   toggleManual: () => void;
   toggleAutoRepair: () => void;
   toggleOverdrive: () => void;
@@ -414,6 +415,15 @@ export class Hud {
     );
   }
 
+  private journalButton(busy: boolean): HTMLElement {
+    return el(
+      "button",
+      { class: "instrument-button", disabled: busy, onclick: () => this.actions.openJournal(), title: t("journal.hint") },
+      createIcon("journal"),
+      t("hud.journalKey"),
+    );
+  }
+
   renderTop(w: World): void {
     const readout = getHudReadout(w);
     const busy = this.actions.isBusy();
@@ -514,6 +524,7 @@ export class Hud {
       }),
       ...this.engineButtons(w, busy),
       this.characterButton(w, busy),
+      this.journalButton(busy),
     );
   }
 
@@ -582,7 +593,7 @@ function infoHead(w: World, v: Vehicle, hostile: boolean): HTMLElement {
 
 function quietLines(w: World, v: Vehicle): Msg[] {
   if (!v.brain) return [];
-  return [formatNpcTraits(w, v), formatNpcCargo(w, v), formatNpcMark(w, v)].filter((line) => line !== null);
+  return [formatNpcPass(w, v), formatNpcTraits(w, v), formatNpcCargo(w, v), formatNpcMark(w, v)].filter((line) => line !== null);
 }
 
 function shownWork(action: ContextAction | null, work: Work | null): Work | null {

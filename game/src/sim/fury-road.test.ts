@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FURY_ROAD, HIGHWAY } from '../data/fury-road';
+import { FURY_ROAD, HIGHWAY } from '../data/modes';
 import { playerVehicle } from './damage';
 import { abandonRun, advanceFuryRoad, canAbandonRun, furyRoadReadout, moveWindow, outpostPad, payOf, reachedOutpostAt, runEarnings, stockSizeOf, waveOf, WINDOW_MOVE } from './fury-road';
 import { highwayHash, milestoneAt, roadPoint, STRIDE } from './highway';

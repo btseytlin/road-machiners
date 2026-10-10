@@ -95,11 +95,11 @@ const SIGNATURE_FX: Record<BreakSignature, (fx: Fx3D, at: V3) => void> = {
   fire: (fx, at) => fx.fireBurst(at),
 };
 
-export function playBreak(world: World, debris: PartDebris, fx: Fx3D, view: VehicleView | undefined, brk: PartBreak): V3 | null {
+export function playBreak(world: World, turnStart: World, debris: PartDebris, fx: Fx3D, view: VehicleView | undefined, brk: PartBreak): V3 | null {
   if (!view) return null;
   const at = view.partPoint(brk.part);
   debris.burst(`${brk.vehicle}:${brk.part}:${world.turn}`, at, view.center(), world.obstacles);
-  const sig = breakSignature(partDef(partOf(world, brk.vehicle, brk.part).defId));
+  const sig = breakSignature(partDef(partOf(turnStart, brk.vehicle, brk.part).defId));
   if (sig) SIGNATURE_FX[sig](fx, at);
   return at;
 }

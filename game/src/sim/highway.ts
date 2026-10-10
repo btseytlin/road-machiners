@@ -1,4 +1,4 @@
-import { FURY_ROAD, HIGHWAY, type BandRule, type GroundBand } from '../data/fury-road';
+import { FURY_ROAD, HIGHWAY, type BandRule, type GroundBand } from '../data/modes';
 import { REGION, type SiteLocationDef } from '../data/region';
 import type { TerrainTypeId } from '../data/terrain';
 import type { Atlas } from './atlas';

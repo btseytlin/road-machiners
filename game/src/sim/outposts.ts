@@ -1,4 +1,4 @@
-import { FURY_ROAD } from '../data/fury-road';
+import { FURY_ROAD } from '../data/modes';
 import { ECONOMY, GOODS } from '../data/goods';
 import { playerVehicle } from './damage';
 import { basicParts, basicsRepairCost, garageParts, garageRepair, partTradePrice, pay, repairCost, supplyRoom, type Supply } from './economy';
@@ -66,7 +66,7 @@ export function outpostGoodPrice(): number {
 }
 
 export function outpostGoodRoom(v: Vehicle): number {
-  return cargoRoom(v, REPAIR_GOOD);
+  return cargoRoom(v);
 }
 
 export function outpostBuyGood(world: World, n: number): World {

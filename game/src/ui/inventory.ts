@@ -21,8 +21,11 @@ import {
   dumpItem,
   moveItem,
   planItemMove,
+  plannedRefitTurns,
+  startRefit,
   storePart,
   takeFromStorage,
+  type RefitLayout,
 } from "../sim/inventory";
 import { cancelRefit, isParkedForWork, startRepair, startStrip, startWeld, stripYield } from "../sim/jobs";
 import { vehicleHasPerk } from "../sim/progress";
@@ -48,10 +51,10 @@ import {
   blockerIds,
   clearFan,
   fanSvg,
+  nextRot,
   weaponDefOf,
   gridEl,
   itemBox,
-  itemLabel,
   itemName,
   itemState,
   lootGoodItem,
@@ -60,12 +63,15 @@ import {
   removalIds,
   storageItem,
   footprint,
+  turnedIcon,
 } from "./inventory-draw";
 import { fuelLiters, kg, moneyEl, moneyMsg, pricedEl } from "./units";
 import { maxSpeedSteps } from "../sim/stats";
 import { getSearchAction, powerChip } from "./hud-readout";
 import {
   doubleClickCommand,
+  planAfterMove,
+  plannedVehicle,
   HOLD_TO_DRAG_MS,
   isDoubleClick,
   needsHold,
@@ -108,6 +114,7 @@ export class InventoryView {
   private loot: string | null = null;
   private truck: string | null = null;
   private cell = CELL_PX;
+  private plan: RefitLayout = {};
 
   constructor(
     private host: UiHost,
@@ -140,7 +147,7 @@ export class InventoryView {
     if (!truck) throw new Error("Inventory view is not rendered");
     const over = truck.getBoundingClientRect().bottom - box.getBoundingClientRect().bottom;
     if (over <= 0) return;
-    const rows = gridOf(playerVehicle(this.host.world())).h;
+    const rows = gridOf(this.shown(this.host.world())).h;
     this.cell = Math.max(MIN_CELL_PX, Math.floor(this.cell - over / rows));
     this.render();
   }
@@ -157,7 +164,7 @@ export class InventoryView {
 
   render(): HTMLElement {
     const w = this.host.world();
-    const me = playerVehicle(w);
+    const me = this.shown(w);
     const g = gridOf(me);
     this.showSelection(w);
     const grid = gridEl(g, me.chassisId, this.cell);
@@ -176,7 +183,7 @@ export class InventoryView {
         el(
           "div",
           { class: "inv-side" },
-          ...this.refitBanner(me),
+          ...this.refitBanner(w),
           this.sideList(w),
           ...(this.dumpZone ? [el("div", { class: "inv-dump", "data-drop": "dump" }, t("inv.dumpShort"))] : []),
           this.inspection,
@@ -189,7 +196,7 @@ export class InventoryView {
   }
 
   private itemEl(w: World, it: GridItem): HTMLElement {
-    const me = playerVehicle(w);
+    const me = this.shown(w);
     const mounted = it.kind === "part" && isMounted(me.chassisId, it);
     const core = it.kind === "part" && partDef(it.part.defId).kind === "core";
     const node = itemBox(it, me.chassisId, mounted, this.cell);
@@ -218,17 +225,20 @@ export class InventoryView {
     return node;
   }
 
+  private shown(w: World): Vehicle {
+    return plannedVehicle(playerVehicle(w), this.plan);
+  }
+
   private gridItems(w: World, v: Vehicle): HTMLElement[] {
-    const moving = refitItems(w, v);
+    const moving = v.job?.kind === "refit" ? refitItems(w, v) : v.items.filter((it) => this.plan[it.id]);
     const staying = v.items.filter((it) => !moving.some((m) => m.id === it.id));
     return [...staying.map((it) => this.itemEl(w, it)), ...moving.map((it) => this.refittingEl(w, v, it))];
   }
 
   private refittingEl(w: World, v: Vehicle, item: GridItem): HTMLElement {
     const node = this.itemEl(w, item);
-    const left = v.job?.kind === "refit" ? v.job.turnsLeft : 0;
     node.classList.add("refitting");
-    bindAttr(node, "title", t("inv.itemRefit", { item: itemName(item), n: left }));
+    if (v.job?.kind === "refit") bindAttr(node, "title", t("inv.itemRefit", { item: itemName(item), n: v.job.turnsLeft }));
     return node;
   }
 
@@ -253,13 +263,13 @@ export class InventoryView {
     const def = weaponDefOf(it);
     if (!def) return;
     grid.append(fanSvg(me, it, def, gridOf(me), this.cell));
-    for (const id of blockerIds(me, it, def)) grid.querySelector(`[data-item-id="${id}"]`)?.classList.add("blocking");
+    for (const id of blockerIds(me, it)) grid.querySelector(`[data-item-id="${id}"]`)?.classList.add("blocking");
   }
 
   private selection(w: World): { item: GridItem; mounted: boolean; own: boolean } | null {
     const id = this.selectedItem;
     if (id === null) return null;
-    const me = playerVehicle(w);
+    const me = this.shown(w);
     const own = me.items.find((it) => it.id === id);
     if (own) return { item: own, mounted: own.kind === "part" && isMounted(me.chassisId, own), own: true };
     const item = this.otherItems(w).find((it) => it.id === id);
@@ -319,16 +329,27 @@ export class InventoryView {
     return { source, id, item, stockId: this.loot, truckId: this.truck };
   }
 
-  private refitBanner(me: Vehicle): HTMLElement[] {
-    if (me.job?.kind !== "refit") return [];
-    return [
-      el(
-        "div",
-        { class: "inv-refit" },
-        el("span", {}, t("inv.refitLeft", { n: me.job.turnsLeft })),
-        el("button", { title: t("inv.cancelRefitTitle"), onclick: () => this.run(cancelRefit) }, t("inv.cancelRefit")),
-      ),
-    ];
+  private refitBanner(w: World): HTMLElement[] {
+    const me = playerVehicle(w);
+    if (me.job?.kind === "refit") return [this.bannerEl(t("inv.refitLeft", { n: me.job.turnsLeft }), t("inv.cancelRefit"), () => this.run(cancelRefit), t("inv.cancelRefitTitle"))];
+    if (Object.keys(this.plan).length === 0) return [];
+    return [this.bannerEl(t("inv.refitPlanned", { n: plannedRefitTurns(w, me, this.plan) }), t("inv.cancelPlan"), () => this.cancelPlan())];
+  }
+
+  private bannerEl(text: Msg, label: Msg, onclick: () => void, title?: Msg): HTMLElement {
+    return el("div", { class: "inv-refit" }, el("span", {}, text), el("button", { title, onclick }, label));
+  }
+
+  private cancelPlan(): void {
+    this.plan = {};
+    this.onChange();
+  }
+
+  commitPlan(): void {
+    if (Object.keys(this.plan).length === 0) return;
+    const layout = this.plan;
+    this.plan = {};
+    this.host.apply(startRefit(this.host.world(), layout));
   }
 
   private sideList(w: World): HTMLElement | null {
@@ -681,7 +702,7 @@ export class InventoryView {
     this.drag.moved = true;
     this.drag.item = {
       ...this.drag.item,
-      rot: this.drag.item.rot === 0 ? 1 : 0,
+      rot: nextRot(this.drag.item),
     };
     this.drag.grab = { x: 0, y: 0 };
     if (this.lastPointer) this.onMove(this.lastPointer);
@@ -689,14 +710,28 @@ export class InventoryView {
 
   private rotateSelected(): void {
     if (!this.gridEl?.isConnected || this.selectedItem === null) return;
-    const item = playerVehicle(this.host.world()).items.find(
+    const item = this.shown(this.host.world()).items.find(
       (it) => it.id === this.selectedItem,
     );
     if (!item || item.kind !== "part") return;
     const id = item.id;
-    this.run((w) =>
-      this.moveGridItem(w, id, { x: item.x, y: item.y, rot: item.rot === 0 ? 1 : 0 }),
-    );
+    let turned = item;
+    for (let i = 0; i < 3; i++) {
+      turned = { ...turned, rot: nextRot(turned) };
+      const to = { x: item.x, y: item.y, rot: turned.rot };
+      const last = i === 2;
+      let fits = true;
+      this.run((w) => {
+        try {
+          return this.moveGridItem(w, id, to);
+        } catch (err) {
+          fits = false;
+          if (last) throw err;
+          return w;
+        }
+      }, !last);
+      if (fits) return;
+    }
   }
 
   private onMove(e: PointerEvent): void {
@@ -718,25 +753,37 @@ export class InventoryView {
   private paintGhost(e: PointerEvent, onGrid: boolean): void {
     const d = this.drag!;
     const size = footprint(d.item);
-    const g = this.gridEl?.getBoundingClientRect();
-    const ok = onGrid && this.placementProblem(d) === null;
-    d.ghost.className = `inv-ghost ${onGrid ? (ok ? "ok" : "no") : ""}`;
-    setText(d.ghost, itemLabel(d.item).short);
+    d.ghost.className = `inv-ghost ${this.ghostTone(d, onGrid)}`;
+    d.ghost.replaceChildren(turnedIcon(d.item, this.cell));
+    this.ghostFan(d, onGrid);
     d.ghost.style.width = `${size.w * this.cell}px`;
     d.ghost.style.height = `${size.h * this.cell}px`;
-    if (onGrid && g) {
-      d.ghost.style.left = `${g.left + d.item.x * this.cell}px`;
-      d.ghost.style.top = `${g.top + d.item.y * this.cell}px`;
-    } else {
-      d.ghost.style.left = `${e.clientX - this.cell / 2}px`;
-      d.ghost.style.top = `${e.clientY - this.cell / 2}px`;
-    }
+    const at = this.ghostCorner(e, d, onGrid);
+    d.ghost.style.left = `${at.x}px`;
+    d.ghost.style.top = `${at.y}px`;
+  }
+
+  private ghostTone(d: Drag, onGrid: boolean): string {
+    if (!onGrid) return "";
+    return this.placementProblem(d) === null ? "ok" : "no";
+  }
+
+  private ghostFan(d: Drag, onGrid: boolean): void {
+    if (!this.gridEl) return;
+    clearFan(this.gridEl);
+    if (onGrid) this.drawFan(this.gridEl, this.shown(this.host.world()), d.item);
+  }
+
+  private ghostCorner(e: PointerEvent, d: Drag, onGrid: boolean): { x: number; y: number } {
+    const g = this.gridEl?.getBoundingClientRect();
+    if (onGrid && g) return { x: g.left + d.item.x * this.cell, y: g.top + d.item.y * this.cell };
+    return { x: e.clientX - this.cell / 2, y: e.clientY - this.cell / 2 };
   }
 
   private placementProblem(d: Drag): Refusal | null {
     const me = playerVehicle(this.host.world());
     if (d.source === "grid")
-      return planItemMove(me, d.id, {
+      return planItemMove(this.shown(this.host.world()), d.id, {
         x: d.item.x,
         y: d.item.y,
         rot: d.item.rot,
@@ -767,6 +814,8 @@ export class InventoryView {
     if (!d) return;
     this.drag = null;
     d.ghost.remove();
+    const shown = this.shown(this.host.world());
+    this.showFan(shown, this.selectedGun(shown));
     if (this.finishSelection(d)) return;
     this.run(this.dropCommand(e, d), true);
   }
@@ -794,7 +843,7 @@ export class InventoryView {
 
   private finishSelection(drag: Drag): boolean {
     if (drag.moved) return false;
-    const item = drag.source === "grid" ? playerVehicle(this.host.world()).items.find((entry) => entry.id === drag.id) : drag.item;
+    const item = drag.source === "grid" ? this.shown(this.host.world()).items.find((entry) => entry.id === drag.id) : drag.item;
     if (item) this.clickItem(this.clicked(drag.source, drag.id, item));
     return true;
   }
@@ -810,13 +859,26 @@ export class InventoryView {
   }
 
   private moveGridItem(w: World, itemId: string, to: Spot): World {
-    return this.instant ? instantMoveItem(w, itemId, to) : moveItem(w, itemId, to);
+    if (this.instant) return instantMoveItem(w, itemId, to);
+    if (shopAt(w)) return moveItem(w, itemId, to);
+    this.planMove(w, itemId, to);
+    return w;
+  }
+
+  private planMove(w: World, itemId: string, to: Spot): void {
+    const next = planAfterMove(playerVehicle(w), this.plan, itemId, to);
+    if (Object.keys(next).length > 0) startRefit(w, next);
+    this.plan = next;
   }
 
   private run(cmd: (w: World) => World, quiet = false): void {
     try {
-      const next = cmd(this.host.world());
-      if (next !== this.host.world()) this.host.apply(next);
+      const w = this.host.world();
+      const next = cmd(w);
+      if (next !== w) {
+        this.plan = {};
+        this.host.apply(next);
+      }
       this.error = null;
     } catch (err) {
       this.error = quiet ? null : commandFailure(this.host.world(), err);
@@ -871,6 +933,7 @@ export class InventoryScreen {
     this.view.clearSelection();
     this.root.style.display = "none";
     this.root.replaceChildren();
+    this.view.commitPlan();
   }
 
   render(): void {

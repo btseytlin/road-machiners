@@ -8,8 +8,9 @@ import { TEST_MAP } from '../test/map';
 import { propReach } from './mapgen';
 import { findCells, nearestFreeCell, stampOverlay, startComponent } from './nav/astar';
 import { CELL, CLEARANCE, componentOf, navLayer } from './nav/layer';
+import { salvageInRange } from './salvage';
 import { siteGap } from './sites';
-import { isLootSpot, territoryEntries, territoryGrounds } from './territory';
+import { isLootSpot, territoryAt, territoryCaches, territoryEntries, territoryGrounds } from './territory';
 import type { Obstacle } from './types';
 import { dist, lerp, type Vec } from './vec';
 import { newWorld } from './world';
@@ -120,4 +121,54 @@ describe('reach through Old Orchard', () => {
       expect(pathLength(cells!), where).toBeLessThanOrEqual(2 * BREACH * 2);
     }
   });
+});
+
+describe('reach to the Fallen Sun and Glass Flats loot spots', () => {
+  const standard = { ...world.vehicles[0] };
+  const territoryOf = (id: string): TerritoryDef => REGION.locations.find((l) => l.id === id) as TerritoryDef;
+
+  function parkedInRange(spot: Obstacle, cell: number): boolean {
+    const stock = world.salvage.find((s) => s.id === spot.id)!;
+    return salvageInRange({ ...standard, pos: centreOf(cell) }, stock);
+  }
+
+  function lootSpots(t: TerritoryDef): Obstacle[] {
+    return world.obstacles.filter((o) => isLootSpot(o) && territoryAt(o.pos)?.id === t.id);
+  }
+
+  function reachableRingCell(entries: readonly Vec[], spot: Obstacle): number | null {
+    const ring = propReach(spot) + radius + CLEARANCE;
+    for (const entry of entries) {
+      const start = cellOf(entry);
+      const component = startComponent(layer, start);
+      for (let k = 0; k < 24; k++) {
+        const angle = (k / 24) * 2 * Math.PI;
+        const goal = cellOf({ x: spot.pos.x + Math.cos(angle) * ring, y: spot.pos.y + Math.sin(angle) * ring });
+        if (componentOf(layer, goal) !== component || !parkedInRange(spot, goal)) continue;
+        if (findCells(layer, overlay, start, goal, null)) return goal;
+      }
+    }
+    return null;
+  }
+
+  it.each([['fallen-sun', 24], ['glass-flats', 21]] as const)('routes a standard truck from an entry of %s to a parking cell in reach of each of its %i loot spots (IV4)', (id, count) => {
+    const t = territoryOf(id);
+    const spotsHere = lootSpots(t);
+    expect(spotsHere).toHaveLength(count);
+    for (const spot of spotsHere) expect(reachableRingCell(territoryEntries(t), spot), spot.id).not.toBeNull();
+  }, 120_000);
+
+  it.each(['fallen-sun', 'glass-flats'] as const)('keeps the ground ahead of every authored cache hatch of %s free in an entry component (IV5)', (id) => {
+    const t = territoryOf(id);
+    const entries = territoryEntries(t);
+    for (const cache of territoryCaches(t)) {
+      const spot = lootSpots(t).find((o) => dist(o.pos, cache.pos) < 1e-3)!;
+      const ahead = propReach(spot) + radius + CLEARANCE;
+      const goal = cellOf({ x: cache.pos.x + Math.cos(cache.yaw) * ahead, y: cache.pos.y + Math.sin(cache.yaw) * ahead });
+      const where = `${spot.id} at ${cache.pos.x.toFixed(1)},${cache.pos.y.toFixed(1)}`;
+      const reaches = entries.some((entry) => componentOf(layer, goal) === startComponent(layer, cellOf(entry)) && findCells(layer, overlay, cellOf(entry), goal, null) !== null);
+      expect(reaches, where).toBe(true);
+      expect(parkedInRange(spot, goal), where).toBe(true);
+    }
+  }, 120_000);
 });

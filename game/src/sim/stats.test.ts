@@ -41,17 +41,18 @@ describe('the overdrive engine cutoff', () => {
     const engine = mountedParts(me, 'engine')[0];
     engine.wear = 2;
     engine.hp = maxHp(engine);
-    return { w, me, engine };
+    const blocked = Math.floor(RULES.overdriveMinEngineShare * maxHp(engine));
+    return { w, me, engine, blocked, allowed: blocked + 1 };
   }
 
-  it('blocks at exactly 15% of the worn max HP and below, and allows one HP above', () => {
-    const { me, engine } = wornEngine();
-    expect(maxHp(engine)).toBe(40);
-    engine.hp = 6;
+  it('blocks at 15% of the worn max HP and below, and allows one HP above', () => {
+    const { me, engine, blocked, allowed } = wornEngine();
+    expect(maxHp(engine)).toBeLessThan(PARTS.stockEngine.hp);
+    engine.hp = blocked;
     expect(canOverdrive(me)).toBe(false);
-    engine.hp = 5;
+    engine.hp = blocked - 1;
     expect(canOverdrive(me)).toBe(false);
-    engine.hp = 7;
+    engine.hp = allowed;
     expect(canOverdrive(me)).toBe(true);
   });
 
@@ -64,15 +65,15 @@ describe('the overdrive engine cutoff', () => {
   });
 
   it('gives no boost with the flag on and a blocked engine', () => {
-    const { w, me, engine } = wornEngine();
-    engine.hp = 6;
+    const { w, me, engine, blocked, allowed } = wornEngine();
+    engine.hp = blocked;
     const off = vehicleStats(w, me);
     w.player.overdrive = true;
     expect(inOverdrive(w, me)).toBe(false);
     const on = vehicleStats(w, me);
     expect(on.maxSpeed).toBe(off.maxSpeed);
     expect(on.accel).toBe(off.accel);
-    engine.hp = 7;
+    engine.hp = allowed;
     expect(inOverdrive(w, me)).toBe(true);
     expect(vehicleStats(w, me).maxSpeed).toBeCloseTo(off.maxSpeed * RULES.overdriveBoost);
   });
@@ -254,7 +255,7 @@ describe('gun power draw', () => {
   it('draw at or past the capacity caps the loss at 60 percent', () => {
     const w = emptyWorld();
     const v = addVehicle(w, 'raiders', 'hauler', ['stockEngine'], { x: 40, y: 40 });
-    for (let i = 0; i < 16; i++) expect(mountPart(w, v, makePart(w, 'mg', 0))).toBe(true);
+    for (let i = 0; i < 6; i++) expect(mountPart(w, v, makePart(w, 'mg', 0))).toBe(true);
     expect(gunDrag(v, 7)).toBeCloseTo(1 - RULES.gunDragMax);
   });
 
@@ -381,7 +382,7 @@ describe('max speed steps', () => {
   };
 
   const FROZEN: Record<string, number> = {
-    bare: 1.04, stock: 9.875716226804332, manyGuns: 5.641376805946041, brokenGun: 8.901316579936632, overload: 2.877966295841562,
+    bare: 1.04, stock: 9.875716226804332, manyGuns: 4.906412009420447, brokenGun: 8.703054785359077, overload: 3.046229250680652,
     heavy: 1, worn: 9.217335145017376, wheels: 7.135204973866129, overdrive: 13.134702581649762, transmission: 1.04,
     brokenEngine: 1.04, stalled: 1.04, storm: 5.925429736082600, towing: 5.9254297360826,
   };
@@ -441,5 +442,44 @@ describe('max speed steps', () => {
     expect(workingEngineCapacity(v)).toBe((PARTS.stockEngine as EngineDef).capacity);
     expect(workingEngineCapacity(SCENARIOS.bare.build().v)).toBeNull();
     expect(workingEngineCapacity(SCENARIOS.brokenEngine.build().v)).toBeNull();
+  });
+});
+
+describe('the acceleration scale', () => {
+  const rules = RULES as { accelScale: number };
+  const stats = (overdrive: boolean, parts: string[]) => {
+    const w = emptyWorld();
+    const v = addVehicle(w, 'raiders', 'scout', parts, { x: 40, y: 40 });
+    w.player.vehicleId = v.id;
+    w.player.overdrive = overdrive;
+    w.player.fuel = 999;
+    return vehicleStats(w, v);
+  };
+  const withScale = <T>(scale: number, run: () => T): T => {
+    const saved = rules.accelScale;
+    rules.accelScale = scale;
+    try {
+      return run();
+    } finally {
+      rules.accelScale = saved;
+    }
+  };
+
+  it.each([false, true])('scales powered acceleration alone, with overdrive %s', (overdrive) => {
+    const full = withScale(0.6, () => stats(overdrive, ['stockEngine']));
+    const half = withScale(0.3, () => stats(overdrive, ['stockEngine']));
+    expect(half.accel).toBeCloseTo(full.accel / 2);
+    expect(half.maxSpeed).toBe(full.maxSpeed);
+    expect(half.brake).toBe(full.brake);
+    expect(half.turnSlow).toBe(full.turnSlow);
+    expect(half.turnFast).toBe(full.turnFast);
+    expect(half.reverseTurn).toBe(full.reverseTurn);
+    expect(half.limpAccel).toBe(full.limpAccel);
+  });
+
+  it('leaves a truck without an engine as it was', () => {
+    const full = withScale(0.6, () => stats(false, []));
+    const half = withScale(0.3, () => stats(false, []));
+    expect(half.accel).toBe(full.accel);
   });
 });

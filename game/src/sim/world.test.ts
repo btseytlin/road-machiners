@@ -4,6 +4,7 @@ import { START_KITS } from '../data/start';
 import { TIME } from '../data/time';
 import { TEST_MAP } from '../test/map';
 import { playerVehicle } from './damage';
+import { maxHp } from './wear';
 import { townAt } from './sites';
 import { endTurn, isAtRest, newWorld, setHeadlights, setOverdrive, startPose, townStart, update } from './world';
 import { dist } from './vec';
@@ -107,8 +108,17 @@ describe('the overdrive cutoff', () => {
 });
 
 function stockHp(): number {
-  return partDef('stockEngine').hp;
+  return maxHp(mountedParts(playerVehicle(emptyWorld()), 'engine')[0]);
 }
+
+describe('the start kit', () => {
+  it('gives every part the kit wear at full worn HP, built-in parts and storage included', () => {
+    const world = newWorld(7, { ...START_KITS.standard, storage: ['plates'], opening: null }, TEST_MAP, defaultSetup('roaming'), false);
+    const parts = [...playerVehicle(world).items.flatMap((it) => (it.kind === 'part' ? [it.part] : [])), ...world.player.storage];
+    expect(parts.some((p) => partDef(p.defId).kind === 'core')).toBe(true);
+    for (const p of parts) expect(p).toMatchObject({ wear: START_KITS.standard.wear, hp: maxHp(p) });
+  });
+});
 
 describe('isAtRest', () => {
   const truck = () => playerVehicle(newWorld(7, START_KITS.standard, TEST_MAP, defaultSetup('roaming'), false));

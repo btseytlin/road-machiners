@@ -114,8 +114,10 @@ export function territoryPieces(t: TerritoryDef): BakedPiece[] {
   return (TERRITORIES[t.id].wreck?.pieces ?? []).map((p) => ({ look: p.look, pos: onMap(t, p.at), yaw: p.yaw, r: p.r, sink: p.sink ?? 0 }));
 }
 
-export function territoryCaches(t: TerritoryDef): Vec[] {
-  return (TERRITORIES[t.id].wreck?.caches ?? []).map((c) => onMap(t, c.at));
+export type BakedCache = { pos: Vec; yaw: number };
+
+export function territoryCaches(t: TerritoryDef): BakedCache[] {
+  return (TERRITORIES[t.id].wreck?.caches ?? []).map((c) => ({ pos: onMap(t, c.at), yaw: c.yaw }));
 }
 
 export function territoryRoads(t: TerritoryDef): { roads: FarmRoad[]; spurs: FarmRoad[] } {

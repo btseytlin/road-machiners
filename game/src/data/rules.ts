@@ -37,7 +37,7 @@ export const RULES = {
   wheelLoss: 0.15,
   tankLeak: 1,
 
-  weaponDamage: 1.2375,
+  weaponDamage: 1.60875,
   crashDamage: 1.125,
 
   stray: {
@@ -45,7 +45,7 @@ export const RULES = {
     feudDamage: 40,
   },
 
-  accelScale: 0.67,
+  accelScale: 0.5695,
   overdriveBoost: 1.33,
   overdriveMinEngineShare: 0.15,
   overloadExponent: 4,

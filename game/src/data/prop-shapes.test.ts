@@ -98,7 +98,8 @@ describe('Glass Flats model sizes', () => {
 });
 
 const GATE_TILES: Record<string, number> = {
-  fort_masonry_gate: FORTRESS.gate.height,
+  fort_pumpworks_gate: FORTRESS.gate.height,
+  fort_cistern_gate: FORTRESS.gate.height,
   fort_scrap_gate: FORTRESS.gate.height,
   fort_ship_gate: 4.5,
   fort_patchwork_gate: 3,
@@ -119,6 +120,18 @@ const FORT_SIZES = [
   { model: 'fort_yard_wall', along: 8, across: 2.9, limit: 1.5 },
   { model: 'fort_yard_tower', along: 5.9, across: 5.9, limit: 3 },
   { model: 'fort_yard_gate', along: 4, across: 10, limit: 5 },
+  { model: 'fort_scrap_wall', along: 8.2, across: 2.9, limit: 1.6 },
+  { model: 'fort_scrap_tower', along: 5.5, across: 5.5, limit: 3 },
+  { model: 'fort_scrap_gate', along: 9.5, across: 20, limit: 10.1 },
+  { model: 'fort_scrap_inner', along: 4.6, across: 10.1, limit: 5.1 },
+  { model: 'fort_pumpworks_wall', along: 8.1, across: 2.9, limit: 1.5 },
+  { model: 'fort_pumpworks_tower', along: 5.8, across: 5.6, limit: 3 },
+  { model: 'fort_pumpworks_gate', along: 9.5, across: 20.2, limit: 10.2 },
+  { model: 'fort_pumpworks_inner', along: 4.4, across: 10, limit: 5 },
+  { model: 'fort_cistern_wall', along: 8, across: 3, limit: 1.6 },
+  { model: 'fort_cistern_tower', along: 5.9, across: 5.9, limit: 3 },
+  { model: 'fort_cistern_gate', along: 9.6, across: 19.8, limit: 10 },
+  { model: 'fort_cistern_inner', along: 4.5, across: 10, limit: 5 },
   { model: 'fort_ship_wall', along: 8, across: 2.9, limit: 1.5 },
   { model: 'fort_ship_tower', along: 5.4, across: 5.4, limit: 3 },
   { model: 'fort_ship_gate', along: 5.5, across: 23.4, limit: 12 },
@@ -199,7 +212,7 @@ describe('prop shapes', () => {
       const parapet = GATE_TILES[name] * PHYSICS.metersPerTile;
       const top = Math.max(...SHAPES[name].boxes.map((b) => b.z1));
       expect(top, name).toBeGreaterThanOrEqual(parapet - 0.5);
-      const over = name.includes('masonry') ? 0.5 : name.includes('ship') ? 6.5 : 2.5;
+      const over = name.includes('ship') ? 6.5 : 2.5;
       expect(top, name).toBeLessThanOrEqual(parapet + over);
     }
   });
@@ -223,7 +236,7 @@ describe('prop shapes', () => {
   it('stands every fortress piece at least 3x the tallest truck (IV4)', () => {
     const tallest = Math.max(...Object.values(TRUCKS).flatMap((t) => t.boxes.map((b) => b.z1)));
     const forts = names.filter((n) => n.startsWith('fort_'));
-    expect(forts).toHaveLength(24);
+    expect(forts).toHaveLength(26);
     for (const name of forts) {
       expect(Math.max(...SHAPES[name].boxes.map((b) => b.z1)), name).toBeGreaterThanOrEqual(tallest * 3);
     }
@@ -264,5 +277,19 @@ describe('ship debris models', () => {
     const tip = Math.max(...boxes.map((b) => b.x1));
     const under = boxes.filter((b) => b.x1 > tip - 6 && b.z0 < PHYSICS.truckClearance && b.z1 > PHYSICS.truckClearance);
     expect(under.length).toBeGreaterThan(0);
+  });
+});
+
+describe('loot section models', () => {
+  const SECTIONS = ['hull_bay', 'cargo_pod', 'engine_section'] as const;
+
+  it.each(SECTIONS)('%s fits the footprint of the crate heap it replaces, 2.4 to 3.2 m out from its centre', (model) => {
+    const reach = Math.max(...shapeBoxes(model).map((b) => Math.hypot(Math.max(Math.abs(b.x0), Math.abs(b.x1)), Math.max(Math.abs(b.y0), Math.abs(b.y1)))));
+    expect(reach).toBeGreaterThanOrEqual(2.4);
+    expect(reach).toBeLessThanOrEqual(3.2);
+  });
+
+  it.each(SECTIONS)('%s is low enough to see over, so its load shows from the camera', (model) => {
+    expect(Math.max(...shapeBoxes(model).map((b) => b.z1))).toBeLessThan(TERRAIN.vision.eyeHeight * PHYSICS.metersPerTile);
   });
 });

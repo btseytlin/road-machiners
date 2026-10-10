@@ -41,3 +41,14 @@ Jill Jane, "J.J.", runs Waste Of Time Radio from a mast nobody has found. Her br
 - Hints are road wisdom someone in the wasteland would say, like "Noon sun cooks an engine. Park in shade." Each matches a real rule in the [mechanics pages](wiki/mechanics/). A hint never says what to do next or how a control works.
 - She names only places the listener has found. Anywhere else is a basin direction like "up north" or "in the southwest basin". She never quotes prices. The Rumor mill and Market ears perks keep that work.
 - A line fits the three-line screen: 90 characters at most once its names are filled in.
+
+## Settlement people
+
+Bowl and Nose have locals the player talks to in town. `src/data/locals.ts` holds them and the journal notes their rumors leave. What each says is an ink quest in `src/data/quests/`. Keep new lines in these voices:
+
+- Bowl is run by the canal families, a say for every gate, and guarded by the Bowl Farmers. Its people talk warm and slow, of crops, canals, water and seed. They think Nose is soldiers playing at a town.
+- Nose is an Army post that became a town. The Army runs it: command gives orders, dispatch hands them out. Its people talk short and to the point. They think Bowl is slow but needed, since its grain feeds them.
+- The locals are Ruben the canal warden, Hattie of the well house and Dag of the Farmers patrol at Bowl, and Sergeant Kovac at dispatch, Lena the mechanic and Old Ibo the radio man at Nose. Nose Army wagon Seven went dark on the Pump Station run to Bowl, and its crew walked home.
+- Locals may be wrong, biased or out of date. Two of them may contradict each other. No line settles the crash date, the basin's old name or what the Fallen Sun was.
+- Lines stay in character, as J.J.'s do. They never say turns, quests, XP, levels, HP, markers, waypoints, the map, clicks, the player or the game. They give no number other than a day count or a clock hour.
+- A clue describes land the listener can see: a compass direction from a town, a named road or place, and the terrain there, like a hollow or an old farm with a water tower. It never gives a distance as a number or an exact spot.

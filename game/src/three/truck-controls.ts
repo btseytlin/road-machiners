@@ -6,7 +6,7 @@ import { playerVehicle } from "../sim/damage";
 import { canDouse, douseEngine } from "../sim/engine-heat";
 import { isBusy } from "../sim/jobs";
 import { canOverdrive, inOverdrive } from "../sim/stats";
-import { canLoot, canScavenge, canUseOasis, scavenge, useOasis } from "../sim/locations";
+import { canLoot, canScavenge, scavenge } from "../sim/locations";
 import { shopAt } from "../sim/market";
 import { reachedOutpostAt } from "../sim/fury-road";
 import type { World } from "../sim/types";
@@ -106,7 +106,6 @@ export class TruckContext {
       shop: () => shopAt(h.world()) && h.openTown(),
       outpost: () => reachedOutpostAt(h.world()) && h.openOutpost(),
       downed: () => 'id' in target && h.openDowned(target.id),
-      oasis: () => this.refill(),
       stock: () => 'id' in target && this.searchStock(target.id, action.combat),
       loot: () => 'id' in target && this.lootStock(target.id),
       empty: () => undefined,
@@ -118,13 +117,6 @@ export class TruckContext {
     const aid = readyAid(this.host.world());
     if (aid?.holder !== npcId) return;
     this.host.apply(startAid(this.host.world(), npcId));
-    this.host.pushEvents();
-  }
-
-  private refill(): void {
-    const w = this.host.world();
-    if (isBusy(playerVehicle(w)) || !canUseOasis(w)) return;
-    this.host.apply(useOasis(w));
     this.host.pushEvents();
   }
 

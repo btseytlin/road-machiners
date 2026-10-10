@@ -2,6 +2,7 @@
 // coverage test checks that every id has its words in every language.
 import { WORLD_SETTINGS } from '../data/modes';
 import type { LineId } from '../data/dialogue';
+import type { LocalId, NoteId } from '../data/locals';
 import { FEMALE_NAMES, FIRST_NAMES, SURNAMES, type TraitId } from '../data/npcs';
 import type { PerkId } from '../data/skills';
 import type { Faction, GameModeId, GoalReason, MoneyReason, Refusal, SimNote, SkillId, UnitId, Vehicle, World, WorldSetup, WorldSettings } from '../sim/types';
@@ -85,6 +86,12 @@ const NOTES: NoteWords = {
   hazard: () => t('note.hazard'),
   spawnBlocked: (n) => t('note.spawnBlocked', { template: templateName(n.template) }),
 };
+
+export const noteTitle = (id: NoteId): Msg => t(`journal.${id}.title`);
+export const noteFrom = (id: NoteId): Msg => t(`journal.${id}.from`);
+export const noteBody = (id: NoteId): Msg => t(`journal.${id}.text`);
+export const localName = (id: LocalId): Msg => t(`local.${id}.name`);
+export const localRole = (id: LocalId): Msg => t(`local.${id}.role`);
 
 export function noteText(note: SimNote): Msg {
   return (NOTES[note.id] as (n: SimNote) => Msg)(note);

@@ -39,6 +39,7 @@ export class BootScreen {
     for (const step of BOOT_STEPS) {
       const seg = document.createElement('span');
       seg.className = 'boot-seg';
+      seg.dataset.step = step;
       this.bar.append(seg);
       this.segments.set(step, seg);
       const line = document.createElement('li');

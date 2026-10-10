@@ -5,7 +5,7 @@ import { TIME } from './time';
 import { TOW } from './tow';
 import { ECONOMY, GOODS } from './goods';
 import { START_KITS } from './start';
-import { NPCS } from './npcs';
+import { GEAR_LEVELS } from './npcs';
 import { UNITS } from './units';
 import { XP_SOURCES } from './skills';
 import { CONTRACTS, EFFORT } from './market';
@@ -108,7 +108,7 @@ describe('money in cents', () => {
         [`${id} money`, kit.money],
         ...Object.entries(kit.costBasis).map(([g, v]): [string, number] => [`${id} ${g} basis`, v]),
       ]),
-      ...Object.entries(NPCS).map(([id, t]): [string, number] => [`${id} budget`, t.loadout.budget]),
+      ...Object.entries(GEAR_LEVELS).map(([id, g]): [string, number] => [`${id} gear money`, g.money]),
     ];
     for (const [id, amount] of amounts) expect(Number.isInteger(amount), id).toBe(true);
   });

@@ -9,7 +9,7 @@ import { partDef } from '../../data/parts';
 import { SHOPS } from '../../data/market';
 import { CONDITION, ENGINE_HEAT } from '../../data/wear';
 import { playerVehicle, vehicleById } from '../damage';
-import { makePart } from '../factory';
+import { makePart, makeVehicle } from '../factory';
 import { freeCells, goodsCount, mountedParts } from '../grid';
 import { addGoods, mountPart, removeAllGoods, stowPart } from '../inventory';
 import { siteOf } from '../market';
@@ -28,6 +28,7 @@ import { heatAt } from '../sun';
 import { getKnownSite, getUpkeepReserve, judgeDanger, tripFuelCost } from '../npc-decisions';
 import { maxHp } from '../wear';
 import { emptyHidden } from '../salvage';
+import { cargoHaul, haulVar, surrenderHaul } from '../haul';
 import { botOrders, CONVOY_ROB_PATROL, fuelReaches, haulMarginAt, robTarget, wouldRob } from './bot';
 
 function town(id: string) {
@@ -60,6 +61,15 @@ function saltGlut(w: World): World {
   w.shops.nose.pressure.salt = -PRESSURE_MAX;
   w.shops.bowl.pressure.salt = PRESSURE_MAX;
   return w;
+}
+
+// A gun takes two deck cells, so three guns fill the scout's deck and leave it no cargo: the player drives a hauler.
+function withThreeGuns(w: World): Vehicle {
+  const old = playerVehicle(w);
+  const me = makeVehicle(w, { faction: 'player', chassisId: 'hauler', parts: ['mg', 'mg', 'mg', 'stockEngine'].map((defId) => ({ defId, wear: 0 })), spares: [], cargo: {}, pos: old.pos, heading: old.heading, brain: null });
+  me.id = old.id;
+  w.vehicles[w.vehicles.indexOf(old)] = me;
+  return me;
 }
 
 describe('botOrders', () => {
@@ -471,6 +481,7 @@ describe('botOrders', () => {
 
   it('has a broke truck without an engine sell gear in town to buy one', () => {
     const w = withoutEngine(parkedAt('bowl'));
+    for (const part of mountedParts(playerVehicle(w))) part.wear = 0;
     w.player.money = 0;
     w.player.supplies = 0;
     w.shops.bowl.stock = [makePart(w, 'stockEngine', 0)];
@@ -729,7 +740,7 @@ describe('the hunter', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = playerVehicle(w);
     me.order = { kind: 'stopAt', dest: { x: me.pos.x + 60, y: me.pos.y } };
-    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'heavyDiesel'], { x: me.pos.x + 14, y: me.pos.y });
+    const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'shotgun', 'heavyDiesel'], { x: me.pos.x + 14, y: me.pos.y });
     raider.brain = npcBrain('gunwagon', raider.pos, ['raider']);
     expect(Math.abs(judgeDanger(w, me, raider) - 1)).toBeLessThan(NPC_BEHAVIOR.dangerSpread / 2);
     const orders = Array.from({ length: 12 }, (_, i) => {
@@ -842,7 +853,7 @@ describe('the hunter', () => {
       return { w, order: playerVehicle(botOrders(w, 'hunter').world).order };
     };
     const weak = orderFacing([]);
-    const strong = orderFacing(['mg', 'mg', 'mg', 'mg']);
+    const strong = orderFacing(['mg', 'mg']);
 
     expect(weak.order).toEqual({ kind: 'stopAt', dest: { x: 120, y: 30 } });
     expect(strong.order?.kind === 'stopAt' && strong.order.dest.x === 120).toBe(false);
@@ -875,17 +886,19 @@ describe('the hunter', () => {
   });
 
   it('has a hunter and a trader both pay the garage for a broken gun', () => {
-    const gunAfter = (archetype: 'hunter' | 'trader') => {
+    const weaponsAfter = (archetype: 'hunter' | 'trader') => {
       const w = parkedAt('bowl');
       const gun = mountedParts(playerVehicle(w)).find((p) => partDef(p.defId).kind === 'weapon');
       if (!gun) throw new Error('The start truck mounts no gun');
       gun.hp = 0;
-      const after = mountedParts(playerVehicle(botOrders(w, archetype).world)).find((p) => p.id === gun.id)!;
-      return after.hp / maxHp(after);
+      const after = mountedParts(playerVehicle(botOrders(w, archetype).world), 'weapon');
+      return after.map((p) => p.hp / maxHp(p));
     };
 
-    expect(gunAfter('hunter')).toBe(1);
-    expect(gunAfter('trader')).toBe(1);
+    expect(weaponsAfter('hunter').length).toBeGreaterThan(0);
+    expect(weaponsAfter('hunter').every((share) => share > 0)).toBe(true);
+    expect(weaponsAfter('trader').length).toBeGreaterThan(0);
+    expect(weaponsAfter('trader').every((share) => share > 0)).toBe(true);
   });
 
   it('has a bot short of money repair the built-in parts, then the most damaged part it can pay for', () => {
@@ -940,9 +953,7 @@ describe('the hunter', () => {
 
   it('has a climber with three guns trade between fights', () => {
     const w = saltGlut(parkedAt('nose'));
-    const me = playerVehicle(w);
-    expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
-    expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
+    withThreeGuns(w);
 
     const bought = botOrders(w, 'climber');
     const carried = botOrders(bought.world, 'climber');
@@ -955,9 +966,7 @@ describe('the hunter', () => {
   it('has a climber accept a truce that a pure hunter refuses', () => {
     const acceptsTruce = (archetype: 'climber' | 'hunter') => {
       const w = emptyWorld({ x: 30, y: 30 });
-      const me = playerVehicle(w);
-      expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
-      expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
+      const me = withThreeGuns(w);
       const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 34, y: 30 });
       raider.brain = npcBrain('buggy', raider.pos, ['raider']);
       plead(w, raider, me, 'truce');
@@ -973,10 +982,8 @@ describe('the hunter', () => {
 
   it('has a climber strip nearby loot before leaving for repairs', () => {
     const w = emptyWorld({ x: 30, y: 30 });
-    const me = playerVehicle(w);
+    const me = withThreeGuns(w);
     me.speed = 0;
-    expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
-    expect(mountPart(w, me, makePart(w, 'mg', 0))).toBe(true);
     const engine = mountedParts(me, 'engine')[0];
     engine.hp = Math.floor(maxHp(engine) / 4);
     const raider = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine'], { x: 33, y: 30 });
@@ -1051,7 +1058,7 @@ describe('the hunter', () => {
     raider.brain = npcBrain('buggy', raider.pos, ['raider']);
     expect(vehicleStats(w, me).maxSpeed).toBeGreaterThan(vehicleStats(w, raider).maxSpeed);
     startCombat(w, raider, me);
-    w.player.call = { with: raider.id, topic: 'demand', node: 'demand', vars: {}, line: { line: 'demandCargo', vars: {} } };
+    w.player.call = { with: raider.id, topic: 'demand', node: 'demand', vars: { haul: haulVar(cargoHaul(raider, playerVehicle(w))) }, line: { line: 'demandCargo', vars: {} } };
 
     expect(goodsCount(playerVehicle(botOrders(w, 'trader').world)).salt ?? 0).toBe(0);
   });
@@ -1101,7 +1108,7 @@ describe('the hunter', () => {
       raider.brain = npcBrain('buggy', raider.pos, ['raider']);
       expect(vehicleStats(w, raider).maxSpeed).toBeGreaterThanOrEqual(vehicleStats(w, me).maxSpeed);
       startCombat(w, raider, me);
-      w.player.call = { with: raider.id, topic: 'demand', node: 'demand', vars: {}, line: { line: 'demandCargo', vars: {} } };
+      w.player.call = { with: raider.id, topic: 'demand', node: 'demand', vars: { haul: haulVar(cargoHaul(raider, playerVehicle(w))) }, line: { line: 'demandCargo', vars: {} } };
       return goodsCount(playerVehicle(botOrders(w, 'trader').world)).salt ?? 0;
     };
 
@@ -1120,7 +1127,7 @@ describe('the hunter', () => {
     };
 
     expect(heardAt([])).toEqual({ kind: 'stopAt', dest: { x: 88, y: 32 } });
-    expect(heardAt(['mg', 'mg', 'mg'])).not.toEqual({ kind: 'stopAt', dest: { x: 88, y: 32 } });
+    expect(heardAt(['mg', 'mg'])).not.toEqual({ kind: 'stopAt', dest: { x: 88, y: 32 } });
   });
 
   it('has a stranded bot accept a strip offer only from a raider that outmatches it', () => {
@@ -1132,7 +1139,7 @@ describe('the hunter', () => {
       const raider = addVehicle(w, 'raiders', 'buggy', [...weapons, 'stockEngine'], { x: 36, y: 30 });
       raider.brain = npcBrain('buggy', raider.pos, ['raider']);
       startCombat(w, raider, me);
-      w.player.call = { with: raider.id, topic: 'surrender', node: 'offer', vars: {}, line: { line: 'surrenderOffer', vars: {} } };
+      w.player.call = { with: raider.id, topic: 'surrender', node: 'offer', vars: { haul: haulVar(surrenderHaul(raider, playerVehicle(w))) }, line: { line: 'surrenderOffer', vars: {} } };
       return goodsCount(playerVehicle(botOrders(w, 'trader').world)).salt ?? 0;
     };
 

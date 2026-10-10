@@ -123,7 +123,8 @@ describe('cargo spills', () => {
     const { w, me } = loadedPlayer();
     const gun = me.items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
     const target = onRow(me, lastRow(me))[0];
-    let next = moveItem(w, gun.id, { x: target.x, y: target.y, rot: gun.rot });
+    me.items = me.items.filter((it) => it === target || it.kind !== 'good' || it.y !== target.y);
+    let next = moveItem(w, gun.id, { x: target.x, y: target.y, rot: 1 });
     expect(next.vehicles[0].job?.kind).toBe('refit');
     panniersOf(next.vehicles[0]).hp = 0;
     next = endTurn(next, testDrive);

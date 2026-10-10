@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { NPCS } from '../data/npcs';
+import { NPC_BEHAVIOR, NPCS, NPC_UPKEEP } from '../data/npcs';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { advanceNpcKnockouts, isDefeated } from './defeat';
 import { corePart, mountedParts } from './grid';
+import { advanceJobs } from './jobs';
 import { fitToHunt } from './npc-decisions';
 import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
 import { watchStalls } from './npc-watchdog';
@@ -61,9 +62,7 @@ describe('a raider unfit to hunt', () => {
     const { w, v } = raider();
     crippleGear(v);
     getResources(w, v).money = 166667;
-    expect(thinkNpc(w, v)).toMatchObject({ kind: 'resupply', targetId: 'kiln' });
-    parkAtCamp(v);
-    resolveNpcActivities(w);
+    serveAtCamp(w, v);
     for (const part of [...gunsOf(v), ...armorOf(v)]) expect(part.hp).toBe(maxHp(part));
     expect(getResources(w, v).money).toBeLessThan(166667);
     expect(topGoal(v)).toBeNull();
@@ -82,6 +81,10 @@ function npcTurn(w: World, v: Vehicle): void {
   w.events = [];
   w.turn++;
   thinkNpc(w, v);
+  const top = topGoal(v);
+  if (top?.kind === 'rearm') v.pos = { ...top.destination! };
+  if (top?.kind === 'retreat') v.pos = { ...sitePads(npcHomeSite(TEST_MAP, v)!)[0] };
+  advanceJobs(w);
   resolveNpcActivities(w);
   watchStalls(w);
   expect(w.events.filter((e) => e.t === 'stall')).toEqual([]);
@@ -102,6 +105,10 @@ function serveAtCamp(w: World, v: Vehicle): void {
   expect(thinkNpc(w, v)).toMatchObject({ kind: 'resupply', targetId: 'kiln' });
   parkAtCamp(v);
   resolveNpcActivities(w);
+  expect(v.job).toMatchObject({ kind: 'business', deal: 'resupply' });
+  const deadline = w.turn + NPC_UPKEEP.businessTurns + 2;
+  while (topGoal(v)?.kind === 'resupply' && w.turn < deadline) npcTurn(w, v);
+  expect(topGoal(v)?.kind).not.toBe('resupply');
 }
 
 describe('the lie-up for fresh gear', () => {
@@ -136,6 +143,30 @@ describe('the lie-up for fresh gear', () => {
     expect(goalKinds(v)).not.toContain('rearm');
   });
 
+  it('lies up at a random free spot beyond the camp edge and off its pad, apart from a truck already lying up', () => {
+    const { w, v } = raider();
+    crippleGear(v);
+    getResources(w, v).money = 0;
+    serveAtCamp(w, v);
+    const first = topGoal(v)!.destination!;
+    v.pos = { ...first };
+    const other = addVehicle(w, 'raiders', 'buggy', ['mg', 'stockEngine', 'plates'], outside(20));
+    other.brain = npcBrain('buggy', other.pos, NPCS.buggy.traits);
+    crippleGear(other);
+    getResources(w, other).money = 0;
+    serveAtCamp(w, other);
+    const second = topGoal(other)!.destination!;
+
+    for (const spot of [first, second]) {
+      expect(sitePads(kiln).some((pad) => dist(pad, spot) < 0.01)).toBe(false);
+      expect(dist(spot, kiln.pos) - kiln.radius).toBeGreaterThanOrEqual(NPC_BEHAVIOR.lieUp.gap.min);
+      expect(dist(spot, kiln.pos) - kiln.radius).toBeLessThanOrEqual(NPC_BEHAVIOR.lieUp.gap.max);
+    }
+    expect(dist(first, second)).toBeGreaterThanOrEqual(2 * RULES.arriveRadius + NPC_BEHAVIOR.lieUp.spacing);
+    expect(liesUp(v)).toBe(true);
+    expect(liesUp(other)).toBe(false);
+  });
+
   it('ends without fresh gear once the driver is fit again', () => {
     const { w, v } = raider();
     getResources(w, v).health = RULES.maxHealth * 0.4;
@@ -158,13 +189,15 @@ describe('the lie-up for fresh gear', () => {
     getResources(w, v).money = 0;
     serveAtCamp(w, v);
     const until = topGoal(v)!.until!;
+    expect(Number.isFinite(until)).toBe(true);
     w.turn = until - 3;
     const saved = cloneWorld(w);
     const reloaded: World = { ...saved, vehicles: saved.vehicles.map((x) => JSON.parse(JSON.stringify(x)) as Vehicle) };
     const runToRefit = (world: World): { turn: number; items: string[] } => {
       const npc = world.vehicles.find((x) => x.id === v.id)!;
       const before = itemIds(npc);
-      while (itemIds(npc).join() === before.join()) npcTurn(world, npc);
+      while (itemIds(npc).join() === before.join() && world.turn < until) npcTurn(world, npc);
+      expect(itemIds(npc)).not.toEqual(before);
       return { turn: world.turn, items: itemIds(npc) };
     };
     const live = runToRefit(w);

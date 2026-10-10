@@ -1,6 +1,5 @@
-// Fortress layout: the curtain outline of each fortress site, and the wall, tower, gatehouse, bastion and inner
+// Fortress layout: the curtain outline of each fortress site, and the wall, tower, gatehouse and inner
 // gate pieces that close it, and the pit dug inside a curtain. Map tiles throughout.
-//
 
 import { FORTRESS, FORTRESS_SITES, FORTRESS_STYLES, type FortressBastions, type FortressKind, type FortressSite, type FortressStyle, type FortressStyleDef } from '../data/fortress';
 import { siteGates, siteLook, type Site } from './sites';
@@ -8,15 +7,16 @@ import type { BakedProp, PropKind } from './terrain';
 import { bearing, DEG, dist, pointInPolygon, polygonEdgeDist, segmentDist, type Vec } from './vec';
 
 export const FORT_PROPS = {
-  masonry: { wall: 'fortMasonryWall', tower: 'fortMasonryTower', gate: 'fortMasonryGate', bastion: 'fortMasonryBastion', inner: 'fortMasonryInner' },
+  pumpworks: { wall: 'fortPumpworksWall', tower: 'fortPumpworksTower', gate: 'fortPumpworksGate', inner: 'fortPumpworksInner' },
+  cistern: { wall: 'fortCisternWall', tower: 'fortCisternTower', gate: 'fortCisternGate', inner: 'fortCisternInner' },
   shipMetal: { wall: 'fortShipWall', tower: 'fortShipTower', gate: 'fortShipGate' },
-  scrap: { wall: 'fortScrapWall', tower: 'fortScrapTower', gate: 'fortScrapGate', bastion: 'fortScrapBastion', inner: 'fortScrapInner' },
+  scrap: { wall: 'fortScrapWall', tower: 'fortScrapTower', gate: 'fortScrapGate', inner: 'fortScrapInner' },
   patchwork: { wall: 'fortPatchworkWall', tower: 'fortPatchworkTower', gate: 'fortPatchworkGate' },
   compound: { wall: 'fortCompoundWall', tower: 'fortCompoundTower', gate: 'fortCompoundGate' },
   ring: { wall: 'fortRingWall', gate: 'fortRingGate' },
   yard: { wall: 'fortYardWall', tower: 'fortYardTower', gate: 'fortYardGate' },
 } as const satisfies Record<FortressStyle, Partial<Record<FortressKind, PropKind>>>;
-const FORT_STYLE_NAMES = { masonry: 'masonry', shipMetal: 'ship', scrap: 'scrap', patchwork: 'patchwork', compound: 'compound', ring: 'ring', yard: 'yard' } as const satisfies Record<FortressStyle, string>;
+const FORT_STYLE_NAMES = { pumpworks: 'pumpworks', cistern: 'cistern', shipMetal: 'ship', scrap: 'scrap', patchwork: 'patchwork', compound: 'compound', ring: 'ring', yard: 'yard' } as const satisfies Record<FortressStyle, string>;
 export type FortModel = { [S in FortressStyle]: `fort_${(typeof FORT_STYLE_NAMES)[S]}_${keyof (typeof FORT_PROPS)[S] & string}` }[FortressStyle];
 
 export const FORT_MODELS: ReadonlyMap<PropKind, { model: FortModel; piece: FortressKind }> = new Map(
@@ -34,7 +34,7 @@ export function fortProp(style: FortressStyle, piece: FortressKind): PropKind {
 
 export type FortressPiece = { kind: FortressKind; pos: Vec; yaw: number; r: number };
 
-type Corner = { pos: Vec; piece: 'tower' | 'bastion' | null };
+type Corner = { pos: Vec; piece: 'tower' | null };
 type Rect = { center: Vec; axis: Vec; half: { along: number; across: number } };
 type Run = { points: Vec[]; corners: (number | null)[] };
 
@@ -121,8 +121,7 @@ function cornerPieces(site: Site, corners: Corner[], houses: Rect[]): FortressPi
   return corners.flatMap((c) => {
     if (c.piece === null || houses.some((h) => inRect(h, c.pos))) return [];
     fortProp(style, c.piece);
-    const size = c.piece === 'tower' ? FORTRESS.towerSize : FORTRESS.bastionSize;
-    return [{ kind: c.piece, pos: c.pos, yaw: bearing(site.pos, c.pos) + Math.PI / 2, r: size / 2 }];
+    return [{ kind: c.piece, pos: c.pos, yaw: bearing(site.pos, c.pos) + Math.PI / 2, r: FORTRESS.towerSize / 2 }];
   });
 }
 
@@ -140,7 +139,7 @@ export function fortressFootprint(site: Site, piece: FortressPiece): Vec[] {
 
 function pieceRect(style: FortressStyleDef, piece: FortressPiece): Rect {
   const axis = { x: Math.cos(piece.yaw), y: Math.sin(piece.yaw) };
-  const across = { wall: FORTRESS.wallDepth, inner: FORTRESS.wallDepth, gate: style.gate.depth, tower: FORTRESS.towerSize, bastion: FORTRESS.bastionSize }[piece.kind];
+  const across = { wall: FORTRESS.wallDepth, inner: FORTRESS.wallDepth, gate: style.gate.depth, tower: FORTRESS.towerSize }[piece.kind];
   return { center: piece.pos, axis, half: { along: piece.r, across: across / 2 } };
 }
 
@@ -166,10 +165,6 @@ function bakedPiece(style: FortressStyle, piece: FortressPiece): BakedProp {
     const { gate, gateFlare } = FORTRESS_STYLES[style];
     return { ...base, pos: along(piece.pos, { x: Math.cos(yaw), y: Math.sin(yaw) }, gate.depth / 2 - gateFlare), yaw };
   }
-  if (piece.kind === 'bastion') {
-    const yaw = piece.yaw - Math.PI / 2;
-    return { ...base, pos: along(piece.pos, { x: Math.cos(yaw), y: Math.sin(yaw) }, -FORTRESS.bastionBack), yaw };
-  }
   if (piece.kind === 'inner') return { ...base, pos: piece.pos, yaw: piece.yaw - Math.PI / 2 };
   return { ...base, pos: piece.pos, yaw: piece.yaw };
 }
@@ -185,13 +180,6 @@ function outlineCorners(site: Site): Corner[] {
   const at = (a: number, r: number): Vec => ({ x: site.pos.x + Math.cos(turn + a) * r, y: site.pos.y + Math.sin(turn + a) * r });
   if (def.shape === 'square') return [0, 1, 2, 3].map((k) => ({ pos: at((k * Math.PI) / 2, radius), piece: 'tower' }));
   if (def.shape === 'bastioned') return bastionedCorners(site, def);
-  if (def.shape === 'star') {
-    const count = FORTRESS.starPoints * 2;
-    return Array.from({ length: count }, (_, k) => {
-      const point = k % 2 === 0;
-      return { pos: at((k * 2 * Math.PI) / count, point ? radius : radius * (1 - FORTRESS.starDepth)), piece: point ? 'bastion' : null };
-    });
-  }
   const every = def.towerEvery ?? FORTRESS.circleTowerEvery;
   const count = every * Math.ceil((2 * Math.PI * radius) / (FORTRESS.wallLength * every));
   const towers = def.towers ?? true;

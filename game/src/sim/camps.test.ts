@@ -8,11 +8,11 @@ import { GOODS } from '../data/goods';
 import { profileOf } from './npc-decisions';
 import { corePart, goodsCount } from './grid';
 import { addGoods } from './inventory';
-import { resolveNpcActivities, thinkNpc, topGoal } from './npc-activities';
+import { thinkNpc, topGoal } from './npc-activities';
 import { getResources } from './resources';
 import { canUseSite, siteGates, sitePads } from './sites';
 import { spawnInitial } from './spawn';
-import { addVehicle, emptyWorld, npcBrain, partHp, testDrive } from './testkit';
+import { addVehicle, emptyWorld, finishBusiness, npcBrain, partHp, testDrive } from './testkit';
 import type { Faction, World } from './types';
 import { dist, type Vec } from './vec';
 import { endTurn } from './world';
@@ -64,7 +64,7 @@ describe('raider camps', () => {
     expect(topGoal(raider)).toMatchObject({ kind: 'resupply', targetId: 'kiln' });
     raider.pos = outside(1);
     raider.speed = 0;
-    resolveNpcActivities(w);
+    finishBusiness(w, raider);
     expect(corePart(raider, 'cab').hp).toBeGreaterThan(1);
     expect(goodsCount(raider).scrap).toBeUndefined();
     expect(topGoal(raider)).toBeNull();
@@ -152,14 +152,14 @@ describe('raider camps', () => {
     expect(topGoal(raider)).toMatchObject({ kind: 'sell', targetId: 'salvage-yard' });
     addGoods(w, raider, 'salt', 1);
     raider.speed = 0;
-    resolveNpcActivities(w);
+    finishBusiness(w, raider);
     expect(goodsCount(raider).salt).toBe(1);
     planNpcOrders(w);
     expect(['scrapjaw', 'kiln']).toContain(topGoal(raider)?.targetId);
   });
 
   it('keep every market for drivers without camps, and list camps and the Salvage Yard for raiders', () => {
-    expect(TOWN_MARKETS.sort()).toEqual([...REGION.towns.map((t) => t.id), 'salvage-yard', 'granary', 'pump-station'].sort());
+    expect(TOWN_MARKETS.sort()).toEqual([...REGION.towns.map((t) => t.id), 'salvage-yard', 'granary', 'pump-station', 'dustwell', 'green-pit'].sort());
     expect(profileOf(['raider']).markets).toEqual(['scrapjaw', 'kiln', 'salvage-yard']);
     expect(profileOf(['trader']).markets.sort()).toEqual([...TOWN_MARKETS].sort());
     expect(profileOf(['raider', 'trader']).markets).toHaveLength(new Set(['scrapjaw', 'kiln', ...TOWN_MARKETS]).size);

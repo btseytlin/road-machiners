@@ -1,10 +1,10 @@
 // Drawing pieces of the inventory view: the grid, item boxes, labels and the items a running refit moves.
 
-import { GOODS } from "../data/goods";
+import { CRATE_MASS } from "../data/goods";
 import { partDef, type WeaponDef } from "../data/parts";
-import { fireSpans, reachedSides, sideBlockers, SIDES, type FireSpan } from "../sim/armor";
-import { itemCells, itemSize, type Cell, type Grid } from "../sim/grid";
-import type { GridItem, PartInstance, RefitJob, RefitMove, Vehicle, World } from "../sim/types";
+import { gunBlockers, gunSpans, type FireSpan } from "../sim/armor";
+import { facingOf, itemCells, itemSize, type Cell, type Grid } from "../sim/grid";
+import type { GridItem, PartInstance, RefitJob, RefitMove, Rot, Vehicle, World } from "../sim/types";
 import { playerVehicle } from "../sim/damage";
 import { el } from "./dom";
 import { truckOutline } from "./plans";
@@ -59,16 +59,24 @@ export function cellEl(c: Cell, x: number, y: number, cell: number): HTMLElement
   return el("div", { class: `inv-cell c-${c === "." ? "plain" : c}`, style: pos(x, y, 1, 1, cell), title: CELL_TITLE[c] });
 }
 
+export function turnedIcon(it: GridItem, cell: number): HTMLElement {
+  const icon = gridItemIcon(it);
+  const gun = weaponDefOf(it);
+  if (gun) icon.style.cssText += `;position:absolute;left:50%;top:50%;width:${gun.w * cell}px;height:${gun.h * cell}px;transform:translate(-50%,-50%) rotate(${facingOf(it)}deg)`;
+  return icon;
+}
+
 export function itemBox(it: GridItem, chassisId: string, mounted: boolean, cell: number): HTMLElement {
   const cells = itemCells(it);
   const x = Math.min(...cells.map((c) => c.x));
   const y = Math.min(...cells.map((c) => c.y));
   const size = itemSize(it);
   const id = it.kind === "part" ? it.part.defId : it.good;
+  const icon = turnedIcon(it, cell);
   const node = el(
     "div",
     { class: itemClass(it, mounted), "data-item-id": it.id, style: `${pos(x, y, size.w, size.h, cell)};${toneStyle(id)}`, title: itemName(it), tabindex: 0, role: "button", "aria-label": itemName(it) },
-    gridItemIcon(it),
+    icon,
     el("span", { class: "inv-item-name" }, itemLabel(it).short),
   );
   if (it.kind === "part") node.append(conditionMeter(it.part));
@@ -130,12 +138,17 @@ export function itemName(it: GridItem): Msg {
 }
 
 export function itemState(it: GridItem, mounted: boolean): Msg {
-  if (it.kind === "good") return t("item.cargo", { mass: kg(GOODS[it.good].mass) });
+  if (it.kind === "good") return t("item.cargo", { mass: kg(CRATE_MASS) });
   if (partDef(it.part.defId).kind === "core") return t("item.builtIn");
   return mounted ? t("item.mounted") : t("item.spare");
 }
 
 const SVG = "http://www.w3.org/2000/svg";
+
+export function nextRot(it: GridItem): Rot {
+  if (weaponDefOf(it)) return ((it.rot + 1) % 4) as Rot;
+  return it.rot === 0 ? 1 : 0;
+}
 
 export function weaponDefOf(it: GridItem): WeaponDef | null {
   if (it.kind !== "part") return null;
@@ -143,12 +156,8 @@ export function weaponDefOf(it: GridItem): WeaponDef | null {
   return def.kind === "weapon" ? def : null;
 }
 
-export function blockerIds(v: Vehicle, it: GridItem, def: WeaponDef): string[] {
-  const blockers = sideBlockers(v, it);
-  return reachedSides(def).flatMap((side) => {
-    const b = blockers[side];
-    return b ? [b.id] : [];
-  });
+export function blockerIds(v: Vehicle, it: GridItem): string[] {
+  return gunBlockers(v, it).map((b) => b.id);
 }
 
 export function fanSvg(v: Vehicle, it: GridItem, def: WeaponDef, size: { w: number; h: number }, cell: number): SVGSVGElement {
@@ -160,8 +169,7 @@ export function fanSvg(v: Vehicle, it: GridItem, def: WeaponDef, size: { w: numb
   svg.setAttribute("class", "inv-fan");
   svg.setAttribute("width", String(size.w * cell));
   svg.setAttribute("height", String(size.h * cell));
-  const open = SIDES.filter((side) => !sideBlockers(v, it)[side]);
-  for (const span of fireSpans(def.arc, open)) {
+  for (const span of gunSpans(v, it)) {
     const path = document.createElementNS(SVG, "path");
     path.setAttribute("d", spanPath(cx, cy, radius, span));
     svg.append(path);

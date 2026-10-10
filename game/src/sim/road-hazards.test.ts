@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
-import { HAZARDS, HIGHWAY, type SceneKind } from '../data/fury-road';
+import { HAZARDS, HIGHWAY, type SceneKind } from '../data/modes';
 import { acrossOf, fromRoad, STRIDE, highwayMap, milestoneAt, outpostFort, roadHeading, roadPoint, toRoad } from './highway';
 import { boxDistance, mapObstacles, propBoxes, propObstacle, type PosedBox } from './mapgen';
 import { CELL, componentOf, navLayer } from './nav/layer';

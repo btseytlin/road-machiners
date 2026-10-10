@@ -3,10 +3,12 @@ import { PERK_NUMBERS, XP_SOURCES } from '../data/skills';
 import { SHOPS } from '../data/market';
 import { buyPrice, sellPrice } from './economy';
 import { goodBasePrice, goodValue, vehicleValue } from './market';
-import { BUSY_LINE, TRAIT_TALK, END, HONK_RANGE, HUB, REFUSED, TOPICS, type LineId, type Topic } from '../data/dialogue';
+import { BUSY_LINE, TRAIT_TALK, END, handoffQuest, HONK_RANGE, HUB, REFUSED, TOPICS, type LineId, type Topic } from '../data/dialogue';
 import { lineKey } from '../text/names';
 import { entryText, schemaOf } from '../text/resolve';
+import { QUESTS, questView } from './quests';
 import { REGION } from '../data/region';
+import { STORY_WRECKS } from '../data/salvage';
 import { playerVehicle } from './damage';
 import { callVehicle, callTrucks, chooseOption, currentOptions, endCallIfOut, hangUp, honk, radioSpeakers, raiseCalls } from './dialogue';
 import { fireBlock, isHostile } from './combat';
@@ -14,7 +16,8 @@ import { MEMORY, NPC_UPKEEP, NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { aidPrice, offerAid, playerAid, spareAid, wantedAid } from './aid';
 import { corePart, isMounted } from './grid';
-import { addGoods } from './inventory';
+import { addGoods, cargoRoom } from './inventory';
+import { cargoHaul, showsHaul } from './haul';
 import { hasCargo, emptyHidden } from './salvage';
 import { fuelCap, suppliesCap, vehicleStats } from './stats';
 import { CONDITIONS, EFFECTS, PREPARES } from './dialogue-rules';
@@ -58,6 +61,11 @@ describe('topic data', () => {
       while (queue.length > 0) {
         for (const option of topic.nodes[queue.pop()!].options) {
           if (option.go === HUB || option.go === END) continue;
+          const quest = handoffQuest(option.go);
+          if (quest) {
+            expect(QUESTS.quests[quest]?.checkpoints, `${topic.id} → ${option.go}`).toContain('start');
+            continue;
+          }
           expect(topic.nodes[option.go], `${topic.id} → ${option.go}`).toBeDefined();
           if (!reached.has(option.go)) { reached.add(option.go); queue.push(option.go); }
         }
@@ -383,6 +391,28 @@ describe('demand', () => {
     const w = endTurn(start, testDrive);
     expect(w.player.call).toMatchObject({ with: raider.id, topic: 'demand' });
     expect(shotsBetween(w, raider.id, w.player.vehicleId)).toEqual([]);
+  });
+
+  it('the demand names the haul the raider can load and handing over drops exactly it', () => {
+    const { w: start, raider } = ambush();
+    const w = endTurn(start, testDrive);
+    const me = playerVehicle(w);
+    const haul = cargoHaul(w.vehicles.find((v) => v.id === raider.id)!, me);
+    expect(haul.length).toBeGreaterThan(0);
+    expect(showsHaul(w.player.call!.vars.haul, haul)).toBe(true);
+    const next = chooseOption(w, optionIndex(w, 'Fine. Take it.'));
+    const stock = next.salvage.find((s) => s.id.startsWith(`cargo-${me.id}`))!;
+    expect(Object.values(stock.goods).reduce((a, b) => a + b, 0) + stock.parts.length).toBe(haul.length);
+  });
+
+  it('a raider with no room raises no demand', () => {
+    const { w: start, raider } = ambush();
+    const full = start.vehicles.find((v) => v.id === raider.id)!;
+    while (cargoRoom(full) > 0 || cargoRoom(full) > 0) {
+      if (addGoods(start, full, 'scrap', 1) + addGoods(start, full, 'electronics', 1) === 0) break;
+    }
+    const w = endTurn(start, testDrive);
+    expect(w.player.call?.topic).not.toBe('demand');
   });
 
   it('a knocked-out raider does not raise its demand', () => {
@@ -825,11 +855,74 @@ describe('rumor mill', () => {
     expect(currentOptions(callVehicle(w, npc.id)).map((o) => en(o.line))).not.toContain(askText);
   });
 
+  it('names a story wreck like any wreck', () => {
+    const { w, npc } = rumorWorld();
+    w.salvage = [wreck('story-wagon-seven', { x: 50, y: 30 })];
+    let next = callVehicle(w, npc.id);
+    next = chooseOption(next, optionIndex(next, askText));
+    next = chooseOption(next, optionIndex(next, 'Where?'));
+    next = chooseOption(next, optionIndex(next, 'Thanks. Over and out.'));
+    expect(next.player.rumored).toEqual(['story-wagon-seven']);
+  });
+
   it('is not offered without the perk', () => {
     const { w, npc } = rumorWorld();
     w.player.perks = [];
     w.salvage = [wreck('wreck7', { x: 50, y: 30 })];
     expect(currentOptions(callVehicle(w, npc.id)).map((o) => en(o.line))).not.toContain(askText);
+  });
+});
+
+describe('army wagon topic', () => {
+  const askText = en(TOPICS.armyWagon.ask!.say);
+
+  // A trader within the Rumor mill radius of wagon Seven, or `away` tiles past it, talking to the player beside it.
+  function wagonWorld(away = 0): { w: World; npc: Vehicle } {
+    const wagon = STORY_WRECKS[0].pos;
+    const at = { x: wagon.x + PERK_NUMBERS.rumorMill.radius - 5 + away, y: wagon.y };
+    const w = emptyWorld({ x: at.x - 6, y: at.y });
+    const npc = addVehicle(w, 'traders', 'scout', ['stockEngine'], at);
+    npc.brain = npcBrain('trader', npc.pos, TRAITS_OF.trader);
+    refreshVision(w);
+    return { w, npc };
+  }
+
+  it('tells where the wagon lies once the player has heard of it, with no perk and no mark', () => {
+    const { w, npc } = wagonWorld();
+    w.player.notes = [{ id: 'wagonBowl', turn: 0 }];
+
+    let next = callVehicle(w, npc.id);
+    next = chooseOption(next, optionIndex(next, askText));
+    next = chooseOption(next, optionIndex(next, 'Thanks. Over and out.'));
+
+    expect(next.player.notes.map((n) => n.id)).toEqual(['wagonBowl', 'wagonRoad']);
+    expect(next.player.rumored).toEqual([]);
+    expect(next.player.talked[npc.id]?.armyWagon).toBe('done');
+  });
+
+  it('hands the talk over to the driver quest: the call ends and the quest opens in the same command', () => {
+    const { w, npc } = wagonWorld();
+    w.player.notes = [{ id: 'wagonBowl', turn: 0 }];
+
+    let next = callVehicle(w, npc.id);
+    next = chooseOption(next, optionIndex(next, askText));
+    next = chooseOption(next, optionIndex(next, 'What else did you see out there?'));
+
+    expect(next.player.call).toBeNull();
+    expect(next.events).toContainEqual({ t: 'call', with: npc.id, outcome: 'ended' });
+    expect(next.player.quests.session?.quest).toBe('radio_wagon_driver');
+    expect(questView(next, QUESTS).choices).toContain('Anyone still around the wreck?');
+    expect(next.player.notes.map((n) => n.id)).toEqual(['wagonBowl', 'wagonRoad']);
+    expect(next.player.talked[npc.id]?.armyWagon).toBe('done');
+  });
+
+  it('is not offered before the Bowl rumor, or by a driver far from the wagon', () => {
+    const fresh = wagonWorld();
+    const far = wagonWorld(10);
+    far.w.player.notes = [{ id: 'wagonBowl', turn: 0 }];
+
+    expect(currentOptions(callVehicle(fresh.w, fresh.npc.id)).map((o) => en(o.line))).not.toContain(askText);
+    expect(currentOptions(callVehicle(far.w, far.npc.id)).map((o) => en(o.line))).not.toContain(askText);
   });
 });
 

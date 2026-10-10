@@ -5,17 +5,19 @@ import { SHOPS } from '../data/market';
 import { REGION } from '../data/region';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
-import { callLawmen, inCombat, isHostile, startFeuds, turnPartHits } from './combat';
+import { callLawmen, inCombat, inCombatWith, isHostile, startFeuds, turnPartHits } from './combat';
 import { affordableBuyCount, buyFuel, cargoSaleValue, sellAtCamp, sellVehicleCargo, tradeGoods } from './economy';
 import { corePart } from './grid';
 import { addGoods, cargoRoom } from './inventory';
 import { cancelJob } from './jobs';
+import { businessBelongs, dealDue } from './npc-business';
 import { isFree } from './spawn';
 import { bodyStop } from './meeting-stop';
+import { huntsOffRoad } from './hunt-style';
 import {
   tradeOffers, tradeSpend, canRob, decide, keepsWord, offersChoice, perceiveDanger, getKnownSite, haulGoods, patrolStopsOf, patrolSite, travelSitesAway,
   huntingGroundsAway, raiderGroundsAway, isHostileContact, isWeak, fitToHunt, huntsPrey, npcProfile, salvageSitesAway, npcSenses, usefulContacts, visibleDowned, visibleHostiles, visibleSalvage, type NpcProfile,
-  lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, noteStripped, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition, givesUpUnarmed, yields,
+  passReason, canStartFight, lootTaken, stockLootInvalid, truckLootInvalid, worksOnLoot, holdsOffRobbery, giveUpStrandedRobberies, forgetFullHold, noteCannotHold, noteStripped, hasSaleCargo, lootPassedUp, holdsUp, robbedFor, bodyCondition, givesUpUnarmed, yields,
 } from './npc-decisions';
 import { chooseNpcRepair, continueNpcRepair, isDamaged, isStrandedForGood, repairsHere, resolveNpcRepair } from './npc-repair';
 import { getResources } from './resources';
@@ -23,7 +25,7 @@ import { standingPressures } from './market';
 import { remember } from './memory';
 import { chance, hashRandom, randInt, randRange } from './rng';
 import { sampleWeighted } from './npc-loadout';
-import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, isSiteStock, lootTruckTurn, searchTarget, STRIPPED, oldSpotOf, oldSpotsNear, oldStockId } from './salvage';
+import { canLootTruck, canReachSalvage, canTakeAny, CANNOT_HOLD, hasSalvage, lootClaimedBy, lootTruckTurn, searchTarget, STRIPPED, oldSpotOf, oldSpotsNear, oldStockId } from './salvage';
 import { beginSearch } from './search';
 import { onNeedySeen } from './aid';
 import { vehicleById } from './damage';
@@ -42,7 +44,7 @@ import { isWatching, startWatch, watchOver } from './watch-posts';
 import { chooseOn, comesInSight, sensedAt, senseTracks, trackOf } from './tracks';
 import { dropTow, follows, isOnRope, joinLeader, mercsInSight, npcHomeSite, offerEscort, ropeClientOf, runTow, steerFollow, steerToStranded, strandedAt, towGoal, towHeldBy } from './tow';
 import { isDefeated, isKnockedOut } from './defeat';
-import { beginRearm, holdsRearm, rearmInvalid, resolveRearm, resolveResupply, serveStranded, servingSiteIds } from './npc-service';
+import { beginRearm, holdsRearm, liesUp, rearmInvalid, resolveRearm, resolveResupply, serveStranded, servingSiteIds } from './npc-service';
 
 export const INTERRUPTIONS: readonly NpcActivity['kind'][] = ['fight', 'flee', 'investigate', 'resupply', 'tow', 'loot', 'repair', 'patch', 'meet', 'retreat', 'rearm', 'follow'];
 
@@ -60,6 +62,7 @@ export function topGoal(v: Vehicle): NpcActivity | null {
 function jobBelongs(job: Job, v: Vehicle): boolean {
   if (job.kind === 'repair') return goalsOf(v).some((g) => g.kind === 'repair');
   if (job.kind === 'refit') return refitBelongs(job, topGoal(v));
+  if (job.kind === 'business') return businessBelongs(job, topGoal(v));
   return searchBelongs(job, topGoal(v));
 }
 
@@ -146,10 +149,7 @@ function fleeDestination(world: World, vehicle: Vehicle, profile: NpcProfile, th
   return { x: clamp(destination.x, 1, world.size - 1), y: clamp(destination.y, 1, world.size - 1) };
 }
 
-// ---- Goal builders.
-
-// Why an NPC needs service, whether low supplies are its only need, and whether it needs repairs.
-type ServiceNeed = { reason: GoalReason; suppliesOnly: boolean };
+type ServiceNeed = { reason: GoalReason };
 
 function unfitHunter(world: World, vehicle: Vehicle): boolean {
   return huntsPrey(vehicle) && !fitToHunt(world, vehicle);
@@ -190,7 +190,7 @@ function serviceNeed(world: World, vehicle: Vehicle, profile: NpcProfile): Servi
   ];
   const held = needs.filter(([, need]) => need).map(([reason]) => reason);
   if (held.length === 0) return null;
-  return { reason: held[0], suppliesOnly: held.length === 1 && held[0] === 'lowSupplies' };
+  return { reason: held[0] };
 }
 
 export function isBroke(world: World, vehicle: Vehicle): boolean {
@@ -200,8 +200,6 @@ export function isBroke(world: World, vehicle: Vehicle): boolean {
 function serviceGoal(world: World, vehicle: Vehicle, profile: NpcProfile): NpcActivity | null {
   const need = serviceNeed(world, vehicle, profile);
   if (!need) return null;
-  const oasis = need.suppliesOnly ? chooseNearestSite(vehicle, profile.supplySites) : undefined;
-  if (oasis) return createSiteActivity('resupply', oasis.id, 'lowSupplies');
   if (isBroke(world, vehicle)) return brokeServiceGoal(world, vehicle, profile, need);
   return serviceTrip(world, vehicle, profile, need);
 }
@@ -575,13 +573,26 @@ export function fightCornered(world: World, vehicle: Vehicle, foe: Vehicle): voi
   interrupt(world, vehicle, fightGoal(world, vehicle, foe, 'cornered'));
 }
 
+export function turnCornered(world: World, vehicle: Vehicle): boolean {
+  if (topGoal(vehicle)?.kind === 'fight') return false;
+  const foe = visibleHostiles(world, vehicle).find((other) => (inCombatWith(world, vehicle, other) || vehicle.brain!.goals.some((goal) => goal.kind === 'fight' && goal.targetId === other.id)) && canStartFight(world, vehicle, other));
+  if (!foe) return false;
+  fightCornered(world, vehicle, foe);
+  return true;
+}
+
 type HostileDecision = 'hostileSeen' | 'contactHeard';
 
 function rollOnHostile<D extends HostileDecision>(world: World, vehicle: Vehicle, decision: D, id: string, at: Vec): DecisionOptions[D] {
   if (!offersChoice(world, vehicle, decision, id)) return 'keep' as DecisionOptions[D];
   const seen = decision === 'hostileSeen';
-  const option = decide(world, vehicle, decision, id, seen ? perceiveDanger(world, vehicle, vehicleById(world, id)) : null);
+  const prey = vehicleById(world, id);
+  const danger = seen ? perceiveDanger(world, vehicle, prey) : null;
+  const option = decide(world, vehicle, decision, id, danger);
   chooseOn(world, vehicle, id, at, option, seen);
+  if (danger !== null && option === 'keep' && huntsPrey(vehicle) && huntsOffRoad(vehicle.brain ?? undefined)) {
+    world.events.push({ t: 'preyPassed', vehicle: vehicle.id, prey: id, reason: passReason(world, vehicle, prey, danger) });
+  }
   return option;
 }
 
@@ -614,12 +625,13 @@ function interrupt(world: World, vehicle: Vehicle, goal: NpcActivity): void {
     dropTow(world, tow, 'danger');
     if (popGoal(world, vehicle, 'droppedTow').kind !== 'tow') throw new Error(`${vehicle.id} held a tow without a tow goal on top`);
   }
-  if (goal.kind === 'flee') dropChases(world, vehicle, goal.targetId);
+  if (goal.kind === 'flee') dropChases(world, vehicle, goal.targetId, 'ranFromIt');
+  if (goal.kind === 'fight') dropChases(world, vehicle, goal.targetId, 'spottedHeard');
   pushGoal(world, vehicle, goal);
 }
 
-function dropChases(world: World, vehicle: Vehicle, threatId: string | null): void {
-  for (const goal of goalsOf(vehicle).filter((g) => g.kind === 'investigate' && g.targetId === threatId)) dropGoal(world, vehicle, goal, 'ranFromIt');
+function dropChases(world: World, vehicle: Vehicle, targetId: string | null, reason: GoalReason): void {
+  for (const goal of goalsOf(vehicle).filter((g) => g.kind === 'investigate' && g.targetId === targetId)) dropGoal(world, vehicle, goal, reason);
 }
 
 function fleeFrom(world: World, vehicle: Vehicle, profile: NpcProfile, threatId: string, threatPos: Vec, reason: GoalReason): NpcActivity {
@@ -647,7 +659,7 @@ function onContactsHeard(world: World, vehicle: Vehicle, profile: NpcProfile, co
   for (const contact of hostileContacts(world, vehicle, contacts)) {
     const option = reactHeard(world, vehicle, contact);
     if (option === null || option === 'keep') continue;
-    if (option === 'investigate') interrupt(world, vehicle, createActivity('investigate', contact.vehicleId, { ...contact.center }, 'heardHostile'));
+    if (option === 'investigate') interrupt(world, vehicle, createActivity('investigate', contact.vehicleId, { ...contact.center }, isWatching(vehicle) ? 'springOnPrey' : 'heardHostile'));
     else interrupt(world, vehicle, fleeFrom(world, vehicle, profile, contact.vehicleId, contact.center, 'heardHostile'));
     return;
   }
@@ -772,7 +784,7 @@ function onStrandedSeen(world: World, vehicle: Vehicle): void {
 function onSalvageSeen(world: World, vehicle: Vehicle): void {
   const top = topGoal(vehicle);
   if (inCombat(world, vehicle) || !top || top.phase !== 'travel' || INTERRUPTIONS.includes(top.kind)) return;
-  const stocks = visibleSalvage(world, vehicle).filter((stock) => !isSiteStock(stock));
+  const stocks = visibleSalvage(world, vehicle);
   const passed = [...stocks, ...visibleDowned(world, vehicle)].filter((s) => s.id !== top.targetId).sort((a, b) => dist(vehicle.pos, a.pos) - dist(vehicle.pos, b.pos));
   const loot = passed.find((s) => react(world, vehicle, 'salvageSeen', s.id) === 'loot');
   if (loot) pushGoal(world, vehicle, createActivity('loot', loot.id, { ...loot.pos }, 'lootOnTheWay'));
@@ -837,7 +849,15 @@ const STEERS: Partial<Record<NpcActivity['kind'], Steer>> = {
   tow: (world, vehicle, goal) => { if (!heldTow(world, vehicle)) steerToStranded(world, vehicle, goal); },
   meet: (world, _vehicle, goal) => { if (goal.destination) goal.destination = { ...vehicleById(world, goal.targetId!).pos }; },
   follow: steerFollow,
+  investigate: steerInvestigate,
 };
+
+// An investigation follows the newest centre of the sound it heard, never the true position of its target.
+function steerInvestigate(_world: World, _vehicle: Vehicle, goal: NpcActivity, _profile: NpcProfile, contacts: Contact[]): void {
+  if (!goal.targetId) throw new Error('An investigation has no target');
+  const contact = contacts.find((c) => c.vehicleId === goal.targetId);
+  if (contact) goal.destination = { ...contact.center };
+}
 
 function steerFlee(world: World, vehicle: Vehicle, profile: NpcProfile, contacts: Contact[], goal: NpcActivity): void {
   const threat = fleeThreat(world, vehicle, contacts, goal);
@@ -871,9 +891,9 @@ export function thinkNpc(world: World, vehicle: Vehicle): NpcActivity {
   onGrievances(world, vehicle);
   onParley(world, vehicle);
   dropInvalidGoals(world, vehicle, contacts);
-  onContactSpotted(world, vehicle);
   onAttacked(world, vehicle, profile);
   onHostilesSeen(world, vehicle, profile);
+  onContactSpotted(world, vehicle);
   onContactsHeard(world, vehicle, profile, contacts);
   onPreySeen(world, vehicle);
   onHoldUp(world, vehicle);
@@ -991,9 +1011,13 @@ export function noteHurt(world: World): void {
 
 export function getActivityDestination(world: World, vehicle: Vehicle, activity: NpcActivity): Vec | null {
   if (!activity.destination) return null;
-  if (activity.kind === 'repair') return repairsHere(vehicle, activity) ? null : activity.destination;
+  if (activity.kind === 'repair' || activity.kind === 'rearm') return parksHere(vehicle, activity) ? null : activity.destination;
   if (['fight', 'flee', 'raid', 'prowl', 'investigate', 'patrol', 'explore', 'follow'].includes(activity.kind)) return activity.destination;
   return siteStop(world, vehicle, activity, activity.destination);
+}
+
+function parksHere(vehicle: Vehicle, activity: NpcActivity): boolean {
+  return activity.kind === 'repair' ? repairsHere(vehicle, activity) : liesUp(vehicle);
 }
 
 function siteStop(world: World, vehicle: Vehicle, activity: NpcActivity, destination: Vec): Vec {
@@ -1087,7 +1111,7 @@ function resolveRaid(world: World, vehicle: Vehicle, activity: NpcActivity): voi
 }
 
 function resolveFlee(world: World, vehicle: Vehicle, activity: NpcActivity): void {
-  if (reachedDestination(world, vehicle, activity)) finishGoal(world, vehicle, 'nowhereToRun');
+  if (reachedDestination(world, vehicle, activity) && !turnCornered(world, vehicle)) finishGoal(world, vehicle, 'nowhereToRun');
 }
 
 function resolveInvestigate(world: World, vehicle: Vehicle, activity: NpcActivity): void {
@@ -1112,7 +1136,7 @@ function topUpAtPump(world: World, vehicle: Vehicle, siteId: string): void {
 
 function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
-  if (!site) return;
+  if (!dealDue(world, vehicle, activity, site)) return;
   if ('kind' in site && site.kind === 'camp') sellAtCamp(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   else sellVehicleCargo(world, vehicle, site.id, NPC_UPKEEP.repairParts);
   topUpAtPump(world, vehicle, site.id);
@@ -1121,10 +1145,10 @@ function resolveSell(world: World, vehicle: Vehicle, activity: NpcActivity): voi
 
 function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
-  if (!site) return;
+  if (!dealDue(world, vehicle, activity, site)) return;
   if (!activity.purchase) throw new Error('Trade activity missing purchase');
   noteShop(world, vehicle, site.id);
-  const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, cargoRoom(vehicle, activity.purchase.good), tradeSpend(world, vehicle));
+  const count = affordableBuyCount(world, vehicle, site.id, activity.purchase.good, cargoRoom(vehicle), tradeSpend(world, vehicle));
   if (count > 0) {
     tradeGoods(world, vehicle, site.id, activity.purchase.good, count, 'buy');
     topUpAtPump(world, vehicle, site.id);
@@ -1138,9 +1162,9 @@ function resolveTrade(world: World, vehicle: Vehicle, activity: NpcActivity): vo
 
 function resolveHaul(world: World, vehicle: Vehicle, activity: NpcActivity): void {
   const site = reachSite(vehicle, activity);
-  if (!site) return;
+  if (!dealDue(world, vehicle, activity, site)) return;
   if (!activity.load) throw new Error('Haul activity missing load');
-  if (addGoods(world, vehicle, activity.load.good, cargoRoom(vehicle, activity.load.good)) === 0) {
+  if (addGoods(world, vehicle, activity.load.good, cargoRoom(vehicle)) === 0) {
     finishGoal(world, vehicle, 'cargoFullLoad');
     return;
   }

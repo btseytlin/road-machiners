@@ -187,6 +187,7 @@ describe('the retreat home', () => {
     const money = getResources(w, buggy).money;
     thinkNpc(w, buggy);
     resolveNpcActivities(w);
+    buggy.pos = { ...topGoal(buggy)!.destination! };
     w.turn = topGoal(buggy)!.until!;
     thinkNpc(w, buggy);
     resolveNpcActivities(w);

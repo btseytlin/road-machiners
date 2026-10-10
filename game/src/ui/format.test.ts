@@ -10,11 +10,12 @@ import { mountPart } from "../sim/inventory";
 import { maxHp } from "../sim/wear";
 import { workOf, addState } from "../sim/states";
 import { startAid } from "../sim/aid";
-import { contractDue, heldContractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel, conditionTier, conditionStatus, showsCondition, GOODS_COLUMNS, PROFIT_HEAD_TITLE, saleEstimate, estimateText, estimateTitle, lotTitle } from "./format";
+import { contractDue, heldContractDue, workLabel, contractSummary, contractWindow, eventText, jobLabel, roundLabel, vehicleName, wearLabel, conditionTier, conditionStatus, showsCondition, CRATE_NOTE, GOODS_COLUMNS, PROFIT_HEAD_TITLE, saleEstimate, estimateText, estimateTitle, lotTitle } from "./format";
 import { mountedParts } from "../sim/grid";
-import { fuelLiters } from "./units";
+import { fuelLiters, kg } from "./units";
+import { CRATE_MASS } from "../data/goods";
 import { wreckVehicle } from "../sim/combat";
-import { partName, vehicleTitle } from "../text/names";
+import { partName, siteName, vehicleTitle } from "../text/names";
 import { t, type Msg } from "../text/msg";
 import { resolve } from "../text/resolve";
 
@@ -150,9 +151,39 @@ describe("contract text", () => {
     expect(en(contractSummary({ ...haul, rush: true })).startsWith("Rush: Haul 3")).toBe(true);
   });
 
+  it("counts a haul in crates", () => {
+    const haul: Contract = { id: "c4", shop: "bowl", kind: "haul", good: "salt", units: 5, to: "nose", reward: 100, deadline: 100, window: 100, rush: false, tier: 1 };
+    expect(en(contractSummary(haul))).toBe("Haul 5 crates of Salt to Nose");
+    expect(en(contractSummary({ ...haul, units: 1 }))).toBe("Haul 1 crate of Salt to Nose");
+  });
+
   it("shows the window in whole game hours, at least one", () => {
     expect(en(contractWindow({ ...bounty, window: 525 }))).toBe("28 h");
     expect(en(contractWindow({ ...bounty, window: 1 }))).toBe("1 h");
+  });
+});
+
+describe("jobLabel of site business", () => {
+  const town = REGION.towns[0];
+  const label = (deal: "resupply" | "sell" | "trade" | "haul", siteId = town.id) => {
+    const w = emptyWorld();
+    return en(jobLabel(w, w.vehicles[0], { kind: "business", siteId, deal, turnsLeft: 2, total: 3 }));
+  };
+
+  it("names each deal and the site", () => {
+    expect(label("resupply")).toBe(`Refuel and repair at ${en(siteName(town.id))}`);
+    expect(label("sell")).toBe(`Sell cargo at ${en(siteName(town.id))}`);
+    expect(label("trade")).toBe(`Buy cargo at ${en(siteName(town.id))}`);
+    expect(label("haul")).toBe(`Load cargo at ${en(siteName(town.id))}`);
+  });
+
+  it("reads an oasis resupply as filling water", () => {
+    const oasis = REGION.locations.find((l) => l.kind === "oasis")!;
+    expect(label("resupply", oasis.id)).toBe(`Fill water at ${en(siteName(oasis.id))}`);
+  });
+
+  it("throws on an unknown deal", () => {
+    expect(() => label("raid" as "sell")).toThrow();
   });
 });
 
@@ -341,6 +372,12 @@ describe("caltrops log", () => {
 });
 
 describe("collision log", () => {
+  it("tells the log the title of a note written into the journal", () => {
+    const w = emptyWorld();
+
+    expect(logEn(w, { t: "note", id: "greenPit" })).toEqual({ text: "Noted in your journal: Clean water at Green Pit.", cls: "good" });
+  });
+
   it("logs no crash, whether into a standing obstacle or through a fence", () => {
     const w = emptyWorld();
     const me = w.player.vehicleId;
@@ -583,7 +620,12 @@ describe("saleEstimate", () => {
 
 describe("goods table words", () => {
   it("has terse column heads", () => {
-    expect(Object.fromEntries(Object.entries(GOODS_COLUMNS).map(([k, v]) => [k, en(v)]))).toEqual({ good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit" });
+    expect(Object.fromEntries(Object.entries(GOODS_COLUMNS).map(([k, v]) => [k, en(v)]))).toEqual({ good: "Good", theirs: "Theirs", buy: "Buy", sell: "Sell", held: "Held", profit: "Profit/crate" });
+  });
+
+  it("says prices are per crate of the one crate mass", () => {
+    expect(en(CRATE_NOTE)).toBe(`Prices are per ${en(kg(CRATE_MASS))} crate. One crate fills one cargo cell.`);
+    expect(en(CRATE_NOTE)).toContain("50 kg");
   });
 
   it("explains the profit head in a hover title without turns", () => {

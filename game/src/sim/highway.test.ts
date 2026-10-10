@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { CHASSIS } from '../data/chassis';
-import { FURY_ROAD, HIGHWAY } from '../data/fury-road';
+import { FURY_ROAD, HIGHWAY } from '../data/modes';
 import { TERRAIN } from '../data/terrain';
 import { atlasOf } from './atlas';
 import { REGION } from '../data/region';

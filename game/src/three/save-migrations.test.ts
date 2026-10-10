@@ -37,18 +37,28 @@ import FORMAT_2_27 from './save-fixtures/format-2-27.json';
 import FORMAT_2_28 from './save-fixtures/format-2-28.json';
 import FORMAT_2_29 from './save-fixtures/format-2-29.json';
 import FORMAT_2_30 from './save-fixtures/format-2-30.json';
+import FORMAT_2_41 from './save-fixtures/format-2-41.json';
+import FORMAT_2_42 from './save-fixtures/format-2-42.json';
+import { LAYOUTS_2_34 } from './save-layouts-2-34';
 import SAVE_SHAPE from './save-shape.json';
 import FORMAT_2_31 from './save-fixtures/format-2-31.json';
 import FORMAT_2_32 from './save-fixtures/format-2-32.json';
 import FORMAT_2_33 from './save-fixtures/format-2-33.json';
 import FORMAT_2_35 from './save-fixtures/format-2-35.json';
 import FORMAT_2_36 from './save-fixtures/format-2-36.json';
-import FORMAT_2_38 from './save-fixtures/format-2-38.json';
-import FORMAT_2_39 from './save-fixtures/format-2-39.json';
+import { STORY_WRECKS } from '../data/salvage';
+import FORMAT_2_43 from './save-fixtures/format-2-43.json';
+import FORMAT_2_44 from './save-fixtures/format-2-44.json';
+import FORMAT_2_47 from './save-fixtures/format-2-47.json';
+import FORMAT_2_48 from './save-fixtures/format-2-48.json';
 import { CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
 import { searchStream } from '../sim/search';
 import { packExplored } from './save';
-import { MIGRATIONS, pooledSkills_9_10 } from './save-migrations';
+import { dropQuest, dropQuestVar, endQuestSession, MIGRATIONS, moveQuestCheckpoint, pooledSkills_9_10, renameQuestVar, type SavedJson } from './save-migrations';
+import FORMAT_2_37 from './save-fixtures/format-2-37.json';
+import FORMAT_2_38 from './save-fixtures/format-2-38.json';
+import FORMAT_2_39 from './save-fixtures/format-2-39.json';
+import FORMAT_2_40 from './save-fixtures/format-2-40.json';
 
 describe('save migrations', () => {
   it('0 to 1 gives the player townPatched false and keeps every other field', () => {
@@ -123,11 +133,13 @@ describe('save migration 1 to 2', () => {
   });
 
   it('puts every item of every truck on a free cell, and every non-core part still mounted', () => {
+    const wide = (item: { kind: string; part?: { defId: string } }) => item.kind === 'part' && item.part?.defId === 'mg';
     for (const v of all) {
       const grid = baseGrid(v.chassisId);
-      v.items.forEach((item, i) => {
-        expect(placementError(grid, v.items.filter((_, j) => j !== i), item, null), `${v.id} ${item.id}`).toBeNull();
-        if (item.kind === 'part' && !['mg', 'rack', 'cannon'].includes(item.part.defId)) expect(isMounted(v.chassisId, item), `${v.id} ${item.id}`).toBe(true);
+      const others = v.items.filter((it) => !wide(it));
+      others.forEach((item, i) => {
+        expect(placementError(grid, others.filter((_, j) => j !== i), item, null), `${v.id} ${item.id}`).toBeNull();
+        if (item.kind === 'part' && !['rack', 'cannon'].includes(item.part.defId)) expect(isMounted(v.chassisId, item), `${v.id} ${item.id}`).toBe(true);
       });
     }
   });
@@ -826,38 +838,243 @@ describe('save migration 36 to 37', () => {
   });
 });
 
-describe('save migration 38 to 39', () => {
-  it('drops a Gauntlet run laid on Icarus roads and keeps the mode, for the load to rescue it', () => {
-    const next = MIGRATIONS[38](structuredClone(FORMAT_2_38));
+describe('save migration 37 to 38', () => {
+  const wagon = STORY_WRECKS[0];
+  const fresh = emptyWorld();
 
-    expect(next).toEqual({ ...FORMAT_2_38, gauntlet: null });
-    expect((next.setup as { mode: string }).mode).toBe('gauntlet');
+  it('gives the player an empty journal and puts wagon Seven in place as a new game has it', () => {
+    const next = MIGRATIONS[37](FORMAT_2_37) as typeof FORMAT_2_37 & { player: { notes: unknown[] } };
+
+    expect(next.player).toEqual({ ...FORMAT_2_37.player, notes: [] });
+    expect(next.obstacles).toEqual([...FORMAT_2_37.obstacles, { id: wagon.id, pos: wagon.pos, r: wagon.r, kind: 'wreck', hulk: { chassisId: wagon.chassisId, yaw: wagon.yaw } }]);
+    const placed = (list: { id: string; parts?: object[] }[]) => list.map((s) => (s.id === wagon.id ? { ...s, parts: [] } : s));
+    expect(placed(next.salvage as never)).toEqual(placed([...FORMAT_2_37.salvage, fresh.salvage.find((s) => s.id === wagon.id)!] as never));
+    expect(next.turn).toBe(FORMAT_2_37.turn);
   });
 
-  it('keeps a world with no run as it is', () => {
-    const roaming = { ...FORMAT_2_38, setup: { ...FORMAT_2_38.setup, mode: 'roaming' }, gauntlet: null };
+  it('adds no second wagon to a save that holds one', () => {
+    const once = MIGRATIONS[37](FORMAT_2_37);
 
-    expect(MIGRATIONS[38](structuredClone(roaming))).toEqual(roaming);
+    const twice = MIGRATIONS[37](once) as typeof FORMAT_2_37;
+
+    expect(twice.obstacles.filter((o) => o.id === wagon.id)).toHaveLength(1);
+    expect(twice.salvage.filter((s) => s.id === wagon.id)).toHaveLength(1);
+  });
+});
+
+describe('save migration 38 to 39', () => {
+  it('gives the player empty quest state with no open quest', () => {
+    const next = MIGRATIONS[38](FORMAT_2_38);
+
+    expect(next).toEqual({ ...FORMAT_2_38, player: { ...FORMAT_2_38.player, quests: { world: {}, local: {}, session: null } } });
   });
 });
 
 describe('save migration 39 to 40', () => {
-  it('renames the Gauntlet mode and its run to Fury Road and keeps the run', () => {
-    const { gauntlet, ...rest } = structuredClone(FORMAT_2_39);
+  it('drops the sample quests and their world variable and keeps every other quest name', () => {
+    const next = MIGRATIONS[39](FORMAT_2_39);
 
-    expect(MIGRATIONS[39](structuredClone(FORMAT_2_39))).toEqual({ ...rest, setup: { ...rest.setup, mode: 'furyRoad' }, furyRoad: gauntlet });
-  });
-
-  it('keeps a Roaming world as it is but for the run key', () => {
-    const { gauntlet: _run, ...rest } = structuredClone(FORMAT_2_39);
-    const roaming = { ...rest, setup: { ...rest.setup, mode: 'roaming' }, gauntlet: null };
-
-    expect(MIGRATIONS[39](structuredClone(roaming))).toEqual({ ...rest, setup: roaming.setup, furyRoad: null });
+    expect(next).toEqual({
+      ...FORMAT_2_39,
+      player: { ...FORMAT_2_39.player, quests: { world: { kept_flag: true }, local: { kept_quest: { n: 2 } }, session: null } },
+    });
   });
 });
 
-describe('save migration 37 to 38', () => {
+describe('save migration 40 to 41', () => {
+  it('drops the depot quest counters that facts replaced and keeps the rest of the open quest', () => {
+    const next = MIGRATIONS[40](FORMAT_2_40);
+
+    expect(next).toEqual({
+      ...FORMAT_2_40,
+      player: { ...FORMAT_2_40.player, quests: { ...FORMAT_2_40.player.quests, local: { nose_depot_leak: { watches: 3, ledger_read: true } } } },
+    });
+  });
+});
+
+describe('save migration 41 to 42', () => {
+  it('sets every lie-up spot to its driver place and keeps every other field', () => {
+    const next = MIGRATIONS[41](FORMAT_2_41);
+    const [player, resting, patrol] = FORMAT_2_41.vehicles;
+
+    expect(next).toEqual({
+      ...FORMAT_2_41,
+      vehicles: [player, { ...resting, brain: { goals: [resting.brain!.goals[0], { ...resting.brain!.goals[1], destination: { x: 198.5, y: 230.2 } }] } }, patrol],
+    });
+  });
+});
+
+describe('save migration 42 to 43', () => {
+  const next = MIGRATIONS[42](FORMAT_2_42) as { vehicles: { id: string; items: { id: string; rot: number }[] }[]; player: { storage: { id: string }[] } };
+  const itemsOf = (id: string) => next.vehicles.find((v) => v.id === id)!.items;
+
+  it('keeps a machine gun whose second cell is free on the same kind of cell as it was', () => {
+    expect(itemsOf('player').filter((it) => ['i1', 'i2'].includes(it.id)).map((it) => it.rot)).toEqual([0, 1]);
+  });
+
+  it('turns a machine gun a quarter turn when only that way keeps it on deck cells', () => {
+    expect(itemsOf('player').find((it) => it.id === 'i4')!.rot).toBe(0);
+  });
+
+  it('stows the player machine gun with no deck room either way and drops an npc one', () => {
+    expect(itemsOf('player').some((it) => it.id === 'i5')).toBe(false);
+    expect(next.player.storage.map((p) => p.id)).toEqual(['s1', 'p5']);
+    expect(itemsOf('npc-3').some((it) => it.id === 'i8')).toBe(false);
+  });
+
+  it('leaves every other item alone', () => {
+    expect(itemsOf('player').filter((it) => ['i3', 'i6', 'i7'].includes(it.id))).toEqual(FORMAT_2_42.vehicles[0].items.filter((it) => ['i3', 'i6', 'i7'].includes(it.id)));
+  });
+
+  it('holds a copy of the chassis layouts that equals the live chassis data', () => {
+    for (const c of Object.values(CHASSIS).filter((it) => LAYOUTS_2_34[it.id])) expect(LAYOUTS_2_34[c.id], c.id).toEqual(c.layout);
+  });
+});
+
+describe('quest migration helpers', () => {
+  const saved = (): SavedJson => ({
+    turn: 3000,
+    player: {
+      vehicleId: 'v1',
+      quests: {
+        world: { wagon_heard: true },
+        local: { bowl: { trust: 2, paid: true } },
+        session: { quest: 'bowl', checkpoint: 'start.talk', seed: 77 },
+      },
+    },
+  });
+  const questsIn = (world: SavedJson) => (world.player as { quests: unknown }).quests;
+
+  it('renames a world variable and keeps its value', () => {
+    expect(questsIn(renameQuestVar(saved(), null, 'wagon_heard', 'heard_of_wagon'))).toMatchObject({ world: { heard_of_wagon: true } });
+  });
+
+  it('renames a quest variable', () => {
+    expect(questsIn(renameQuestVar(saved(), 'bowl', 'trust', 'faith'))).toMatchObject({ local: { bowl: { faith: 2, paid: true } } });
+  });
+
+  it('leaves a save without the variable as it was', () => {
+    expect(renameQuestVar(saved(), 'bowl', 'missing', 'other')).toEqual(saved());
+  });
+
+  it('refuses to rename onto a variable that holds a value', () => {
+    expect(() => renameQuestVar(saved(), 'bowl', 'trust', 'paid')).toThrow('Quest variable paid already holds a value');
+  });
+
+  it('drops a quest variable and the quest entry once it is empty', () => {
+    const once = dropQuestVar(saved(), 'bowl', 'trust');
+    expect(questsIn(once)).toMatchObject({ local: { bowl: { paid: true } } });
+    expect(questsIn(dropQuestVar(once, 'bowl', 'paid'))).toMatchObject({ local: {} });
+  });
+
+  it('moves the open session to a renamed checkpoint', () => {
+    expect(questsIn(moveQuestCheckpoint(saved(), 'bowl', 'start.talk', 'start.chat'))).toMatchObject({ session: { quest: 'bowl', checkpoint: 'start.chat', seed: 77 } });
+  });
+
+  it('ends the session of a quest and leaves another quest session open', () => {
+    expect(questsIn(endQuestSession(saved(), 'bowl'))).toMatchObject({ session: null });
+    expect(endQuestSession(saved(), 'nose')).toEqual(saved());
+  });
+
+  it('drops a whole quest with its session and variables but keeps world variables', () => {
+    expect(questsIn(dropQuest(saved(), 'bowl'))).toEqual({ world: { wagon_heard: true }, local: {}, session: null });
+  });
+});
+
+describe('save migration 43 to 44', () => {
+  const before = structuredClone(FORMAT_2_43);
+  const next = MIGRATIONS[43](FORMAT_2_43) as {
+    salvage: { id: string }[];
+    shops: Record<string, { contracts: unknown[]; pressure: Record<string, number>; stock: unknown[]; restockAt: number }>;
+    obstacles: { id: string }[];
+    player: { scavenged: string[]; discovered: string[] };
+    vehicles: { id: string; job: unknown; brain: { goals: { targetId: string }[]; noticed: Record<string, number>; unfit: string[]; memories: { fact: { kind: string; stock?: string } }[] } | null }[];
+  };
+
+  it('drops the six retired stocks and keeps every other stock', () => {
+    expect(next.salvage.map((s) => s.id)).toEqual(['wreck4', 'farmhouse-1']);
+  });
+
+  it('drops the retired ids from the searched and discovered lists', () => {
+    expect(next.player.scavenged).toEqual(['wreck4', 'farmhouse-1']);
+    expect(next.player.discovered).toEqual(['bowl', 'dustwell']);
+  });
+
+  it('adds both outpost shops empty, to roll their stock on the next turn, and leaves the old shops', () => {
+    expect(next.shops.dustwell).toEqual({ contracts: [], pressure: { water: 0, scrap: 0, tools: 0, meds: 0 }, stock: [], restockAt: 1200 });
+    expect(next.shops['green-pit']).toEqual({ contracts: [], pressure: { water: 0, grain: 0, salt: 0, textiles: 0 }, stock: [], restockAt: 1200 });
+    expect(next.shops.bowl).toEqual(FORMAT_2_43.shops.bowl);
+    expect(next.shops.nose).toEqual(FORMAT_2_43.shops.nose);
+  });
+
+  it('ends a search or a refit pickup of a retired stock and keeps other jobs', () => {
+    expect(next.vehicles[0].job).toBeNull();
+    expect(next.vehicles[1].job).toBeNull();
+    expect(next.vehicles[2].job).toEqual(FORMAT_2_43.vehicles[2].job);
+  });
+
+  it('drops goals, stripped memories, unfit entries and noticed marks of retired stocks', () => {
+    const brain = next.vehicles[1].brain!;
+    expect(brain.goals.map((g) => g.targetId)).toEqual(['bowl']);
+    expect(brain.memories.map((m) => m.fact.kind)).toEqual(['stripped', 'prices']);
+    expect(brain.memories[0].fact.stock).toBe('wreck4');
+    expect(brain.unfit).toEqual(['wreck4']);
+    expect(brain.noticed).toEqual({ 'salvageSeen:wreck4': 5 });
+  });
+
+  it('drops the retired site and convoy wreck obstacles and keeps the rest', () => {
+    expect(next.obstacles.map((o) => o.id)).toEqual(['pond-dustwell', 'wreck0', 'rock1']);
+  });
+
+  it('does not mutate its input', () => {
+    expect(FORMAT_2_43).toEqual(before);
+  });
+});
+
+describe('save migration 44 to 45', () => {
+  it('keeps a save holding a call that names a haul as it is', () => {
+    expect(MIGRATIONS[44](structuredClone(FORMAT_2_44))).toEqual(FORMAT_2_44);
+  });
+});
+
+describe('save migration 45 to 46', () => {
+  it('returns the world unchanged, since no old save holds a business job', () => {
+    expect(MIGRATIONS[45](structuredClone(FORMAT_2_44))).toEqual(FORMAT_2_44);
+  });
+});
+
+describe('save migration 47 to 48', () => {
+  it('drops a Gauntlet run laid on Icarus roads and keeps the mode, for the load to rescue it', () => {
+    const next = MIGRATIONS[47](structuredClone(FORMAT_2_47));
+
+    expect(next).toEqual({ ...FORMAT_2_47, gauntlet: null });
+    expect((next.setup as { mode: string }).mode).toBe('gauntlet');
+  });
+
+  it('keeps a world with no run as it is', () => {
+    const roaming = { ...FORMAT_2_47, setup: { ...FORMAT_2_47.setup, mode: 'roaming' }, gauntlet: null };
+
+    expect(MIGRATIONS[47](structuredClone(roaming))).toEqual(roaming);
+  });
+});
+
+describe('save migration 48 to 49', () => {
+  it('renames the Gauntlet mode and its run to Fury Road and keeps the run', () => {
+    const { gauntlet, ...rest } = structuredClone(FORMAT_2_48);
+
+    expect(MIGRATIONS[48](structuredClone(FORMAT_2_48))).toEqual({ ...rest, setup: { ...rest.setup, mode: 'furyRoad' }, furyRoad: gauntlet });
+  });
+
+  it('keeps a Roaming world as it is but for the run key', () => {
+    const { gauntlet: _run, ...rest } = structuredClone(FORMAT_2_48);
+    const roaming = { ...rest, setup: { ...rest.setup, mode: 'roaming' }, gauntlet: null };
+
+    expect(MIGRATIONS[48](structuredClone(roaming))).toEqual({ ...rest, setup: roaming.setup, furyRoad: null });
+  });
+});
+
+describe('save migration 46 to 47', () => {
   it('adds an empty Gauntlet run and keeps the rest of the world', () => {
-    expect(MIGRATIONS[37](structuredClone(FORMAT_2_36))).toEqual({ ...FORMAT_2_36, gauntlet: null });
+    expect(MIGRATIONS[46](structuredClone(FORMAT_2_44))).toEqual({ ...FORMAT_2_44, gauntlet: null });
   });
 });

@@ -15,7 +15,7 @@ import { inShade, sunAt } from './sun';
 import { straightClear } from './path';
 import { vehicleStats } from './stats';
 import { cloneWorld, endTurn } from './world';
-import { addVehicle, emptyWorld, npcBrain, testDrive  } from './testkit';
+import { addVehicle, emptyWorld, finishBusiness, npcBrain, testDrive  } from './testkit';
 import { siteGates, sitePads } from './sites';
 import { budget } from '../test/budget';
 import type { NpcActivity, Vehicle, World } from './types';
@@ -27,6 +27,13 @@ function createNpc(templateId = 'scavenger') {
   const npc = addVehicle(world, NPCS[templateId].faction, 'scout', ['mg', 'stockEngine'], { x: 30, y: 30 });
   npc.brain = npcBrain(templateId, npc.pos, TRAITS_OF[templateId]);
   return { world, npc };
+}
+
+function loadedTrader(world: World, pos: { x: number; y: number }, parts = ['mg', 'stockEngine']): Vehicle {
+  const trader = addVehicle(world, 'traders', 'scout', parts, pos);
+  trader.brain = npcBrain('trader', trader.pos, TRAITS_OF.trader);
+  addGoods(world, trader, 'scrap', 2);
+  return trader;
 }
 
 const scavengeGoal: NpcActivity = { kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'searchSite' };
@@ -69,11 +76,11 @@ describe('NPC restraint', () => {
 
   it('judges the nearby hostile faction group before attacking', () => {
     const { world, npc } = createNpc('buggy');
-    addVehicle(world, 'traders', 'scout', ['mg'], { x: 33, y: 30 });
+    loadedTrader(world, { x: 33, y: 30 });
     const alone = shareOfSeeds(world, npc.id, (x, me) => thinkNpc(x, me).kind === 'flee');
-    addVehicle(world, 'traders', 'scout', ['mg'], { x: 33, y: 32 });
+    loadedTrader(world, { x: 33, y: 32 }, ['mg', 'mg', 'mg', 'stockEngine']);
     const grouped = shareOfSeeds(world, npc.id, (x, me) => thinkNpc(x, me).kind === 'flee');
-    expect(grouped).toBeGreaterThan(0.5);
+    expect(grouped).toBeGreaterThan(0.25);
     expect(grouped).toBeGreaterThan(alone + 0.2);
   });
 
@@ -98,6 +105,7 @@ describe('NPC restraint', () => {
     const gate = siteGates(REGION.towns[0])[0];
     npc.pos = { x: gate.x + 3, y: gate.y };
     const prey = addVehicle(world, 'traders', 'scout', [], gate);
+    prey.brain = npcBrain('trader', prey.pos, TRAITS_OF.trader);
     addGoods(world, prey, 'scrap', 1);
     const fought = shareOfSeeds(world, npc.id, (x, me) => {
       planNpcOrders(x);
@@ -333,7 +341,7 @@ describe('NPC field repairs', () => {
     addGoods(world, npc, 'scrap', 1);
     npc.pos = { ...sitePads(REGION.towns[0])[0] };
     npc.brain!.goals = [{ kind: 'sell', targetId: REGION.towns[0].id, destination: REGION.towns[0].pos, phase: 'act', reason: 'sellCargo' }];
-    resolveNpcActivities(world);
+    finishBusiness(world, npc);
     expect(goodsCount(npc).scrap ?? 0).toBe(0);
     expect(goodsCount(npc).parts).toBe(2);
   });

@@ -12,6 +12,10 @@ import type { GridItem, World } from '../sim/types';
 import { advanceContracts, siteOf, type Contract } from '../sim/market';
 import { advanceJobs } from '../sim/jobs';
 import { CHASSIS } from '../data/chassis';
+import { CRATE_MASS } from '../data/goods';
+import { addGoods } from '../sim/inventory';
+import { goodsCount } from '../sim/grid';
+import { itemMass, vehicleMass } from '../sim/mass';
 import { clearGame, clearSlot, hasSave, loadWorld, packExplored, SaveError, unpackExplored, saveKey, saveInTown, isDayStart, saveOf, savedRunId, saveWorld, SaveHold, writeSave } from './save';
 import { memoryBackend, SaveSlots } from './save-db';
 import { REGION } from '../data/region';
@@ -25,7 +29,8 @@ import { TIME } from '../data/time';
 import { MIGRATIONS, SAVE_FORMAT, SAVE_MAJOR } from './save-migrations';
 import SAVED_SHAPE from './save-shape.json';
 import { allSlots, type SlotId } from './save-slots';
-import { newGameShape } from '../test/save-shape';
+import { lostQuestNames, newGameShape, questNames } from '../test/save-shape';
+import { chooseQuestOption, QUESTS, questView, startQuest } from '../sim/quests';
 import { defaultSetup, parseSetup } from '../sim/settings';
 
 const SLOTS = allSlots(3);
@@ -141,12 +146,40 @@ describe('game save', () => {
     expect(loadWorld(slots, 'auto', TEST_MAP)?.player.contracts).toEqual([{ ...bounty, fulfilled: true }]);
   });
 
+  it('loads light and heavy crates, a haul, a cost basis and hidden goods as they were saved', () => {
+    const slots = makeSlots();
+    const world = emptyWorld();
+    const truck = world.vehicles[0];
+    const held = goodsCount(truck);
+    expect(addGoods(world, truck, 'electronics', 3)).toBe(3);
+    expect(addGoods(world, truck, 'tools', 2)).toBe(2);
+    const haul: Contract = { id: 'ct-h', shop: 'bowl', kind: 'haul', good: 'salt', units: 4, to: 'nose', reward: 900, deadline: 900, window: 900, rush: false, tier: 1 };
+    expect(addGoods(world, truck, 'salt', 4)).toBe(4);
+    world.player.contracts = [haul];
+    world.player.costBasis = { electronics: 5000, tools: 3500, salt: 867 };
+    world.salvage.push({ id: 'sv-x', pos: { x: 34, y: 30 }, radius: 1, goods: { scrap: 2 }, parts: [], hidden: { goods: { batteries: 3 }, parts: [], fuel: 0, supplies: 0 } });
+    writeSave(slots, 'auto', world, RUN, 1000);
+    const loaded = loadWorld(slots, 'auto', TEST_MAP)!;
+    const loadedTruck = loaded.vehicles[0];
+    expect(loadedTruck.items).toEqual(truck.items);
+    expect(goodsCount(loadedTruck)).toEqual({ ...held, electronics: 3, tools: 2, salt: 4 });
+    expect(loaded.player.contracts).toEqual([haul]);
+    expect(loaded.player.money).toBe(world.player.money);
+    expect(loaded.player.xp).toBe(world.player.xp);
+    expect(loaded.player.costBasis).toEqual(world.player.costBasis);
+    expect(loaded.salvage.find((s) => s.id === 'sv-x')?.hidden.goods).toEqual({ batteries: 3 });
+    expect(loaded.events).toEqual(world.events);
+    const crates = Object.values(held).reduce((sum, n) => sum + n, 0) + 9;
+    const partsMass = loadedTruck.items.filter((it) => it.kind === 'part').reduce((sum, it) => sum + itemMass(it), 0);
+    expect(vehicleMass(loadedTruck)).toBe(CHASSIS[loadedTruck.chassisId].mass + partsMass + crates * CRATE_MASS);
+  });
+
   it('resumes a pending refit after loading without losing progress', () => {
     const slots = makeSlots();
     const world = emptyWorld();
     const weapon = world.vehicles[0].items.find((item) => item.kind === 'part' && item.part.defId === 'mg');
     if (!weapon) throw new Error('Expected weapon');
-    const to = { x: 1, y: CHASSIS.scout.layout.length, rot: 0 as const };
+    const to = { x: 3, y: CHASSIS.scout.layout.length, rot: 1 as const };
     const next = moveItem(world, weapon.id, to);
     advanceJobs(next);
     writeSave(slots, 'auto', next, RUN, 1000);
@@ -181,6 +214,20 @@ describe('game save', () => {
     }
     const back = takeFromStorage(freed, part.id, spot);
     expect(back.vehicles[0].items.some((it) => it.kind === 'part' && it.part.id === part.id)).toBe(true);
+  });
+
+  it.each(['dustwell', 'green-pit'])('keeps the shop of the outpost %s across a save and a load and awards nothing', (id) => {
+    const slots = makeSlots();
+    const world = emptyWorld(sitePads(siteOf(id))[0]);
+    world.player.money = 100000;
+    const bought = buyStockPart(world, world.shops[id].stock[0].id);
+    const xp = structuredClone(bought.player.xp);
+    writeSave(slots, 'auto', bought, RUN, 1000);
+    const loaded = loadWorld(slots, 'auto', TEST_MAP)!;
+    expect(loaded.shops[id]).toEqual(bought.shops[id]);
+    expect(loaded.player.money).toBe(bought.player.money);
+    expect(loaded.player.xp).toEqual(xp);
+    expect(loaded.events).toEqual([]);
   });
 
   it('stores explored as a string', () => {
@@ -265,6 +312,48 @@ describe('game save', () => {
     const format = `${SAVE_FORMAT.major}.${SAVE_FORMAT.minor}`;
     expect(SAVED_SHAPE.format, 'Run npm run save:shape after a new save format').toBe(format);
     expect(newGameShape(), 'The saved shape changed. Add a migration step in src/three/save-migrations.ts, then run npm run save:shape').toEqual(SAVED_SHAPE.shape);
+  });
+
+  it('records the saved quest names, so a lost name needs a new format', () => {
+    expect(questNames(QUESTS), 'Saved quest names changed. A removed, renamed or retyped name needs a migration step. Then run npm run save:shape').toEqual(SAVED_SHAPE.quests);
+  });
+
+  it('finds a removed, retyped or lost checkpoint name against the recorded names', () => {
+    const recorded = { world: { heard: 'boolean' as const }, local: { bowl: { trust: 'number' as const } }, checkpoints: { bowl: ['start', 'start.talk'] } };
+    const current = { world: {}, local: { bowl: { trust: 'string' as const } }, checkpoints: { bowl: ['start'] } };
+    expect(lostQuestNames(recorded, current)).toEqual(['World variable heard (boolean)', 'Quest bowl variable trust (number)', 'Quest bowl checkpoint start.talk']);
+  });
+
+  it('saves quest variables and the checkpoint but never ink state, and resumes there on load', () => {
+    const slots = makeSlots();
+    const start = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
+    const mid = chooseQuestOption(startQuest(start, QUESTS, 'bowl_hattie', 'start'), QUESTS, 0);
+    writeSave(slots, 'auto', mid, 'run', 1);
+    const stored = JSON.stringify(slots.get('auto'));
+    expect(stored).not.toContain('"live"');
+    expect(stored).not.toContain('inkVersion');
+    const loaded = loadWorld(slots, 'auto', TEST_MAP);
+    expect(loaded?.player.quests.session).toEqual(mid.player.quests.session);
+    expect(loaded?.player.notes).toEqual(mid.player.notes);
+    expect(loaded && questView(loaded, QUESTS).choices).toEqual(questView(mid, QUESTS).choices);
+    expect(loaded?.player.money).toBe(mid.player.money);
+    expect(loaded?.events).toEqual([]);
+  });
+
+  it('rejects a save holding a quest variable or checkpoint this version does not know', () => {
+    const slots = makeSlots();
+    const world = newWorld(1337, startKit('standard'), TEST_MAP, defaultSetup('roaming'));
+    const cases = [
+      [{ world: { gone: true }, local: {}, session: null }, /badQuests: World variable gone is not declared/],
+      [{ world: {}, local: {}, session: { quest: 'bowl_hattie', checkpoint: 'nowhere', seed: 1 } }, /badQuests: Quest bowl_hattie has no checkpoint nowhere/],
+      [{ world: {}, local: [], session: null }, /badQuests/],
+    ] as const;
+    for (const [quests, error] of cases) {
+      const saved = saveOf(world).world as { player: Record<string, unknown> };
+      slots.put('auto', { format: SAVE_FORMAT, world: { ...saved, player: { ...saved.player, quests } } });
+      expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(SaveError);
+      expect(() => loadWorld(slots, 'auto', TEST_MAP)).toThrow(error);
+    }
   });
 
   it('rejects a save missing a field required for future turns', () => {

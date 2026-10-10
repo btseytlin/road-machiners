@@ -19,7 +19,7 @@ import { chance } from "./rng";
 import { sitePads, type Site } from "./sites";
 import { isFree } from "./spawn";
 import { npcHomeSite, towOf } from "./tow";
-import { pushGoal } from "./npc-activities";
+import { dropGoal, pushGoal } from "./npc-activities";
 import { liesUp } from "./npc-service";
 import { isWeak, wantsLoot } from "./npc-decisions";
 import { endRun } from "./fury-road";
@@ -108,6 +108,11 @@ export function gaveUp(v: Vehicle): boolean {
 function layDown(world: World, v: Vehicle, foes: string[], gaveUp: boolean): void {
   v.defeat = { phase: "out", turns: 0, unseen: 0, foes, gaveUp };
   stopKnockedOut(world, v);
+  endDangerGoals(world, v);
+}
+
+function endDangerGoals(world: World, v: Vehicle): void {
+  for (const goal of v.brain!.goals.filter((g) => g.kind === "fight" || g.kind === "flee")) dropGoal(world, v, goal, "defeated");
 }
 
 export function standDown(world: World, v: Vehicle, winnerId: string): void {

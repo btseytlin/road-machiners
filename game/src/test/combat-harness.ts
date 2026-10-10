@@ -17,6 +17,7 @@ import { mountPart } from '../sim/inventory';
 import { hangUp } from '../sim/dialogue';
 import { isMounted, mountedParts } from '../sim/grid';
 import { maxHp } from '../sim/wear';
+import { CONDITION } from '../data/wear';
 import { generateNpcLoadout, type NpcLoadout } from '../sim/npc-loadout';
 import { topGoal } from '../sim/npc-activities';
 import { spawnAt } from '../sim/spawn';
@@ -39,7 +40,7 @@ export type Outfit = { gun: string; armor: string | null; ram?: string };
 
 export type Gear = { kind: 'kit'; id: string } | { kind: 'npc'; template: string; level: GearLevel | null } | { kind: 'outfit'; outfit: Outfit };
 
-export type Truck = { driver: string; gear: Gear; label: string };
+export type Truck = { driver: string; gear: Gear; wear: number | null; label: string };
 
 export type Fight = {
   a: Truck[];
@@ -66,12 +67,19 @@ const ARENA_STEP = 1.6;
 const FIGHT_BEFORE_SCENE = 10;
 
 export function parseTruck(spec: string): Truck {
-  const [driver, gearText, extra] = spec.split(':');
-  if (extra !== undefined) throw new Error(`A truck is driver:gear, got "${spec}"`);
+  const [body, wearText, extraWear] = spec.split('~');
+  const [driver, gearText, extra] = body.split(':');
+  if (extra !== undefined || extraWear !== undefined) throw new Error(`A truck is driver:gear~wear, got "${spec}"`);
   const scripted = (POLICIES as string[]).includes(driver);
   if (!scripted && !NPCS[driver]) throw new Error(`Unknown driver "${driver}". Drivers are NPC templates or ${POLICIES.join(', ')}`);
   const gear = gearText === undefined ? defaultGear(driver, scripted) : parseGear(gearText);
-  return { driver, gear, label: spec };
+  return { driver, gear, wear: wearText === undefined ? null : wearStep(wearText), label: spec };
+}
+
+function wearStep(text: string): number {
+  const wear = Number(text);
+  if (!Number.isInteger(wear) || wear < 0 || wear > CONDITION.maxWear) throw new Error(`Wear must be a whole step from 0 to ${CONDITION.maxWear}, got "${text}"`);
+  return wear;
 }
 
 export function parseLineup(text: string): Truck[] {
@@ -98,7 +106,7 @@ function parseOutfit(text: string): Outfit {
   return { gun, armor: armor === 'bare' ? null : armor, ...(ram ? { ram } : {}) };
 }
 
-const TABLES: Record<string, object> = { RULES, PHYSICS, NPCS, PARTS, CHASSIS, TRAITS, DECISIONS, NPC_BEHAVIOR, SKILL_EFFECTS };
+const TABLES: Record<string, object> = { RULES, PHYSICS, NPCS, PARTS, CHASSIS, TRAITS, DECISIONS, NPC_BEHAVIOR, SKILL_EFFECTS, CONDITION };
 
 export function setNumber(assignment: string): void {
   const [path, raw] = assignment.split('=');
@@ -227,6 +235,7 @@ function setup(fight: Fight): { w: World; ids: Ids } {
   const ground = groundOf(fight);
   const player = w.vehicles.find((v) => v.id === w.player.vehicleId)!;
   if (scripted?.gear.kind === 'outfit') outfit(w, player, scripted.gear.outfit);
+  if (scripted && scripted.wear !== null) rebuildAt(w, player, scripted.wear);
   if (scripted) player.pos = along(ground, -fight.gap / 2, 0);
   else park(player, ground.parked);
   const npcA = scripted ? [] : fight.a;
@@ -253,10 +262,15 @@ function placeSide(w: World, trucks: Truck[], ground: Ground, forward: number, t
     const pos = along(ground, forward, (i - (trucks.length - 1) / 2) * LINE_SPACING);
     const v = spawnAt(w, NPCS[t.driver], loadoutOf(w, t.gear), pos);
     if (t.gear.kind === 'outfit') outfit(w, v, t.gear.outfit);
+    if (t.wear !== null) rebuildAt(w, v, t.wear);
     v.heading = Math.atan2(ground.axis.y, ground.axis.x) + turn;
     v.brain!.traits = v.brain!.traits.filter((trait) => trait !== 'coward');
     return v.id;
   });
+}
+
+function rebuildAt(w: World, v: Vehicle, wear: number): void {
+  for (const item of v.items) if (item.kind === 'part') item.part = makePart(w, item.part.defId, wear);
 }
 
 function loadoutOf(w: World, gear: Gear): NpcLoadout {

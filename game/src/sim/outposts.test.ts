@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ECONOMY, GOODS } from '../data/goods';
-import { FURY_ROAD, HIGHWAY } from '../data/fury-road';
+import { FURY_ROAD, HIGHWAY } from '../data/modes';
 import { REPAIR } from '../data/wear';
 import { playerVehicle } from './damage';
 import { outpostPad } from './fury-road';

@@ -14,14 +14,14 @@ import { budget } from '../test/budget';
 import { defaultSetup } from './settings';
 
 const original = [
-  [16, 94], [102, 35], [22.8, 56.8], [33.8, 32], [50, 32.8], [60, 18.8], [78.2, 21],
-  [106.2, 70], [81, 75.6], [71.8, 89], [56.8, 94], [41, 90.2], [40.7, 51.7], [64, 54], [82, 52.2],
+  [16, 94], [102, 35], [22.8, 56.8], [33.8, 32], [50, 32.8],
+  [81, 75.6], [71.8, 89], [40.7, 51.7], [64, 54], [82, 52.2],
   [22, 14], [66, 76],
 ];
 
 describe('Icarus exploration distances', () => {
   it('multiplies every pairwise destination distance by five', () => {
-    const sites = [...REGION.towns, ...REGION.locations].filter((s) => s.id !== 'broken-wing');
+    const sites = [...REGION.towns, ...REGION.locations];
     expect(sites).toHaveLength(original.length);
     for (let i = 0; i < sites.length; i++) for (let j = i + 1; j < sites.length; j++) {
       expect(dist(sites[i].pos, sites[j].pos)).toBeCloseTo(Math.hypot(original[i][0] - original[j][0], original[i][1] - original[j][1]) * 5);

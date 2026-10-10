@@ -1,5 +1,5 @@
 import { chassisDef } from '../data/chassis';
-import { FURY_ROAD, HAZARDS, HIGHWAY, type Range, type SceneKind } from '../data/fury-road';
+import { FURY_ROAD, HAZARDS, HIGHWAY, type Range, type SceneKind } from '../data/modes';
 import { NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { START_KITS } from '../data/start';

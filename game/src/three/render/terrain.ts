@@ -11,6 +11,7 @@ import { deckAt, railOffset, type Deck } from "../../sim/bridge";
 import { deckHeight, deckSegments, type DeckSegment, type Terrain } from "../../sim/terrain";
 import type { World } from "../../sim/types";
 import { drawRoads } from "./roads";
+import { NIGHT_POOLS } from "./lightPools";
 import type { RenderScope } from "./scope";
 
 const S = PHYSICS.metersPerTile;
@@ -103,9 +104,10 @@ export function chunkGeometry(t: Terrain, x: number, y: number, width: number, d
 
 export function terrainMesh(w: World, scope: RenderScope): TerrainChunk[] {
   const chunks: TerrainChunk[] = [];
-  const material = new THREE.MeshLambertMaterial({ map: groundTexture(w), flatShading: true });
+  const material = new THREE.MeshLambertMaterial({ map: groundTexture(w) });
   drawRoads(material, mapCanvas(w, TEXTURE_SIDE), w.terrain);
   facetGround(material);
+  NIGHT_POOLS.light(material);
   for (let y = 0; y < w.size; y += TERRAIN_CHUNK)
     for (let x = 0; x < w.size; x += TERRAIN_CHUNK) {
       const width = Math.min(TERRAIN_CHUNK, w.size - x);
@@ -133,9 +135,11 @@ function facetGround(material: THREE.MeshLambertMaterial): void {
     before(shader, renderer);
     shader.uniforms.facetTile = { value: S };
     shader.uniforms.facetTint = { value: FACET_TINT };
+    shader.uniforms.facetSmooth = NIGHT_POOLS.level;
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nuniform float facetTile;\nuniform float facetTint;")
-      .replace("#include <color_fragment>", `#include <color_fragment>\n${FACET_FRAGMENT}`);
+      .replace("#include <common>", "#include <common>\nuniform float facetTile;\nuniform float facetTint;\nuniform float facetSmooth;")
+      .replace("#include <color_fragment>", `#include <color_fragment>\n${FACET_FRAGMENT}`)
+      .replace("#include <normal_fragment_begin>", `#include <normal_fragment_begin>\n${FACET_NORMAL}`);
   };
   material.customProgramCacheKey = () => `${key()}|facets`;
   material.needsUpdate = true;
@@ -149,6 +153,8 @@ const FACET_FRAGMENT = `{
   float facetHash = fract(sin(dot(facetCell + facetHalf * vec2(0.37, 0.71), vec2(12.9898, 78.233))) * 43758.5453);
   diffuseColor.rgb *= 1.0 + (facetHash - 0.5) * 2.0 * facetTint;
 }`;
+
+const FACET_NORMAL = `normal = normalize(mix(normalize(cross(dFdx(vViewPosition), dFdy(vViewPosition))), normal, facetSmooth));`;
 
 function deckPick(t: Terrain, deck: Deck, scope: RenderScope): void {
   for (const seg of deckSegments(t, deck)) piecePick(deck, seg, scope);

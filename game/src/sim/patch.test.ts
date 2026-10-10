@@ -119,7 +119,7 @@ describe('asking a driver for a patch', () => {
     expect(parts(find(w, trader.id))).toBe(4 - needed);
     expect(w.player.money).toBe(money);
     const engine = mountedParts(playerVehicle(w), 'engine')[0];
-    expect(engine.hp).toBe(Math.max(1, Math.round(partDef(engine.defId).hp * PATCH.share)));
+    expect(engine.hp).toBe(Math.max(1, Math.round(maxHp(engine) * PATCH.share)));
     expect(isStranded(w, playerVehicle(w))).toBe(false);
   });
 

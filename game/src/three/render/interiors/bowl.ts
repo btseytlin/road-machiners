@@ -11,7 +11,7 @@ import { segmentDist, type Vec } from '../../../sim/vec';
 import { hash2 } from '../../../render/noise';
 import { model, socket, type ModelName } from '../models';
 import { spin } from '../site-motion';
-import type { SiteBuilder } from '../sites';
+import { fitsCurtain, type SiteBuilder } from '../sites';
 
 const S = PHYSICS.metersPerTile;
 
@@ -36,6 +36,7 @@ const TREE_SPAN = 0.9;
 const STAIR = { at: 0.32, from: 1, to: 11.4, step: 0.3, width: 0.9, height: 0.3 };
 const SHEDS = [4, 2];
 const SHED_OUT = 1.2;
+const LAMPS = { rings: [4.8, 5.4, 6.9, 8.4, 9.9, 12.4], step: 36, count: 14, gap: 2.5, keepOut: 0.2, span: 0.4 };
 const FENCE = { r: POND.r + 0.5, posts: 14, height: 0.28 };
 
 const CROP = mix(FACTION_COLORS.bowl.top, PAL.palm, 0.3);
@@ -51,6 +52,22 @@ export function buildBowl(b: SiteBuilder, site: Site): void {
   b.root.userData.homes = addHouses(b, site, taken);
   addTerraces(b, site, taken);
   addSheds(b, site);
+  lampSpots(site, taken).forEach((s, i) => b.addLantern(s.x, s.z, i * 0.5));
+}
+
+function lampSpots(site: Site, taken: Disc[]): Spot[] {
+  const free = LAMPS.rings
+    .flatMap((r) => Array.from({ length: LAMPS.step }, (_, i) => ({ x: POND.x + Math.cos((i * 2 * Math.PI) / LAMPS.step + r) * r, z: POND.z + Math.sin((i * 2 * Math.PI) / LAMPS.step + r) * r, yaw: 0 })))
+    .filter((s) => fitsCurtain(site, s.x, s.z, LAMPS.span, LAMPS.span) && levelUnder(site, s, LAMPS.span, LAMPS.span) && !taken.some((d) => Math.hypot(d.x - s.x, d.z - s.z) < d.r + LAMPS.keepOut));
+  const chosen: Spot[] = [];
+  while (chosen.length < LAMPS.count && free.length > 0) {
+    const apart = (s: Spot) => Math.min(...chosen.map((c) => Math.hypot(c.x - s.x, c.z - s.z)), Infinity);
+    const best = free.reduce((m, s) => (apart(s) > apart(m) ? s : m));
+    if (apart(best) < LAMPS.gap) break;
+    chosen.push(best);
+    free.splice(free.indexOf(best), 1);
+  }
+  return chosen;
 }
 
 function buildFloor(b: SiteBuilder, site: Site, taken: Disc[]): void {

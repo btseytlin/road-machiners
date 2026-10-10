@@ -2,7 +2,7 @@
 // radio works in sight only. A player call opens on the hub, which lists the topics this NPC can take up. An
 // NPC call opens on the topic it raises. Turns wait while a call is open. Topic content lives in
 
-import { BUSY_LINE, END, HANG_UP_LINE, HONK_RANGE, HUB, REFUSED, TOPICS, TRAIT_TALK, type DialogueOption, type LineId, type Topic, type TopicId, type Voice } from '../data/dialogue';
+import { BUSY_LINE, END, handoffQuest, HANG_UP_LINE, HONK_RANGE, HUB, REFUSED, TOPICS, TRAIT_TALK, type DialogueOption, type LineId, type Topic, type TopicId, type Voice } from '../data/dialogue';
 import { inCombat, inCombatWithOther, inFeud, isHostile } from './combat';
 import { playerVehicle, vehicleById } from './damage';
 import { isKnockedOut } from './defeat';
@@ -12,6 +12,7 @@ import { dist } from './vec';
 import { npcTraits } from './npc-decisions';
 import { practice } from './progress';
 import { modeRules } from './settings';
+import { openQuest, QUESTS } from './quests';
 import { canVehicleSee } from './vision';
 import { playerCommand, requireActivePlayer, update } from './world';
 
@@ -159,6 +160,11 @@ function askTopic(world: World, npc: Vehicle, call: Call, topic: Topic): void {
 
 function follow(world: World, npc: Vehicle, call: Call, option: DialogueOption): void {
   for (const id of option.effects) EFFECTS[id](world, npc, call);
+  const quest = handoffQuest(option.go);
+  if (quest) {
+    endCall(world, call);
+    return openQuest(world, QUESTS, quest, 'start');
+  }
   if (option.go === END) return endCall(world, call);
   if (option.go === HUB) return enter(world, call, null, HUB);
   enter(world, call, call.topic, option.go);

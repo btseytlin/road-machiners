@@ -211,13 +211,13 @@ describe('the Fallen Sun layout', () => {
   const roadSegments = [...roads, ...spurs].flatMap((road) => road.points.slice(1).map((b, i) => [road.points[i], b] as const));
 
   it('keeps every piece centre, cache and patch inside the territory', () => {
-    const points = [...pieces.map((p) => p.pos), ...territoryCaches(t)];
+    const points = [...pieces.map((p) => p.pos), ...territoryCaches(t).map((c) => c.pos)];
     for (const p of points) expect(siteGap(fallenSun, p), `${p.x},${p.y}`).toBeLessThan(0);
     for (const patch of rules.patches) expect(siteGap(fallenSun, { x: fallenSun.pos.x + patch.at.x, y: fallenSun.pos.y + patch.at.y })).toBeLessThan(0);
   });
 
   it("keeps caches, patches and every piece but the reactor's housing out of the hazard", () => {
-    for (const p of territoryCaches(t)) expect(dist(p, zone.pos), `${p.x},${p.y}`).toBeGreaterThan(zone.radius);
+    for (const { pos: p } of territoryCaches(t)) expect(dist(p, zone.pos), `${p.x},${p.y}`).toBeGreaterThan(zone.radius);
     for (const patch of rules.patches) expect(dist({ x: fallenSun.pos.x + patch.at.x, y: fallenSun.pos.y + patch.at.y }, zone.pos) - patch.radius).toBeGreaterThan(zone.radius);
     pieces.forEach((p, k) => {
       if (k === housing) return;
@@ -403,7 +403,7 @@ describe("the Fallen Sun's dirt roads, wing and flaps", () => {
   });
 
   it('puts every cache and spot patch within 6 tiles of a dirt road (IV5)', () => {
-    for (const c of territoryCaches(t)) expect(nearestRoad(c), `${c.x},${c.y}`).toBeLessThanOrEqual(6);
+    for (const { pos: c } of territoryCaches(t)) expect(nearestRoad(c), `${c.x},${c.y}`).toBeLessThanOrEqual(6);
     for (const patch of rules.patches.filter((p) => p.spots > 0)) expect(nearestRoad(onMap(patch.at)), `${patch.at.x},${patch.at.y}`).toBeLessThanOrEqual(6);
   });
 
@@ -499,8 +499,9 @@ describe('Glass Flats', () => {
     expect(isLootSpot(landmarkAt('ruinCompound', { x: 1, y: 1 }))).toBe(false);
   });
 
-  it('rolls a hull cache there from the engine scrap table, while a Fallen Sun cache still rolls the landmark table', () => {
-    expect(spotTable(landmarkAt('hullCache', flats.pos))).toBe(SALVAGE.engineScrap);
+  it('rolls an engine cache there from the engine scrap table, while a Fallen Sun hull cache still rolls the landmark table', () => {
+    expect(spotTable(landmarkAt('engineCache', flats.pos))).toBe(SALVAGE.engineScrap);
+    expect(isLootSpot(landmarkAt('hullCache', flats.pos))).toBe(false);
     expect(spotTable(landmarkAt('hullCache', fallenSun.pos))).toBe(SALVAGE.landmark);
   });
 
@@ -511,6 +512,7 @@ describe('Glass Flats', () => {
 
   it('places 21 loot spots: 3 engine caches, 11 compounds and 7 dead trucks', () => {
     expect(wreck.caches).toHaveLength(3);
+    expect(wreck.cacheLook).toBe('engineCache');
     expect(wreck.buildings.map((b) => [b.look, b.table, b.poses.length])).toEqual([['ruinCompound', 'cityStores', 11]]);
     expect(wreck.patches.reduce((n, p) => n + p.spots, 0)).toBe(7);
   });
@@ -521,7 +523,7 @@ describe('Glass Flats', () => {
   });
 
   it('keeps every piece centre, compound, cache and patch inside it', () => {
-    const points = [...pieces.map((p) => p.pos), ...territoryCaches(t), ...wreck.buildings.flatMap((b) => b.poses.map((p) => onMap(p.at))), ...wreck.patches.map((p) => onMap(p.at))];
+    const points = [...pieces.map((p) => p.pos), ...territoryCaches(t).map((c) => c.pos), ...wreck.buildings.flatMap((b) => b.poses.map((p) => onMap(p.at))), ...wreck.patches.map((p) => onMap(p.at))];
     for (const p of points) expect(siteGap(flats, p), `${p.x},${p.y}`).toBeLessThan(0);
   });
 
@@ -574,7 +576,7 @@ describe('Glass Flats', () => {
   });
 
   it('puts every cache within 6 tiles of a dirt road and every compound within 12', () => {
-    for (const c of territoryCaches(t)) expect(nearestRoad(c), `${c.x},${c.y}`).toBeLessThanOrEqual(6);
+    for (const { pos: c } of territoryCaches(t)) expect(nearestRoad(c), `${c.x},${c.y}`).toBeLessThanOrEqual(6);
     for (const b of wreck.buildings.flatMap((g) => g.poses)) expect(nearestRoad(onMap(b.at)), `${b.at.x},${b.at.y}`).toBeLessThanOrEqual(12);
   });
 

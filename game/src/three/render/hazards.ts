@@ -16,6 +16,9 @@ import { shutDownTurnsLeft } from '../../sim/utility';
 import { dist, type Vec } from '../../sim/vec';
 import { playerSees } from '../../sim/vision';
 import { HarpoonLinesView } from './lines';
+import { CARD_SHAPES, ROUND_SHAPE, type Card, type FxCards } from './particles/cards';
+import { liveNear, Particles, type ParticleLook } from './particles/particles';
+import { newWake, stepWake, WakeTracker, type WakeMover, type WakeState } from './particles/wake';
 import type { VehicleView } from './vehicle';
 
 const S = PHYSICS.metersPerTile;
@@ -43,6 +46,12 @@ export class HazardViews {
     const fresh = clock === null ? NO_IDS : new Set(world.lines.filter((l) => madeThisTurn(clock, 'lines', l.id)).map((l) => l.id));
     this.lines.update(world, views, nowMs, { fresh, playing: turnClock !== null });
     this.pulses.update(world, terrain, views, nowMs, clock);
+  }
+
+  draw(cards: FxCards): void {
+    this.smoke.draw(cards);
+    this.flares.draw(cards);
+    this.pulses.draw(cards);
   }
 
   private clockOf(world: World, clock: TurnClock | null): TurnClock | null {
@@ -137,62 +146,89 @@ export class Flight {
 
 type FlightLook = { casing: number; length: number; radius: number; trail: number; trailPuffs: number; trailLag: number; trailSize: number; trailOpacity: number };
 
-type Flying = { flight: Flight; head: THREE.Mesh; trail: THREE.Sprite[] };
+type Flying = { flight: Flight; head: THREE.Mesh; trail: Card[]; live: Card[] };
 
 const UP = new THREE.Vector3(0, 1, 0);
 const HEADING = new THREE.Vector3();
 const FLIGHT_LOOKAHEAD = 0.01;
+const FLIGHT_CARDS = 100;
+const TRAIL_SPIN = 2.4;
+const TRAIL_FADE_MS = 600;
 
 class FlightsView {
   readonly root = new THREE.Group();
   private readonly flying: Flying[] = [];
   private readonly headGeometry: THREE.CylinderGeometry;
   private readonly headMaterial: THREE.MeshLambertMaterial;
-  private readonly trailTexture = createSmokeTexture();
+  private readonly trailColor: THREE.Color;
 
   constructor(private readonly look: FlightLook) {
     this.headGeometry = new THREE.CylinderGeometry(look.radius * S, look.radius * S, look.length * S, 8);
     this.headMaterial = new THREE.MeshLambertMaterial({ color: look.casing });
+    this.trailColor = new THREE.Color(look.trail);
   }
 
   launch(flight: Flight): void {
     const head = new THREE.Mesh(this.headGeometry, this.headMaterial);
     head.renderOrder = FLARE_ORDER;
-    const trail = Array.from({ length: this.look.trailPuffs }, () => {
-      const puff = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.trailTexture, color: this.look.trail, transparent: true, depthWrite: false }));
-      puff.renderOrder = FLARE_ORDER - 1;
-      return puff;
-    });
-    this.root.add(head, ...trail);
-    this.flying.push({ flight, head, trail });
+    const trail = Array.from({ length: this.look.trailPuffs }, (_, i) => this.trailCard(i));
+    this.root.add(head);
+    this.flying.push({ flight, head, trail, live: [] });
+  }
+
+  draw(cards: FxCards): void {
+    let left = FLIGHT_CARDS;
+    for (const body of this.flying) {
+      const n = Math.min(body.live.length, left);
+      for (let i = 0; i < n; i++) cards.lit.push(body.live[i]);
+      left -= n;
+    }
   }
 
   update(nowMs: number): void {
     for (const body of [...this.flying]) {
       const t = body.flight.share(nowMs);
-      if (t >= 1) this.land(body);
-      else this.fly(body, t);
+      if (t >= 1) this.land(body, nowMs);
+      else this.fly(body, t, nowMs);
     }
   }
 
-  private fly(body: Flying, t: number): void {
+  private trailCard(i: number): Card {
+    const { r, g, b } = this.trailColor;
+    const shape = i % CARD_SHAPES;
+    const spin = i * TRAIL_SPIN;
+    return { x: 0, y: 0, z: 0, size: 0, spin, shape, r, g, b, alpha: 0, sx: 0, sy: 0, sz: 0 };
+  }
+
+  private fly(body: Flying, t: number, nowMs: number): void {
     const at = body.flight.at(t);
     const ahead = body.flight.at(t + FLIGHT_LOOKAHEAD);
     body.head.position.copy(at);
     body.head.quaternion.setFromUnitVectors(UP, HEADING.set(ahead.x - at.x, ahead.y - at.y, ahead.z - at.z).normalize());
-    body.trail.forEach((puff, i) => {
+    body.live.length = 0;
+    body.trail.forEach((card, i) => {
       const lag = (i + 1) * this.look.trailLag;
-      puff.visible = t > lag;
-      puff.position.copy(body.flight.at(Math.max(0, t - lag)));
-      puff.scale.setScalar(this.look.trailSize * S * (1 + i * 0.25));
-      puff.material.opacity = this.look.trailOpacity * (1 - i / body.trail.length);
+      if (t <= lag) return;
+      const p = body.flight.at(Math.max(0, t - lag));
+      card.x = p.x;
+      card.y = p.y;
+      card.z = p.z;
+      card.size = this.look.trailSize * S * (1 + i * 0.25);
+      card.spin = i * TRAIL_SPIN + nowMs * 0.0004;
+      card.alpha = this.trailAlpha(body, i);
+      body.live.push(card);
     });
   }
 
-  private land(body: Flying): void {
-    this.root.remove(body.head, ...body.trail);
-    for (const puff of body.trail) puff.material.dispose();
-    this.flying.splice(this.flying.indexOf(body), 1);
+  private trailAlpha(body: Flying, i: number): number {
+    return this.look.trailOpacity * (1 - i / body.trail.length);
+  }
+
+  private land(body: Flying, nowMs: number): void {
+    this.root.remove(body.head);
+    const gone = dissolvedShare(body.flight.startMs + body.flight.ms, nowMs, TRAIL_FADE_MS);
+    if (gone >= 1) return void this.flying.splice(this.flying.indexOf(body), 1);
+    body.trail.forEach((card, i) => (card.alpha = this.trailAlpha(body, i) * (1 - gone)));
   }
 }
 
@@ -211,10 +247,17 @@ function launchPoint(world: World, views: ReadonlyMap<string, VehicleView>, e: U
   return groundPoint(world.terrain, contact ? contact.center : target);
 }
 
-const SMOKE_ORDER = 905;
 const SMOKE_LOOK = {
   basePuffs: 16,
   puffsPerArea: 2.2,
+  maxPuffs: 120,
+  cardBudget: 800,
+  cardSize: 0.95,
+  clearance: 0.3,
+  lit: { toward: 0x8a847d, lift: 0.5 },
+  tint: { min: 0.6, max: 1.4 },
+  heightShade: { low: 0.55, high: 1.35 },
+  turnRate: 0.12,
   size: { min: 3, max: 4 },
   opacity: { min: 0.8, max: 0.9 },
   inset: 1.3,
@@ -223,6 +266,7 @@ const SMOKE_LOOK = {
   high: { from: 1.3, to: 2.3, spread: 0.8 },
   billowMs: 1500,
   lastTurn: 0.55,
+  dissolve: { ms: 1000, grow: 0.4, rise: 0.8 },
   wobble: 0.35,
   wobbleSeconds: 5,
   cutaway: { inner: 0.9, clear: 0.6, floor: 0.04 },
@@ -231,41 +275,43 @@ export const SHELL = { flightMs: 900, apex: 3 };
 const SHELL_LOOK: FlightLook = { casing: PAL.shell.casing, length: 0.05, radius: 0.015, trail: PAL.shell.trail, trailPuffs: 6, trailLag: 0.05, trailSize: 0.5, trailOpacity: 0.55 };
 const RIM_SAMPLES = 8;
 
-type Puff = { sprite: THREE.Sprite; home: THREE.Vector3; size: number; opacity: number; seed: number };
-type CloudView = { group: THREE.Group; puffs: Puff[]; bornMs: number; from: THREE.Vector3 };
+type Puff = { home: THREE.Vector3; size: number; opacity: number; seed: number; side: number; spin: number; shade: number; card: Card; wake: WakeState };
+type CloudView = { cloud: SmokeCloud; ground: THREE.Vector3; puffs: Puff[]; bornMs: number; from: THREE.Vector3; limit: number; goneMs: number | null };
+type Step = { nowMs: number; cutaway: Cutaway | null; movers: readonly WakeMover[]; dt: number };
 
 class SmokeCloudsView {
   readonly root = new THREE.Group();
   private readonly views = new Map<string, CloudView>();
-  private readonly texture = createSmokeTexture();
   private readonly shells = new FlightsView(SHELL_LOOK);
+  private readonly wake = new WakeTracker();
 
   constructor() {
     this.root.add(this.shells.root);
   }
 
+  draw(cards: FxCards): void {
+    this.shells.draw(cards);
+    for (const view of this.views.values()) {
+      for (let i = 0; i < view.limit; i++) if (view.puffs[i].card.alpha > 0.003) cards.lit.push(view.puffs[i].card);
+    }
+  }
+
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null, cutaway: Cutaway | null): void {
     const shown = new Map(world.smoke.filter((c) => volleyShown(clock, 'smoke', c.id) && isShown(world, c)).map((c) => [c.id, c]));
-    for (const [id, view] of this.views) {
-      if (shown.has(id)) continue;
-      this.root.remove(view.group);
-      for (const p of view.puffs) p.sprite.material.dispose();
-      this.views.delete(id);
-    }
-    for (const c of shown.values()) {
-      const view = this.views.get(c.id) ?? this.makeView(world, views, c, madeThisTurn(clock, 'smoke', c.id), nowMs);
-      place(terrain, view, c, nowMs, cutaway);
+    ageOut(this.views, shown, nowMs, SMOKE_LOOK.dissolve.ms);
+    for (const c of shown.values()) (this.views.get(c.id) ?? this.makeView(world, views, c, madeThisTurn(clock, 'smoke', c.id), nowMs)).cloud = c;
+    const { movers, dt } = this.views.size > 0 ? this.wake.update(positionsOf(views), nowMs) : { movers: [], dt: 0 };
+    const share = Math.floor(SMOKE_LOOK.cardBudget / Math.max(1, this.views.size));
+    for (const view of this.views.values()) {
+      view.limit = Math.min(view.puffs.length, share);
+      place(terrain, view, { nowMs, cutaway, movers, dt });
     }
     this.shells.update(nowMs);
   }
 
   private makeView(world: World, views: ReadonlyMap<string, VehicleView>, c: SmokeCloud, fresh: boolean, nowMs: number): CloudView {
-    const group = new THREE.Group();
-    group.position.copy(groundPoint(world.terrain, c.pos));
-    const puffs = puffsOf(c, this.texture);
-    group.add(...puffs.map((p) => p.sprite));
-    this.root.add(group);
-    const view = { group, puffs, ...this.billow(world, views, c, fresh, nowMs) };
+    const ground = new THREE.Vector3().copy(groundPoint(world.terrain, c.pos));
+    const view = { cloud: c, ground, puffs: puffsOf(c), limit: 0, goneMs: null, ...this.billow(world, views, c, fresh, nowMs) };
     this.views.set(c.id, view);
     return view;
   }
@@ -284,8 +330,12 @@ class SmokeCloudsView {
   }
 }
 
-export function puffsOf(c: SmokeCloud, texture: THREE.Texture): Puff[] {
-  const count = Math.round(SMOKE_LOOK.basePuffs + SMOKE_LOOK.puffsPerArea * c.r * c.r);
+function positionsOf(views: ReadonlyMap<string, VehicleView>): Map<string, { x: number; z: number }> {
+  return new Map([...views].map(([id, view]) => [id, view.center()]));
+}
+
+export function puffsOf(c: SmokeCloud): Puff[] {
+  const count = Math.min(SMOKE_LOOK.maxPuffs, Math.round(SMOKE_LOOK.basePuffs + SMOKE_LOOK.puffsPerArea * c.r * c.r));
   const seed = hashId(c.id);
   return Array.from({ length: count }, (_, i) => {
     const k = seed + i * 17;
@@ -295,12 +345,27 @@ export function puffsOf(c: SmokeCloud, texture: THREE.Texture): Puff[] {
     const a = hash2(k, 5) * 2 * Math.PI;
     const band = low ? SMOKE_LOOK.low : SMOKE_LOOK.high;
     const home = new THREE.Vector3(Math.cos(a) * r * S, (band.from + (band.to - band.from) * hash2(k, 7)) * S, Math.sin(a) * r * S);
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, color: PAL.smoke, transparent: true, opacity: 0, depthWrite: false }));
-    sprite.renderOrder = SMOKE_ORDER;
     const size = SMOKE_LOOK.size.min + (SMOKE_LOOK.size.max - SMOKE_LOOK.size.min) * hash2(k, 11);
     const opacity = SMOKE_LOOK.opacity.min + (SMOKE_LOOK.opacity.max - SMOKE_LOOK.opacity.min) * hash2(k, 13);
-    return { sprite, home, size, opacity, seed: k };
+    const spin = hash2(k, 29) * 2 * Math.PI;
+    const shade = SMOKE_LOOK.tint.min + (SMOKE_LOOK.tint.max - SMOKE_LOOK.tint.min) * hash2(k, 41);
+    return { home, size, opacity, seed: k, side: hash2(k, 37) < 0.5 ? -1 : 1, spin, shade, card: smokeCard(k, spin), wake: newWake() };
   });
+}
+
+const SMOKE_COLOR = new THREE.Color(PAL.smoke).lerp(new THREE.Color(SMOKE_LOOK.lit.toward), SMOKE_LOOK.lit.lift);
+
+function smokeCard(k: number, spin: number): Card {
+  const shape = Math.floor(hash2(k, 43) * CARD_SHAPES);
+  return { x: 0, y: 0, z: 0, size: 0, spin, shape, r: 0, g: 0, b: 0, alpha: 0, sx: 0, sy: 0, sz: 0 };
+}
+
+function shadeCard(card: Card, shade: number, height: number): void {
+  const { low, high } = SMOKE_LOOK.heightShade;
+  const k = shade * (low + (high - low) * Math.min(1, Math.max(0, height / (SMOKE_LOOK.high.to * S))));
+  card.r = SMOKE_COLOR.r * k;
+  card.g = SMOKE_COLOR.g * k;
+  card.b = SMOKE_COLOR.b * k;
 }
 
 function isShown(world: World, c: { source: string; pos: Vec; r: number }): boolean {
@@ -333,19 +398,47 @@ export function cutShare(cut: Cutaway | null, p: THREE.Vector3, half: number): n
   return floor + (1 - floor) * t * t * (3 - 2 * t);
 }
 
-function place(terrain: Terrain, view: CloudView, c: SmokeCloud, nowMs: number, cutaway: Cutaway | null): void {
-  view.group.position.y = heightAt(terrain, c.pos.x, c.pos.y) * S;
-  const grown = easeOut(Math.min(1, Math.max(0, (nowMs - view.bornMs) / SMOKE_LOOK.billowMs)));
-  const fade = Math.min(1, grown * 2) * (c.turnsLeft <= 1 ? SMOKE_LOOK.lastTurn : 1);
-  const t = nowMs / 1000 / SMOKE_LOOK.wobbleSeconds;
-  for (const p of view.puffs) {
-    const wx = (valueNoise(p.seed * 0.11 + t, 2.3) - 0.5) * 2 * SMOKE_LOOK.wobble * S;
-    const wz = (valueNoise(5.1, p.seed * 0.11 + t) - 0.5) * 2 * SMOKE_LOOK.wobble * S;
-    p.sprite.position.lerpVectors(view.from, p.home, grown).add({ x: wx, y: 0, z: wz });
-    p.sprite.scale.setScalar(p.size * S * (0.3 + 0.7 * grown));
-    const at = PUFF_AT.copy(p.sprite.position).add(view.group.position);
-    p.sprite.material.opacity = p.opacity * fade * cutShare(cutaway, at, (p.size * S) / 2);
+const PUFF_LOCAL = new THREE.Vector3();
+const PUFF_SPOT = { x: 0, z: 0, height: 0 };
+
+function place(terrain: Terrain, view: CloudView, step: Step): void {
+  const c = view.cloud;
+  view.ground.y = heightAt(terrain, c.pos.x, c.pos.y) * S;
+  const grown = easeOut(Math.min(1, Math.max(0, (step.nowMs - view.bornMs) / SMOKE_LOOK.billowMs)));
+  const gone = dissolvedShare(view.goneMs, step.nowMs, SMOKE_LOOK.dissolve.ms);
+  const fade = Math.min(1, grown * 2) * (c.turnsLeft <= 1 ? SMOKE_LOOK.lastTurn : 1) * (1 - gone);
+  for (let i = 0; i < view.limit; i++) placePuff(view, view.puffs[i], step, grown, fade, gone);
+}
+
+export function dissolvedShare(goneMs: number | null, nowMs: number, ms: number): number {
+  return goneMs === null ? 0 : Math.min(1, Math.max(0, (nowMs - goneMs) / ms));
+}
+
+function ageOut(views: Map<string, { goneMs: number | null }>, shown: ReadonlyMap<string, unknown>, nowMs: number, ms: number): void {
+  for (const [id, view] of views) {
+    if (shown.has(id)) view.goneMs = null;
+    else if (view.goneMs === null) view.goneMs = nowMs;
+    else if (nowMs - view.goneMs >= ms) views.delete(id);
   }
+}
+
+function placePuff(view: CloudView, p: Puff, step: Step, grown: number, fade: number, gone: number): void {
+  const t = step.nowMs / 1000 / SMOKE_LOOK.wobbleSeconds;
+  const wx = (valueNoise(p.seed * 0.11 + t, 2.3) - 0.5) * 2 * SMOKE_LOOK.wobble * S;
+  const wz = (valueNoise(5.1, p.seed * 0.11 + t) - 0.5) * 2 * SMOKE_LOOK.wobble * S;
+  const local = PUFF_LOCAL.lerpVectors(view.from, p.home, grown);
+  PUFF_SPOT.x = view.ground.x + local.x + wx;
+  PUFF_SPOT.z = view.ground.z + local.z + wz;
+  PUFF_SPOT.height = local.y;
+  stepWake(p.wake, PUFF_SPOT, p.side, step.movers, step.dt);
+  const card = p.card;
+  card.size = p.size * S * SMOKE_LOOK.cardSize * (0.3 + 0.7 * grown) * (1 + SMOKE_LOOK.dissolve.grow * gone);
+  card.x = PUFF_SPOT.x + p.wake.ox;
+  card.y = view.ground.y + Math.max(local.y, card.size * SMOKE_LOOK.clearance) + SMOKE_LOOK.dissolve.rise * S * gone;
+  card.z = PUFF_SPOT.z + p.wake.oz;
+  shadeCard(card, p.shade, local.y);
+  card.spin = p.spin + (step.nowMs / 1000) * SMOKE_LOOK.turnRate * p.side;
+  card.alpha = p.opacity * fade * cutShare(step.cutaway, PUFF_AT.set(card.x, card.y, card.z), (p.size * S) / 2);
 }
 
 function easeOut(t: number): number {
@@ -354,22 +447,6 @@ function easeOut(t: number): number {
 
 function easeIn(t: number): number {
   return t * t;
-}
-
-function createSmokeTexture(): THREE.CanvasTexture {
-  return radialTexture([[0, 1], [0.45, 0.85], [0.75, 0.4], [1, 0]]);
-}
-
-function radialTexture(stops: [number, number][]): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 64;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Could not create a hazard texture');
-  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
-  for (const [at, alpha] of stops) g.addColorStop(at, `rgba(255,255,255,${alpha})`);
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 64, 64);
-  return new THREE.CanvasTexture(canvas);
 }
 
 function hashId(id: string): number {
@@ -603,32 +680,72 @@ export const FLARE_LOOK = {
   light: { intensity: 60, reach: 1.6, decay: 1 },
   flicker: { share: 0.25, speed: 6 },
   lastTurn: 0.55,
+  burnOutMs: 1000,
 };
 const FLARE_FLIGHT: FlightLook = { casing: PAL.flare.casing, length: 0.09, radius: 0.024, trail: PAL.flare.trail, trailPuffs: 10, trailLag: 0.04, trailSize: 0.55, trailOpacity: 0.5 };
 
-type FlareView = { core: THREE.Sprite; halo: THREE.Sprite; igniteMs: number; bornTurn: number };
+type FlareView = { flare: Flare; at: THREE.Vector3; shine: FlareShine | null; igniteMs: number; bornTurn: number; goneMs: number | null; emit: { sparks: number; smoke: number } };
+type FlareShine = { bright: number; haloScale: number; haloAlpha: number };
+
+const FLARE_SPARK: ParticleLook = { life: 0.9, size: { from: 0.45, to: 0.12 }, colors: [0xfff4d0, 0xffb040, 0xff5014], alpha: { peak: 1, fadeIn: 0.05 }, drag: 0.6, gravity: 9, streak: 0.14, form: 'round' };
+const FLARE_SMOKE: ParticleLook = { life: 4, size: { from: 1, to: 4 }, colors: [0xc89878, 0x9a928c, 0x6c6762], alpha: { peak: 0.4, fadeIn: 0.15 }, drag: 0.5, gravity: -0.9, streak: 0, form: 'cloud' };
+const FLARE_FX = {
+  sparks: { perSecond: 28, pool: 200, speed: { min: 1.5, spread: 3.5 }, up: 1.2, scale: { min: 0.6, spread: 0.8 } },
+  smoke: { perSecond: 8, pool: 120, drift: 0.5, rise: 0.4, scale: { min: 0.8, spread: 0.4 } },
+  views: 12,
+  maxStepMs: 100,
+};
 
 class FlaresView {
   readonly root = new THREE.Group();
   private readonly views = new Map<string, FlareView>();
-  private readonly texture = createGlowTexture();
   private readonly flights = new FlightsView(FLARE_FLIGHT);
   private readonly lights: THREE.PointLight[] = [];
+  private seenIn: World | null = null;
+  private readonly nearby = liveNear(() => {
+    if (!this.seenIn) throw new Error('A flare spawned particles before its first update');
+    return this.seenIn;
+  });
+  private readonly sparks = new Particles(FLARE_FX.sparks.pool, this.nearby);
+  private readonly smoke = new Particles(FLARE_FX.smoke.pool, this.nearby);
+  private readonly color = new THREE.Color();
+  private lastMs: number | null = null;
 
   constructor() {
     this.root.add(this.flights.root);
   }
 
+  draw(cards: FxCards): void {
+    this.flights.draw(cards);
+    this.sparks.draw(cards.glow);
+    this.smoke.draw(cards.lit);
+    let drawn = 0;
+    for (const view of this.views.values()) {
+      if (!view.shine || drawn++ >= FLARE_FX.views) continue;
+      const { bright, haloScale, haloAlpha } = view.shine;
+      this.glow(cards, view.at, PAL.flare.halo, haloScale * S, haloAlpha);
+      this.glow(cards, view.at, PAL.flare.core, FLARE_LOOK.core * S, bright);
+    }
+  }
+
+  private glow(cards: FxCards, at: THREE.Vector3, hex: number, size: number, alpha: number): void {
+    this.color.set(hex);
+    cards.glow.push({ x: at.x, y: at.y, z: at.z, size, spin: 0, shape: ROUND_SHAPE, r: this.color.r, g: this.color.g, b: this.color.b, alpha, sx: 0, sy: 0, sz: 0 });
+  }
+
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null): void {
+    const dt = this.lastMs === null ? 0 : Math.min(FLARE_FX.maxStepMs, Math.max(0, nowMs - this.lastMs)) / 1000;
+    this.lastMs = nowMs;
+    this.seenIn = world;
+    this.sparks.tick(dt);
+    this.smoke.tick(dt);
     const shown = new Map(world.flares.filter((f) => volleyShown(clock, 'flares', f.id) && flareShown(world, f)).map((f) => [f.id, f]));
-    for (const [id, view] of this.views) if (!shown.has(id)) this.drop(id, view);
-    while (this.lights.length < shown.size) this.addLight();
+    ageOut(this.views, shown, nowMs, FLARE_LOOK.burnOutMs);
+    for (const f of shown.values()) (this.views.get(f.id) ?? this.makeView(world, views, f, madeThisTurn(clock, 'flares', f.id), nowMs)).flare = f;
+    while (this.lights.length < this.views.size) this.addLight();
     this.lights.forEach((light) => (light.intensity = 0));
     const progress = clock ? clock.progress : 1;
-    [...shown.values()].forEach((f, i) => {
-      const view = this.views.get(f.id) ?? this.makeView(world, views, f, madeThisTurn(clock, 'flares', f.id), nowMs);
-      this.place(terrain, view, this.lights[i], f, { nowMs, turn: world.turn, progress });
-    });
+    [...this.views.values()].forEach((view, i) => this.place(terrain, view, this.lights[i], { nowMs, turn: world.turn, progress, dt }));
     this.flights.update(nowMs);
   }
 
@@ -639,9 +756,6 @@ class FlaresView {
   }
 
   private makeView(world: World, views: ReadonlyMap<string, VehicleView>, f: Flare, fresh: boolean, nowMs: number): FlareView {
-    const core = this.glowSprite(PAL.flare.core, FLARE_ORDER + 1);
-    core.scale.setScalar(FLARE_LOOK.core * S);
-    const halo = this.glowSprite(PAL.flare.halo, FLARE_ORDER);
     const shot = fresh ? launchOf(world, 'flare', f.source, f.pos) : null;
     if (shot) {
       const top = groundPoint(world.terrain, f.pos);
@@ -649,51 +763,47 @@ class FlaresView {
       const from = launchPoint(world, views, shot, f.pos);
       this.flights.launch(new Flight(from, top, (top.y - from.y) / 4, FLARE_LOOK.flightMs, nowMs));
     }
-    const view = { core, halo, igniteMs: shot ? nowMs + FLARE_LOOK.flightMs : -Infinity, bornTurn: world.turn };
+    const view = { flare: f, at: new THREE.Vector3(), shine: null, igniteMs: shot ? nowMs + FLARE_LOOK.flightMs : -Infinity, bornTurn: world.turn, goneMs: null, emit: { sparks: 0, smoke: 0 } };
     this.views.set(f.id, view);
     return view;
   }
 
-  private glowSprite(color: number, order: number): THREE.Sprite {
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.texture, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
-    sprite.renderOrder = order;
-    this.root.add(sprite);
-    return sprite;
-  }
-
-  private drop(id: string, view: FlareView): void {
-    for (const sprite of [view.core, view.halo]) {
-      this.root.remove(sprite);
-      sprite.material.dispose();
-    }
-    this.views.delete(id);
-  }
-
-  private place(terrain: Terrain, view: FlareView, light: THREE.PointLight, f: Flare, at: { nowMs: number; turn: number; progress: number }): void {
+  private place(terrain: Terrain, view: FlareView, light: THREE.PointLight, at: { nowMs: number; turn: number; progress: number; dt: number }): void {
+    const f = view.flare;
     const lit = Math.min(1, Math.max(0, (at.nowMs - view.igniteMs) / FLARE_LOOK.igniteMs));
     const burst = lit > 0 ? 1 - Math.min(1, (at.nowMs - view.igniteMs) / FLARE_LOOK.burst.ms) : 0;
     const wave = 1 - FLARE_LOOK.flicker.share * valueNoise((at.nowMs / 1000) * FLARE_LOOK.flicker.speed, hashId(f.id) % 97);
-    const bright = lit * wave * (f.turnsLeft <= 1 ? FLARE_LOOK.lastTurn : 1);
+    const left = 1 - dissolvedShare(view.goneMs, at.nowMs, FLARE_LOOK.burnOutMs);
+    const bright = lit * wave * (f.turnsLeft <= 1 ? FLARE_LOOK.lastTurn : 1) * left * left;
     const sunk = Math.max(0, at.turn - view.bornTurn - 1 + at.progress) * FLARE_LOOK.sink;
     const { halo, burst: wide } = FLARE_LOOK;
-    view.core.position.set(f.pos.x * S, (heightAt(terrain, f.pos.x, f.pos.y) + FLARE_LOOK.height - sunk) * S, f.pos.y * S);
-    view.halo.position.copy(view.core.position);
-    view.core.visible = view.halo.visible = lit > 0;
-    view.core.material.opacity = bright;
-    view.halo.scale.setScalar((halo.size + (wide.size - halo.size) * burst) * S);
-    view.halo.material.opacity = halo.opacity * bright + (1 - halo.opacity) * burst;
+    view.at.set(f.pos.x * S, (heightAt(terrain, f.pos.x, f.pos.y) + FLARE_LOOK.height - sunk) * S, f.pos.y * S);
+    view.shine = lit > 0 ? { bright, haloScale: halo.size + (wide.size - halo.size) * burst, haloAlpha: halo.opacity * bright + (1 - halo.opacity) * burst } : null;
+    if (lit > 0) this.emit(view, bright, at.dt);
     light.intensity = FLARE_LOOK.light.intensity * bright * (1 + burst);
     light.distance = f.r * FLARE_LOOK.light.reach * S;
-    light.position.copy(view.core.position);
+    light.position.copy(view.at);
+  }
+
+  private emit(view: FlareView, bright: number, dt: number): void {
+    const { sparks, smoke } = FLARE_FX;
+    view.emit.sparks += sparks.perSecond * bright * dt;
+    view.emit.smoke += smoke.perSecond * dt;
+    for (; view.emit.sparks >= 1; view.emit.sparks--) {
+      const a = Math.random() * Math.PI * 2;
+      const speed = sparks.speed.min + Math.random() * sparks.speed.spread;
+      const vel = { x: Math.cos(a) * speed, y: sparks.up * (Math.random() - 0.3) * speed, z: Math.sin(a) * speed };
+      this.sparks.spawn(view.at, vel, FLARE_SPARK, sparks.scale.min + Math.random() * sparks.scale.spread);
+    }
+    for (; view.emit.smoke >= 1; view.emit.smoke--) {
+      const vel = { x: (Math.random() - 0.5) * smoke.drift, y: smoke.rise, z: (Math.random() - 0.5) * smoke.drift };
+      this.smoke.spawn(view.at, vel, FLARE_SMOKE, smoke.scale.min + Math.random() * smoke.scale.spread);
+    }
   }
 }
 
 function flareShown(world: World, f: Flare): boolean {
   return f.source === world.player.vehicleId || dist(playerVehicle(world).pos, f.pos) <= FLARE.seenRange;
-}
-
-function createGlowTexture(): THREE.CanvasTexture {
-  return radialTexture([[0, 1], [0.25, 0.8], [1, 0]]);
 }
 
 const PULSE_ORDER = 906;
@@ -705,28 +815,64 @@ const PULSE_LOOK = {
   jitter: 0.9,
   strands: 2,
   sparks: 10,
-  sparkSize: 0.7,
+  sparkSize: 0.12,
   sparkReach: 1.4,
   sparkHeight: 2.2,
+  sparkStreak: 0.7,
+  crackleMs: 90,
+  strandSparks: [2, 4, 6],
+  strandStreak: 0.5,
+  maxZaps: 4,
+  maxArcs: 4,
+  maxShut: 6,
 };
 
 type PulseEvent = Extract<GameEvent, { t: 'pulse' }>;
 type Strand = THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
-type Zap = { e: PulseEvent; flash: THREE.Sprite; arcs: { to: string; strands: Strand[] }[]; startMs: number };
+const NO_STREAK = new THREE.Vector3();
+type Flash = { at: THREE.Vector3; size: number; alpha: number };
+type Zap = { e: PulseEvent; flash: Flash; arcs: { to: string; strands: Strand[] }[]; startMs: number };
+type Crackle = { spots: { at: THREE.Vector3; streak: THREE.Vector3 }[]; nextMs: number };
 
 class PulseView {
   readonly root = new THREE.Group();
   private readonly zaps: Zap[] = [];
   private played = new Set<string>();
   private turn = -1;
-  private readonly sparks = new Map<string, THREE.Group>();
-  private readonly glowTexture = createGlowTexture();
-  private readonly sparkMaterial = new THREE.SpriteMaterial({ map: this.glowTexture, color: PAL.pulse.spark, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  private readonly sparks = new Map<string, Crackle>();
+  private readonly color = new THREE.Color();
+
+  draw(cards: FxCards): void {
+    for (const zap of this.zaps.slice(0, PULSE_LOOK.maxZaps)) {
+      this.spark(cards, zap.flash.at, PAL.pulse.flash, zap.flash.size, zap.flash.alpha, NO_STREAK);
+      for (const arc of zap.arcs.slice(0, PULSE_LOOK.maxArcs)) this.strandSparks(cards, arc.strands[0], zap.flash.alpha);
+    }
+    for (const crackle of [...this.sparks.values()].slice(0, PULSE_LOOK.maxShut)) {
+      for (const spot of crackle.spots) this.spark(cards, spot.at, PAL.pulse.spark, PULSE_LOOK.sparkSize * S, 1, spot.streak);
+    }
+  }
+
+  private strandSparks(cards: FxCards, strand: Strand, alpha: number): void {
+    if (!strand.visible) return;
+    const at = strand.geometry.getAttribute('position');
+    const point = new THREE.Vector3();
+    const streak = new THREE.Vector3();
+    for (const i of PULSE_LOOK.strandSparks) {
+      point.fromBufferAttribute(at, i);
+      streak.fromBufferAttribute(at, i + 1).sub(new THREE.Vector3().fromBufferAttribute(at, i - 1)).multiplyScalar(PULSE_LOOK.strandStreak);
+      this.spark(cards, point, PAL.pulse.spark, PULSE_LOOK.sparkSize * S, alpha, streak);
+    }
+  }
+
+  private spark(cards: FxCards, at: THREE.Vector3, hex: number, size: number, alpha: number, streak: THREE.Vector3): void {
+    this.color.set(hex);
+    cards.glow.push({ x: at.x, y: at.y, z: at.z, size, spin: 0, shape: ROUND_SHAPE, r: this.color.r, g: this.color.g, b: this.color.b, alpha, sx: streak.x, sy: streak.y, sz: streak.z });
+  }
 
   update(world: World, terrain: Terrain, views: ReadonlyMap<string, VehicleView>, nowMs: number, clock: TurnClock | null): void {
     if (clock === null || clock.moved) this.startZaps(world, nowMs);
     for (const zap of [...this.zaps]) this.play(zap, terrain, views, nowMs);
-    this.crackle(world, views);
+    this.crackle(world, views, nowMs);
   }
 
   private startZaps(world: World, nowMs: number): void {
@@ -742,10 +888,9 @@ class PulseView {
   }
 
   private makeZap(e: PulseEvent, nowMs: number): Zap {
-    const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.glowTexture, color: PAL.pulse.flash, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
-    flash.renderOrder = PULSE_ORDER;
+    const flash = { at: new THREE.Vector3(), size: 0, alpha: 0 };
     const arcs = e.hit.map((to) => ({ to, strands: Array.from({ length: PULSE_LOOK.strands }, () => makeStrand()) }));
-    this.root.add(flash, ...arcs.flatMap((a) => a.strands));
+    this.root.add(...arcs.flatMap((a) => a.strands));
     return { e, flash, arcs, startMs: nowMs };
   }
 
@@ -753,9 +898,9 @@ class PulseView {
     const t = (nowMs - zap.startMs) / PULSE_LOOK.ms;
     if (t >= 1) return this.end(zap);
     const from = zapPoint(userPoint(zap.e, terrain, views));
-    zap.flash.position.copy(from);
-    zap.flash.scale.setScalar(PULSE_LOOK.flash * S * (0.6 + 0.6 * t));
-    zap.flash.material.opacity = 1 - t;
+    zap.flash.at.set(from.x, from.y, from.z);
+    zap.flash.size = PULSE_LOOK.flash * S * (0.6 + 0.6 * t);
+    zap.flash.alpha = 1 - t;
     for (const arc of zap.arcs) {
       const target = views.get(arc.to);
       for (const strand of arc.strands) jag(strand, from, target ? zapPoint(target.center()) : null, 1 - t);
@@ -764,8 +909,7 @@ class PulseView {
 
   private end(zap: Zap): void {
     const strands = zap.arcs.flatMap((a) => a.strands);
-    this.root.remove(zap.flash, ...strands);
-    zap.flash.material.dispose();
+    this.root.remove(...strands);
     for (const s of strands) {
       s.geometry.dispose();
       s.material.dispose();
@@ -773,29 +917,22 @@ class PulseView {
     this.zaps.splice(this.zaps.indexOf(zap), 1);
   }
 
-  private crackle(world: World, views: ReadonlyMap<string, VehicleView>): void {
+  private crackle(world: World, views: ReadonlyMap<string, VehicleView>, nowMs: number): void {
     const shut = shutDownViews(world, views);
-    for (const [id, group] of this.sparks) {
-      if (shut.has(id)) continue;
-      this.root.remove(group);
-      this.sparks.delete(id);
+    for (const id of this.sparks.keys()) if (!shut.has(id)) this.sparks.delete(id);
+    for (const [id, view] of shut) {
+      const crackle = this.sparks.get(id) ?? this.makeCrackle();
+      this.sparks.set(id, crackle);
+      if (nowMs >= crackle.nextMs) {
+        jump(crackle, view.center());
+        crackle.nextMs = nowMs + PULSE_LOOK.crackleMs;
+      }
     }
-    for (const [id, view] of shut) jump(this.sparksOf(id), view.center());
   }
 
-  private sparksOf(id: string): THREE.Group {
-    const known = this.sparks.get(id);
-    if (known) return known;
-    const group = new THREE.Group();
-    for (let i = 0; i < PULSE_LOOK.sparks; i++) {
-      const spark = new THREE.Sprite(this.sparkMaterial);
-      spark.renderOrder = PULSE_ORDER;
-      spark.frustumCulled = false;
-      group.add(spark);
-    }
-    this.root.add(group);
-    this.sparks.set(id, group);
-    return group;
+  private makeCrackle(): Crackle {
+    const spots = Array.from({ length: PULSE_LOOK.sparks }, () => ({ at: new THREE.Vector3(), streak: new THREE.Vector3() }));
+    return { spots, nextMs: -Infinity };
   }
 }
 
@@ -848,11 +985,12 @@ function pulseShown(world: World, e: PulseEvent): boolean {
   });
 }
 
-function jump(group: THREE.Group, at: { x: number; y: number; z: number }): void {
-  for (const spark of group.children) {
+function jump(crackle: Crackle, at: { x: number; y: number; z: number }): void {
+  for (const spot of crackle.spots) {
     const a = Math.random() * 2 * Math.PI;
     const r = Math.random() * PULSE_LOOK.sparkReach;
-    spark.position.set(at.x + Math.cos(a) * r, at.y + PULSE_LOOK.sparkHeight * Math.random(), at.z + Math.sin(a) * r);
-    spark.scale.setScalar(PULSE_LOOK.sparkSize * (0.5 + Math.random()));
+    spot.at.set(at.x + Math.cos(a) * r, at.y + PULSE_LOOK.sparkHeight * Math.random(), at.z + Math.sin(a) * r);
+    const b = Math.random() * 2 * Math.PI;
+    spot.streak.set(Math.cos(b), Math.random() - 0.3, Math.sin(b)).multiplyScalar(PULSE_LOOK.sparkStreak);
   }
 }

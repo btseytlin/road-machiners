@@ -1,6 +1,7 @@
 // Loot tables, search speed and daily renewal for scavenging. Rolls draw through rng.ts.
 
 import type { Weighted } from './npcs';
+import type { Vec } from '../sim/vec';
 
 export type LootRange = [number, number];
 
@@ -58,7 +59,7 @@ export const SALVAGE = {
     goods: { scrap: [1, 2], salt: [0, 1], meds: [0, 1] },
     parts: [1, 2],
     sparePartChance: 0.2,
-    spareParts: ['stockEngine', 'plates', 'cage', 'mg', 'emitter', 'emitter', 'scrapersKnife', 'scrapersKnife'],
+    spareParts: ['stockEngine', 'plates', 'cage', 'mg', 'emitter', 'emitter', 'scrapersKnife', 'scrapersKnife', 'patcherCrane', 'patcherCrane'],
     rare: null,
     fuel: [0, 8],
     supplies: [0, 3],
@@ -117,15 +118,6 @@ export const SALVAGE = {
     fuel: [0, 2],
     supplies: [0, 2],
   } as LootTable,
-  convoy: {
-    goods: { scrap: [1, 3], meds: [0, 1] },
-    parts: [1, 2],
-    sparePartChance: 0.3,
-    spareParts: ['tunedEngine', 'cannon', 'ram', 'trailerBox', 'patcherCrane', 'patcherCrane'],
-    rare: null,
-    fuel: [4, 12],
-    supplies: [2, 6],
-  } as LootTable,
 };
 
 export const OLD_TABLES: Record<OldPlaceType, LootTable> = {
@@ -170,3 +162,39 @@ export const STRIP = {
   yieldShare: 0.5,
   turns: 3,
 };
+
+// A wreck placed by hand, the end of a story the locals tell (src/data/locals.ts). Its place and loot are fixed, so
+// the clues match it on every seed, and its id starts with `story-`. It never refills and is never cleared, and
+// anyone may loot it first. part is a spare at a fixed id and wear step, so it takes no id from the world counter.
+export type StoryWreck = {
+  id: string;
+  pos: Vec;
+  r: number; // tiles, the chassis radius times RULES.wreckRadiusScale, as for a kill wreck
+  chassisId: string;
+  yaw: number;
+  goods: Record<string, number>;
+  fuel: number;
+  supplies: number;
+  part: { id: string; defId: string; wear: number };
+};
+
+// The id of wagon Seven, the wreck the locals' clue chain leads to.
+export const WAGON_SEVEN = 'story-wagon-seven';
+
+export const STORY_WRECKS: StoryWreck[] = [
+  // Wagon Seven, a Nose Army gunwagon raiders ran off the Pump Station track on its way to Bowl. It lies in a shallow
+  // hollow south of an old farm with a water tower, about 49 tiles off the Bowl north road and 68 off the Pump Station
+  // track, so neither road shows it. Its load is about one good convoy roll: the convoy table's highs in scrap,
+  // meds and fuel, a parts unit, a crew's supplies, and the spare cannon an Army wagon carries, worn halfway.
+  {
+    id: WAGON_SEVEN,
+    pos: { x: 171, y: 381 },
+    r: 0.8,
+    chassisId: 'wagon',
+    yaw: 2.2,
+    goods: { scrap: 3, meds: 1, parts: 1 },
+    fuel: 10,
+    supplies: 4,
+    part: { id: 'story-wagon-seven-cannon', defId: 'cannon', wear: 2 },
+  },
+];

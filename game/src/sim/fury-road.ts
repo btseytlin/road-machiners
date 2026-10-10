@@ -1,4 +1,4 @@
-import { FURY_ROAD, type Curve } from '../data/fury-road';
+import { FURY_ROAD, type Curve } from '../data/modes';
 import { GARAGE_STOCK } from '../data/market';
 import { NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';

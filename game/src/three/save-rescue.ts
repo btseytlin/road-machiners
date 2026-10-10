@@ -46,8 +46,8 @@ function isGridInt(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value);
 }
 
-function spotOf(item: Json): { x: number; y: number; rot: 0 | 1 } | null {
-  return isGridInt(item.x) && isGridInt(item.y) ? { x: item.x, y: item.y, rot: item.rot === 1 ? 1 : 0 } : null;
+function spotOf(item: Json): { x: number; y: number; rot: 0 | 1 | 2 | 3 } | null {
+  return isGridInt(item.x) && isGridInt(item.y) ? { x: item.x, y: item.y, rot: item.rot === 1 || item.rot === 2 || item.rot === 3 ? item.rot : 0 } : null;
 }
 
 function itemOf(value: unknown): CarriedItem | null {
@@ -77,7 +77,7 @@ function truckOf(world: Json, player: Json): Carried['truck'] {
 
 const NO_CARRIED: Carried = {
   seed: null, money: null, xp: null, ranks: {}, xpBySource: {}, perks: [], discovered: [], knockouts: null, autoFire: null,
-  autoRepair: null, fuel: null, supplies: null, costBasis: {}, truck: null, storage: [], setup: undefined,
+  autoRepair: null, fuel: null, supplies: null, costBasis: {}, truck: null, storage: [], setup: undefined, quests: { world: {}, local: {} },
 };
 
 export function readCarried(raw: unknown): Carried {
@@ -101,7 +101,14 @@ export function readCarried(raw: unknown): Carried {
     truck: truckOf(world, player),
     storage: listOf(player.storage).flatMap((p) => partOf(p) ?? []),
     setup: world.setup,
+    quests: questVarsOf(player.quests),
   };
+}
+
+function questVarsOf(value: unknown): Carried['quests'] {
+  const quests = objectOf(value);
+  const local = Object.entries(objectOf(quests?.local) ?? {}).flatMap(([id, vars]) => (objectOf(vars) ? [[id, objectOf(vars) as Json] as const] : []));
+  return { world: objectOf(quests?.world) ?? {}, local: Object.fromEntries(local) };
 }
 
 function moneyScale_29_30(raw: unknown): number {

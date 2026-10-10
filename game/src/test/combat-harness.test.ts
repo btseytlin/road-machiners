@@ -3,6 +3,7 @@ import { PARTS } from '../data/parts';
 import { RULES } from '../data/rules';
 import { mountedParts } from '../sim/grid';
 import { initPhysics } from '../phys/drive';
+import { forceOption } from '../sim/testkit';
 import { parseLineup, parseRoad, parseTruck, runFight, setNumber, type Fight } from './combat-harness';
 
 beforeAll(async () => {
@@ -45,7 +46,9 @@ describe('combat harness', () => {
   });
 
   it('names the courier side when it flees a stronger truck', () => {
-    const r = runFight({ ...FIGHT, a: parseLineup('merc:midgame'), b: parseLineup('courier:standard'), seed: 2, maxTurns: 40 });
+    forceOption('truceOffered', 'refuse');
+    forceOption('mercyBegged', 'finish');
+    const r = runFight({ ...FIGHT, a: parseLineup('merc:snowball'), b: parseLineup('courier'), seed: 6, maxTurns: 40 });
     expect(r.outcome).toBe('b fled');
   });
 

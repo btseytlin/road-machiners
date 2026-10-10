@@ -1,0 +1,11 @@
+{
+  "turn": 900,
+  "player": { "vehicleId": "player", "rumored": ["wreck4"], "scavenged": ["wreck2"] },
+  "obstacles": [
+    { "id": "wreck4", "pos": { "x": 210.5, "y": 120.25 }, "r": 0.6, "kind": "wreck" },
+    { "id": "wreck-npc-7", "pos": { "x": 300, "y": 200 }, "r": 0.9, "kind": "wreck", "hulk": { "chassisId": "buggy", "yaw": 1.5 } }
+  ],
+  "salvage": [
+    { "id": "wreck4", "pos": { "x": 210.5, "y": 120.25 }, "radius": 0.6, "goods": { "scrap": 1, "parts": 0 }, "parts": [], "fuel": 2, "supplies": 0 }
+  ]
+}

@@ -9,7 +9,9 @@ import type { DecisionOptions } from "../data/npcs";
 import type { Contract, ShopState } from "./market";
 import type { Rng } from "./rng";
 import type { PerkId } from "../data/skills";
+import type { NoteId } from "../data/locals";
 import type { UtilityEffectType } from "../data/parts";
+import type { QuestValue } from "../data/quests";
 
 export type PatchDeal = DecisionOptions["patchDeal"];
 
@@ -36,12 +38,14 @@ export type GunState = { cooldown: number; ammo: number; reloadWork: number };
 
 export type ChargeState = { reload: number; armed?: true };
 
+export type Rot = 0 | 1 | 2 | 3;
+
 export type GridItem =
   | {
       id: string;
       x: number;
       y: number;
-      rot: 0 | 1;
+      rot: Rot;
       kind: "part";
       part: PartInstance;
     }
@@ -49,7 +53,7 @@ export type GridItem =
       id: string;
       x: number;
       y: number;
-      rot: 0 | 1;
+      rot: Rot;
       kind: "good";
       good: string;
     };
@@ -87,8 +91,8 @@ export type Pile = { until: number; fromPlayer: boolean; basis: Record<string, n
 
 export type RefitMove = {
   itemId: string;
-  from: { x: number; y: number; rot: 0 | 1 };
-  to: { x: number; y: number; rot: 0 | 1 };
+  from: { x: number; y: number; rot: Rot };
+  to: { x: number; y: number; rot: Rot };
 };
 
 export type RefitPickup =
@@ -115,7 +119,11 @@ export type Job =
   | { kind: "search"; stockId: string; turnsLeft: number; total: number }
   | { kind: "strip"; partId: string; turnsLeft: number; total: number }
   | { kind: "weld"; turnsLeft: number; total: number }
+  | { kind: "business"; siteId: string; deal: BusinessDeal; turnsLeft: number; total: number } // an NPC's time at a site deal
   | RefitJob;
+
+// The NPC goal kind a business job serves. The deal runs when the job is done.
+export type BusinessDeal = "resupply" | "sell" | "trade" | "haul";
 
 export type Contact = {
   vehicleId: string;
@@ -172,8 +180,8 @@ export type GoalReason =
   | 'towUnanswered' | 'towedPlayer' | 'towedStranded' | 'tripToSite' | 'truckGotAway' | 'unfitToHunt' | 'waitPatch'
   | 'waitTow' | 'waitTowAnswer' | 'warnedOff'
   | 'avoidRanFrom' | 'breakOffFight' | 'cannotWearDown' | 'holdFull' | 'leftPost' | 'lootWontFit' | 'ranFromIt' | 'salvageOutOfReach'
-  | 'takeSpilledCargo' | 'watchedRoad' | 'cornered'
-  | 'fightOverLoot' | 'looterWontLeave' | 'warningUnanswered' | 'defendPromisedLoot' | 'keepLoot' | 'searchOldHulks' | 'searchOldRuin';
+  | 'takeSpilledCargo' | 'watchedRoad' | 'cornered' | 'defeated'
+  | 'fightOverLoot' | 'looterWontLeave' | 'warningUnanswered' | 'defendPromisedLoot' | 'keepLoot' | 'searchOldHulks' | 'searchOldRuin' | 'springOnPrey';
 
 // A note the sim adds to the player's log. Numbers are raw sim units.
 export type SimNote =
@@ -322,6 +330,8 @@ export type LandmarkLook = Exclude<PropKind, "rock">;
 export type Hulk = { chassisId: string; yaw: number };
 
 export type Obstacle =
+  // Only kill wrecks and story wrecks have a hulk. Map, road and convoy wrecks, and kill wrecks from saves before format 2.10, show the
+  // generic wreck.
   | { id: string; pos: Vec; r: number; kind: "rock" | "wreck" | "building" | "water" | "site"; hulk?: Hulk }
   | { id: string; pos: Vec; r: number; kind: "landmark"; look: LandmarkLook; yaw: number };
 
@@ -360,6 +370,7 @@ export type CallVar =
   | { kind: "bearing"; rad: number }
   | { kind: "count"; n: number; unit: UnitId } // shown as "1 part" or "2 parts"
   | { kind: "deal"; deal: PatchDeal; patcher: "player" | "npc"; price: number; parts: number; turns: number }
+  | { kind: "haul"; goods: Record<string, number>; parts: string[] }
   | { kind: "aid"; fuel: number; supplies: number }
   | { kind: "prices"; town: string; goods: { good: string; buy: number; sell: number }[] }
   | { kind: "tip"; tip: { shop: string; good: string; dear: boolean } | null }
@@ -370,6 +381,13 @@ export type CallVars = Record<string, CallVar>;
 export type Repeat = { count: number; turn: number };
 
 export type Call = { with: string; topic: TopicId | null; node: string; vars: CallVars; line: { line: LineId; vars: CallVars } };
+
+
+export type QuestVars = Record<string, QuestValue>;
+export type QuestSession = { quest: string; checkpoint: string; seed: number };
+export type QuestLine = { text: string; tags: string[] };
+export type QuestLive = { quest: string; ink: string; lines: QuestLine[]; choices: string[]; costs: (number | null)[] };
+export type QuestState = { world: QuestVars; local: Record<string, QuestVars>; session: QuestSession | null; live: QuestLive | null };
 export type TopicOutcome = "agreed" | "refused" | "done";
 
 export type Player = {
@@ -405,12 +423,14 @@ export type Player = {
   beacon: boolean;
   call: Call | null;
   talked: Record<string, Partial<Record<TopicId, TopicOutcome>>>;
+  quests: QuestState;
   explored: Uint8Array;
   visible: number[];
   contacts: Contact[];
   clouds: string[];
   marked: { vehicleId: string; until: number }[];
   rumored: string[];
+  notes: { id: NoteId; turn: number }[];
   hostilesSeen: string[];
 };
 
@@ -424,6 +444,8 @@ export type ShotRound = {
   burst: Vec | null;
 };
 export type VehicleHits = { vehicle: string; hits: PartHit[] };
+
+export type PassReason = 'nothing' | 'busy' | 'outgunned' | 'poorLoad' | 'chance';
 
 export type GameEvent =
   | { t: 'activity'; vehicle: string; previous: NpcActivity['kind'] | null; activity: NpcActivity['kind'] | null; reason: GoalReason }
@@ -441,11 +463,13 @@ export type GameEvent =
   | { t: 'spawn'; vehicle: string }
   | { t: 'despawn'; vehicle: string }
   | { t: 'hostile'; vehicle: string; against: string }
+  | { t: 'preyPassed'; vehicle: string; prey: string; reason: PassReason }
   | { t: 'practice'; source: XpSource; amount: number; difficulty: number | null; target: string; xp: number }
   | { t: 'skillUp'; skill: SkillId; level: number } // level is the rank just bought
   | { t: 'money'; amount: number; reason: MoneyReason }
   | { t: 'contract'; contract: Contract; outcome: 'accepted' | 'expiring' | 'fulfilled' | 'done' | 'failed' | 'lapsed' }
   | { t: 'discover'; location: string }
+  | { t: 'note'; id: NoteId } // the player wrote a rumor or clue into the journal
   | { t: 'supply'; what: string; note: SimNote }
   | { t: 'death' }
   | { t: 'knockout' }

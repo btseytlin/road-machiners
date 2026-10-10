@@ -6,6 +6,7 @@ import { vehicleStats } from "../sim/stats";
 import { refreshVision } from "../sim/vision";
 import { endTurn, newWorld, setMoveOrder, startPose } from "../sim/world";
 import { startKit } from "../data/start";
+import { CONDITION } from "../data/wear";
 import { findSpot, gridOf, isMounted, MOUNT_CELLS, mountedParts, type Spot } from "../sim/grid";
 import { moveItem } from "../sim/inventory";
 import { startRepair } from "../sim/jobs";
@@ -226,6 +227,14 @@ describe("opening tips", () => {
     expect(openingStep(w)).toBeNull();
     expect(refresh(w, seen)).toBe("waypoint");
     expect([...seen]).toEqual(["wreck", "search", "loot", "patch", "install"]);
+  });
+
+  it("drops the patch step once the engine is junk, as no patch fixes it", () => {
+    const w = looted();
+    const engine = mountedParts(playerVehicle(w)).find((p) => p.id === engineId(w))!;
+    engine.wear = CONDITION.maxWear + 1;
+    engine.hp = 0;
+    expect(refresh(w, new Set<TipId>())).not.toBe("patch");
   });
 
   it("skips a step the player closes and lets the driving tips show", () => {

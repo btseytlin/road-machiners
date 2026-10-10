@@ -1,22 +1,28 @@
-
 import * as THREE from 'three';
-import { REGION, type SiteLocationDef, type SiteEdge, type TownDef } from '../../data/region';
-import { FORTRESS_STYLES } from '../../data/fortress';
-import { fortressGates, fortressStyle, insideCurtain, onFortressRock, type FortGate } from '../../sim/fortress';
+import { REGION, type SiteLocationDef, type TownDef } from '../../data/region';
+import { FORTRESS, FORTRESS_STYLES, type FortressKind } from '../../data/fortress';
+import { fortressGates, fortressOutline, fortressPieces, fortressStyle, insideCurtain, onFortressRock, type FortGate, type FortressPiece } from '../../sim/fortress';
 import { PHYSICS } from '../../data/physics';
 import { PAL } from '../../render/palette';
 import { hash2 } from '../../render/noise';
-import { isFortress, siteGates, siteLook } from '../../sim/sites';
+import { isFortress, siteLook } from '../../sim/sites';
 import { atlasOf } from '../../sim/atlas';
 import { deckById, deckCenterAt, type Deck } from '../../sim/bridge';
 import { deckSegments, heightAt, type DeckSegment, type Terrain } from '../../sim/terrain';
-import { angleDiff, segmentDist } from '../../sim/vec';
+import { pointInPolygon, segmentDist } from '../../sim/vec';
 import { instancedModel, model, type ModelName } from './models';
 import type { RenderScope } from './scope';
+import type { PlayClock } from '../play-clock';
 import { SiteMotion, type Motion } from './site-motion';
 import { buildBowl } from './interiors/bowl';
-import { buildDustwell, buildGranary, buildSalvageYard } from './interiors/compounds';
+import { buildCamp } from './interiors/camp';
+import { buildDustwell } from './interiors/dustwell';
+import { buildGranary } from './interiors/granary';
+import { buildOasis, buildPump } from './interiors/masonry';
 import { buildNose } from './interiors/nose';
+import { buildSalvageYard } from './interiors/salvage';
+import { NIGHT_POOLS, type PoolLamp } from './lightPools';
+import { SITE_LIGHT_POOL, type SiteLight, type SiteLightKind } from './siteLights';
 
 const S = PHYSICS.metersPerTile;
 type Site = TownDef | SiteLocationDef;
@@ -26,11 +32,14 @@ const WING_DECK_LENGTH = 156;
 const WING_DECK_WIDTH = 24;
 
 export type Mover = { node: THREE.Object3D; motion: Motion };
+type Fixture = { kind: SiteLightKind; head: THREE.Object3D; home: THREE.Vector3; aim: { x: number; z: number; lift?: number }; color?: number; range?: number; intensity?: number };
 const MOTION_PHASE_SPAN = 60;
 
 export class SiteBuilder {
   readonly root = new THREE.Group();
   readonly movers: Mover[] = [];
+  readonly fixtures: Fixture[] = [];
+  readonly lamps: THREE.Mesh[] = [];
   private readonly materials = new Map<number, THREE.MeshLambertMaterial>();
   constructor(private readonly terrain: Terrain, readonly site: Site) {
     this.root.name = `landmark-${site.id}`;
@@ -42,7 +51,7 @@ export class SiteBuilder {
     let material = this.materials.get(color);
     if (!material) {
       material = new THREE.MeshLambertMaterial({ color, flatShading: true });
-      if (color === PAL.lamp.on) material.emissive.setHex(color);
+      if (color === PAL.lamp.on || color === PAL.lamp.amber) material.emissive.setHex(color);
       this.materials.set(color, material);
     }
     return material;
@@ -58,26 +67,60 @@ export class SiteBuilder {
     this.root.add(mesh);
     return mesh;
   }
-  addDoor(x: number, z: number, length: number, height: number, thickness: number, color: number, yaw: number): THREE.Group {
-    const wx = this.site.pos.x + x;
-    const wz = this.site.pos.y + z;
-    const door = new THREE.Group();
-    door.name = 'door';
-    door.position.set(wx * S, (heightAt(this.terrain, wx, wz) - SINK) * S, wz * S);
-    door.rotation.y = yaw;
-    const leaf = new THREE.Mesh(new THREE.BoxGeometry(length * S, (height + SINK) * S, thickness * S), this.material(color));
-    leaf.position.set((length / 2) * S, ((height + SINK) / 2) * S, 0);
-    leaf.castShadow = true;
-    leaf.receiveShadow = true;
-    door.add(leaf);
-    this.root.add(door);
-    return door;
-  }
   addBox(x: number, z: number, w: number, h: number, d: number, color: number, lift = 0, yaw = 0): THREE.Mesh {
     return this.addShape(new THREE.BoxGeometry(w * S, h * S, d * S), color, x, z, lift + h / 2, yaw);
   }
   addTank(x: number, z: number, radius: number, height: number, color: number, lift = 0): void {
     this.addShape(new THREE.CylinderGeometry(radius * S, radius * S, height * S, 10), color, x, z, lift + height / 2);
+  }
+  addLampHead(x: number, z: number, top: number, yaw: number): THREE.Mesh {
+    this.addBox(x, z, 0.2 / LAMP_SHRINK, 0.35 / LAMP_SHRINK, 0.6 / LAMP_SHRINK, PAL.metal, top, yaw);
+    const head = this.addBox(x, z, 0.24 / LAMP_SHRINK, 0.22 / LAMP_SHRINK, 0.45 / LAMP_SHRINK, PAL.lamp.amber, top + 0.06 / LAMP_SHRINK, yaw);
+    this.lamps.push(head);
+    return head;
+  }
+  addWallLamp(face: { x: number; z: number }, out: { x: number; z: number }, height: number): THREE.Mesh {
+    const yaw = Math.atan2(-out.z, out.x);
+    const bracket = { x: face.x + (out.x * SCONCE.reach) / 2, z: face.z + (out.z * SCONCE.reach) / 2 };
+    this.addBox(bracket.x, bracket.z, SCONCE.reach, 0.12, 0.12, PAL.metal, height - 0.12, yaw);
+    return this.addLampHead(face.x + out.x * SCONCE.reach, face.z + out.z * SCONCE.reach, height, yaw);
+  }
+  addLantern(x: number, z: number, yaw: number): THREE.Mesh {
+    const out = { x: Math.cos(yaw), z: -Math.sin(yaw) };
+    const hang = { x: x + out.x * LANTERN.arm, z: z + out.z * LANTERN.arm };
+    this.addBox(x, z, LANTERN.post, LANTERN.height + SINK, LANTERN.post, PAL.trunk, -SINK, yaw);
+    this.addBox(x + (out.x * LANTERN.arm) / 2, z + (out.z * LANTERN.arm) / 2, LANTERN.arm + LANTERN.post, LANTERN.post * 0.7, LANTERN.post * 0.7, PAL.trunk, LANTERN.height - LANTERN.post, yaw);
+    this.addBox(hang.x, hang.z, LANTERN.cap, LANTERN.cap / 3, LANTERN.cap, PAL.metal, LANTERN.height - LANTERN.post - LANTERN.drop - LANTERN.cap / 3, yaw);
+    const glass = this.addBox(hang.x, hang.z, LANTERN.glass, LANTERN.glass * 1.3, LANTERN.glass, PAL.lamp.amber, LANTERN.height - LANTERN.post - LANTERN.drop - LANTERN.cap / 3 - LANTERN.glass * 1.3, yaw);
+    this.lamps.push(glass);
+    return glass;
+  }
+  addFirePit(x: number, z: number): THREE.Mesh {
+    this.addTank(x, z, FIRE_PIT.ring, FIRE_PIT.rim, PAL.rust.dark);
+    const flame = this.addShape(new THREE.ConeGeometry(FIRE_PIT.flame * S, FIRE_PIT.flame * 2.2 * S, 5), PAL.lamp.amber, x, z, FIRE_PIT.rim + FIRE_PIT.flame * 1.1);
+    flame.castShadow = false;
+    this.lamps.push(flame);
+    return flame;
+  }
+  addWorkLight(kind: SiteLightKind, x: number, z: number, height: number, aim: { x: number; z: number; lift?: number }, color: number, range?: number, intensity?: number): void {
+    const anchor = new THREE.Group();
+    const wx = this.site.pos.x + x;
+    const wz = this.site.pos.y + z;
+    anchor.position.set(wx * S, (heightAt(this.terrain, wx, wz) + height) * S, wz * S);
+    this.root.add(anchor);
+    this.addLight(kind, anchor, aim, color, range, intensity);
+  }
+  addFill(): void {
+    this.addWorkLight('fill', 0, 0, FILL.height, { x: 0, z: 0 }, PAL.siteLight.amber, this.site.radius * FILL.reach * S);
+  }
+  addWash(reach: number, color: number): void {
+    this.addWorkLight('wash', WASH.mast * reach, WASH.mast * reach, WORK_MAST, { x: -WASH.aim * reach, z: -WASH.aim * reach, lift: WASH.lift }, color);
+  }
+  addLight(kind: SiteLightKind, head: THREE.Object3D, aim: { x: number; z: number; lift?: number }, color?: number, range?: number, intensity?: number): void {
+    let root: THREE.Object3D | null = head;
+    while (root && root !== this.root) root = root.parent;
+    if (!root) throw new Error(`Light head of ${this.site.id} is not inside its site root`);
+    this.fixtures.push({ kind, head, home: head.position.clone(), aim, color, range, intensity });
   }
   addMover(node: THREE.Object3D, motion: Motion): void {
     if (this.movers.some((m) => m.node === node)) throw new Error(`Moving part ${node.name || node.uuid} of ${this.site.id} was added twice`);
@@ -146,125 +189,17 @@ export function fitsCurtain(site: Site, x: number, z: number, w: number, d: numb
   return [-1, 1].every((i) => [-1, 1].every((j) => insideCurtain(site, { x: site.pos.x + x + (i * w) / 2, y: site.pos.y + z + (j * d) / 2 })));
 }
 
-type WallStyle = {
-  height: number;
-  thickness: number;
-  segment: number;
-  ragged: boolean;
-  fence: boolean;
-  colors: number[];
-  postColor: number;
-  doorColor: number;
-};
-
-const SET = REGION.settlement;
-const EDGE_STYLES: Record<SiteEdge, WallStyle> = {
-  fence: { height: SET.fenceHeight, thickness: SET.fenceThickness, segment: SET.fenceSegment, ragged: false, fence: true, colors: [PAL.trunk], postColor: PAL.trunk, doorColor: PAL.metal },
-  wrecks: { height: SET.wreckHeight, thickness: SET.wreckThickness, segment: SET.wreckSegment, ragged: true, fence: false, colors: [PAL.rust.side, PAL.metal, PAL.rust.dark], postColor: PAL.rust.dark, doorColor: PAL.metal },
-};
 const LAMP_REACH = 0.3;
+const LAMP_SHRINK = 1.5;
 const SINK = 0.3;
-const DOOR_THICKNESS = 0.4;
-
-function edgeStyle(site: Site): WallStyle {
-  const edge = 'edge' in site ? site.edge : undefined;
-  if (edge === undefined) throw new Error(`Site ${site.id} has no edge style`);
-  return EDGE_STYLES[edge];
-}
-
-type Ring = { radius: number; count: number; step: number; open: boolean[]; mid: number; length: number };
-
-function edgeRing(site: Site, style: WallStyle): Ring {
-  const radius = site.radius;
-  const gates = siteGates(site).map((g) => Math.atan2(g.y - site.pos.y, g.x - site.pos.x));
-  const count = Math.ceil((2 * Math.PI * radius) / style.segment);
-  const step = (2 * Math.PI) / count;
-  const gateHalf = SET.gateWidth / 2 / radius;
-  const open = Array.from({ length: count }, (_, i) => gates.some((e) => Math.abs(angleDiff((i + 0.5) * step, e)) < gateHalf + step / 2));
-  return { radius, count, step, open, mid: radius * Math.cos(step / 2) - style.thickness / 2, length: 2 * radius * Math.sin(step / 2) };
-}
-
-function onEdge(ring: Ring, a: number, width: number): { x: number; z: number } {
-  const r = Math.sqrt(ring.radius * ring.radius - (width / 2) ** 2) - width / 2;
-  return { x: Math.cos(a) * r, z: Math.sin(a) * r };
-}
-
-function addWall(b: SiteBuilder, site: Site, style: WallStyle): void {
-  const ring = edgeRing(site, style);
-  const runs = gateRuns(ring.open);
-  b.root.userData.wallSections = addSections(b, ring, style, site.pos.x);
-  for (const [start, end] of runs) addGate(b, ring, style, start * ring.step, end * ring.step);
-  b.root.userData.gates = runs.length;
-  b.root.userData.doors = 2 * runs.length;
-  b.root.userData.edgeReach = [ring.mid - style.thickness / 2, ring.radius];
-  b.root.userData.wallThickness = style.thickness;
-}
-
-function addSections(b: SiteBuilder, ring: Ring, style: WallStyle, seed: number): number {
-  let sections = 0;
-  for (let i = 0; i < ring.count; i++) {
-    if (ring.open[i]) continue;
-    const a = (i + 0.5) * ring.step;
-    const height = style.ragged ? style.height * (0.8 + 0.4 * hash2(i, seed)) : style.height;
-    const color = style.colors[Math.floor(hash2(i, seed + 7) * style.colors.length)];
-    const p = { x: Math.cos(a) * ring.mid, z: Math.sin(a) * ring.mid };
-    if (style.fence) addFenceSection(b, ring, style, p, a, i);
-    else b.addBox(p.x, p.z, style.thickness, height + SINK, ring.length, color, -SINK, -a);
-    sections++;
-  }
-  return sections;
-}
-
-function addFenceSection(b: SiteBuilder, ring: Ring, style: WallStyle, p: { x: number; z: number }, a: number, i: number): void {
-  for (const lift of [0.45, 0.85]) b.addBox(p.x, p.z, style.thickness, 0.06, ring.length, style.colors[0], style.height * lift, -a);
-  addPost(b, ring, i * ring.step, 0.12, style.height, style.postColor);
-}
-
-function addPost(b: SiteBuilder, ring: Ring, a: number, width: number, height: number, color: number): void {
-  const q = onEdge(ring, a, width);
-  b.addBox(q.x, q.z, width, height + SINK, width, color, -SINK, -a);
-}
-
-function gateRuns(open: boolean[]): [number, number][] {
-  const n = open.length;
-  const runs: [number, number][] = [];
-  for (let i = 0; i < n; i++) {
-    if (!open[i] || open[(i + n - 1) % n]) continue;
-    let end = i;
-    while (open[end % n]) end++;
-    runs.push([i, end]);
-  }
-  return runs;
-}
-
-function addGate(b: SiteBuilder, ring: Ring, style: WallStyle, from: number, to: number): void {
-  for (const a of [from, to]) addPost(b, ring, a, style.thickness * 1.6, style.height * 1.4, style.postColor);
-  for (const a of [from, to]) addLamp(b, ring, style, a);
-  const middle = (from + to) / 2;
-  const doorHeight = style.fence ? style.height : style.height * 0.95;
-  addLeaf(b, ring, style, from, middle, doorHeight);
-  addLeaf(b, ring, style, to, middle, doorHeight);
-}
-
-function addLeaf(b: SiteBuilder, ring: Ring, style: WallStyle, hinge: number, tip: number, height: number): void {
-  const r = ring.radius - style.thickness / 2;
-  const h = { x: Math.cos(hinge) * r, z: Math.sin(hinge) * r };
-  const t = { x: Math.cos(tip) * r, z: Math.sin(tip) * r };
-  const length = Math.hypot(t.x - h.x, t.z - h.z);
-  b.addDoor(h.x, h.z, length, height, style.thickness * DOOR_THICKNESS, style.doorColor, -Math.atan2(t.z - h.z, t.x - h.x));
-}
-
-function addLamp(b: SiteBuilder, ring: Ring, style: WallStyle, a: number): void {
-  const top = Math.max(SET.lampHeight, style.height * 1.4);
-  const q = onEdge(ring, a, style.thickness);
-  b.addBox(q.x, q.z, 0.18, top + SINK, 0.18, PAL.metal, -SINK, -a);
-  addLampHead(b, q.x, q.z, top, -a);
-}
-
-function addLampHead(b: SiteBuilder, x: number, z: number, top: number, yaw: number): void {
-  b.addBox(x, z, 0.2, 0.35, 0.6, PAL.metal, top, yaw);
-  b.addBox(x, z, 0.24, 0.22, 0.45, PAL.lamp.on, top + 0.06, yaw);
-}
+const GATE_APRON_AIM = 2.5;
+const WORK_MAST = 3.3;
+const LANTERN = { height: 1.15, post: 0.09, arm: 0.28, cap: 0.17, glass: 0.11, drop: 0.04 };
+const FIRE_PIT = { ring: 0.45, rim: 0.12, flame: 0.16 };
+const FILL = { height: 6, reach: 1.6 };
+const SCONCE = { every: 3, reach: 0.7, height: 2.3, throw: 2.5, gap: 1.5 };
+const WASH = { mast: 2.4, aim: 3.8, lift: 3 };
+const SET = REGION.settlement;
 
 function isBannered(site: Site): boolean {
   return REGION.towns.some((t) => t.id === site.id) || ('kind' in site && site.kind === 'camp');
@@ -274,7 +209,78 @@ function dressGates(b: SiteBuilder, site: Site): void {
   const guarded = isBannered(site);
   const first = b.root.children.length;
   for (const fort of fortressGates(site)) dressGate(b, site, fort, guarded);
+  addSconces(b, site);
+  b.addFill();
   for (const piece of b.root.children.slice(first)) piece.userData.gateFurniture = true;
+}
+
+type Vec2 = { x: number; z: number };
+type Mount = { n: Vec2; face: Vec2; lamp: Vec2; throwAt: Vec2; inside: boolean };
+
+function sconceNormals(piece: FortressPiece): Vec2[] {
+  const across = { x: -Math.sin(piece.yaw), z: Math.cos(piece.yaw) };
+  const sides = [across, { x: -across.x, z: -across.z }];
+  if (piece.kind === 'wall') return sides;
+  const along = { x: Math.cos(piece.yaw), z: Math.sin(piece.yaw) };
+  return [...sides, along, { x: -along.x, z: -along.z }];
+}
+
+function sconceMount(site: Site, centre: Vec2, depth: number, n: Vec2): Mount {
+  const face = { x: centre.x + (n.x * depth) / 2, z: centre.z + (n.z * depth) / 2 };
+  const lamp = { x: face.x + n.x * SCONCE.reach, z: face.z + n.z * SCONCE.reach };
+  const throwAt = { x: lamp.x + n.x * SCONCE.throw, z: lamp.z + n.z * SCONCE.throw };
+  return { n, face, lamp, throwAt, inside: insideAt(site, lamp) };
+}
+
+function insideAt(site: Site, p: Vec2): boolean {
+  return insideCurtain(site, { x: site.pos.x + p.x, y: site.pos.y + p.z });
+}
+
+function wantsSconce(site: Site, kind: FortressKind, m: Mount): boolean {
+  if (kind === 'tower') return m.inside;
+  return kind === 'wall' && m.inside && insideAt(site, m.throwAt);
+}
+
+function outermost(mounts: Mount[], centre: Vec2): Mount[] {
+  const outward = (m: Mount) => m.n.x * centre.x + m.n.z * centre.z;
+  const outside = mounts.filter((m) => !m.inside).sort((a, b) => outward(b) - outward(a));
+  return outside.slice(0, 1);
+}
+
+function hangSconce(b: SiteBuilder, m: Mount): void {
+  b.addWallLamp(m.face, m.n, SCONCE.height);
+}
+
+const PIECE_DEPTH: Partial<Record<FortressKind, number>> = { wall: FORTRESS.wallDepth, tower: FORTRESS.towerSize };
+
+function sconceMounts(site: Site, piece: FortressPiece): Mount[] {
+  const depth = PIECE_DEPTH[piece.kind];
+  if (depth === undefined) return [];
+  const centre = { x: piece.pos.x - site.pos.x, z: piece.pos.y - site.pos.y };
+  const mounts = sconceNormals(piece).map((n) => sconceMount(site, centre, depth, n));
+  const lit = mounts.filter((m) => wantsSconce(site, piece.kind, m));
+  return piece.kind === 'tower' ? [...lit, ...outermost(mounts, centre)] : lit;
+}
+
+function spaced(kind: FortressKind, seen: { walls: number }): boolean {
+  return kind !== 'wall' || seen.walls++ % SCONCE.every === 0;
+}
+
+function clearOf(hung: Vec2[], m: Mount): boolean {
+  return hung.every((p) => Math.hypot(p.x - m.lamp.x, p.z - m.lamp.z) >= SCONCE.gap);
+}
+
+function addSconces(b: SiteBuilder, site: Site): void {
+  const seen = { walls: 0 };
+  const hung: Vec2[] = [];
+  const pieces = fortressPieces(site).sort((p, q) => Number(q.kind === 'tower') - Number(p.kind === 'tower'));
+  for (const piece of pieces) {
+    for (const m of sconceMounts(site, piece)) {
+      if (!spaced(piece.kind, seen) || !clearOf(hung, m)) continue;
+      hangSconce(b, m);
+      hung.push(m.lamp);
+    }
+  }
 }
 
 function dressGate(b: SiteBuilder, site: Site, fort: FortGate, guarded: boolean): void {
@@ -285,7 +291,8 @@ function dressGate(b: SiteBuilder, site: Site, fort: FortGate, guarded: boolean)
     const p = at(LAMP_REACH, (side * width) / 4);
     const bracket = at(LAMP_REACH / 2, (side * width) / 4);
     b.addBox(bracket.x, bracket.z, LAMP_REACH, 0.12, 0.12, PAL.metal, SET.lampHeight - 0.12, -a);
-    addLampHead(b, p.x, p.z, SET.lampHeight, -a);
+    const head = b.addLampHead(p.x, p.z, SET.lampHeight, -a);
+    if (side === 1) b.addLight('gate', head, at(GATE_APRON_AIM, 0));
   }
   if (!guarded) return;
   const lift = (x: number, z: number) => b.groundAt(face.x - site.pos.x, face.y - site.pos.y) - b.groundAt(x, z);
@@ -294,19 +301,6 @@ function dressGate(b: SiteBuilder, site: Site, fort: FortGate, guarded: boolean)
   b.addBox(pole.x, pole.z, 0.12, SET.gatePoleHeight - height, 0.12, PAL.trunk, height + lift(pole.x, pole.z), -a);
   const flag = at(-depth / 2 + 0.5, width / 2 - 0.6);
   b.addBox(flag.x, flag.z, 0.05, 1, 0.8, PAL.rust.top, SET.gatePoleHeight - 1.1 + lift(flag.x, flag.z), -a);
-}
-
-function buildPump(b: SiteBuilder): void {
-  b.addRuin(-1.7, 0, 3, 3.8);
-  b.addModel('pump_station', 2.5, 0);
-  b.addBox(-2, 0, 1.2, 0.85, 2, PAL.rust.side);
-}
-
-function buildLock(b: SiteBuilder): void {
-  for (const x of [-1.6, 1.6]) b.addBox(x, 0, 0.6, 1.1, 3.8, PAL.wall.side);
-  b.addBox(0, 0, 2.6, 0.05, 3.8, PAL.water);
-  b.addModel('lock_gate', 0, 0, Math.PI / 2);
-  b.addRuin(3.7, 0, 1.7, 2);
 }
 
 function sampleSightOnDeck(obj: THREE.Object3D, deck: Deck): void {
@@ -326,13 +320,21 @@ function sampleSightOnDeck(obj: THREE.Object3D, deck: Deck): void {
   });
 }
 
-function buildBridge(b: SiteBuilder, terrain: Terrain): void {
+function buildCanyonBridge(t: Terrain): THREE.Group {
   const deck = deckById('canyon-bridge');
-  const bridge = b.addModel('bridge', 0, 0, 0, new THREE.Vector3((deck.length * S) / 32, BRIDGE_RISE, (deck.width * S) / 7));
+  const root = new THREE.Group();
+  root.name = 'landmark-canyon-bridge';
+  const bridge = model('bridge');
+  bridge.scale.set((deck.length * S) / 32, BRIDGE_RISE, (deck.width * S) / 7);
   bridge.userData.outsideEdge = true;
-  poseOnDeck(bridge, deck, soleSegment(terrain, deck), BRIDGE_DECK_TOP * BRIDGE_RISE);
+  poseOnDeck(bridge, deck, soleSegment(t, deck), BRIDGE_DECK_TOP * BRIDGE_RISE);
+  root.add(bridge);
   sampleSightOnDeck(bridge, deck);
-  b.addRuin(0, 0, 3, 2);
+  root.traverse((o) => {
+    o.updateMatrix();
+    o.matrixAutoUpdate = false;
+  });
+  return root;
 }
 
 function buildWingDeck(t: Terrain): THREE.Group {
@@ -351,62 +353,10 @@ function buildWingDeck(t: Terrain): THREE.Group {
   return root;
 }
 
-function buildOasis(b: SiteBuilder): void {
-  b.addTank(0, 0, 2.8, 0.04, PAL.waterLight);
-  for (let i = 0; i < 9; i++) {
-    const a = i * Math.PI * 2 / 9;
-    b.addModel('palm', Math.cos(a) * 4, Math.sin(a) * 4, a * 2.3);
-  }
-}
-
-function buildWrecks(b: SiteBuilder, id: string): void {
-  if (id === 'podfield') {
-    for (let i = 0; i < 7; i++) {
-      const a = i * 2.4;
-      const pod = b.addShape(new THREE.CapsuleGeometry(0.45 * S, 1.1 * S, 2, 6), PAL.metalLight, Math.cos(a) * 3.4, Math.sin(a) * 3.4, 0.65);
-      pod.rotation.z = 0.7 + i * 0.3;
-    }
-    b.addModel('crates', 0, 0, 0.3);
-  } else {
-    b.addHull(-1, 0, id === 'ridge-wrecks' ? 7 : 4, 2, 0.3);
-    b.addHull(2, 3, 3.5, 1.5, -0.6);
-    for (let i = 0; i < 5; i++) b.addBox(-3 + i, -3, 0.5, 0.25, 1, PAL.rust.dark, 0, i);
-    b.addModel('crates', 3.5, -2.5, 0.3);
-  }
-}
-
-function buildWingSalvage(b: SiteBuilder): void {
-  b.addTank(2.5, 2.8, 0.6, 1.4, PAL.rust.top);
-  b.addTank(3.8, 2.2, 0.45, 1.1, PAL.rust.dark);
-  b.addBox(3, 1.2, 3, 0.15, 1.2, PAL.metalLight, 0.2, -0.3);
-  b.addBox(-3, 3, 2.2, 0.9, 1.3, PAL.rust.dark, 0, 0.2);
-  b.addBox(-1, 4, 1.8, 0.12, 0.9, PAL.rust.side, 0.1, 0.6);
-  b.addModel('crates', -3.8, 2.6, 0.5);
-}
-
-function buildCamp(b: SiteBuilder, id: string): void {
-  const turn = id === 'kiln' ? 1.3 : 0;
-  for (let i = 0; i < 3; i++) {
-    const a = turn + i * 2.1;
-    const x = Math.cos(a) * 3.2;
-    const z = Math.sin(a) * 3.2;
-    b.addBox(x, z, 1.8, 1.1, 1.4, i % 2 ? PAL.rust.side : PAL.metal, 0, -a);
-    b.addBox(x, z, 2.1, 0.12, 1.7, PAL.rust.top, 1.1, -a + 0.1);
-  }
-  b.addTank(0, 0, 0.7, 0.12, PAL.rust.dark);
-  for (const a of [turn + 1, turn + 1.3]) b.addTank(Math.cos(a) * 4.3, Math.sin(a) * 4.3, 0.45, 0.9, PAL.rust.top);
-  b.addHull(Math.cos(turn + 3.1) * 3.6, Math.sin(turn + 3.1) * 3.6, 3, 1.4, turn + 1.6);
-  b.addModel('crates', Math.cos(turn + 5.2) * 3.5, Math.sin(turn + 5.2) * 3.5, turn);
-}
-
 function closeSite(b: SiteBuilder, site: Site, t: Terrain): void {
-  if (isFortress(site)) {
-    pullInside(site, b.root, t);
-    dressGates(b, site);
-  } else {
-    if (isBannered(site)) throw new Error(`Town or camp ${site.id} has no fortress`);
-    addWall(b, site, edgeStyle(site));
-  }
+  if (!isFortress(site)) throw new Error(`Site ${site.id} has no fortress`);
+  pullInside(site, b.root, t);
+  dressGates(b, site);
 }
 
 function insideSiteCurtain(site: Site, obj: THREE.Object3D): boolean {
@@ -452,28 +402,55 @@ function pullInside(site: Site, root: THREE.Group, t: Terrain): void {
 
 type SiteDecor = (b: SiteBuilder, site: Site, t: Terrain) => void;
 
-const wrecks: SiteDecor = (b, site) => buildWrecks(b, site.id);
 const camp: SiteDecor = (b, site) => buildCamp(b, site.id);
 
 const SITE_DECOR: Record<string, SiteDecor> = {
   granary: (b) => buildGranary(b),
   'pump-station': (b) => buildPump(b),
-  'south-lock': (b) => buildLock(b),
-  'canyon-bridge': (b, _site, t) => buildBridge(b, t),
   dustwell: (b) => buildDustwell(b),
   'green-pit': (b) => buildOasis(b),
-  'broken-wing': (b) => buildWingSalvage(b),
   nose: (b, site) => buildNose(b, site),
   bowl: (b, site) => buildBowl(b, site),
-  'burnt-convoy': wrecks,
-  podfield: wrecks,
-  'ridge-wrecks': wrecks,
   'salvage-yard': (b) => buildSalvageYard(b),
   scrapjaw: camp,
   kiln: camp,
 };
 
-type BuiltSite = { root: THREE.Group; movers: Mover[] };
+type BuiltSite = { root: THREE.Group; movers: Mover[]; lights: SiteLight[]; lamps: PoolLamp[] };
+
+function lightNights(b: SiteBuilder, site: Site): PoolLamp[] {
+  if (!isFortress(site)) return [];
+  b.root.traverse((o) => {
+    if (!(o instanceof THREE.Mesh)) return;
+    for (const material of Array.isArray(o.material) ? o.material : [o.material]) NIGHT_POOLS.light(material);
+  });
+  const outline = fortressOutline(site);
+  return b.lamps.map((head) => {
+    head.add(NIGHT_POOLS.halo());
+    const at = { x: head.position.x / S, y: head.position.z / S };
+    return { site, x: at.x, z: at.y, inside: pointInPolygon(at, outline) };
+  });
+}
+
+function resolveLights(b: SiteBuilder, site: Site, t: Terrain): SiteLight[] {
+  const lights = b.fixtures.map((f, i): SiteLight => {
+    const shift = f.head.position.clone().sub(f.home);
+    const x = site.pos.x + f.aim.x + shift.x / S;
+    const z = site.pos.y + f.aim.z + shift.z / S;
+    const at = f.head.position;
+    const ground = heightAt(t, x, z) * S;
+    return { id: `${site.id}:${f.kind}:${i}`, siteId: site.id, kind: f.kind, at: { x: at.x, y: at.y, z: at.z }, aim: { x: x * S, y: ground + (f.aim.lift ?? 0) * S, z: z * S }, ground, color: f.color, range: f.range, intensity: f.intensity };
+  });
+  if (!isFortress(site)) {
+    if (lights.length > 0) throw new Error(`Abandoned site ${site.id} has work lights`);
+    return lights;
+  }
+  const gates = lights.filter((l) => l.kind === 'gate').length;
+  if (gates !== fortressGates(site).length) throw new Error(`Site ${site.id} has ${gates} gate lights for ${fortressGates(site).length} gates`);
+  if (lights.length === gates) throw new Error(`Site ${site.id} has no interior work light`);
+  if (lights.length > SITE_LIGHT_POOL) throw new Error(`Site ${site.id} has ${lights.length} work lights, more than the pool of ${SITE_LIGHT_POOL}`);
+  return lights;
+}
 
 function buildSite(t: Terrain, site: Site): BuiltSite {
   const b = new SiteBuilder(t, site);
@@ -481,11 +458,13 @@ function buildSite(t: Terrain, site: Site): BuiltSite {
   if (decor === undefined) throw new Error(`Missing landmark model for ${siteLook(site)}`);
   decor(b, site, t);
   closeSite(b, site, t);
+  const lights = resolveLights(b, site, t);
+  const lamps = lightNights(b, site);
   b.root.traverse((o) => {
     o.updateMatrix();
     o.matrixAutoUpdate = false;
   });
-  return { root: b.root, movers: b.movers };
+  return { root: b.root, movers: b.movers, lights, lamps };
 }
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -494,38 +473,54 @@ function sitesOf(t: Terrain): (TownDef | SiteLocationDef)[] {
   return [...atlas.towns, ...atlas.locations.filter((l): l is SiteLocationDef => l.kind !== 'territory')];
 }
 
-function wingDeckOf(t: Terrain): Deck | null {
-  return atlasOf(t).decks.decks.find((d) => d.id === 'broken-wing') ?? null;
+function deckOf(t: Terrain, id: string): Deck | null {
+  return atlasOf(t).decks.decks.find((d) => d.id === id) ?? null;
 }
+
+const DECK_MODELS = [
+  { id: 'canyon-bridge', build: buildCanyonBridge },
+  { id: 'broken-wing', build: buildWingDeck },
+] as const;
 
 export function buildSites(t: Terrain): BuiltSite {
   const root = new THREE.Group();
   const movers: Mover[] = [];
+  const lights: SiteLight[] = [];
+  const lamps: PoolLamp[] = [];
   for (const site of sitesOf(t)) {
     const built = buildSite(t, site);
     root.add(built.root);
     movers.push(...built.movers);
+    lights.push(...built.lights);
+    lamps.push(...built.lamps);
   }
-  if (wingDeckOf(t)) root.add(buildWingDeck(t));
-  return { root, movers };
+  for (const { id, build } of DECK_MODELS) if (deckOf(t, id)) root.add(build(t));
+  return { root, movers, lights, lamps };
 }
 
-export function addSites(t: Terrain, scope: RenderScope): void {
+export function addSites(t: Terrain, scope: RenderScope, play: PlayClock): { lights: SiteLight[]; lamps: PoolLamp[] } {
   const motion = new SiteMotion();
+  const lights: SiteLight[] = [];
+  const lamps: PoolLamp[] = [];
   for (const site of sitesOf(t)) {
     const built = buildSite(t, site);
     scope.add(built.root, site.pos, site.radius);
+    lights.push(...built.lights);
+    lamps.push(...built.lamps);
     const phase = hash2(site.pos.x, site.pos.y) * MOTION_PHASE_SPAN;
     for (const mover of built.movers) motion.add(mover.node, (seconds, node, rest) => mover.motion(seconds + phase, node, rest));
   }
-  let last = performance.now();
+  let last = play.nowMs();
   scope.onFrame(() => {
-    const now = performance.now();
+    const now = play.nowMs();
     motion.tick((now - last) / 1000);
     last = now;
   });
-  const deck = wingDeckOf(t);
-  if (deck) scope.add(buildWingDeck(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
+  for (const { id, build } of DECK_MODELS) {
+    const deck = deckOf(t, id);
+    if (deck) scope.add(build(t), { x: deck.from.x + (deck.axis.x * deck.length) / 2, y: deck.from.y + (deck.axis.y * deck.length) / 2 }, deck.length / 2);
+  }
+  return { lights, lamps };
 }
 
 export function poseOnDeck(obj: THREE.Object3D, deck: Deck, seg: DeckSegment, top: number): void {

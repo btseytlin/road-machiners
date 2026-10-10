@@ -1,12 +1,12 @@
-
 import { FORTRESS } from '../data/fortress';
 import { FORT_MODELS, type FortModel } from './fortress';
 import { PHYSICS } from '../data/physics';
 import SHAPES from '../data/prop-shapes.json';
 import { REGION } from '../data/region';
 import { BREAKABLE } from '../data/rules';
+import { STORY_WRECKS } from '../data/salvage';
 import { PROP_KINDS, type BakedMap, type BakedProp, type PropKind, type Terrain } from './terrain';
-import { isFortress, siteGap } from './sites';
+import { siteGap } from './sites';
 import { TERRAIN } from '../data/terrain';
 import { randInt, randRange } from './rng';
 import { hulkBoxes } from './body';
@@ -20,16 +20,20 @@ import { dist, segmentDist, type Vec } from './vec';
 const O = REGION.obstacles;
 export function generateObstacles(world: World, map: BakedMap, fixed: Obstacle[]): Obstacle[] {
   const atlas = atlasOf(map.terrain);
-  const baked = mapObstacles(map);
-  const sites = placeSites(atlas);
-  const out = [...baked, ...sites];
+  const out = mapObstacles(map);
   for (const o of fixed) {
     if (overlapsAny(out, o.pos, o.r) || !clearOfSites(atlas, o.pos, o.r) || !clearOfDecks(atlas, o.pos, o.r))
       throw new Error(`Obstacle ${o.id} at ${o.pos.x.toFixed(1)}, ${o.pos.y.toFixed(1)} overlaps a prop, a site or a deck`);
     out.push(o);
   }
-  if (modeRules(world).roadWrecks) placeRoadWrecks(world, out);
+  placeModeWrecks(world, out);
   return out;
+}
+
+function placeModeWrecks(world: World, out: Obstacle[]): void {
+  const rules = modeRules(world);
+  if (rules.roadWrecks) placeRoadWrecks(world, out);
+  if (rules.salvage) out.push(...STORY_WRECKS.map((w): Obstacle => ({ id: w.id, pos: { ...w.pos }, r: w.r, kind: 'wreck', hulk: { chassisId: w.chassisId, yaw: w.yaw } })));
 }
 
 export function mapObstacles(map: BakedMap): Obstacle[] {
@@ -59,17 +63,6 @@ let bakedId: RegExp | null = null;
 export function isBakedObstacle(o: Obstacle): boolean {
   bakedId ??= new RegExp(`^(rock\\d+|hulk-\\d+|pole-\\d+-\\d+|(${PROP_KINDS.filter((k) => k !== 'rock' && k !== 'pole').join('|')})-\\d+)$`);
   return bakedId.test(o.id);
-}
-
-function placeSites(atlas: Atlas): Obstacle[] {
-  const S = REGION.sites;
-  const out: Obstacle[] = [...atlas.towns, ...atlas.locations.filter((l) => l.kind !== 'territory')].filter((s) => !isFortress(s)).map((s) => ({ id: `site-${s.id}`, pos: { ...s.pos }, r: s.radius, kind: 'site' }));
-  for (const loc of atlas.locations) {
-    if (loc.kind === 'oasis' && !isFortress(loc)) out.push({ id: `pond-${loc.id}`, pos: { ...loc.pos }, r: S.pondRadius, kind: 'water' });
-    if (loc.kind === 'convoy' && !isFortress(loc))
-      S.convoyWrecks.forEach((o, i) => out.push({ id: `cw-${loc.id}-${i}`, pos: { x: loc.pos.x + o.x, y: loc.pos.y + o.y }, r: 0.65, kind: 'wreck' }));
-  }
-  return out;
 }
 
 function placeRoadWrecks(world: World, out: Obstacle[]): void {
@@ -128,7 +121,7 @@ export type ShapeBox = { x0: number; x1: number; y0: number; y1: number; z0: num
 
 type FortLook = Extract<PropKind, `fort${string}`>;
 type Landmark = Extract<Obstacle, { kind: 'landmark' }>;
-type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'crates' | 'reactor' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | 'ship_bow' | 'ship_cage' | 'ship_hub' | 'hull_shell' | 'hull_drum' | 'hull_shard' | 'hull_tower' | 'hull_gantry' | 'rim_rock' | 'escape_pod' | 'habitat_cylinder' | 'wing_shard' | 'power_cell' | 'tank_trap' | 'nose_rise' | 'nose_crag' | 'engine_nozzle' | 'engine_frame' | 'watchtower' | 'ruin_compound' | 'glass_spire' | 'scrap_wall' | FortModel;
+type PropModel = 'rock' | 'wreck' | 'building' | 'crag' | 'ruin_house' | 'silo' | 'water_tower' | 'gas_station' | 'bridge_broken' | 'power_pole' | 'billboard' | 'tank_hulk' | 'shack' | 'fence' | 'junk' | 'hull_chunk' | 'crates' | 'reactor' | 'dead_tree' | 'bunker' | 'sandbags' | 'farmhouse' | 'barn' | 'quonset' | 'guard_post' | 'army_truck' | 'barrier' | 'drums' | 'woodpile' | 'ship_wing' | 'ship_bow' | 'ship_cage' | 'ship_hub' | 'hull_shell' | 'hull_drum' | 'hull_shard' | 'hull_tower' | 'hull_gantry' | 'rim_rock' | 'escape_pod' | 'habitat_cylinder' | 'wing_shard' | 'power_cell' | 'tank_trap' | 'nose_rise' | 'nose_crag' | 'engine_nozzle' | 'engine_frame' | 'watchtower' | 'ruin_compound' | 'glass_spire' | 'scrap_wall' | 'hull_bay' | 'cargo_pod' | 'engine_section' | FortModel;
 
 const M = PHYSICS.metersPerTile;
 const TURN = Math.PI * 2;
@@ -148,7 +141,7 @@ const LANDMARK_MODELS: Record<Exclude<LandmarkLook, FortLook>, PropModel> = {
   junk: 'junk',
   carWreck: 'wreck',
   hullChunk: 'hull_chunk',
-  shipCache: 'crates',
+  shipCache: 'cargo_pod',
   reactor: 'reactor',
   deadTree: 'dead_tree',
   armyCache: 'crates',
@@ -164,7 +157,8 @@ const LANDMARK_MODELS: Record<Exclude<LandmarkLook, FortLook>, PropModel> = {
   drums: 'drums',
   woodpile: 'woodpile',
   shipWing: 'ship_wing',
-  hullCache: 'crates',
+  hullCache: 'hull_bay',
+  engineCache: 'engine_section',
   shipBow: 'ship_bow',
   shipCage: 'ship_cage',
   shipHub: 'ship_hub',
@@ -222,6 +216,9 @@ const MODEL_RADIUS: Partial<Record<PropModel, number>> = {
   hull_gantry: 22,
   rim_rock: 8,
   escape_pod: 2.4,
+  hull_bay: 2.8,
+  cargo_pod: 2.8,
+  engine_section: 2.8,
   habitat_cylinder: 8,
   wing_shard: 7,
   power_cell: 1.6,

@@ -1,15 +1,15 @@
 {
-  "seed": 12,
-  "mapHash": "highway:1:12:1",
-  "setup": { "mode": "gauntlet", "settings": { "damage": 1, "fuelUse": 1, "supplyUse": 1 } },
-  "gauntlet": {
-    "window": 1,
-    "outposts": [
-      { "milestone": 1, "stock": [], "paid": true },
-      { "milestone": 2, "stock": [{ "id": "p91", "defId": "plates", "wear": 1, "hp": 40 }], "paid": false }
-    ],
-    "groups": [],
-    "earned": 300,
-    "wrecks": 2
+  "turn": 2700,
+  "player": {
+    "vehicleId": "v1",
+    "money": 5120,
+    "talked": { "v4": { "directions": "done" } },
+    "notes": [],
+    "explored": "AAAA",
+    "quests": {
+      "world": { "sample_wagon_heard": true, "kept_flag": true },
+      "local": { "sample_bowl": { "trust": 1 }, "sample_nose": { "asked": true }, "kept_quest": { "n": 2 } },
+      "session": { "quest": "sample_bowl", "checkpoint": "start.talk", "seed": 5 }
+    }
   }
 }

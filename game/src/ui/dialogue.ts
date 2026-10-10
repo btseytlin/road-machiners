@@ -10,11 +10,13 @@ import { callVehicle, chooseOption, currentOptions, hangUp, honk } from '../sim/
 import type { CallVar, CallVars, GameEvent, World } from '../sim/types';
 import { playerSees } from '../sim/vision';
 import { playerCanAct } from '../sim/world';
+import { language, say } from '../text/language';
 import { byId, list, t, type Msg } from '../text/msg';
-import { goodLower, lineKey, siteName, unitCount, vehicleTitle } from '../text/names';
+import { goodLower, lineKey, partName, siteName, unitCount, vehicleTitle } from '../text/names';
 import { schemaOf } from '../text/resolve';
 import { modeRules } from '../sim/settings';
 import { el, isBrowserChord, panel, topCenter } from './dom';
+import { renderLine } from './quest-text';
 import { fuelLiters, meters, moneyM } from './units';
 
 const COMPASS = ['east', 'southEast', 'south', 'southWest', 'west', 'northWest', 'north', 'northEast'] as const;
@@ -63,6 +65,15 @@ export function tipText(v: Extract<CallVar, { kind: 'tip' }>): Msg {
   return v.tip.dear ? t('tip.dear', words) : t('tip.cheap', words);
 }
 
+export function haulText(v: Extract<CallVar, { kind: 'haul' }>): Msg {
+  const names = [
+    ...Object.entries(v.goods).map(([good, n]) => t('call.haulGood', { n, good: goodLower(good) })),
+    ...v.parts.map((id) => t('call.haulPart', { part: partName(id) })),
+  ];
+  if (names.length === 0) throw new Error('An empty haul is never named in a line');
+  return list(names);
+}
+
 type VarText = { [K in CallVar['kind']]: (v: Extract<CallVar, { kind: K }>) => Msg };
 
 const VAR_TEXT: VarText = {
@@ -75,6 +86,7 @@ const VAR_TEXT: VarText = {
   deal: dealText,
   prices: pricesText,
   aid: (v) => aidWords(v.fuel, v.supplies),
+  haul: haulText,
   tip: tipText,
   line: (v) => lineText(v.line, {}),
   answer: () => { throw new Error('A rolled answer is never shown in a line'); },
@@ -151,27 +163,35 @@ const KEY_DIGITS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 
 export class DialoguePanel {
   private readonly root = panel('dialogue notice', topCenter());
   private readonly horn: Horn;
+  private drawn = '';
 
   constructor(private readonly host: DialogueHost) {
     this.horn = new Horn(host);
     this.root.style.display = 'none';
+    this.root.addEventListener('click', () => this.root.classList.add('qt-done'));
     window.addEventListener('keydown', (e) => this.onKey(e), true);
   }
 
   render(w: World): void {
     const call = w.player.call;
     this.root.style.display = call ? '' : 'none';
-    if (!call) return this.root.replaceChildren();
+    if (!call) {
+      this.drawn = '';
+      return this.root.replaceChildren();
+    }
+    const offered = currentOptions(w);
+    const key = JSON.stringify([call, offered.map((o) => o.line), language()]);
+    if (key === this.drawn) return;
+    this.drawn = key;
     const npc = vehicleById(w, call.with);
     this.root.style.borderLeftColor = `#${FACTION_COLORS[npc.faction].top.toString(16).padStart(6, '0')}`;
-    const options = currentOptions(w).map((o, i) =>
+    this.root.classList.remove('qt-done');
+    const options = offered.map((o, i) =>
       el('button', { class: 'dialogue-option', onclick: () => this.choose(i) }, t('call.option', { n: i + 1, line: lineText(o.line, call.vars) })),
     );
-    this.root.replaceChildren(
-      el('div', { class: 'dialogue-speaker' }, t('call.speaker', { who: vehicleTitle(w, npc) })),
-      el('div', { class: 'dialogue-line' }, t('call.said', { line: lineText(call.line.line, call.line.vars) })),
-      el('div', { class: 'dialogue-options' }, ...options),
-    );
+    const line = renderLine(`“${say(lineText(call.line.line, call.line.vars))}”`, [], 0).el;
+    line.classList.add('dialogue-line');
+    this.root.replaceChildren(el('div', { class: 'dialogue-speaker' }, t('call.speaker', { who: vehicleTitle(w, npc) })), line, el('div', { class: 'dialogue-options' }, ...options));
   }
 
   private onKey(e: KeyboardEvent): void {

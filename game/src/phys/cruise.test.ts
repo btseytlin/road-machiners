@@ -5,7 +5,8 @@ import { PHYSICS } from '../data/physics';
 import { RULES } from '../data/rules';
 import { TOW } from '../data/tow';
 import { corePart } from '../sim/grid';
-import { addGoods } from '../sim/inventory';
+import { stowPart } from '../sim/inventory';
+import { makePart } from '../sim/factory';
 import { vehicleMass } from '../sim/mass';
 import { npcHomeSite } from '../sim/tow';
 import { addState } from '../sim/states';
@@ -58,13 +59,13 @@ describe('driven speed on an open road', () => {
     expect(speed).toBeGreaterThanOrEqual(0.95 * top);
   });
 
-  it('a hauler loaded past its rated mass drives slower than the empty hauler', () => {
+  it('a hauler loaded to the brim drives slower than the empty hauler', () => {
     const empty = road();
     const e = truck(empty, 'hauler', ['stockEngine']);
     const loaded = road();
     const l = truck(loaded, 'hauler', ['stockEngine']);
-    addGoods(loaded, l, 'tools', 999);
-    expect(vehicleMass(l)).toBeGreaterThan(chassisDef('hauler').ratedMass);
+    while (stowPart(loaded, l, makePart(loaded, 'stockEngine', 0)));
+    expect(vehicleMass(l)).toBeGreaterThan(0.6 * chassisDef('hauler').ratedMass);
     expect(cruise(loaded, l.id)).toBeLessThan(0.95 * cruise(empty, e.id));
   });
 

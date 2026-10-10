@@ -4,7 +4,7 @@ import { partDef } from '../data/parts';
 import { STRIP } from '../data/salvage';
 import { WORK } from '../data/utilities';
 import { CONDITION, REPAIR } from '../data/wear';
-import { damagePart, partValue } from './wear';
+import { damagePart, maxHp, partValue } from './wear';
 import { makePart } from './factory';
 import { addVehicle, emptyWorld, practiceOf , startCombat } from './testkit';
 import { corePart, goodsCount, gridOf, mountedParts } from './grid';
@@ -92,7 +92,7 @@ describe('field repair job', () => {
     const plan = repairPlan(w, me, cage.id);
     expect(plan.needed).toBeGreaterThan(1);
     expect(plan.parts).toBe(1);
-    expect(plan.hp).toBeCloseTo((partDef(cage.defId).hp * GOODS.parts.value) / partValue(cage), 5);
+    expect(plan.hp).toBeCloseTo((maxHp(cage) * GOODS.parts.value) / partValue(cage), 5);
     let next = startRepair(w, cage.id);
     for (let i = 0; i < plan.turns; i++) advanceJobs(next);
     const after = next.vehicles[0];
@@ -458,7 +458,7 @@ describe('field job practice', () => {
   it('pays nothing for a refit that only moves parts the truck has', () => {
     const w = emptyWorld();
     const mg = w.vehicles[0].items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
-    const next = moveItem(w, mg.id, { x: 1, y: gridOf(w.vehicles[0]).h - 1, rot: 0 });
+    const next = moveItem(w, mg.id, { x: 3, y: gridOf(w.vehicles[0]).h - 1, rot: 1 });
     while (next.vehicles[0].job) advanceJobs(next);
     expect(practiceOf(next, 'fieldJob')).toEqual([]);
   });
@@ -603,7 +603,7 @@ describe('cancelling a refit', () => {
     const w = emptyWorld();
     const mg = w.vehicles[0].items.find((it) => it.kind === 'part' && it.part.defId === 'mg')!;
     const before = structuredClone(w.vehicles[0].items);
-    const started = moveItem(w, mg.id, { x: 1, y: gridOf(w.vehicles[0]).h - 1, rot: 0 });
+    const started = moveItem(w, mg.id, { x: 3, y: gridOf(w.vehicles[0]).h - 1, rot: 1 });
     advanceJobs(started);
     expect(started.vehicles[0].job).toMatchObject({ kind: 'refit' });
 

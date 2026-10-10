@@ -101,23 +101,41 @@ function practiceRoughGround(world: World): void {
 }
 
 export function maxHp(part: PartInstance): number {
-  return Math.round(partDef(part.defId).hp * (1 - CONDITION.hpLoss * part.wear));
+  return Math.round(partDef(part.defId).hp * worse(part.wear));
+}
+
+function worse(steps: number): number {
+  return 1 - CONDITION.stepLoss * steps;
+}
+
+function costlier(steps: number): number {
+  return 1 + CONDITION.stepLoss * steps;
 }
 
 export function wornDef<T extends PartDef>(part: PartInstance): T {
   const def = partDef(part.defId);
   const steps = part.wear;
   const hp = maxHp(part);
-  const loss = CONDITION.statLoss;
+  const keep = worse(steps);
   switch (def.kind) {
-    case 'weapon':
-      return { ...def, hp, spread: def.spread * (1 + loss.spread * steps) } as T;
+    case 'weapon': {
+      const round = { ...def.round, damage: def.round.damage * keep, pen: def.round.pen * keep };
+      return { ...def, hp, round, range: def.range * keep, spread: def.spread * costlier(steps) } as T;
+    }
     case 'engine':
-      return { ...def, hp, speedBonus: def.speedBonus - loss.speedBonus * steps, accelBonus: def.accelBonus - loss.accelBonus * steps } as T;
+      return {
+        ...def,
+        hp,
+        speedBonus: def.speedBonus - CONDITION.speedLoss.speedBonus * steps,
+        accelBonus: def.accelBonus - CONDITION.speedLoss.accelBonus * steps,
+        capacity: def.capacity * keep,
+        fuelMult: def.fuelMult * costlier(steps),
+        heat: def.heat * costlier(steps),
+      } as T;
     case 'armor':
-      return { ...def, hp, armor: def.armor * (1 - loss.armor * steps), blastArmor: def.blastArmor * (1 - loss.armor * steps) } as T;
+      return { ...def, hp, armor: def.armor * keep, blastArmor: def.blastArmor * keep } as T;
     case 'scanner':
-      return { ...def, hp, range: def.range * (1 - loss.scannerRange * steps) } as T;
+      return { ...def, hp, range: def.range * keep } as T;
     case 'utility':
       return { ...def, hp, reload: wornReloadTurns(def.reload, steps) } as T;
     default:
@@ -126,7 +144,7 @@ export function wornDef<T extends PartDef>(part: PartInstance): T {
 }
 
 export function wornTurns(turns: number, steps: number): number {
-  return Math.ceil((turns * (100 + CONDITION.statLoss.reloadPercent * steps)) / 100);
+  return Math.ceil((turns * (100 + CONDITION.reloadPercent * steps)) / 100);
 }
 
 function wornReloadTurns(reload: number | null, steps: number): number | null {

@@ -1,6 +1,7 @@
 // Event log lines and the words of jobs, contracts, parts and states. Every function returns a Msg, so its words
 // follow the active language.
 
+import { CRATE_MASS } from '../data/goods';
 import { CONTRACTS } from '../data/market';
 import { partDef } from '../data/parts';
 import type { Contract } from '../sim/market';
@@ -14,10 +15,13 @@ import type { Work, WorkLeft } from '../sim/states';
 import { dist } from '../sim/vec';
 import { goodsCount } from '../sim/grid';
 import { spareParts } from '../sim/inventory';
-import { carriedPart } from '../sim/salvage';
-import { playerSees } from '../sim/vision';
+import { carriedPart, isStoryWreck } from '../sim/salvage';
+import { canVehicleSee, playerSees } from '../sim/vision';
 import { topGoal } from '../sim/npc-activities';
-import { npcTraits } from '../sim/npc-decisions';
+import { judgeDanger, npcTraits, passReason } from '../sim/npc-decisions';
+import { huntsOffRoad } from '../sim/hunt-style';
+import { isHostile } from '../sim/combat';
+import { trackOf } from '../sim/tracks';
 import { hasPerk } from '../sim/progress';
 import { aidData, lootWarningData, pleaData, statesHeld, strayData, towData } from '../sim/states';
 import { REGION } from '../data/region';
@@ -29,20 +33,35 @@ import { shotDamage } from '../sim/combat';
 import { shutDownTurnsLeft } from '../sim/utility';
 import type { GameEvent, GridItem, Job, NpcState, PartInstance, RefitJob, ShotRound, SkillId, StateEnding, StateKindId, Vehicle, World } from '../sim/types';
 import { concat, list, t, verbatim, type Msg } from '../text/msg';
-import { goalText, goodName, moneyReasonText, noteText, partName as partNameOf, refusalText, siteName, skillName, templateName, traitName, vehicleTitle } from '../text/names';
+import { goalText, goodName, moneyReasonText, noteText, noteTitle, partName as partNameOf, refusalText, siteName, skillName, templateName, traitName, vehicleTitle } from '../text/names';
 import { Refused } from '../sim/world';
 import { aidWords, lineText } from './dialogue';
 import { outpostId } from '../sim/highway';
-import { damage, fuelLiters, hp, kph, moneyM, moneyMsg } from './units';
+import { damage, fuelLiters, hp, kg, kph, moneyM, moneyMsg } from './units';
 
 // What a job works on, in words: "Repair Autocannon", "Remove Autocannon from Raider outrider".
 export function jobLabel(world: World, v: Vehicle, job: Job): Msg {
+  if (job.kind === 'refit') return refitLabel(world, v, job);
+  if (job.kind === 'business') return businessLabel(job);
   if (job.kind === 'search') return t('job.search');
   if (job.kind === 'weld') return t('job.weld');
-  if (job.kind === 'refit') return refitLabel(world, v, job);
+  return partJobLabel(v, job);
+}
+
+function partJobLabel(v: Vehicle, job: Extract<Job, { kind: 'repair' | 'strip' }>): Msg {
   const part = v.items.find((it) => it.kind === 'part' && it.part.id === job.partId);
   const what = part ? itemName(part) : t('job.somePart');
   return job.kind === 'repair' ? t('job.repair', { part: what }) : t('job.strip', { part: what });
+}
+
+const BUSINESS_LABELS = { resupply: 'job.business.resupply', sell: 'job.business.sell', trade: 'job.business.trade', haul: 'job.business.haul' } as const;
+
+// A business job names its deal and site: "Sell cargo at Dustwell". An oasis only fills water.
+function businessLabel(job: Extract<Job, { kind: 'business' }>): Msg {
+  const key: (typeof BUSINESS_LABELS)[keyof typeof BUSINESS_LABELS] | undefined = BUSINESS_LABELS[job.deal];
+  if (!key) throw new Error(`No business label for ${job.deal}`);
+  const oasis = job.deal === 'resupply' && REGION.locations.some((l) => l.id === job.siteId && l.kind === 'oasis');
+  return t(oasis ? 'job.business.fillWater' : key, { site: siteName(job.siteId) });
 }
 
 // A refit names its part while it runs and after it is done, so the part is looked up where it lies now.
@@ -136,7 +155,7 @@ export function vehicleName(world: World, id: string): Msg {
   if (id === world.player.vehicleId) return t('log.you');
   const v = findAny(world, id);
   if (v) return vehicleTitle(world, v);
-  return OBSTACLE_ID.test(id) ? t('log.anObstacle') : t('log.something');
+  return OBSTACLE_ID.test(id) || isStoryWreck({ id }) ? t('log.anObstacle') : t('log.something');
 }
 
 function findAny(world: World, id: string): Vehicle | undefined {
@@ -155,6 +174,17 @@ export function formatNpcActivity(world: World, vehicle: Vehicle): Msg | null {
   if (isKnockedOut(vehicle)) return gaveUp(vehicle) ? t('npc.gaveUp') : t('npc.knockedOut');
   const activity = topGoal(vehicle);
   return activity ? goalText(activity.reason) : null;
+}
+
+export function formatNpcPass(world: World, vehicle: Vehicle): Msg | null {
+  if (!vehicle.brain || !playerSees(world, vehicle.pos)) return null;
+  if (vehicle.faction !== 'raiders' || !huntsOffRoad(vehicle.brain)) return null;
+  const player = playerVehicle(world);
+  const track = trackOf(vehicle, player.id);
+  const kept = track?.choice === 'keep' && track.chosenInSight;
+  const ignored = canVehicleSee(world, vehicle, player.pos) && !isHostile(world, vehicle, player);
+  if (!kept && !ignored) return null;
+  return t('npc.letsPass', { why: t(`pass.${passReason(world, vehicle, player, judgeDanger(world, vehicle, player))}`) });
 }
 
 // "Traits: scavenger, scumbag" for an NPC. The hover panel shows it as one line. Traits stay hidden, so null,
@@ -594,6 +624,10 @@ function activityText(world: World, e: Extract<GameEvent, { t: 'activity' }>): L
   return world.player.fullLog && vehicle ? line(t('log.debugActivity', { who: vehicleTitle(world, vehicle), what: debugId(e.activity ?? 'idle'), why: goalText(e.reason) }), 'dim') : null;
 }
 
+function preyPassedText(world: World, e: Extract<GameEvent, { t: 'preyPassed' }>): LogLine | null {
+  return world.player.fullLog ? line(t('log.preyPassed', { who: vehicleName(world, e.vehicle), prey: vehicleName(world, e.prey), why: t(`pass.${e.reason}`) }), 'dim') : null;
+}
+
 function stallText(world: World, e: Extract<GameEvent, { t: 'stall' }>): LogLine | null {
   return world.player.fullLog ? line(t('log.debugStall', { who: vehicleName(world, e.vehicle), what: debugId(e.goal ?? 'idle'), why: goalText(e.reason) }), 'bad') : null;
 }
@@ -693,6 +727,7 @@ const quiet = (): null => null;
 const EVENT_TEXTS: { [K in GameEvent['t']]: (world: World, e: Extract<GameEvent, { t: K }>) => LogLine | null } = {
   activity: activityText,
   stall: stallText,
+  preyPassed: preyPassedText,
   info: infoText,
   townPatch: () => line(t('log.townPatch'), 'good'),
   scrapPatch: (_, e) => line(e.fuel > 0 ? t('log.scrapPatchFuel', { liters: fuelLiters(e.fuel) }) : t('log.scrapPatch'), 'good'),
@@ -725,6 +760,7 @@ const EVENT_TEXTS: { [K in GameEvent['t']]: (world: World, e: Extract<GameEvent,
   escortPaid: escortPaidText,
   escortHired: escortHiredText,
   escortRefused: escortRefusedText,
+  note: (_, e) => line(t('log.noted', { title: noteTitle(e.id) }), 'good'),
   lootArgument: lootArgumentText,
   collision: quiet,
   shot: shotText,
@@ -763,6 +799,8 @@ export type SaleEstimate =
 export const GOODS_COLUMNS = {
   good: t('goods.good'), theirs: t('goods.theirs'), buy: t('goods.buy'), sell: t('goods.sell'), held: t('goods.held'), profit: t('goods.profit'),
 } as const;
+
+export const CRATE_NOTE = t('goods.crateNote', { mass: kg(CRATE_MASS) });
 
 export const PROFIT_HEAD_TITLE = t('goods.profitTitle');
 

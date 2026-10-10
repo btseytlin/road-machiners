@@ -2,20 +2,24 @@
 // refers to. The records are typed complete, so a name in the data without a function fails typecheck.
 
 import type { ConditionId, EffectId, PrepareId } from '../data/dialogue';
+import { CONTRACTS } from '../data/market';
+import { LOCALS, NOTE_IDS, type LocalDef, type NoteId } from '../data/locals';
 import { TRADE_TIP } from '../data/npcs';
 import { PERK_NUMBERS } from '../data/skills';
+import { WAGON_SEVEN } from '../data/salvage';
 import { REGION, type TownDef } from '../data/region';
 import { playerVehicle } from './damage';
 import { discoverSite } from './locations';
 import { inCombat, isHostile } from './combat';
 import { patchGoal, startTow, topGoal } from './npc-activities';
-import { goodValue, priceAtPressure, standingPrice, vehicleValue } from './market';
+import { haulBlocked, isExpired, shopAt, shopState, takeContract, type Contract, goodValue, priceAtPressure, standingPrice, vehicleValue } from './market';
 import { recall } from './memory';
 import { hasPerk, practice } from './progress';
-import { abandonSpill, answerPlea, standDownBeggar, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, giveUpTo, hasStrandedPrey, hasStrippable, judgedWorthOffer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, spillClaimOn, standDownTo, surrenderTo, yieldTo, type ThreatAnswer } from './parley';
+import { abandonSpill, answerPlea, standDownBeggar, backOffClaims, defyClaims, guardsClaim, answersPlea, answersSurrender, offeredSurrenderBy, answersThreat, giveUpTo, handedOver, hasStrandedPrey, hasStrippable, judgedWorthOffer, makePeace, offersGiveUp, pendingPlea, playerPleaded, settlePlayerPlea, settleThreat, spillClaimOn, standDownTo, surrenderTo, yieldTo, type ThreatAnswer } from './parley';
 import { answerLootWarning, answerWarning, lootsBesidePlayer, pendingWarningTo, playerWarns, warnRefusalOf, type WarnAnswer } from './loot-warning';
 import { talkOf } from './dialogue';
-import { hasCargo, hasSalvage } from './salvage';
+import { cargoHaul, haulVar, showsHaul, surrenderHaul } from './haul';
+import { hasCargo, hasSalvage, isStoryWreck, storyStock } from './salvage';
 import { agreePatch, canFixItself, canTakeWornPatch, needsPatch, patchTerms } from './patch';
 import { decide, isWeak, npcProfile, wantsLoot } from './npc-decisions';
 import { isStranded } from './stats';
@@ -23,12 +27,12 @@ import { aidData, stateOf, towData } from './states';
 import { agreeAid, aidPrice, canSpareFor, hasAid, isLow, playerAid, refuseAid, spareAid, wantedAid, type AidAmounts } from './aid';
 import { spread, startTrade, tradeWith, transfer } from './economy';
 import { acceptOffer, canTowNpc, isTowing, hitchNpc, isOnRope, npcTowTerms, playerTow, playerTowing, refuseOffer, releaseNpc, strandedPlayerAt } from './tow';
-import type { Call, CallVar, CallVars, MemoryFact, NpcState, Plea, SalvageStock, TopicOutcome, Vehicle, World } from './types';
+import type { Call, CallVar, CallVars, GridItem, MemoryFact, NpcState, Plea, SalvageStock, TopicOutcome, Vehicle, World } from './types';
 import { bearing, dist, type Vec } from './vec';
 
 function demandsOnTop(world: World, npc: Vehicle): boolean {
   const top = topGoal(npc);
-  return top?.kind === 'fight' && top.targetId === world.player.vehicleId && top.demands === true && hasCargo(playerVehicle(world));
+  return top?.kind === 'fight' && top.targetId === world.player.vehicleId && top.demands === true && cargoHaul(npc, playerVehicle(world)).length > 0;
 }
 
 export type Condition = (world: World, npc: Vehicle, vars: CallVars) => boolean;
@@ -64,6 +68,18 @@ function answerOf(vars: CallVars): string | null {
   if (v === undefined) return null;
   if (v.kind !== 'answer') throw new Error(`The answer value holds a ${v.kind}`);
   return v.option;
+}
+
+function namesHaul(vars: CallVars): boolean {
+  const v = vars.haul;
+  return v?.kind === 'haul' && (v.parts.length > 0 || Object.keys(v.goods).length > 0);
+}
+
+function shownHaul(world: World, npc: Vehicle, call: Call, surrender: boolean): GridItem[] {
+  const me = playerVehicle(world);
+  const haul = surrender ? surrenderHaul(npc, me) : handedOver(world, me, npc);
+  if (!showsHaul(call.vars.haul, haul)) throw new Error(`${npc.id} named a different haul than the one the player drops`);
+  return haul;
 }
 
 function playerPlea(call: Call): Plea {
@@ -105,7 +121,7 @@ type Rumor = { id: string; pos: Vec; site: { id: string } | null };
 
 function isRumorWreck(world: World, stock: SalvageStock): boolean {
   const { scavenged, rumored } = world.player;
-  return stock.id.startsWith('wreck') && !scavenged.includes(stock.id) && !rumored.includes(stock.id) && hasSalvage(stock);
+  return (stock.id.startsWith('wreck') || isStoryWreck(stock)) && !scavenged.includes(stock.id) && !rumored.includes(stock.id) && hasSalvage(stock);
 }
 
 function heardRumor(world: World, npc: Vehicle): Rumor | null {
@@ -202,8 +218,10 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   npcCalm: (world, npc) => !inCombat(world, npc),
   hasDeal: (_world, _npc, vars) => vars.deal !== undefined,
   noDeal: (_world, _npc, vars) => vars.deal === undefined,
+  hasHaul: (_world, _npc, vars) => namesHaul(vars),
+  noHaul: (_world, _npc, vars) => !namesHaul(vars),
   demandsCargo: (world, npc) => !isStranded(world, npc) && !hasStrandedPrey(world, npc) && demandsOnTop(world, npc),
-  demandsSurrender: (world, npc) => hasStrandedPrey(world, npc) && wantsLoot(world, npc, playerVehicle(world)) && hasStrippable(playerVehicle(world)),
+  demandsSurrender: (world, npc) => hasStrandedPrey(world, npc) && wantsLoot(world, npc, playerVehicle(world)) && hasStrippable(world, npc, playerVehicle(world)),
   demandsGiveUp: (world, npc) => offersGiveUp(world, npc) && judgedWorthOffer(world, npc),
   npcBeaten: (world, npc) => isWeak(world, npc),
   notOfferedYield: (world, npc) => !offeredSurrenderBy(world, npc, playerVehicle(world)),
@@ -239,6 +257,7 @@ export const CONDITIONS: Record<ConditionId, Condition> = {
   aidGiven: (_world, _npc, vars) => answerOf(vars) === 'give',
   aidRefused: (_world, _npc, vars) => answerOf(vars) === 'refuse',
   offersAid: (world, npc) => pendingAid(world, npc) !== null,
+  heardWagonNearby: (world, npc) => holdsNote(world, 'wagonBowl') && dist(npc.pos, storyStock(world, WAGON_SEVEN).pos) <= PERK_NUMBERS.rumorMill.radius,
 };
 
 export const EFFECTS: Record<EffectId, Effect> = {
@@ -260,7 +279,7 @@ export const EFFECTS: Record<EffectId, Effect> = {
     settle(world, npc, call, 'agreed');
   },
   handOver: (world, npc, call) => {
-    yieldTo(world, playerVehicle(world), npc);
+    yieldTo(world, playerVehicle(world), npc, shownHaul(world, npc, call, false));
     settle(world, npc, call, 'agreed');
     practice(world, 'deal', 1, null, npc.id);
   },
@@ -272,6 +291,7 @@ export const EFFECTS: Record<EffectId, Effect> = {
     practice(world, 'deal', 1, null, npc.id);
   },
   surrender: (world, npc, call) => {
+    shownHaul(world, npc, call, true);
     surrenderTo(world, playerVehicle(world), npc);
     settle(world, npc, call, 'agreed');
     practice(world, 'deal', 1, null, npc.id);
@@ -298,7 +318,10 @@ export const EFFECTS: Record<EffectId, Effect> = {
   },
   acceptPlea: (world, npc) => answerPlea(world, npc, true),
   refusePlea: (world, npc) => answerPlea(world, npc, false),
-  settlePlea: (world, npc, call) => settlePlayerPlea(world, npc, playerPlea(call), answerOf(call.vars) === 'yes'),
+  settlePlea: (world, npc, call) => {
+    if (playerPlea(call) === 'mercy' && answerOf(call.vars) === 'yes') shownHaul(world, npc, call, false);
+    settlePlayerPlea(world, npc, playerPlea(call), answerOf(call.vars) === 'yes');
+  },
   withdrawPlea: (world, npc, call) => {
     settlePlayerPlea(world, npc, playerPlea(call), false);
     if (answerOf(call.vars) === 'demand') settleDemand(world, npc, 'refused');
@@ -306,7 +329,7 @@ export const EFFECTS: Record<EffectId, Effect> = {
   payToll: (world, npc, call) => {
     if (answerOf(call.vars) !== 'demand') throw new Error('payToll needs a demand answer');
     settlePlayerPlea(world, npc, 'truce', false);
-    yieldTo(world, playerVehicle(world), npc);
+    yieldTo(world, playerVehicle(world), npc, shownHaul(world, npc, call, false));
     settleDemand(world, npc, 'agreed');
     practice(world, 'deal', 1, null, npc.id);
   },
@@ -364,13 +387,16 @@ export const EFFECTS: Record<EffectId, Effect> = {
     agreeAid(world, npc, { giver, fuel, supplies, price, free });
   },
   refuseAidOffer: (world, npc) => refuseAid(world, npc),
+  noteWagonRoad: (world) => learnNote(world, 'wagonRoad'),
   settleDone: (world, npc, call) => settle(world, npc, call, 'done'),
   settleRefused: (world, npc, call) => settle(world, npc, call, 'refused'),
 };
 
 export const PREPARES: Record<PrepareId, Prepare> = {
-  truceAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'truce') } }),
-  mercyAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'mercy') } }),
+  truceAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'truce') }, haul: haulVar(handedOver(world, playerVehicle(world), npc)) }),
+  mercyAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersPlea(world, npc, playerVehicle(world), 'mercy') }, haul: haulVar(handedOver(world, playerVehicle(world), npc)) }),
+  demandHaul: (world, npc) => ({ haul: haulVar(handedOver(world, playerVehicle(world), npc)) }),
+  surrenderHaul: (world, npc) => ({ haul: haulVar(surrenderHaul(npc, playerVehicle(world))) }),
   yieldAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersSurrender(world, npc, playerVehicle(world)) ? 'yes' : 'no' } }),
   threatAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersThreat(world, npc) } }),
   warnAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answerWarning(world, npc, playerVehicle(world)) } }),
@@ -423,3 +449,48 @@ export const PREPARES: Record<PrepareId, Prepare> = {
     };
   },
 };
+
+export function localsAt(town: string): LocalDef[] {
+  return Object.values(LOCALS).filter((l) => l.town === town);
+}
+
+export function localOfQuest(questId: string): LocalDef | null {
+  return Object.values(LOCALS).find((l) => l.quest === questId) ?? null;
+}
+
+export function boardFull(world: World): boolean {
+  return world.player.contracts.length >= CONTRACTS.maxActive;
+}
+
+export function townOffers(world: World): Contract[] {
+  const town = shopAt(world);
+  if (!town) throw new Error('Not parked at a town, so no board is in reach');
+  return shopState(world, town).contracts.filter((c) => !isExpired(world, c));
+}
+
+export function townWork(world: World): Contract | null {
+  const open = townOffers(world).filter((c) => !haulBlocked(world, c));
+  if (boardFull(world)) return null;
+  return open.reduce<Contract | null>((best, c) => (best === null || c.reward > best.reward ? c : best), null);
+}
+
+export function takeTownWork(world: World): void {
+  const offer = townWork(world);
+  if (!offer) throw new Error('The board offers no work to take');
+  takeContract(world, offer.id);
+}
+
+export function isNoteId(id: string): id is NoteId {
+  return (NOTE_IDS as readonly string[]).includes(id);
+}
+
+export function learnNote(world: World, id: NoteId): void {
+  if (!isNoteId(id)) throw new Error(`No note ${id}`);
+  if (holdsNote(world, id)) return;
+  world.player.notes.push({ id, turn: world.turn });
+  world.events.push({ t: 'note', id });
+}
+
+export function holdsNote(world: World, id: NoteId): boolean {
+  return world.player.notes.some((n) => n.id === id);
+}

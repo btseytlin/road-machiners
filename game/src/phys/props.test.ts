@@ -309,7 +309,7 @@ describe('Broken Wing', () => {
 
   it('a truck drives the road under the hoop, up the root ramp, along the deck and down the tip ramp', () => {
     const end = BROKEN_WING_POINT(50, 0);
-    const { w, hits, frames } = drive(onMap(BROKEN_WING_POINT(BROKEN_WING.hoopAt - 8, 0), 0, end), 14);
+    const { w, hits, frames } = drive(onMap(BROKEN_WING_POINT(BROKEN_WING.hoopAt - 8, 0), 0, end), 17);
     expect(hits).toEqual([]);
     expect(me(w).pos.x).toBeGreaterThan(end.x - 2);
     const b = bodyOf(me(w).chassisId);

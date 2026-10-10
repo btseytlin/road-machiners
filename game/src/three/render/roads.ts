@@ -8,7 +8,7 @@ import { atlasOf, atlasSites, type Atlas } from "../../sim/atlas";
 import { sitePads } from "../../sim/sites";
 import type { Terrain } from "../../sim/terrain";
 import { mix, PAL } from "../../render/palette";
-import { HIGHWAY } from "../../data/fury-road";
+import { HIGHWAY } from "../../data/modes";
 import { fromRoad } from "../../sim/highway";
 import { windowCraters } from "../../sim/road-hazards";
 import { paintRoadDetail, paintRoadMask, type RoadHole, paintRoadTone, ROAD_DETAIL_SIDE, ROAD_TONE_PIXELS, ROAD_TONE_SIDE, type RoadImage } from "../../render/roadPaint";

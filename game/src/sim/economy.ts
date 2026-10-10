@@ -99,7 +99,7 @@ export function tradeGoods(
 function buyGoods(world: World, vehicle: Vehicle, good: string, count: number, total: number): void {
   const resources = getResources(world, vehicle);
   if (resources.money < total) throw new Refused({ id: "noMoney" });
-  if (cargoRoom(vehicle, good) < count) throw new Refused({ id: "noCargoRoom" });
+  if (cargoRoom(vehicle) < count) throw new Refused({ id: "noCargoRoom" });
   if (vehicle.id === world.player.vehicleId) noteCostBasis(world, good, total / count, count);
   const added = addGoods(world, vehicle, good, count);
   if (added !== count) throw new Error("Cargo capacity invariant failed");
@@ -726,7 +726,7 @@ export function sellTruckGood(world: World, npcId: string, good: string, n: numb
     const me = playerVehicle(w);
     requireCount(n);
     if ((goodsCount(me)[good] ?? 0) < n) throw new Error(`Cannot sell ${n} ${good}`);
-    if (cargoRoom(npc, good) < n) throw new Refused({ id: 'theyHaveNoRoom' });
+    if (cargoRoom(npc) < n) throw new Refused({ id: 'theyHaveNoRoom' });
     const price = truckGoodPrice(w, good, "sell");
     transfer(w, npc, me, price * n);
     removeGoods(me, good, n);

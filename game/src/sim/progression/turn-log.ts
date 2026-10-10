@@ -5,6 +5,8 @@ import { goodsCount, mountedParts } from '../grid';
 import { onRouteRoad, terrainNav } from '../nav/layer';
 import { fightOddsAgainst } from '../npc-decisions';
 import { keepsOffRoads } from '../off-road';
+import { REGION } from '../../data/region';
+import { ROAD_INDEX } from '../road-index';
 import { getResources } from '../resources';
 import { isStranded, vehicleStats } from '../stats';
 import { isTowed } from '../tow';
@@ -80,7 +82,7 @@ function runField(world: World): { run?: string } {
 const SNAPSHOT_TURNS = 10;
 
 export type WorldLine = { t: number; events?: GameEvent[]; trucks?: TruckSnap[] };
-export type TruckSnap = { id: string; who: string; faction: string; chassis: string; pos: [number, number]; speed: number; order: string | null; goals: string[]; money: number; fuel: number; hp: number; states: string[]; offRoad: boolean; onRoad: boolean };
+export type TruckSnap = { id: string; who: string; faction: string; chassis: string; pos: [number, number]; speed: number; order: string | null; goals: string[]; money: number; fuel: number; hp: number; states: string[]; offRoad: boolean; onRoad: boolean; roadGap: number };
 
 export function worldLine(world: World, events: readonly GameEvent[]): WorldLine | null {
   const line: WorldLine = { t: world.turn };
@@ -111,7 +113,16 @@ function snap(world: World, v: Vehicle): TruckSnap {
     states: world.states.filter((s) => s.holder === v.id).map((s) => `${s.kind}>${s.other}`),
     offRoad: keepsOffRoads(world, v),
     onRoad: onRouteRoad(terrainNav(world.terrain), v.pos.x, v.pos.y),
+    roadGap: roadGap(v),
   };
+}
+
+// Tiles from the road edge, rounded and capped at ROAD_GAP_CAP.
+const ROAD_GAP_CAP = 20;
+
+function roadGap(v: Vehicle): number {
+  const centre = ROAD_INDEX.nearestWithin(v.pos.x, v.pos.y, ROAD_GAP_CAP + REGION.roadWidth / 2);
+  return Math.min(ROAD_GAP_CAP, Math.round(Math.max(0, centre - REGION.roadWidth / 2)));
 }
 
 function flagsOf(world: World, me: Vehicle): string[] {

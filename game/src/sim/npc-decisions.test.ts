@@ -7,8 +7,7 @@ import { corePart, coreParts, mountedParts } from './grid';
 import { maxHp } from './wear';
 import { addGoods } from './inventory';
 import { decide, fitToHunt, holdsUp, huntingGrounds, isWeak, judgeDanger, lawmanTowns, nearLawGate, raiderGrounds, optionChances, optionWeights } from './npc-decisions';
-import { siteLootTable } from './salvage';
-import { isTerritory, siteGap, siteGates, sitePads } from './sites';
+import { isTerritory, siteGap, siteGates } from './sites';
 import { hazardZones, territoryEntries, territoryGrounds } from './territory';
 import { noteHurt, thinkNpc, topGoal } from './npc-activities';
 import { chooseOn, trackOf } from './tracks';
@@ -542,11 +541,11 @@ describe('hunting grounds', () => {
 
   const grounds = huntingGrounds();
   const territories = REGION.locations.filter(isTerritory);
-  const lootPads = [...REGION.locations.filter((l) => l.kind !== 'camp' && siteLootTable(l)).flatMap((l) => sitePads(l)), ...territories.flatMap(territoryGrounds)];
+  const lootPads = territories.flatMap(territoryGrounds);
   const isPad = (p: Vec) => lootPads.some((pad) => dist(p, pad) < 0.01);
   const onRoad = (p: Vec) => !isPad(p) && REGION.roads.some((road) => polylineDist(p, road) < 0.01);
 
-  it('lie on lonely road stretches and at the pads of salvage sites', () => {
+  it('lie on lonely road stretches and in the territories', () => {
     expect(lootPads.length).toBeGreaterThan(0);
     for (const pad of lootPads) expect(grounds).toContainEqual(pad);
     expect(grounds.filter(onRoad).length).toBeGreaterThanOrEqual(4);
@@ -566,6 +565,7 @@ describe('hunting grounds', () => {
   describe('in Old Orchard', () => {
     const orchard = territories.find((t) => t.id === 'orchard')!;
     const orchardGrounds = territoryGrounds(orchard);
+    const watchesOrchard = (p: Vec) => orchardGrounds.some((q) => dist(p, q) <= Math.max(...HUNT.postRings));
     const isOrchardGround = (p: Vec) => orchardGrounds.some((q) => q.x === p.x && q.y === p.y);
 
     it('hold every orchard ground', () => {
@@ -588,8 +588,8 @@ describe('hunting grounds', () => {
     it('are shared by the raiders of Scrapjaw and Kiln', () => {
       const camps = REGION.locations.filter((l) => l.kind === 'camp');
       const w = emptyWorld();
-      const covering = Object.fromEntries(camps.map((c): [string, number] => [c.id, raiderGrounds(w, c).filter(isOrchardGround).length]).filter(([, n]) => n > 0));
-      expect(covering).toEqual({ kiln: 2, scrapjaw: 6 });
+      const covering = Object.fromEntries(camps.map((c): [string, number] => [c.id, raiderGrounds(w, c).filter(watchesOrchard).length]).filter(([, n]) => n > 0));
+      expect(covering).toEqual({ kiln: 3, scrapjaw: 6 });
     });
   });
 
@@ -727,7 +727,7 @@ describe('holdsUp', () => {
   it('a raider holds up a non-raider with cargo', () => {
     const w = emptyWorld({ x: 80, y: 80 });
     const me = find(w, w.player.vehicleId);
-    const raider = addNpc(w, 'raiders', 'raider', ['raider'], { x: 14, y: 10 }, ['autocannon', 'stockEngine']);
+    const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: 14, y: 10 }, ['autocannon', 'stockEngine']);
     addGoods(w, me, 'scrap', 2);
     expect(holdsUp(w, raider, me, judgeDanger(w, raider, me))).toBe(true);
   });
