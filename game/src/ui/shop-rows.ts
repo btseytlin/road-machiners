@@ -134,7 +134,7 @@ export function truckCards(w: World, ids: string[], offer: (id: string) => SwapO
           "div",
           { class: "truck-head" },
           el("div", { class: "card-name" }, el("b", {}, chassisName(id))),
-          own ? el("span", { class: "dim" }, t("vehicle.yours")) : swapButton(w, id, offer(id)),
+          own ? el("span", { class: "dim" }, t("vehicle.yours")) : swapButton(w, id, offer),
         ),
         statGrid(diffStats(chassisStats(id), own ? null : chassisStats(mine))),
       ),
@@ -143,7 +143,8 @@ export function truckCards(w: World, ids: string[], offer: (id: string) => SwapO
   return el("div", { class: "cards trucks" }, ...cards);
 }
 
-function swapButton(w: World, id: string, offer: SwapOffer): HTMLElement {
+function swapButton(w: World, id: string, makeOffer: (id: string) => SwapOffer): HTMLElement {
+  const offer = makeOffer(id);
   const cost = chassisPrice(w, id);
   const price = cost < 0 ? el("span", { class: "good" }, PLUS, moneyEl(-cost)) : priceSpan(cost, offer.reason === null);
   const title = offer.reason ? null : t("trade.includesTradeIn", { price: moneyMsg(chassisTradeIn(w)) });
