@@ -1,0 +1,37 @@
+#ui .options {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: var(--z-save);
+  box-sizing: border-box;
+  width: var(--panel-m);
+  max-width: calc(100vw - 2 * var(--hud-inset));
+  font-size: var(--text-dense);
+}
+.options h3 {
+  margin-right: var(--space-10);
+  font-size: var(--text-body);
+}
+.options .close {
+  position: absolute;
+  right: var(--space-4);
+  top: var(--space-4);
+}
+.options h4 {
+  margin: 0 0 var(--space-3);
+  color: var(--ink-muted);
+  font-size: var(--text-dense);
+  font-weight: normal;
+}
+.language-switch {
+  display: flex;
+  gap: var(--space-3);
+}
+.language-option {
+  flex: 1;
+}
+#ui .language-option[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--accent-dim);
+}

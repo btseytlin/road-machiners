@@ -127,7 +127,7 @@ function levels(world: World): Record<string, number> {
 function npcSnapshot(v: Vehicle): NpcSnapshot {
   const brain = v.brain;
   return {
-    id: v.id, name: brain ? brain.driver : v.name, faction: v.faction, template: brain ? brain.templateId : null, pos: at(v.pos),
+    id: v.id, name: brain ? brain.driver : v.id, faction: v.faction, template: brain ? brain.templateId : null, pos: at(v.pos),
     ...goalOf(brain ? brain.goals.at(-1) : undefined), ...resourcesOf(v.resources), defeat: v.defeat ? v.defeat.phase : null,
   };
 }

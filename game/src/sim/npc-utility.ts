@@ -85,7 +85,7 @@ function flareOrder(world: World, v: Npc): UtilityOrder | null {
 
 function emitterOrder(world: World, v: Npc, part: PartInstance): UtilityOrder | null {
   const def = partDef(part.defId);
-  if (def.kind !== 'utility' || def.effect.type !== 'emitter') throw new Error(`${def.name} is not an emitter`);
+  if (def.kind !== 'utility' || def.effect.type !== 'emitter') throw new Error(`${def.id} is not an emitter`);
   const radius = def.effect.radius;
   const near = world.vehicles.filter((x) => x.id !== v.id && dist(x.pos, v.pos) <= radius && canVehicleSee(world, v, x.pos));
   return self(near.length > 0 && inCombat(world, v) && near.every((x) => isHostile(world, v, x)));

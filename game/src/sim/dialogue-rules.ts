@@ -99,7 +99,9 @@ function offerBy(world: World, npc: Vehicle) {
   return tow?.holder === npc.id && !towData(tow).hitched ? tow : null;
 }
 
-type Rumor = { id: string; pos: Vec; site: { id: string; name: string } | null };
+// Something a driver can tell of with the Rumor mill perk: an undiscovered site, or a wreck stock the player has not
+// searched or heard of that still holds loot. `site` is null for a wreck.
+type Rumor = { id: string; pos: Vec; site: { id: string } | null };
 
 function isRumorWreck(world: World, stock: SalvageStock): boolean {
   const { scavenged, rumored } = world.player;
@@ -373,7 +375,7 @@ export const PREPARES: Record<PrepareId, Prepare> = {
   threatAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answersThreat(world, npc) } }),
   warnAnswer: (world, npc) => ({ answer: { kind: 'answer', option: answerWarning(world, npc, playerVehicle(world)) } }),
   lootWarningTerms: (world, npc) => ({
-    warnLine: { kind: 'line', text: talkOf(npc).warnOff },
+    warnLine: { kind: 'line', line: talkOf(npc).warnOff },
     answer: { kind: 'answer', option: warnRefusalOf(world, npc, playerVehicle(world)) },
   }),
   npcTowTerms: (world, npc) => {

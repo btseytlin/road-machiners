@@ -66,7 +66,7 @@ describe('escape practice', () => {
 
   it('pays for a hostile that hunts the player on a fight goal without a combat state', () => {
     const { w, raider } = raiderInSight(false);
-    raider.brain!.goals.push({ kind: 'fight', targetId: w.vehicles[0].id, destination: { ...w.vehicles[0].pos }, phase: 'travel', reason: 'test' });
+    raider.brain!.goals.push({ kind: 'fight', targetId: w.vehicles[0].id, destination: { ...w.vehicles[0].pos }, phase: 'travel', reason: 'fightHostile' });
     raider.pos = { x: 80, y: 30 };
     refreshVision(w);
     noteEscape(w);

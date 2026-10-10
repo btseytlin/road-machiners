@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { LineId } from '../data/dialogue';
 import { NPC_BEHAVIOR, NPCS, type TraitId } from '../data/npcs';
 import { playerVehicle } from './damage';
 import { chooseOption, currentOptions, hangUp, raiseCalls } from './dialogue';
@@ -32,14 +33,14 @@ function driver(w: World, x: number, y: number, traits: TraitId[] = ['scavenger'
 function npcLooting(w: World): Vehicle {
   playerVehicle(w).pos = { x: 60, y: 60 };
   const looter = driver(w, 31.5, 30);
-  looter.brain!.goals = [{ kind: 'scavenge', targetId: WRECK, destination: { x: 30.5, y: 30 }, phase: 'act', reason: 'test loot' }];
+  looter.brain!.goals = [{ kind: 'scavenge', targetId: WRECK, destination: { x: 30.5, y: 30 }, phase: 'act', reason: 'searchSpot' }];
   beginSearch(w, looter, WRECK);
   return looter;
 }
 
 function arriving(w: World): Vehicle {
   const npc = driver(w, 30.5, 31.2);
-  pushGoal(w, npc, { kind: 'loot', targetId: WRECK, destination: { x: 30.5, y: 30 }, phase: 'travel', reason: 'loot salvage on the way' });
+  pushGoal(w, npc, { kind: 'loot', targetId: WRECK, destination: { x: 30.5, y: 30 }, phase: 'travel', reason: 'lootOnTheWay' });
   refreshVision(w);
   return npc;
 }
@@ -52,9 +53,9 @@ function arguments_(w: World): Extract<GameEvent, { t: 'lootArgument' }>[] {
   return w.events.filter((e): e is Extract<GameEvent, { t: 'lootArgument' }> => e.t === 'lootArgument');
 }
 
-function pick(w: World, text: string): World {
-  const i = currentOptions(w).findIndex((o) => o.text === text);
-  if (i < 0) throw new Error(`No option "${text}" in ${currentOptions(w).map((o) => o.text).join(' | ')}`);
+function pick(w: World, line: LineId): World {
+  const i = currentOptions(w).findIndex((o) => o.line === line);
+  if (i < 0) throw new Error(`No option "${line}" in ${currentOptions(w).map((o) => o.line).join(' | ')}`);
   return chooseOption(w, i);
 }
 
@@ -67,7 +68,7 @@ describe('a driver that reaches loot another NPC is looting', () => {
     expect(lootTaken(w, npc, WRECK)).toBeNull();
     expect(visibleSalvage(w, npc).map((s) => s.id)).toContain(WRECK);
     npc.brain!.noticed[`lootContested:${looter.id}`] = w.turn;
-    expect(lootTaken(w, npc, WRECK)).toBe('someone else is looting it');
+    expect(lootTaken(w, npc, WRECK)).toBe('lootTaken');
     expect(visibleSalvage(w, npc).map((s) => s.id)).not.toContain(WRECK);
   });
 
@@ -86,7 +87,7 @@ describe('a driver that reaches loot another NPC is looting', () => {
     expect(looter.brain!.noticed).toHaveProperty(`lootContested:${npc.id}`);
     resolveNpcActivities(w);
     expect(npc.job).toMatchObject({ kind: 'search', stockId: WRECK });
-    expect(lootTaken(w, looter, WRECK)).toBe('someone else is looting it');
+    expect(lootTaken(w, looter, WRECK)).toBe('lootTaken');
   });
 
   it('on a refusal leaves, or fights, as its own roll says', () => {
@@ -111,7 +112,7 @@ describe('a driver that reaches loot another NPC is looting', () => {
     const looter = npcLooting(w);
     const npc = arriving(w);
     resolveNpcActivities(w);
-    expect(topGoal(npc)).toMatchObject({ kind: 'fight', targetId: looter.id, reason: 'fight over loot' });
+    expect(topGoal(npc)).toMatchObject({ kind: 'fight', targetId: looter.id, reason: 'fightOverLoot' });
     expect(stateOf(w, 'feud', npc.id, looter.id)).not.toBeNull();
     expect(arguments_(w).map((e) => e.end)).toEqual(['fight']);
   });
@@ -158,7 +159,7 @@ describe('a driver that reaches loot another NPC is looting', () => {
     npcLooting(w);
     const npc = arriving(w);
     resolveNpcActivities(w);
-    pushGoal(w, npc, { kind: 'loot', targetId: WRECK, destination: { x: 30.5, y: 30 }, phase: 'travel', reason: 'again' });
+    pushGoal(w, npc, { kind: 'loot', targetId: WRECK, destination: { x: 30.5, y: 30 }, phase: 'travel', reason: 'lootOnTheWay' });
     w.events = [];
     resolveNpcActivities(w);
     expect(npc.brain!.goals).toEqual([]);
@@ -226,14 +227,14 @@ describe('a driver that reaches loot the player is looting', () => {
     expect(looterOf(w, WRECK)?.id).toBe(w.player.vehicleId);
     raiseCalls(w);
     expect(w.player.call).toMatchObject({ with: npc.id, topic: 'lootWarning' });
-    expect(w.player.call!.vars.warnLine).toEqual({ kind: 'line', text: "That's my pick. Roll on." });
-    expect(currentOptions(w).map((o) => o.text)).toEqual(['Rolling on.', 'Find your own.', 'Make me.', 'Hang up.']);
+    expect(w.player.call!.vars.warnLine).toEqual({ kind: 'line', line: 'thatsMyPick' });
+    expect(currentOptions(w).map((o) => o.line)).toEqual(['rollingOn', 'findYourOwn', 'makeMe', 'hangUp']);
   });
 
   it('gets the loot when the player rolls on, and the player no longer holds it', () => {
     const { w: start, npc } = warned();
     raiseCalls(start);
-    const w = pick(start, 'Rolling on.');
+    const w = pick(start, 'rollingOn');
     const me = playerVehicle(w);
     expect(w.player.call).toBeNull();
     expect(warnedOffTarget(w, me, WRECK)).not.toBeNull();
@@ -247,16 +248,16 @@ describe('a driver that reaches loot the player is looting', () => {
     const { w: start } = warned();
     beginSearch(start, playerVehicle(start), WRECK);
     raiseCalls(start);
-    const w = pick(start, 'Rolling on.');
+    const w = pick(start, 'rollingOn');
     expect(playerVehicle(w).job).toBeNull();
   });
 
-  it.each([['leave', 'Keep your scraps, then.'], ['fight', 'Then we settle it the hard way.']] as const)('on a refusal it rolled to %s, it says so and does it', (refusal, line) => {
+  it.each([['leave', 'keepYourScrapsThen'], ['fight', 'thenWeSettleIt']] as const)('on a refusal it rolled to %s, it says so and does it', (refusal, line) => {
     forceOption('warnRefused', refusal);
     const { w: start, npc } = warned();
     raiseCalls(start);
-    const w = pick(start, 'Find your own.');
-    expect(w.player.call?.line.text).toBe(line);
+    const w = pick(start, 'findYourOwn');
+    expect(w.player.call?.line.line).toBe(line);
     if (refusal === 'leave') expect(after(w, npc).brain!.goals).toEqual([]);
     else expect(topGoal(after(w, npc))).toMatchObject({ kind: 'fight', targetId: w.player.vehicleId });
     expect(stateOf(w, 'lootWarning', npc.id, w.player.vehicleId)).toBeNull();
@@ -266,7 +267,7 @@ describe('a driver that reaches loot the player is looting', () => {
   it('fights a player that dares it', () => {
     const { w: start, npc } = warned();
     raiseCalls(start);
-    const w = pick(start, 'Make me.');
+    const w = pick(start, 'makeMe');
     expect(stateOf(w, 'feud', npc.id, w.player.vehicleId)).not.toBeNull();
     expect(topGoal(after(w, npc))).toMatchObject({ kind: 'fight', targetId: w.player.vehicleId });
   });
@@ -280,7 +281,7 @@ describe('a driver that reaches loot the player is looting', () => {
     expect(pendingWarningTo(w, after(w, npc))).toBeNull();
     const { w: again } = warned();
     raiseCalls(again);
-    expect(() => hangUp(pick(again, 'Find your own.'))).not.toThrow();
+    expect(() => hangUp(pick(again, 'findYourOwn'))).not.toThrow();
   });
 
   it('leaves when the player cannot answer in time', () => {
@@ -296,11 +297,11 @@ describe('a driver that reaches loot the player is looting', () => {
   it('fights a player that breaks its word in sight', () => {
     const { w: start, npc } = warned();
     raiseCalls(start);
-    const left = pick(start, 'Rolling on.');
+    const left = pick(start, 'rollingOn');
     after(left, npc).brain!.goals = [];
     const w = startSearch(left, WRECK);
     expect(warnedOffTarget(w, playerVehicle(w), WRECK)).toBeNull();
-    expect(topGoal(after(w, npc))).toMatchObject({ kind: 'fight', targetId: w.player.vehicleId, reason: 'defend the loot it was promised' });
+    expect(topGoal(after(w, npc))).toMatchObject({ kind: 'fight', targetId: w.player.vehicleId, reason: 'defendPromisedLoot' });
   });
 });
 

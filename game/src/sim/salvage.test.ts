@@ -206,7 +206,7 @@ describe('finite salvage', () => {
     const claimant = addVehicle(w, 'raiders', 'scout', [], { x: 34, y: 30 });
     claimant.brain = npcBrain('buggy', claimant.pos, []);
     const pile = createCargoSalvage(w, victim, 1);
-    claimant.brain.goals.push({ kind: 'loot', targetId: pile.id, destination: { ...pile.pos }, phase: 'travel', reason: 'test' });
+    claimant.brain.goals.push({ kind: 'loot', targetId: pile.id, destination: { ...pile.pos }, phase: 'travel', reason: 'tripToSite' });
     claimPile(w, pile, claimant);
     return { w, pile, claimant };
   }
@@ -646,7 +646,7 @@ describe('who loots a target', () => {
   }
 
   const pickupJob = (pickup: RefitPickup): Vehicle['job'] => ({ kind: 'refit', moves: [], pickup, turnsLeft: 2, total: 2 });
-  const lootGoal = (targetId: string, phase: NpcActivity['phase']): NpcActivity => ({ kind: 'loot', targetId, destination: null, phase, reason: 'test' });
+  const lootGoal = (targetId: string, phase: NpcActivity['phase']): NpcActivity => ({ kind: 'loot', targetId, destination: null, phase, reason: 'tripToSite' });
 
   it('counts wrecks, piles and knocked-out trucks as loot targets, and never a site or a running truck', () => {
     const { w, stock } = wreckWorld();
@@ -723,9 +723,9 @@ describe('who loots a target', () => {
   it('names the looter and what it loots in the error', () => {
     const { w, stock } = wreckWorld();
     const npc = scavenger(w);
-    expect(lootBlockedError(w, npc, stock.id)).toBe(`${npc.name} is looting this wreck`);
+    expect(lootBlockedError(w, npc, stock.id)).toEqual({ id: 'looting', by: npc.id, place: 'wreck' });
     const { w: dw, buggy } = downedWorld();
-    expect(lootBlockedError(dw, npc, buggy.id)).toBe(`${npc.name} is looting this truck`);
+    expect(lootBlockedError(dw, npc, buggy.id)).toEqual({ id: 'looting', by: npc.id, place: 'truck' });
     expect(() => lootBlockedError(w, npc, 'nothing')).toThrow(/nothing/);
   });
 
@@ -912,8 +912,8 @@ describe('salvage place', () => {
   it('says a looter is looting here at a spot that is no wreck', async () => {
     const w = await realWorld();
     const npc = addVehicle(w, 'scavengers', 'scout', ['stockEngine'], { x: 10, y: 10 });
-    expect(lootBlockedError(w, npc, spotStock(w, 'orchard', 'farmhouse').id)).toBe(`${npc.name} is looting here`);
-    expect(lootBlockedError(w, npc, spotStock(w, 'orchard', 'armyTruck').id)).toBe(`${npc.name} is looting this wreck`);
+    expect(lootBlockedError(w, npc, spotStock(w, 'orchard', 'farmhouse').id)).toEqual({ id: 'looting', by: npc.id, place: 'here' });
+    expect(lootBlockedError(w, npc, spotStock(w, 'orchard', 'armyTruck').id)).toEqual({ id: 'looting', by: npc.id, place: 'wreck' });
   }, 30_000);
 });
 

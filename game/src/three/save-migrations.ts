@@ -2,6 +2,7 @@
 // it, load runs every step from the save's minor format on, so the minor format is the number of steps.
 
 import { CORES_2_1, CORES_2_2, LAYOUTS_2_2 } from './save-layouts-2-2';
+import { GOAL_REASONS_2_19, LINES_2_19, WARN_LINES_2_19 } from './save-text-2-19';
 
 export type SavedJson = Record<string, unknown>;
 
@@ -519,6 +520,68 @@ function withCents_29_30(world: SavedJson): SavedJson {
   };
 }
 
+
+const UNITS_2_19 = new Set(['part']);
+
+function withGoalIds_34_35(v: SavedJson): SavedJson {
+  const { name: _name, ...rest } = v;
+  const brain = v.brain as SavedJson | null;
+  if (!brain) return rest;
+  const goals = (brain.goals as SavedJson[]).map((g) => ({ ...g, reason: GOAL_REASONS_2_19[g.reason as string] ?? 'legacy' }));
+  return { ...rest, brain: { ...brain, goals } };
+}
+
+function withLineVars_34_35(vars: SavedJson): SavedJson | null {
+  const out: SavedJson = {};
+  for (const [key, v] of Object.entries(vars)) {
+    const item = v as SavedJson;
+    if (item.kind !== 'line') {
+      out[key] = item;
+      continue;
+    }
+    const line = WARN_LINES_2_19[item.text as string];
+    if (!line) return null;
+    out[key] = { kind: 'line', line };
+  }
+  return out;
+}
+
+function knownUnits_34_35(vars: SavedJson): boolean {
+  return Object.values(vars).every((v) => (v as SavedJson).kind !== 'count' || UNITS_2_19.has((v as SavedJson).unit as string));
+}
+
+// The open call with its line as an id, or null when the call hangs up.
+function callWithLineId_34_35(call: SavedJson | null): SavedJson | null {
+  if (!call) return null;
+  const said = call.line as SavedJson;
+  const line = LINES_2_19[said.text as string];
+  if (!line || !knownUnits_34_35(call.vars as SavedJson) || !knownUnits_34_35(said.vars as SavedJson)) return null;
+  const vars = withLineVars_34_35(call.vars as SavedJson);
+  const sayVars = withLineVars_34_35(said.vars as SavedJson);
+  if (!vars || !sayVars) return null;
+  return { ...call, vars, line: { line, vars: sayVars } };
+}
+
+const withoutTargetName_34_35 = (c: SavedJson): SavedJson => {
+  const { targetName: _targetName, ...rest } = c;
+  return rest;
+};
+
+function withTextIds_34_35(world: SavedJson): SavedJson {
+  const player = world.player as SavedJson;
+  const shops = Object.fromEntries(
+    Object.entries(world.shops as Record<string, SavedJson>).map(([id, shop]) => [id, { ...shop, contracts: (shop.contracts as SavedJson[]).map(withoutTargetName_34_35) }]),
+  );
+  return {
+    ...world,
+    vehicles: (world.vehicles as SavedJson[]).map(withGoalIds_34_35),
+    player: { ...player, call: callWithLineId_34_35(player.call as SavedJson | null), contracts: (player.contracts as SavedJson[]).map(withoutTargetName_34_35) },
+    shops,
+  };
+}
+
+// MIGRATIONS[n] turns a saved world of minor format n into minor format n + 1. A step is pure and imports no sim
+// or data code, and a committed step is never edited.
 export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => ({ ...world, player: { ...(world.player as SavedJson), townPatched: false } }),
   (world) => {
@@ -600,6 +663,7 @@ export const MIGRATIONS: readonly ((world: SavedJson) => SavedJson)[] = [
   (world) => world,
   (world) => world,
   (world) => world,
+  withTextIds_34_35,
 ];
 
 export const SAVE_FORMAT = { major: SAVE_MAJOR, minor: MIGRATIONS.length } as const;

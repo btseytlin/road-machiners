@@ -1,22 +1,25 @@
+import { t, type Msg } from "../text/msg";
 import { el } from "./dom";
 
 export interface SwitchOptions {
-  on: string;
-  off: string;
+  // The option named above the lever, chosen while `on` is true.
+  on: Msg;
+  // The option named below the lever, chosen while `on` is false.
+  off: Msg;
   checked: boolean;
   key?: string;
-  title: string;
-  reason?: string | null;
+  title: Msg;
+  reason?: Msg | null;
   onclick: () => void;
 }
 
 export function createSwitch(o: SwitchOptions): HTMLElement {
-  const option = (name: string, chosen: boolean) =>
+  const option = (name: Msg, chosen: boolean) =>
     el(
       "span",
       { class: chosen ? "switch-option chosen" : "switch-option" },
       name,
-      chosen && o.key ? el("kbd", {}, `[${o.key}]`) : null,
+      chosen && o.key ? el("kbd", {}, t("ui.key", { key: o.key })) : null,
     );
   const reason = o.reason ?? null;
   return el(

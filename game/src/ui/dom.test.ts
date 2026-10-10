@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { vi } from "vitest";
+import { t } from "../text/msg";
 import { disabledWith, isBrowserChord } from "./dom";
+
+const NO_SAVES = t("save.none");
 
 const keys = { ctrlKey: false, metaKey: false, altKey: false };
 
@@ -30,10 +33,10 @@ describe("disabledWith", () => {
 
   it("blocks the click and carries the reason when there is one", () => {
     const click = vi.fn();
-    const attrs = disabledWith("No saves yet", click);
+    const attrs = disabledWith(NO_SAVES, click);
     attrs.onclick();
     expect(click).not.toHaveBeenCalled();
     expect(attrs["aria-disabled"]).toBe("true");
-    expect(attrs["data-reason"]).toBe("No saves yet");
+    expect(attrs["data-reason"]).toBe(NO_SAVES);
   });
 });

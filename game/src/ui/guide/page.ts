@@ -1,6 +1,6 @@
 import "../style.css";
 import "./guide.css";
-import { el, uiRoot } from "../dom";
+import { devEl as el, uiRoot } from "../dom";
 import { TOKENS } from "../tokens";
 import { PIECES } from "./pieces";
 

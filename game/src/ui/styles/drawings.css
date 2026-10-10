@@ -199,7 +199,8 @@
 .radio-lcd {
   position: relative;
   height: calc(var(--radio-line) * var(--radio-lines));
-  overflow: hidden;
+  overflow-y: auto;
+  scrollbar-width: none;
   font-size: var(--text-dense);
   line-height: var(--radio-line);
 }
@@ -212,6 +213,7 @@
 }
 .knob-cell {
   flex: 1 1 0;
+  min-width: 0;
   align-self: stretch;
   display: flex;
   flex-direction: column;

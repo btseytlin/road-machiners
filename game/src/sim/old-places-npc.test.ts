@@ -60,7 +60,7 @@ function freeNear(w: World, p: Vec): Vec {
 }
 
 const moveFar = (w: World): void => w.vehicles.forEach((v) => v.brain && advanceFar(w, v));
-const scavengeGoal = (pick: OldSpotPick) => ({ kind: 'scavenge' as const, targetId: oldStockId(pick), destination: { ...pick.pos }, phase: 'travel' as const, reason: 'search an old ruin' });
+const scavengeGoal = (pick: OldSpotPick) => ({ kind: 'scavenge' as const, targetId: oldStockId(pick), destination: { ...pick.pos }, phase: 'travel' as const, reason: 'searchOldRuin' as const });
 
 // Scrap and the parts good across the stock and every truck, which loot moves but never makes.
 function held(w: World, stockId: string): number {
@@ -154,7 +154,7 @@ describe('a scavenger at an old-world loot spot', () => {
     stock.hidden = { goods: {}, parts: [], fuel: 0, supplies: 0 };
     npc.brain!.goals = [scavengeGoal(building)];
     const { w: after, reasons } = runGoal(w, npc.id, stock.id);
-    expect(reasons).toContain('salvage exhausted');
+    expect(reasons).toContain('salvageExhausted');
     expect(dist(vehicle(after, npc.id).pos, stock.pos)).toBeLessThan(stock.radius + 6);
   }, 120_000);
 
@@ -176,7 +176,7 @@ describe('a scavenger at an old-world loot spot', () => {
     };
     const { w: after, searched, reasons } = runGoal(w, npc.id, stock.id, DRIVE_TURNS, keepSearching);
     expect(searched).toBe(false);
-    expect(['someone else is looting it', 'the looter would not leave']).toContain(reasons[0]);
+    expect(['lootTaken', 'looterWontLeave']).toContain(reasons[0]);
     expect(held(after, stock.id)).toBe(before);
   }, 120_000);
 });
