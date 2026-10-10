@@ -14,6 +14,10 @@ await loadModels(
 );
 
 describe('loadModels progress', () => {
+  it('loads every model file and leaves no orphan file behind', () => {
+    expect(progress[0][1]).toBe(Object.keys(FILES).length);
+  });
+
   it('reports 0 first, then one more file each time, ending at the total', () => {
     const total = progress[0][1];
     expect(total).toBe(Object.keys(FILES).length);
