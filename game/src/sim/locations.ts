@@ -17,6 +17,7 @@ import { beginSearch } from './search';
 import { practice } from './progress';
 import { isFortress, siteGap, type Site } from './sites';
 import { atGarage } from './garage';
+import { modeRules } from './settings';
 import type { GridItem, PartInstance, SalvageStock, Vehicle, World } from './types';
 import { tileCenter } from './vision';
 import { playerCommand, Refused } from './world';
@@ -64,13 +65,14 @@ export function downedNear(world: World): Vehicle | null {
 }
 
 export function downedListNear(world: World): Vehicle[] {
+  if (!modeRules(world).looting) return [];
   const me = playerVehicle(world);
   return world.vehicles.filter((v) => v.id !== me.id && isKnockedOut(v) && inTowReach(me, v));
 }
 
 export function downedHere(world: World): Vehicle | null {
   const me = playerVehicle(world);
-  return world.vehicles.find((v) => canLootTruck(me, v)) ?? null;
+  return world.vehicles.find((v) => canLootTruck(world, me, v)) ?? null;
 }
 
 export function emptySalvageNear(world: World): SalvageStock | null {

@@ -969,7 +969,7 @@ export function settleAims(world: World): void {
 
 function npcFate(world: World, v: Vehicle, shot: Set<string>): "dies" | "knockedOut" | null {
   const fate = rolledFate(world, v, shot);
-  return fate === "knockedOut" && !modeRules(world).knockouts ? "dies" : fate;
+  return fate === "knockedOut" && !modeRules(world).npcKnockouts ? "dies" : fate;
 }
 
 function rolledFate(world: World, v: Vehicle, shot: Set<string>): "dies" | "knockedOut" | null {

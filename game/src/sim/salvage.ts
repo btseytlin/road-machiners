@@ -513,8 +513,8 @@ function clearOfVehicles(world: World, pos: Vec, r: number): boolean {
 
 type TruckPickup = Extract<RefitPickup, { from: 'truck' }>;
 
-export function canLootTruck(looter: Vehicle, target: Vehicle): boolean {
-  return looter.id !== target.id && isKnockedOut(target) && looter.speed <= RULES.parkedSpeed && inTowReach(looter, target);
+export function canLootTruck(world: World, looter: Vehicle, target: Vehicle): boolean {
+  return modeRules(world).looting && looter.id !== target.id && isKnockedOut(target) && looter.speed <= RULES.parkedSpeed && inTowReach(looter, target);
 }
 
 // Why this item cannot leave the truck, or null. A built-in part stays, and a rack must be empty before it comes off.
@@ -552,7 +552,7 @@ export function takeFromTruck(world: World, targetId: string, itemId: string, to
     const me = playerVehicle(w);
     const target = vehicleById(w, targetId);
     requireIdleRefit(me);
-    if (!canLootTruck(me, target)) throw new Error('Park beside a knocked-out truck to loot it');
+    if (!canLootTruck(w, me, target)) throw new Error('Park beside a knocked-out truck to loot it');
     requireLootFree(w, me, targetId);
     breakLootWarning(w, me, targetId);
     const item = target.items.find((it) => it.id === itemId);
@@ -564,7 +564,7 @@ export function takeFromTruck(world: World, targetId: string, itemId: string, to
 // The part a running refit takes off the truck, at its new spot, or why the refit cannot go on.
 export function truckPickupItem(world: World, looter: Vehicle, pickup: TruckPickup): GridItem | Refusal {
   const target = world.vehicles.find((v) => v.id === pickup.vehicleId);
-  if (!target || !canLootTruck(looter, target)) return { id: 'truckOutOfReach' };
+  if (!target || !canLootTruck(world, looter, target)) return { id: 'truckOutOfReach' };
   const item = target.items.find((it) => it.kind === 'part' && it.part.id === pickup.partId);
   if (item?.kind !== 'part') return { id: 'truckPartGone' };
   return { kind: 'part', id: pickup.itemId, part: item.part, ...pickup.to };
@@ -645,7 +645,7 @@ function isLootActOn(goal: NpcActivity, targetId: string): boolean {
 
 export function inLootReach(world: World, v: Vehicle, targetId: string): boolean {
   const stock = world.salvage.find((s) => s.id === targetId);
-  return stock ? canReachSalvage(v, stock) : canLootTruck(v, vehicleById(world, targetId));
+  return stock ? canReachSalvage(v, stock) : canLootTruck(world, v, vehicleById(world, targetId));
 }
 
 export const CANNOT_HOLD: GoalReason = 'cargoFullLoot';

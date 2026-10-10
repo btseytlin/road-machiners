@@ -9,8 +9,8 @@ import type { TerrainTypeId } from './terrain';
 
 export type GameMode = { rules: ModeRules; kit: string | null; map: MapKind };
 
-const OPEN_WORLD: ModeRules = { traffic: true, looting: true, knockouts: true, yielding: true, radio: true, rescue: true, roadWrecks: true, run: false };
-const RUN: ModeRules = { traffic: false, looting: false, knockouts: false, yielding: false, radio: false, rescue: false, roadWrecks: false, run: true };
+const OPEN_WORLD: ModeRules = { traffic: true, looting: true, npcKnockouts: true, playerKnockouts: true, yielding: true, radio: true, rescue: true, roadWrecks: true, run: false };
+const RUN: ModeRules = { traffic: false, looting: false, npcKnockouts: true, playerKnockouts: false, yielding: false, radio: false, rescue: false, roadWrecks: false, run: true };
 
 export const GAME_MODES: Record<GameModeId, GameMode> = {
   roaming: { rules: OPEN_WORLD, kit: null, map: 'icarus' },

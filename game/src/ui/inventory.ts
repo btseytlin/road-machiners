@@ -923,7 +923,7 @@ export class InventoryScreen {
 
   openDowned(world: World, vehicleId: string): boolean {
     const downed = world.vehicles.find((v) => v.id === vehicleId);
-    if (!downed || !canLootTruck(playerVehicle(world), downed)) return false;
+    if (!downed || !canLootTruck(world, playerVehicle(world), downed)) return false;
     this.view.setTruck(downed.id);
     this.root.style.display = "";
     this.render();

@@ -9,6 +9,7 @@ import { spillDeadRows } from './spill';
 import { fightCornered, thinkNpc, topGoal } from './npc-activities';
 import { optionWeights } from './npc-decisions';
 import { renewSalvage } from './salvage';
+import { getResources } from './resources';
 import { addState, advanceStates, stateOf } from './states';
 import { setBeacon } from './tow';
 import { addVehicle, emptyWorld, forceOption, furyRoadWorld, npcBrain } from './testkit';
@@ -143,8 +144,7 @@ describe('salvage', () => {
   it('leaves no salvage on a wreck and renews none', () => {
     const w = worldIn('furyRoad');
     const v = raider(w);
-    corePart(v, 'cab').hp = 0;
-    w.rngState = 1;
+    getResources(w, v).health = 0;
     const before = structuredClone(w.salvage);
 
     resolveDestroyed(w);
@@ -157,18 +157,18 @@ describe('salvage', () => {
 });
 
 describe('knockouts', () => {
-  it('wrecks an NPC whose fate would be a knockout', () => {
-    const outs = Array.from({ length: 12 }, (_, seed) => {
-      const w = worldIn('furyRoad');
+  it('knocks an NPC out by the same roll as in Roaming', () => {
+    const fates = (mode: GameModeId) => Array.from({ length: 12 }, (_, seed) => {
+      const w = worldIn(mode);
       const v = raider(w);
       corePart(v, 'cab').hp = 0;
       w.rngState = seed + 1;
       resolveDestroyed(w);
-      return w.events.map((e) => e.t);
+      return w.events.flatMap((e) => (e.t === 'npcKnockout' || e.t === 'destroyed' ? [e.t] : []));
     });
 
-    expect(outs.every((events) => events.includes('destroyed'))).toBe(true);
-    expect(outs.some((events) => events.includes('npcKnockout'))).toBe(false);
+    expect(fates('furyRoad')).toEqual(fates('roaming'));
+    expect(fates('furyRoad').some((events) => events.includes('npcKnockout'))).toBe(true);
   });
 
   it('ends the run when the player would be knocked out', () => {

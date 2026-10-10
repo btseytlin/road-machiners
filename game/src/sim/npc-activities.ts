@@ -1083,7 +1083,7 @@ function resolveSearch(world: World, vehicle: Vehicle, activity: NpcActivity): v
 }
 
 function resolveTruckLoot(world: World, vehicle: Vehicle, activity: NpcActivity, truck: Vehicle): void {
-  if (!canLootTruck(vehicle, truck)) return;
+  if (!canLootTruck(world, vehicle, truck)) return;
   activity.phase = 'act';
   const ended = lootTruckTurn(world, vehicle, truck);
   if (ended) finishGoal(world, vehicle, ended);

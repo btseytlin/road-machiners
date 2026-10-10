@@ -104,7 +104,7 @@ function getPlaceActions(world: World): ContextAction[] {
   const post = outpostNear(world);
   if (post) actions.push({ label: t("action.enterOutpost", { site: siteName(post.id) }), ready: reachedOutpostAt(world) !== null, target: { kind: 'outpost' } });
   for (const downed of downedListNear(world)) {
-    actions.push({ label: t("action.lootTruck", { truck: vehicleTitle(world, downed) }), ready: canLootTruck(playerVehicle(world), downed), target: { kind: 'downed', id: downed.id } });
+    actions.push({ label: t("action.lootTruck", { truck: vehicleTitle(world, downed) }), ready: canLootTruck(world, playerVehicle(world), downed), target: { kind: 'downed', id: downed.id } });
   }
   if (!isBusy(playerVehicle(world))) actions.push(...getSiteActions(world));
   return actions;

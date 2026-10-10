@@ -39,7 +39,7 @@ export function checkDeath(world: World): void {
 export function checkKnockout(world: World): void {
   const me = playerVehicle(world);
   if (world.player.state !== "active" || !knockedNow(world, me)) return;
-  if (modeRules(world).knockouts) knockOutPlayer(world, me);
+  if (modeRules(world).playerKnockouts) knockOutPlayer(world, me);
   else endRun(world, "wrecked");
 }
 
@@ -116,7 +116,7 @@ function endDangerGoals(world: World, v: Vehicle): void {
 }
 
 export function standDown(world: World, v: Vehicle, winnerId: string): void {
-  if (!modeRules(world).knockouts) throw new Error(`${v.id} cannot stand down where nobody is knocked out`);
+  if (!modeRules(world).npcKnockouts) throw new Error(`${v.id} cannot stand down where nobody is knocked out`);
   layDown(world, v, [...new Set([...foesOf(world, v), winnerId])], true);
 }
 
@@ -126,7 +126,7 @@ export function knockOutNpc(world: World, v: Vehicle): void {
   world.events.push({ t: "npcKnockout", vehicle: v.id, by });
   if (by === world.player.vehicleId && chance(world, NPC_BEHAVIOR.revengeChance))
     addState(world, "revenge", v.id, world.player.vehicleId, { kind: "none" });
-  sendToLoot(world, v, strippers(world, v));
+  if (modeRules(world).looting) sendToLoot(world, v, strippers(world, v));
 }
 
 function strippers(world: World, victim: Vehicle): Vehicle[] {

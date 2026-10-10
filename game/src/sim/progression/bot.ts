@@ -1055,7 +1055,7 @@ function hasLooseItems(v: Vehicle): boolean {
 }
 
 function takeFromTarget(o: Orders, target: Vehicle): void {
-  if (!canLootTruck(o.me, target)) return driveTo(o, besideStop(o.world, target.pos, chassisDef(target.chassisId).radius));
+  if (!canLootTruck(o.world, o.me, target)) return driveTo(o, besideStop(o.world, target.pos, chassisDef(target.chassisId).radius));
   for (const item of target.items.filter((it) => !isMounted(target.chassisId, it))) {
     const spot = looseSpot(o.me, item);
     if (spot) o.loot(target.id, (w) => takeFromTruck(w, target.id, item.id, spot));

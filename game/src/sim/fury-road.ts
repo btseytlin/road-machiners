@@ -4,6 +4,7 @@ import { NPCS } from '../data/npcs';
 import { RULES } from '../data/rules';
 import { chassisDef } from '../data/chassis';
 import { inCombatWith } from './combat';
+import { isDefeated } from './defeat';
 import { playerVehicle } from './damage';
 import { alongOf, highwayMap, milestoneAt, outpostFort, outpostId, outpostSite, roadPoint, stretchStream, toRoad, WINDOW_SHIFT } from './highway';
 import { canUseSite, sitePads } from './sites';
@@ -138,7 +139,8 @@ function factsOf(run: FuryRoadRun, milestone: number): OutpostFacts {
 export function advanceFuryRoad(world: World): void {
   const run = world.furyRoad;
   if (!run || world.player.state !== 'active' || betweenLevels(world)) return;
-  countWrecks(world, run);
+  countBeaten(world, run);
+  retireWoken(world, run);
   huntPlayer(world, run);
   noteEngaged(world, run);
   if (arrivedAtNext(world, run)) return completeStretch(world, run);
@@ -150,26 +152,34 @@ function playerProgress(world: World, run: FuryRoadRun): number {
   return alongOf(world.seed, toRoad(run.window, playerVehicle(world).pos));
 }
 
-function countWrecks(world: World, run: FuryRoadRun): void {
+function countBeaten(world: World, run: FuryRoadRun): void {
   for (const e of world.events) {
-    if (e.t !== 'destroyed') continue;
+    if (e.t !== 'destroyed' && e.t !== 'npcKnockout') continue;
     const group = run.groups.find((g) => g.vehicles.includes(e.vehicle));
-    if (group) group.wrecked++;
+    if (!group || group.counted.includes(e.vehicle)) continue;
+    group.counted.push(e.vehicle);
+    group.wrecked++;
   }
 }
 
-function liveTrucks(world: World, group: WaveGroup): Vehicle[] {
-  return world.vehicles.filter((v) => group.vehicles.includes(v.id));
+function retireWoken(world: World, run: FuryRoadRun): void {
+  const ids = new Set(run.groups.flatMap((g) => g.vehicles));
+  const woken = world.vehicles.filter((v) => ids.has(v.id) && v.defeat?.phase === 'retreat');
+  if (woken.length > 0) removeVehicles(world, woken.map((v) => v.id));
+}
+
+function fighting(world: World, group: WaveGroup): Vehicle[] {
+  return world.vehicles.filter((v) => group.vehicles.includes(v.id) && !isDefeated(v));
 }
 
 function aliveCount(world: World, run: FuryRoadRun): number {
-  return run.groups.reduce((n, g) => n + liveTrucks(world, g).length, 0);
+  return run.groups.reduce((n, g) => n + fighting(world, g).length, 0);
 }
 
 function huntPlayer(world: World, run: FuryRoadRun): void {
   const me = playerVehicle(world);
   for (const group of run.groups) {
-    for (const v of liveTrucks(world, group)) {
+    for (const v of fighting(world, group)) {
       declareFeud(world, v, me.id);
       if (huntsPlayer(world, v)) refreshTrack(world, v, me.id, me.pos);
       else fightCornered(world, v, me);
@@ -185,7 +195,7 @@ function huntsPlayer(world: World, v: Vehicle): boolean {
 function noteEngaged(world: World, run: FuryRoadRun): void {
   const me = playerVehicle(world);
   for (const group of run.groups) {
-    for (const v of liveTrucks(world, group)) {
+    for (const v of fighting(world, group)) {
       if (group.engaged.includes(v.id)) continue;
       if (dist(v.pos, me.pos) <= FURY_ROAD.catchUp.engageAt || inCombatWith(world, v, me)) group.engaged.push(v.id);
     }
@@ -194,7 +204,7 @@ function noteEngaged(world: World, run: FuryRoadRun): void {
 
 function encounterOn(world: World, run: FuryRoadRun): boolean {
   const me = playerVehicle(world);
-  return run.groups.some((g) => liveTrucks(world, g).some((v) => dist(v.pos, me.pos) <= FURY_ROAD.pacing.near));
+  return run.groups.some((g) => fighting(world, g).some((v) => dist(v.pos, me.pos) <= FURY_ROAD.pacing.near));
 }
 
 function pace(world: World, run: FuryRoadRun): void {
@@ -319,13 +329,13 @@ function completeStretch(world: World, run: FuryRoadRun): void {
   post.paid = true;
   run.earned += pay;
   run.wrecks += wrecks;
-  removeSurvivors(world, run.groups);
+  removeVehicles(world, run.groups.flatMap((g) => g.vehicles));
   run.groups = [];
   world.events.push({ t: 'outpostReached', milestone: j, pay, wrecks });
 }
 
-function removeSurvivors(world: World, groups: WaveGroup[]): void {
-  const gone = new Set(groups.flatMap((g) => g.vehicles));
+function removeVehicles(world: World, ids: string[]): void {
+  const gone = new Set(ids);
   world.removed.push(...world.vehicles.filter((v) => gone.has(v.id)));
   world.vehicles = world.vehicles.filter((v) => !gone.has(v.id));
   settleStates(world);

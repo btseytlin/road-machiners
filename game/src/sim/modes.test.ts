@@ -29,22 +29,23 @@ describe('game mode rules', () => {
     expect(Object.values(open).every((on) => on)).toBe(true);
   });
 
-  it('turns every open-world rule off in a Fury Road world and plays a run', () => {
+  it('turns every open-world rule but NPC knockouts off in a Fury Road world and plays a run', () => {
     const world = furyRoadWorld(7);
-    const { run, ...open } = modeRules(world);
+    const { run, npcKnockouts, ...open } = modeRules(world);
 
     expect(run).toBe(true);
+    expect(npcKnockouts).toBe(true);
     expect(Object.values(open).some((on) => on)).toBe(false);
   });
 
   it('names each mode difference in its row', () => {
     expect(GAME_MODES.roaming).toEqual({
-      rules: { traffic: true, looting: true, knockouts: true, yielding: true, radio: true, rescue: true, roadWrecks: true, run: false },
+      rules: { traffic: true, looting: true, npcKnockouts: true, playerKnockouts: true, yielding: true, radio: true, rescue: true, roadWrecks: true, run: false },
       kit: null,
       map: 'icarus',
     });
     expect(GAME_MODES.furyRoad).toEqual({
-      rules: { traffic: false, looting: false, knockouts: false, yielding: false, radio: false, rescue: false, roadWrecks: false, run: true },
+      rules: { traffic: false, looting: false, npcKnockouts: true, playerKnockouts: false, yielding: false, radio: false, rescue: false, roadWrecks: false, run: true },
       kit: 'furyRoad',
       map: 'highway',
     });

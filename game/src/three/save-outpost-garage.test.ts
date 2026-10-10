@@ -3,7 +3,13 @@ import { playerVehicle } from '../sim/damage';
 import { mountedParts } from '../sim/grid';
 import { storePart, takeFromStorage } from '../sim/inventory';
 import { outpostBuyChassis, outpostBuyPart } from '../sim/outposts';
-import { outpostTrucks } from '../sim/fury-road';
+import { advanceFuryRoad, outpostTrucks } from '../sim/fury-road';
+import { knockOutNpc } from '../sim/defeat';
+import { resolveDestroyed } from '../sim/combat';
+import { corePart } from '../sim/grid';
+import { getResources } from '../sim/resources';
+import { FURY_ROAD } from '../data/modes';
+import { furyRoadWorld } from '../sim/testkit';
 import { fillCargo, parkedAtOutpost, stockOfKind } from '../sim/testkit';
 import type { World } from '../sim/types';
 import { endTurn } from '../sim/world';
@@ -55,5 +61,28 @@ describe('a saved outpost garage', () => {
 
     expect(playerVehicle(loaded).chassisId).toBe(offer[0]);
     expect(outpostTrucks(loaded, loaded.furyRoad!.outposts[0])).toEqual(offer.slice(1));
+  });
+});
+
+describe('a saved run with a knocked-out truck on the road', () => {
+  it('gives back the downed truck and counts it once when it is shot to a wreck after the load', () => {
+    const w = furyRoadWorld(21);
+    w.turn = w.furyRoad!.quietFrom + FURY_ROAD.pacing.quiet;
+    advanceFuryRoad(w);
+    const group = w.furyRoad!.groups[0];
+    const v = w.vehicles.find((x) => x.id === group.vehicles[0])!;
+    corePart(v, 'cab').hp = 0;
+    knockOutNpc(w, v);
+    advanceFuryRoad(w);
+    w.events = [];
+
+    const loaded = expectSameAndNoAward(w);
+
+    const downed = loaded.vehicles.find((x) => x.id === v.id)!;
+    expect(downed.defeat?.phase).toBe('out');
+    getResources(loaded, downed).health = 0;
+    resolveDestroyed(loaded);
+    advanceFuryRoad(loaded);
+    expect(loaded.furyRoad!.groups[0].wrecked).toBe(1);
   });
 });
