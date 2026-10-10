@@ -1,27 +1,27 @@
 // Drawing pieces of the inventory view: the grid, item boxes, labels and the items a running refit moves.
 
-import { CRATE_MASS, GOODS } from "../data/goods";
+import { CRATE_MASS } from "../data/goods";
 import { partDef, type WeaponDef } from "../data/parts";
 import { fireSpans, reachedSides, sideBlockers, SIDES, type FireSpan } from "../sim/armor";
-import { maxHp } from "../sim/wear";
 import { itemCells, itemSize, type Cell, type Grid } from "../sim/grid";
 import type { GridItem, PartInstance, RefitJob, RefitMove, Vehicle, World } from "../sim/types";
 import { playerVehicle } from "../sim/damage";
 import { el } from "./dom";
 import { truckOutline } from "./plans";
-import { wearLabel } from "./format";
-import { gridItemIcon, toneStyle } from "./cards";
-import { hp, kg } from "./units";
+import { conditionMeter, gridItemIcon, toneStyle } from "./cards";
+import { kg } from "./units";
+import { byId, t, type Msg } from "../text/msg";
+import { goodName, partName } from "../text/names";
 
-const CELL_TITLE: Record<Cell, string> = {
-  D: "deck mount for a weapon, scanner, utility, cargo frame or store",
-  E: "engine mount",
-  F: "front armor mount",
-  B: "back armor mount",
-  L: "left armor mount",
-  R: "right armor mount",
-  X: "built-in part",
-  ".": "",
+const CELL_TITLE: Record<Cell, Msg | undefined> = {
+  D: t("cell.deck"),
+  E: t("cell.engine"),
+  F: t("cell.front"),
+  B: t("cell.back"),
+  L: t("cell.left"),
+  R: t("cell.right"),
+  X: t("cell.builtIn"),
+  ".": undefined,
 };
 
 export function storageItem(part: PartInstance): GridItem {
@@ -52,7 +52,7 @@ function gridCellEl(g: Grid, x: number, y: number, cell: number): HTMLElement | 
   const c = g.cells[y][x];
   if (c !== null) return cellEl(c, x, y, cell);
   if (y < g.deadFrom) return null;
-  return el("div", { class: "inv-cell c-dead", style: pos(x, y, 1, 1, cell), title: "Broken cargo rows. Repair the cargo part to use them." });
+  return el("div", { class: "inv-cell c-dead", style: pos(x, y, 1, 1, cell), title: t("cell.deadRows") });
 }
 
 export function cellEl(c: Cell, x: number, y: number, cell: number): HTMLElement {
@@ -67,11 +67,11 @@ export function itemBox(it: GridItem, chassisId: string, mounted: boolean, cell:
   const id = it.kind === "part" ? it.part.defId : it.good;
   const node = el(
     "div",
-    { class: itemClass(it, mounted), "data-item-id": it.id, style: `${pos(x, y, size.w, size.h, cell)};${toneStyle(id)}`, title: itemTitle(it, mounted), tabindex: 0, role: "button", "aria-label": itemTitle(it, mounted) },
+    { class: itemClass(it, mounted), "data-item-id": it.id, style: `${pos(x, y, size.w, size.h, cell)};${toneStyle(id)}`, title: itemName(it), tabindex: 0, role: "button", "aria-label": itemName(it) },
     gridItemIcon(it),
     el("span", { class: "inv-item-name" }, itemLabel(it).short),
   );
-  if (it.kind === "part") node.append(conditionBar(it.part));
+  if (it.kind === "part") node.append(conditionMeter(it.part));
   return node;
 }
 
@@ -120,40 +120,19 @@ export function footprint(it: GridItem): { w: number; h: number } {
   };
 }
 
-export function itemLabel(it: GridItem): { short: string } {
-  if (it.kind === "good") return { short: GOODS[it.good].name.slice(0, 5) };
-  return { short: partDef(it.part.defId).name };
+export function itemLabel(it: GridItem): { short: Msg } {
+  if (it.kind === "good") return { short: byId(`good.${it.good}.short`) };
+  return { short: partName(it.part.defId) };
 }
 
-export function itemTitle(it: GridItem, mounted: boolean): string {
-  if (it.kind === "good") return `${GOODS[it.good].name}, crate of ${kg(CRATE_MASS)}`;
-  if (partDef(it.part.defId).kind === "core")
-    return `${partTitle(it.part)}\nBuilt in`;
-  return `${partTitle(it.part)}\n${mounted ? "Mounted" : "Spare"}`;
+export function itemName(it: GridItem): Msg {
+  return it.kind === "good" ? goodName(it.good) : partName(it.part.defId);
 }
 
-export function conditionBar(p: PartInstance): HTMLElement {
-  const max = maxHp(p);
-  return el(
-    "div",
-    { class: `inv-hp${p.hp > 0 ? "" : " broken"}` },
-    el("div", { style: `width:${(p.hp / max) * 100}%` }),
-  );
-}
-
-export function partTitle(p: PartInstance): string {
-  const d = partDef(p.defId);
-  return `${d.name} (${d.kind}) ${wearLabel(p)}, ${hp(p.hp)}/${hp(maxHp(p))} HP, ${d.w}x${d.h}`;
-}
-
-export function itemName(it: GridItem): string {
-  return it.kind === "good" ? GOODS[it.good].name : partDef(it.part.defId).name;
-}
-
-export function itemState(it: GridItem, mounted: boolean): string {
-  if (it.kind === "good") return `Crate, ${kg(CRATE_MASS)}`;
-  if (partDef(it.part.defId).kind === "core") return "Built in";
-  return mounted ? "Mounted" : "Spare";
+export function itemState(it: GridItem, mounted: boolean): Msg {
+  if (it.kind === "good") return t("item.cargo", { mass: kg(CRATE_MASS) });
+  if (partDef(it.part.defId).kind === "core") return t("item.builtIn");
+  return mounted ? t("item.mounted") : t("item.spare");
 }
 
 const SVG = "http://www.w3.org/2000/svg";

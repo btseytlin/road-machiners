@@ -19,7 +19,7 @@ import { isStranded } from '../stats';
 import { buyCheapestRanks } from '../progress';
 import { clockOf } from '../sun';
 import { isTowed } from '../tow';
-import type { GameEvent, NpcActivity, Vehicle, World, WorldSetup, XpSource } from '../types';
+import type { GameEvent, MoneyReason, NpcActivity, Vehicle, World, WorldSetup, XpSource } from '../types';
 import { dist, type Vec } from '../vec';
 import { canVehicleSee } from '../vision';
 import { maxHp, partValue, restorePart } from '../wear';
@@ -159,10 +159,8 @@ function paidBetween(payee: string, payer: string, me: string, fee: number): Mov
   return payer === me ? { key: 'fees', amount: -fee } : null;
 }
 
-function moneyEventKey(reason: string): 'contracts' | 'fees' {
-  if (reason === 'contract' || reason === 'failed haul contract') return 'contracts';
-  if (reason.startsWith('towing ')) return 'fees';
-  throw new Error(`Money event with an unknown reason "${reason}"`);
+function moneyEventKey(reason: MoneyReason): 'contracts' | 'fees' {
+  return reason.kind === 'towing' ? 'fees' : 'contracts';
 }
 
 function playTurn(world: World, archetype: Policy, options: BotOptions): PlayedTurn {

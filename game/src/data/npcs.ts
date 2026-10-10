@@ -97,8 +97,6 @@ export type SpawnPlace = { kind: 'camp' } | { kind: 'town' } | { kind: 'sites'; 
 
 export type NpcTemplate = {
   id: string;
-  name: string;
-  profession: string;
   faction: Faction;
   traits: TraitId[];
   extraTraits: { trait: TraitId; chance: number }[];
@@ -184,7 +182,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [1.85, 2.85], armor: [0.2, 0.35] },
+    targets: { guns: [1.85, 2.85], armor: [0.2, 0.45] },
     spares: null,
   },
   gunwagon: {
@@ -338,7 +336,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "batteries", count: 1 }, weight: 2 },
       { value: { good: "electronics", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [2, 3.1], armor: [0.2, 0.4] },
+    targets: { guns: [1.95, 3.1], armor: [0.2, 0.4] },
     spares: null,
   },
   bowlPatrol: {
@@ -413,7 +411,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "electronics", count: 2 }, weight: 2 },
       { value: { good: "meds", count: 2 }, weight: 2 },
     ],
-    targets: { guns: [2.05, 3.1], armor: [0.15, 0.3] },
+    targets: { guns: [2.05, 3.1], armor: [0.15, 0.35] },
     spares: null,
   },
   roamer: {
@@ -458,7 +456,7 @@ const LOADOUTS: Record<string, NpcLoadoutTable> = {
       { value: { good: "textiles", count: 2 }, weight: 2 },
       { value: { good: "tools", count: 1 }, weight: 1 },
     ],
-    targets: { guns: [2.05, 3.15], armor: [0.2, 0.35] },
+    targets: { guns: [2.05, 3.15], armor: [0.2, 0.42] },
     spares: null,
   },
   vulture: {
@@ -638,7 +636,7 @@ export const OPPOSED_TRAITS: readonly [TraitId, TraitId][] = [['coward', 'brave'
 
 export const NPCS: Record<string, NpcTemplate> = {
   buggy: {
-    id: 'buggy', name: 'Raider outrider', profession: 'Raider', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
+    id: 'buggy', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
     loadout: LOADOUTS.outrider,
     aggroRange: 11,
     fightStyle: 'circle',
@@ -648,7 +646,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "camp" },
   },
   gunwagon: {
-    id: 'gunwagon', name: 'Gunwagon', profession: 'Raider', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
+    id: 'gunwagon', faction: 'raiders', traits: ['raider'], extraTraits: RAIDER_EXTRAS,
     loadout: LOADOUTS.gunwagon,
     aggroRange: 12,
     fightStyle: 'hold',
@@ -658,7 +656,8 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "camp" },
   },
   trader: {
-    id: 'trader', name: 'Trader caravan', profession: 'Trader', faction: 'traders', traits: ['trader'],
+    id: 'trader', faction: 'traders', traits: ['trader'],
+    // One trader in four is a scumbag, and one in four a coward, as with every neutral driver.
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.trader,
     aggroRange: 0,
@@ -669,7 +668,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   scavenger: {
-    id: 'scavenger', name: 'Scavenger', profession: 'Scavenger', faction: 'scavengers', traits: ['scavenger'],
+    id: 'scavenger', faction: 'scavengers', traits: ['scavenger'],
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.scavenger,
     aggroRange: 0,
@@ -680,7 +679,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   bowlFarmer: {
-    id: 'bowlFarmer', name: 'Bowl Farmers patrol', profession: 'Bowl Farmer', faction: 'bowl', traits: ['lawman', 'brave'], extraTraits: [],
+    id: 'bowlFarmer', faction: 'bowl', traits: ['lawman', 'brave'], extraTraits: [],
     loadout: LOADOUTS.bowlPatrol,
     aggroRange: 0,
     fightStyle: 'hold',
@@ -690,7 +689,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "sites", ids: ["bowl"] },
   },
   noseArmy: {
-    id: 'noseArmy', name: 'Nose Army patrol', profession: 'Nose soldier', faction: 'nose', traits: ['lawman', 'brave'], extraTraits: [],
+    id: 'noseArmy', faction: 'nose', traits: ['lawman', 'brave'], extraTraits: [],
     loadout: LOADOUTS.nosePatrol,
     aggroRange: 0,
     fightStyle: 'hold',
@@ -700,7 +699,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "sites", ids: ["nose"] },
   },
   courier: {
-    id: 'courier', name: 'Courier', profession: 'Courier', faction: 'couriers', traits: ['courier'],
+    id: 'courier', faction: 'couriers', traits: ['courier'],
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.courier,
     aggroRange: 0,
@@ -711,7 +710,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   roamer: {
-    id: 'roamer', name: 'Roamer', profession: 'Roamer', faction: 'roamers', traits: ['roamer'],
+    id: 'roamer', faction: 'roamers', traits: ['roamer'],
     extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.roamer,
     aggroRange: 0,
@@ -722,7 +721,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   vulture: {
-    id: 'vulture', name: 'Vulture', profession: 'Vulture', faction: 'vultures', traits: ['vulture'],
+    id: 'vulture', faction: 'vultures', traits: ['vulture'],
     extraTraits: VULTURE_EXTRAS,
     loadout: LOADOUTS.vulture,
     aggroRange: 0,
@@ -733,7 +732,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "town" },
   },
   convoy: {
-    id: 'convoy', name: 'Supply convoy', profession: 'Convoy driver', faction: 'convoys', traits: ['supplier'], extraTraits: NEUTRAL_EXTRAS,
+    id: 'convoy', faction: 'convoys', traits: ['supplier'], extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.convoy,
     aggroRange: 0,
     fightStyle: 'hold',
@@ -743,7 +742,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "sites", ids: ["bowl", "nose"] },
   },
   convoyGuard: {
-    id: 'convoyGuard', name: 'Convoy guard', profession: 'Convoy guard', faction: 'convoys', traits: ['guard', 'brave'], extraTraits: GUARD_EXTRAS,
+    id: 'convoyGuard', faction: 'convoys', traits: ['guard', 'brave'], extraTraits: GUARD_EXTRAS,
     loadout: LOADOUTS.convoyGuard,
     aggroRange: 0,
     fightStyle: 'hold',
@@ -753,7 +752,7 @@ export const NPCS: Record<string, NpcTemplate> = {
     spawn: { kind: "escort", of: "convoy" },
   },
   merc: {
-    id: 'merc', name: 'Merc', profession: 'Merc', faction: 'mercs', traits: ['merc'], extraTraits: NEUTRAL_EXTRAS,
+    id: 'merc', faction: 'mercs', traits: ['merc'], extraTraits: NEUTRAL_EXTRAS,
     loadout: LOADOUTS.merc,
     aggroRange: 0,
     fightStyle: 'hold',
@@ -812,6 +811,8 @@ export type DecisionOptions = {
   surrenderOffered: 'accept' | 'refuse';
   threatened: 'comply' | 'fightBack' | 'flee';
   warnedOff: 'comply' | 'refuse' | 'fightBack';
+  lootContested: 'warn' | 'leave' | 'fight';
+  warnRefused: 'leave' | 'fight';
   mugging: 'demand' | 'attack';
   resume: 'resume' | 'new';
   idle: 'trade' | 'scavenge' | 'raid' | 'prowl' | 'wait' | 'patrol' | 'travel' | 'explore' | 'haul' | 'escort';
@@ -841,6 +842,8 @@ export const DECISIONS: { [D in DecisionId]: Record<DecisionOptions[D], number> 
   strandedFoe: { offer: 9, spare: 1 },
   surrenderOffered: { accept: 3, refuse: 1 },
   threatened: { comply: 1, fightBack: 1, flee: 1 }, warnedOff: { comply: 1, refuse: 1, fightBack: 1 },
+  lootContested: { warn: 4, leave: 5.7, fight: 0.2 },
+  warnRefused: { leave: 3, fight: 1 },
   mugging: { demand: 3, attack: 2 },
   resume: { resume: 9, new: 1 },
   idle: { trade: 0, scavenge: 1, raid: 0, prowl: 0, wait: 0.1, patrol: 0, travel: 0, explore: 0, haul: 0, escort: 0 },
@@ -856,7 +859,7 @@ export type TraitWeights = { [D in DecisionId]?: Partial<Record<DecisionOptions[
 export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
   feud: { hostileSeen: { fight: { add: 4 } } },
   backedOff: { preySeen: { rob: { mul: 0.005 } } },
-  tow: {}, patch: {}, trade: {}, aid: {}, combat: {},
+  tow: {}, patch: {}, trade: {}, aid: {}, combat: {}, lootWarning: {},
   truce: { preySeen: { rob: { mul: 0.005 } } },
   grievance: {},
   strayFire: {},
@@ -876,6 +879,7 @@ export const STATE_WEIGHTS: Record<StateKindId, TraitWeights> = {
     truceOffered: { refuse: { mul: 3 } },
     mercyBegged: { finish: { mul: 3 } },
     threatened: { fightBack: { mul: 2 } }, warnedOff: { fightBack: { mul: 2 } },
+    lootContested: { fight: { mul: 2 } }, warnRefused: { fight: { mul: 2 } },
   },
 };
 
@@ -896,8 +900,9 @@ export const STATE_TURNS: Record<StateKindId, number | null> = {
   answering: 20,
   escort: null,
   combat: 10,
+  lootWarning: 30,
 };
 
 
-export { FIRST_NAMES, HUNT, MEMORY, NPC_BEHAVIOR, NPC_UPKEEP, SURNAMES, TRADE_TIP } from './npc-behavior';
+export { FEMALE_NAMES, FIRST_NAMES, HUNT, MEMORY, NPC_BEHAVIOR, NPC_UPKEEP, SURNAMES, TRADE_TIP } from './npc-behavior';
 export { TRAITS, type Trait } from './npc-traits';

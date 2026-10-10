@@ -299,7 +299,7 @@ describe('fight back', () => {
   function shotTrader(traits: TraitId[], damage: number) {
     const w = emptyWorld({ x: 80, y: 80 });
     const trader = addNpc(w, 'traders', 'trader', traits, { x: 10, y: 10 }, ['autocannon', 'stockEngine']);
-    trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
+    trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'tripToSite' }];
     const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: 14, y: 10 });
     w.events = [{ t: 'shot', shooter: raider.id, weapon: 'w', target: trader.id, aim: 'body', chance: 1, damageChance: 1, side: 'front', rounds: [round(trader.id, damage)] }];
     noteHurt(w);
@@ -318,7 +318,7 @@ describe('fight back', () => {
       x.rngState = seed;
       const top = thinkNpc(x, find(x, trader.id));
       if (top.kind === 'fight') {
-        expect(top).toMatchObject({ targetId: raider.id, reason: 'fight back' });
+        expect(top).toMatchObject({ targetId: raider.id, reason: 'fightBack' });
         back++;
       }
       if (top.kind === 'flee') fled++;
@@ -356,7 +356,7 @@ describe('decision points', () => {
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
     const chosen = () => trackOf(npc, raider.id)?.choice ?? null;
-    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'search a known salvage site' }];
+    npc.brain!.goals = [{ kind: 'scavenge', targetId: 'salvage-yard', destination: { x: 100, y: 100 }, phase: 'travel', reason: 'searchSite' }];
     const keeps = (seed: number) => {
       const x = cloneWorld(w);
       x.rngState = seed;
@@ -392,7 +392,7 @@ describe('decision points', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = w.player.vehicleId;
     const raider = addNpc(w, 'raiders', 'buggy', ['raider'], { x: 70, y: 30 });
-    raider.brain!.goals = [{ kind: 'investigate', targetId: me, destination: { x: 30, y: 30 }, phase: 'travel', reason: 'heard a hostile beyond sight' }];
+    raider.brain!.goals = [{ kind: 'investigate', targetId: me, destination: { x: 30, y: 30 }, phase: 'travel', reason: 'heardHostile' }];
     chooseOn(w, raider, me, { x: 30, y: 30 }, 'investigate', false);
     w.turn += NPC_BEHAVIOR.noticeMemory + 1;
     thinkNpc(w, raider);
@@ -404,7 +404,7 @@ describe('decision points', () => {
     const w = emptyWorld({ x: 30, y: 30 });
     const me = w.vehicles[0];
     const trader = addNpc(w, 'traders', 'trader', ['trader'], { x: 34, y: 30 });
-    trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
+    trader.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'idle' }];
     thinkNpc(w, trader);
     expect(trackOf(trader, me.id)).toMatchObject({ sighted: true, choice: null, at: me.pos });
     me.pos = { x: 34 + TERRAIN.vision.radius + 5, y: 30 };
@@ -440,7 +440,7 @@ describe('decision points', () => {
     const npc = addNpc(w, 'scavengers', 'scavenger', ['scavenger'], { x: 10, y: 10 });
     const raider = addVehicle(w, 'raiders', 'buggy', [], { x: 14, y: 10 });
     chooseOn(w, npc, raider.id, raider.pos, 'keep', true);
-    npc.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'test base goal' }];
+    npc.brain!.goals = [{ kind: 'wait', targetId: null, destination: null, phase: 'act', reason: 'tripToSite' }];
     forceOption('attacked', 'flee');
     thinkNpc(w, npc);
     expect(npc.brain!.goals.some((g) => g.kind === 'flee')).toBe(false);
@@ -643,7 +643,7 @@ describe('a driver that gave its word', () => {
     const passer = addVehicle(w, 'traders', 'scout', [], { x: 44, y: 34 });
     if (addGoods(w, passer, 'scrap', 2) < 2) throw new Error('No room for the passer goods');
     addState(w, 'trade', npc.id, me.id, { kind: 'none' });
-    npc.brain!.goals = [{ kind: 'meet', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'pull over to trade' }];
+    npc.brain!.goals = [{ kind: 'meet', targetId: me.id, destination: { ...me.pos }, phase: 'travel', reason: 'pullOver' }];
     return { w, me, npc, passer };
   }
 

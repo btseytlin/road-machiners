@@ -1,6 +1,6 @@
 # Items
 
-Every chassis, part and good in the game. Value is money for a pristine item. Every price derives from it, see [economy.md](economy.md). Mass is per part in kilograms. Goods come in crates, one per cargo cell, and every crate weighs `CRATE_MASS`, 50 kg, whatever the good. A good's value is per crate. Footprints are in grid cells. One cell is `RULES.cellMeters` meters wide.
+Every chassis, part and good in the game. Value is in M's, the basin's currency ([lore](../lore.md#ms)), for a pristine item. Every price derives from it, see [economy.md](economy.md). Mass is per part in kilograms, and per unit for goods. Footprints are in grid cells. One cell is `RULES.cellMeters` meters wide.
 
 Parts are defined in `src/data/parts.ts`, chassis in `src/data/chassis.ts` and goods in `src/data/goods.ts`. A value is a hand-set base plus a modifier from the stats the kind is bought for. The modifier numbers are `PART_PRICE_MODIFIERS` for parts and `CHASSIS_PRICE_MODIFIERS` for chassis. Core parts come built into a chassis at fixed cells and are never sold.
 
@@ -102,18 +102,18 @@ Each weapon's round:
 <!-- wiki:armor -->
 | id | name | tier | value (M) | cells (w x h) | mass (kg) | hp | armor | tall | blast armor | field repair | ram mult | claymore |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| plates | Steel plates | 2 | 102 | 1 x 3 | 225 | 80 | 12 | false | 12 | capped | 1 |  |
-| cage | Rebar cage | 1 | 73 | 1 x 2 | 110 | 60 | 2 | false | 20 | capped | 1 |  |
-| ram | Ram bar | 2 | 110 | 3 x 1 | 480 | 100 | 20 | false | 8 | capped | 2 |  |
-| scrapPanels | Scrap panels | 1 | 50 | 1 x 2 | 200 | 44 | 5 | false | 5 | full | 1 |  |
-| ceramicPlates | Ceramic plates | 2 | 150 | 1 x 2 | 100 | 36 | 22 | false | 8 | none | 1 |  |
-| spacedArmor | Spaced armor | 2 | 142 | 1 x 4 | 260 | 110 | 10 | false | 28 | capped | 1 |  |
-| reinforcedCage | Reinforced cage | 2 | 117 | 1 x 3 | 180 | 130 | 4 | false | 26 | capped | 1.2 |  |
-| plowRam | Plow ram | 3 | 201 | 3 x 1 | 420 | 170 | 25 | false | 12 | none | 2.8 |  |
+| plates | Steel plates | 2 | 102 | 1 x 3 | 112 | 80 | 12 | false | 12 | capped | 1 |  |
+| cage | Rebar cage | 1 | 73 | 1 x 2 | 55 | 60 | 2 | false | 20 | capped | 1 |  |
+| ram | Ram bar | 2 | 86 | 3 x 1 | 135 | 100 | 8 | false | 8 | capped | 2 |  |
+| scrapPanels | Scrap panels | 1 | 50 | 1 x 2 | 80 | 44 | 5 | false | 5 | full | 1 |  |
+| ceramicPlates | Ceramic plates | 2 | 150 | 1 x 2 | 50 | 36 | 22 | false | 8 | none | 1 |  |
+| spacedArmor | Spaced armor | 2 | 142 | 1 x 4 | 130 | 110 | 10 | false | 28 | capped | 1 |  |
+| reinforcedCage | Reinforced cage | 2 | 117 | 1 x 3 | 90 | 130 | 4 | false | 26 | capped | 1.2 |  |
+| plowRam | Plow ram | 3 | 167 | 3 x 1 | 126 | 170 | 10 | false | 10 | none | 2.8 |  |
 | claymoreRam | Claymore ram | 2 | 140 | 3 x 1 | 380 | 80 | 14 | false | 6 | capped | 1.5 | {"minImpact":3,"blast":{"damage":60,"pen":12,"radius":2},"selfBlast":{"damage":25,"pen":6},"throw":{"impulse":40000,"lift":0.35},"reload":20} |
-| steelPlate | Steel plate | 2 | 66 | 1 x 1 | 80 | 28 | 12 | false | 12 | capped | 1 |  |
-| scrapSheet | Scrap sheet | 1 | 34 | 1 x 1 | 100 | 22 | 5 | false | 5 | full | 1 |  |
-| ceramicTile | Ceramic tile | 2 | 87 | 1 x 1 | 50 | 18 | 22 | false | 8 | none | 1 |  |
+| steelPlate | Steel plate | 2 | 66 | 1 x 1 | 40 | 28 | 12 | false | 12 | capped | 1 |  |
+| scrapSheet | Scrap sheet | 1 | 34 | 1 x 1 | 40 | 22 | 5 | false | 5 | full | 1 |  |
+| ceramicTile | Ceramic tile | 2 | 87 | 1 x 1 | 25 | 18 | 22 | false | 8 | none | 1 |  |
 <!-- /wiki:armor -->
 
 ## Cargo
@@ -121,13 +121,13 @@ Each weapon's round:
 <!-- wiki:cargo -->
 | id | name | tier | value (M) | cells (w x h) | mass (kg) | hp | armor | tall | extra rows |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| rack | Roof rack | 1 | 40 | 2 x 1 | 60 | 30 | 1 | false | 1 |
-| trailerBox | Cargo box | 2 | 100 | 2 x 2 | 135 | 60 | 1 | true | 3 |
+| rack | Roof rack | 1 | 67 | 2 x 1 | 60 | 30 | 1 | false | 2 |
+| trailerBox | Cargo box | 2 | 120 | 2 x 2 | 135 | 60 | 1 | true | 5 |
 | panniers | Panniers | 1 | 34 | 1 x 1 | 60 | 20 | 1 | false | 1 |
 | flatbed | Flatbed extension | 1 | 67 | 2 x 1 | 120 | 50 | 1 | false | 2 |
-| lightFrame | Light cargo frame | 2 | 127 | 2 x 2 | 90 | 24 | 1 | false | 3 |
-| enclosedFrame | Enclosed cargo frame | 2 | 147 | 2 x 2 | 165 | 110 | 8 | true | 3 |
-| heavyFrame | Heavy cargo frame | 3 | 217 | 2 x 2 | 175 | 90 | 3 | true | 5 |
+| lightFrame | Light cargo frame | 2 | 127 | 2 x 2 | 90 | 24 | 1 | false | 5 |
+| enclosedFrame | Enclosed cargo frame | 2 | 134 | 2 x 2 | 165 | 110 | 8 | true | 5 |
+| heavyFrame | Heavy cargo frame | 3 | 160 | 2 x 2 | 150 | 90 | 3 | true | 6 |
 <!-- /wiki:cargo -->
 
 ## Scanners

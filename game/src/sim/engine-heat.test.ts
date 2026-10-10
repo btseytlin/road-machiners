@@ -9,7 +9,7 @@ import { TIME } from '../data/time';
 import { ENGINE_HEAT } from '../data/wear';
 import { SKILL_EFFECTS } from '../data/skills';
 import { playerVehicle } from './damage';
-import { advanceEngineHeat, douseEngine, engineOverheating } from './engine-heat';
+import { advanceEngineHeat, douseBlock, douseEngine, engineOverheating } from './engine-heat';
 import { mountedParts } from './grid';
 import { route } from './path';
 import { nearestPad } from './sites';
@@ -41,7 +41,7 @@ describe('engine heat', () => {
       expect(turns).toBeLessThan(60);
     }
     expect(turns).toBeGreaterThan(20);
-    expect(w.events.some((e) => e.t === 'info' && e.text.startsWith('Engine running hot'))).toBe(true);
+    expect(w.events.some((e) => e.t === 'info' && e.note.id === 'engineHot')).toBe(true);
     expect(engine(w).hp).toBe(hp - ENGINE_HEAT.overheatDamage);
     advanceEngineHeat(w);
     expect(engine(w).hp).toBe(hp - 2 * ENGINE_HEAT.overheatDamage);
@@ -348,5 +348,19 @@ describe('desert rat', () => {
     me.speed = vehicleStats(w, me).maxSpeed;
     advanceEngineHeat(w);
     expect(practiceOf(w, 'heat')[0].difficulty).toBeCloseTo((heatAt(w, me.pos) - 1) / (TIME.sunHeat - 1));
+  });
+});
+
+describe('douse reasons', () => {
+  it('names what blocks cooling the engine', () => {
+    const w = emptyWorld();
+    w.player.supplies = 0;
+    w.player.engineHeat = 0.5;
+    expect(douseBlock(w)).toBe('noSupplies');
+    w.player.supplies = ENGINE_HEAT.douseSupplies;
+    w.player.engineHeat = 0;
+    expect(douseBlock(w)).toBe('engineCool');
+    w.player.engineHeat = 0.5;
+    expect(douseBlock(w)).toBeNull();
   });
 });

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { isBrowserChord, overlaps } from "./dom";
+import { vi } from "vitest";
+import { t } from "../text/msg";
+import { disabledWith, isBrowserChord } from "./dom";
+
+const NO_SAVES = t("save.none");
 
 const keys = { ctrlKey: false, metaKey: false, altKey: false };
 
@@ -18,21 +22,21 @@ describe("isBrowserChord", () => {
   });
 });
 
-describe("overlaps", () => {
-  const box = (left: number, top: number, right: number, bottom: number) => ({ left, top, right, bottom });
-  it("holds for crossing boxes", () => {
-    expect(overlaps(box(0, 0, 100, 100), box(50, 50, 150, 150))).toBe(true);
-    expect(overlaps(box(50, 50, 150, 150), box(0, 0, 100, 100))).toBe(true);
+describe("disabledWith", () => {
+  it("passes the click through when there is no reason", () => {
+    const click = vi.fn();
+    const attrs = disabledWith(null, click);
+    attrs.onclick();
+    expect(click).toHaveBeenCalledOnce();
+    expect(attrs["aria-disabled"]).toBeUndefined();
   });
-  it("does not hold for boxes that only touch", () => {
-    expect(overlaps(box(0, 0, 100, 100), box(0, 100, 100, 200))).toBe(false);
-    expect(overlaps(box(0, 0, 100, 100), box(100, 0, 200, 100))).toBe(false);
-  });
-  it("does not hold for boxes apart", () => {
-    expect(overlaps(box(0, 0, 100, 100), box(0, 300, 100, 400))).toBe(false);
-  });
-  it("does not hold for an empty box, as a hidden panel measures", () => {
-    expect(overlaps(box(0, 0, 0, 0), box(-10, -10, 10, 10))).toBe(false);
-    expect(overlaps(box(-10, -10, 10, 10), box(5, 5, 5, 5))).toBe(false);
+
+  it("blocks the click and carries the reason when there is one", () => {
+    const click = vi.fn();
+    const attrs = disabledWith(NO_SAVES, click);
+    attrs.onclick();
+    expect(click).not.toHaveBeenCalled();
+    expect(attrs["aria-disabled"]).toBe("true");
+    expect(attrs["data-reason"]).toBe(NO_SAVES);
   });
 });

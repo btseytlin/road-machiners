@@ -6,9 +6,14 @@ import { mountPart } from '../sim/inventory';
 import { corePart } from '../sim/grid';
 import { vehicleStats } from '../sim/stats';
 import { addVehicle, emptyWorld } from '../sim/testkit';
-import { DEG } from '../sim/vec';
 import { refreshVision } from '../sim/vision';
 import { hitCardRows } from './hitCard';
+import { ammoText } from './weapons';
+import type { Msg } from "../text/msg";
+import { resolve } from "../text/resolve";
+import { partName, vehicleTitle } from "../text/names";
+
+const en = (msg: Msg): string => resolve(msg, "en");
 
 function createDuel() {
   const world = emptyWorld();
@@ -20,38 +25,82 @@ function createDuel() {
 }
 
 describe('hover card rows', () => {
-  it('shows the shut-down turns the hovered truck has ahead, and nothing while it runs', () => {
-    const { world, them } = createDuel();
-    expect(hitCardRows(world, them.id)!.shutDown).toBeNull();
-    them.shutDown = { from: world.turn + 1, until: world.turn + 2 };
-    expect(hitCardRows(world, them.id)!.shutDown).toBe('Shut down: 2 turns left');
-  });
-
   it('shows my guns as shut down while I am', () => {
     const { world, me, them } = createDuel();
     me.shutDown = { from: world.turn, until: world.turn + 1 };
-    expect(hitCardRows(world, them.id)!.mine[0]).toMatchObject({ odds: null, text: 'shut down' });
+    const row = hitCardRows(world, them.id)!.mine[0];
+    expect([row.odds, en(row.text), row.tip]).toEqual([null, 'shut down', null]);
   });
 
-  it('shows my weapon odds from hitOdds with every cause', () => {
+  it('shows my weapon odds from hitOdds, with my key and the gun name and ammo', () => {
     const { world, me, them, mine } = createDuel();
     const o = hitOdds(world, me, mine, them, 'body');
     const card = hitCardRows(world, them.id)!;
-    expect(card.name).toBe(them.name);
-    expect(card.mine[0]).toMatchObject({ odds: o, text: `${Math.round(o.damageChance * 100)}%` });
-    const deg = (r: number) => (r / DEG).toFixed(1);
-    expect(o.causes.crossing).toBeGreaterThan(0);
-    expect(o.causes.recoil).toBeGreaterThan(0);
-    expect(card.mine[0].detail).toBe(`${Math.round(o.chance * 100)}% land on aim, ${Math.round(o.distance)} m, shows ${o.width.toFixed(1)} m wide, scatter ${deg(o.causes.weapon)}° weapon +${deg(o.causes.range)}° range +${deg(o.causes.crossing)}° crossing +${deg(o.causes.recoil)}° recoil`);
+    expect(en(card.name)).toBe(en(vehicleTitle(world, them)));
+    expect(card.mine[0]).toMatchObject({ key: 1, odds: o });
+    expect(en(card.mine[0].name)).toBe(en(partName(mine.def.id)));
+    expect(en(card.mine[0].ammo)).toBe(en(ammoText(mine)));
+    expect(en(card.mine[0].text)).toBe(`${Math.round(o.damageChance * 100)}%`);
   });
 
-  it('names the biggest reasons in plain words and keeps at most two', () => {
+  it('shows its weapons without a key', () => {
+    const { world, them, theirs } = createDuel();
+    expect(hitCardRows(world, them.id)!.theirs[0]).toMatchObject({ key: null });
+    expect(en(hitCardRows(world, them.id)!.theirs[0].name)).toBe(en(partName(theirs.def.id)));
+  });
+
+  it('makes the base and the cause rows add up to the chance on the card', () => {
     const { world, them } = createDuel();
-    const cause = hitCardRows(world, them.id)!.mine[0].cause!;
-    expect(cause).toMatch(/^(far|target crossing fast|you are moving|gun kick|bad weather|loose gun)(, (far|target crossing fast|you are moving|gun kick|bad weather|loose gun))?$/);
+    const card = hitCardRows(world, them.id)!;
+    for (const r of [...card.mine, ...card.theirs]) {
+      const tip = r.tip!;
+      expect(tip.rows.length).toBeGreaterThan(0);
+      expect(tip.rows.every((x) => x.delta !== 0)).toBe(true);
+      expect(`${tip.base + tip.rows.reduce((sum, x) => sum + x.delta, 0)}%`).toBe(en(r.text));
+    }
   });
 
-  it('names parts in the way of an aimed part they shield', () => {
+  it('names causes from the shooter point of view', () => {
+    const { world, me, them } = createDuel();
+    them.speed = 0;
+    me.speed = 0;
+    const card = hitCardRows(world, them.id)!;
+    const mineNames = card.mine[0].tip!.rows.map((x) => en(x.name));
+    const theirNames = card.theirs[0].tip!.rows.map((x) => en(x.name));
+    expect(mineNames).toContain('Target is parked');
+    expect(theirNames).toContain('You are parked');
+    expect(mineNames).not.toContain('You are parked');
+  });
+
+  it('names a moving shooter and a crossing target', () => {
+    const { world, me, them } = createDuel();
+    me.speed = 3;
+    them.speed = 3;
+    const card = hitCardRows(world, them.id)!;
+    expect(card.mine[0].tip!.rows.map((x) => en(x.name))).toEqual(expect.arrayContaining(['You are moving', 'Gun kick']));
+    expect(card.theirs[0].tip!.rows.map((x) => en(x.name))).toContain('It is moving');
+  });
+
+  it('shows perception as a chance gain', () => {
+    const { world, them } = createDuel();
+    world.player.ranks.perception = 3;
+    const row = hitCardRows(world, them.id)!.mine[0].tip!.rows.find((x) => en(x.name) === 'Driver perception');
+    expect(row!.delta).toBeGreaterThan(0);
+  });
+
+  it('shows smoke between us as a chance loss', () => {
+    const { world, me, them } = createDuel();
+    world.smoke = [{ id: 's1', source: me.id, pos: { x: 31.5, y: 30 }, r: 1, turnsLeft: 3 }];
+    const row = hitCardRows(world, them.id)!.mine[0].tip!.rows.find((x) => en(x.name) === 'Smoke');
+    expect(row!.delta).toBeLessThan(0);
+  });
+
+  it('names no smoke on a clear shot', () => {
+    const { world, them } = createDuel();
+    expect(hitCardRows(world, them.id)!.mine[0].tip!.rows.map((x) => en(x.name))).not.toContain('Smoke');
+  });
+
+  it('builds the tip for the part my order aims at', () => {
     const world = emptyWorld();
     const me = world.vehicles[0];
     const them = addVehicle(world, 'raiders', 'courier', ['stockEngine'], { x: 33, y: 30 }, Math.PI);
@@ -60,23 +109,7 @@ describe('hover card rows', () => {
     me.weaponOrders[mine.part.id] = { targetId: them.id, aim: corePart(them, 'cab').id };
     const row = hitCardRows(world, them.id)!.mine[0];
     expect(row.odds!.damageChance).toBeLessThan(row.odds!.chance);
-    expect(row.cause).toContain('parts in the way');
-  });
-
-  it('calls a parked target easy', () => {
-    const { world, them } = createDuel();
-    them.speed = 0;
-    const row = hitCardRows(world, them.id)!.mine[0];
-    expect(row.odds!.causes.still).toBeLessThan(0);
-    expect(row.cause).toContain('target is parked: easy');
-  });
-
-  it('says clear shot when no cause is a main one', () => {
-    const { world, them } = createDuel();
-    them.speed = 0;
-    world.vehicles[0].speed = 0;
-    const row = hitCardRows(world, them.id)!.mine[0];
-    expect(row.cause).not.toContain('you are moving');
+    expect(row.tip!.base + row.tip!.rows.reduce((sum, x) => sum + x.delta, 0)).toBe(Math.round(row.odds!.damageChance * 100));
   });
 
   it('shows its weapons against me with the aim of its order at me', () => {
@@ -97,38 +130,15 @@ describe('hover card rows', () => {
   it('shows a knocked-out driver firing nothing at me', () => {
     const { world, them } = createDuel();
     them.defeat = { phase: 'out', turns: 0, unseen: 0, foes: [], gaveUp: true };
-    expect(hitCardRows(world, them.id)!.theirs[0]).toMatchObject({ odds: null, text: 'driver knocked out' });
+    const row = hitCardRows(world, them.id)!.theirs[0];
+    expect([row.odds, en(row.text)]).toEqual([null, 'driver knocked out']);
   });
 
   it('shows the block reason instead of a chance', () => {
     const { world, them, mine } = createDuel();
     mine.part.hp = 0;
-    expect(hitCardRows(world, them.id)!.mine[0]).toMatchObject({ odds: null, text: 'disabled', cause: null, detail: null });
-  });
-
-  it('shows perception as a negative scatter cause', () => {
-    const { world, me, them, mine } = createDuel();
-    world.player.ranks.perception = 3;
-    const o = hitOdds(world, me, mine, them, 'body');
-    expect(o.causes.skill).toBeLessThan(0);
-    expect(hitCardRows(world, them.id)!.mine[0].detail).toContain(` −${(-o.causes.skill / DEG).toFixed(1)}° perception`);
-  });
-
-  it('shows smoke between us as a scatter cause and names it as a reason', () => {
-    const { world, me, them, mine } = createDuel();
-    world.smoke = [{ id: 's1', source: me.id, pos: { x: 31.5, y: 30 }, r: 1, turnsLeft: 3 }];
-    const o = hitOdds(world, me, mine, them, 'body');
     const row = hitCardRows(world, them.id)!.mine[0];
-    expect(o.causes.smoke).toBeGreaterThan(0);
-    expect(row.detail).toContain(` +${(o.causes.smoke / DEG).toFixed(1)}° smoke`);
-    expect(row.cause).toContain('smoke');
-  });
-
-  it('names no smoke on a clear shot', () => {
-    const { world, them } = createDuel();
-    const row = hitCardRows(world, them.id)!.mine[0];
-    expect(row.detail).not.toContain('smoke');
-    expect(row.cause).not.toContain('smoke');
+    expect([row.odds, en(row.text), row.tip]).toEqual([null, 'disabled', null]);
   });
 
   it('shows no card for my own truck', () => {
@@ -158,17 +168,19 @@ describe('hover card harpoon row', () => {
     const { world, me, them } = harpoonDuel();
     const odds = hitOdds(world, me, { def: partDef('harpoon') as WeaponDef }, them, 'body');
 
-    const row = hitCardRows(world, them.id)!.mine.find((r) => r.label.endsWith('Harpoon 1/1'));
+    const row = hitCardRows(world, them.id)!.mine.find((r) => en(r.name) === 'Harpoon' && en(r.ammo) === '1/1');
 
-    expect(row).toMatchObject({ odds, text: `${Math.round(odds.damageChance * 100)}%` });
+    expect(row).toMatchObject({ odds });
+    expect(en(row!.text)).toBe(`${Math.round(odds.damageChance * 100)}%`);
   });
 
   it('shows a reloading harpoon with no odds', () => {
     const { world, harpoon, them } = harpoonDuel();
     harpoon.gun = { cooldown: 0, ammo: 0, reloadWork: 2 };
 
-    const row = hitCardRows(world, them.id)!.mine.find((r) => r.label.endsWith('Harpoon 0/1'));
+    const row = hitCardRows(world, them.id)!.mine.find((r) => en(r.name) === 'Harpoon' && en(r.ammo) === '0/1');
 
-    expect(row).toMatchObject({ odds: null, text: 'reloading 3 turns' });
+    expect(row).toMatchObject({ odds: null });
+    expect(en(row!.text)).toBe('reloading 3 turns');
   });
 });

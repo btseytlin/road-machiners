@@ -1,8 +1,12 @@
 import { baseGrid } from "../sim/grid";
 import type { Vehicle } from "../sim/types";
+import { bindAttr } from "../text/language";
+import { t, verbatim } from "../text/msg";
 import { el } from "./dom";
 import { conditionLabel, TruckConditionReadout } from "./hud-readout";
 import { tintedIcon, truckOutline } from "./plans";
+import { PLAN_PAD } from "../render/partLooks";
+import { token } from "./tokens";
 import "./truck-condition.css";
 
 const CELL = 30;
@@ -13,26 +17,35 @@ export type ConditionAim = { marks: ReadonlyMap<string, number[]>; pick: (partId
 export class TruckConditionView {
   readonly root = el("div", {
     class: "truck-condition",
-    "aria-label": "Truck part condition, nose up",
+    "aria-label": t("condition.panel"),
   });
   private body = el("div", { class: "condition-chassis" });
   private readout = new TruckConditionReadout();
   private nodes = new Map<string, HTMLElement>();
-  private tip = el("div", { class: "condition-tip" });
+  private tip = el("div", { class: "condition-tip tooltip" });
   private hoverId: string | null = null;
   private tiles: ConditionPart[] = [];
   private outline: HTMLElement[] = [];
   private chassisId: string | null = null;
 
-  constructor() {
+  constructor(private readonly quiet = false) {
     this.body.append(this.tip);
     this.root.append(this.body);
+  }
+
+  fitTo(box: HTMLElement): void {
+    this.root.style.zoom = "1";
+    const outline = parseFloat(token("--space-4"));
+    const height = this.body.offsetHeight + 2 * PLAN_PAD * CELL;
+    const scale = Math.min(1, (box.clientHeight - outline) / height, (box.clientWidth - outline) / this.body.offsetWidth);
+    this.root.style.zoom = String(scale);
   }
 
   render(vehicle: Vehicle, aim?: ConditionAim): void {
     const grid = baseGrid(vehicle.chassisId);
     this.body.style.width = `${grid.w * CELL}px`;
     this.body.style.height = `${grid.h * CELL}px`;
+    this.body.style.margin = `${PLAN_PAD * CELL}px 0`;
     if (this.chassisId !== vehicle.chassisId) {
       this.chassisId = vehicle.chassisId;
       for (const old of this.outline) old.remove();
@@ -57,7 +70,10 @@ export class TruckConditionView {
     const part = this.tiles.find((p) => p.id === this.hoverId);
     this.tip.style.display = part ? "" : "none";
     if (!part) return;
-    this.tip.textContent = conditionLabel(part);
+    this.tip.replaceChildren(
+      el("span", {}, part.name),
+      el("span", { class: part.percent === 0 ? "num bad" : "num" }, part.percent === 0 ? t("cond.broken") : t("setting.percent", { n: part.percent })),
+    );
     this.tip.style.left = `${part.x * CELL}px`;
     this.tip.style.top = `${part.y === 0 ? (part.y + part.h) * CELL + 2 : part.y * CELL - 22}px`;
   }
@@ -72,7 +88,7 @@ export class TruckConditionView {
     node.dataset.condition = part.state;
     node.classList.toggle("broken", part.broken);
     markAim(node, part.id, aim);
-    node.setAttribute("aria-label", conditionLabel(part));
+    bindAttr(node, "aria-label", conditionLabel(part));
     node.onmouseenter = () => {
       this.hoverId = part.id;
       this.showTip();
@@ -81,7 +97,7 @@ export class TruckConditionView {
       if (this.hoverId === part.id) this.hoverId = null;
       this.showTip();
     };
-    const tone = conditionTone(part.percent);
+    const tone = this.quiet ? quietTone(part.percent) : conditionTone(part.percent);
     node.style.cssText = `${boxStyle(part.x, part.y, part.w, part.h)};--tone:${tone.fill};--tint-line:${tone.shade};--tint-shadow:${tone.shade};--tint-light:${tone.light}`;
     if (part.hit) this.flashDamage(node);
   }
@@ -90,8 +106,8 @@ export class TruckConditionView {
     for (const animation of node.getAnimations()) animation.cancel();
     node.animate(
       [
-        { background: "#fa3934", offset: 0 },
-        { background: "#fa3934", offset: 0.65 },
+        { background: token("--alarm"), offset: 0 },
+        { background: token("--alarm"), offset: 0.65 },
       ],
       { duration: 300, iterations: 2 },
     );
@@ -107,11 +123,11 @@ function markAim(node: HTMLElement, partId: string, aim?: ConditionAim): void {
   node.onclick = aim ? () => aim.pick(partId) : null;
   node.querySelector(".condition-aim")?.remove();
   const guns = aim?.marks.get(partId);
-  if (guns) node.append(el("span", { class: "condition-aim", title: `Aimed by gun ${guns.join(", ")}` }, guns.join(" ")));
+  if (guns) node.append(el("span", { class: "condition-aim", title: t("condition.aimedBy", { guns: verbatim(guns.join(", ")) }) }, verbatim(guns.join(" "))));
 }
 
 type Tone = { fill: string; shade: string; light: string };
-const BROKEN_TONE: Tone = { fill: "#262626", shade: "#151515", light: "#333333" };
+const BROKEN_TONE: Tone = { fill: token("--cond-broken-fill"), shade: token("--cond-broken-shade"), light: token("--cond-broken-light") };
 const TONE_STOPS: readonly { at: number; rgb: readonly [number, number, number] }[] = [
   { at: 0, rgb: [128, 46, 38] },
   { at: 0.5, rgb: [140, 116, 48] },
@@ -120,6 +136,21 @@ const TONE_STOPS: readonly { at: number; rgb: readonly [number, number, number] 
 const SHADE_DARKEN = 0.3;
 const LIGHT_LIGHTEN = 0.25;
 
+function quietTone(percent: number): Tone {
+  if (percent === 0) return BROKEN_TONE;
+  const fill =
+    percent >= 100
+      ? "var(--cell-side)"
+      : percent >= 50
+        ? `color-mix(in oklab, var(--cell-side) ${(percent - 50) * 2}%, var(--accent-deep))`
+        : `color-mix(in oklab, var(--accent-deep) ${percent * 2}%, var(--danger-deep))`;
+  return {
+    fill,
+    shade: `color-mix(in oklab, ${fill} 70%, black)`,
+    light: `color-mix(in oklab, ${fill} 75%, white)`,
+  };
+}
+
 function conditionTone(percent: number): Tone {
   if (percent === 0) return BROKEN_TONE;
   const t = percent / 100;
@@ -127,6 +158,7 @@ function conditionTone(percent: number): Tone {
   const [a, b] = i <= 0 ? [TONE_STOPS[0], TONE_STOPS[0]] : [TONE_STOPS[i - 1], TONE_STOPS[i]];
   const k = b.at === a.at ? 0 : (t - a.at) / (b.at - a.at);
   const rgb = a.rgb.map((v, c) => v + (b.rgb[c] - v) * k);
-  const css = (mix: number): string => `rgb(${rgb.map((v) => Math.round(mix >= 0 ? v + (255 - v) * mix : v * (1 + mix))).join(" ")})`;
-  return { fill: css(0), shade: css(-SHADE_DARKEN), light: css(LIGHT_LIGHTEN) };
+  const hex = (mix: number): string =>
+    `#${rgb.map((v) => Math.round(mix >= 0 ? v + (255 - v) * mix : v * (1 + mix)).toString(16).padStart(2, "0")).join("")}`;
+  return { fill: hex(0), shade: hex(-SHADE_DARKEN), light: hex(LIGHT_LIGHTEN) };
 }

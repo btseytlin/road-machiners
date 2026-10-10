@@ -1,56 +1,44 @@
-// Hover card: my weapons' hit odds on the hovered truck and its weapons' odds on me, with the causes of scatter.
-// Every number comes from hitOdds, the same function the fire phase rolls against.
-
-import { fireBlock, hitOdds, type HitOdds } from '../sim/combat';
+import { chanceSteps, fireBlock, hitOdds, type ChanceStep, type HitOdds } from '../sim/combat';
 import { playerVehicle } from '../sim/damage';
 import { vehicleStats, type MountedWeapon } from '../sim/stats';
 import type { Aim, Vehicle, World } from '../sim/types';
-import { shutDownTurnsLeft } from '../sim/utility';
-import { DEG } from '../sim/vec';
+import { partName, vehicleTitle } from '../text/names';
+import { DASH, num, t, type Msg } from '../text/msg';
 import { el } from './dom';
 import { ammoText, blockText } from './weapons';
 
-export type HitRow = { label: string; odds: HitOdds | null; text: string; cause: string | null; detail: string | null };
-export type HitCardData = { name: string; shutDown: string | null; mine: HitRow[]; theirs: HitRow[] };
+export type TipRow = { name: Msg; delta: number };
+export type ChanceTip = { base: number; rows: TipRow[] };
+export type HitRow = { key: number | null; name: Msg; ammo: Msg; odds: HitOdds | null; text: Msg; tip: ChanceTip | null };
+export type HitCardData = { name: Msg; mine: HitRow[]; theirs: HitRow[] };
 
-function deg(r: number): string {
-  return (Math.abs(r) / DEG).toFixed(1);
+type CauseNames = Record<ChanceStep['cause'], Msg>;
+
+const SHARED_NAMES = {
+  weapon: t('hitTip.weapon'),
+  range: t('hitTip.range'),
+  recoil: t('hitTip.recoil'),
+  skill: t('hitTip.skill'),
+  weather: t('hitTip.weather'),
+  smoke: t('hitTip.smoke'),
+};
+
+const MY_NAMES: CauseNames = { ...SHARED_NAMES, crossing: t('hitTip.mine.crossing'), own: t('hitTip.mine.own'), still: t('hitTip.mine.still') };
+const THEIR_NAMES: CauseNames = { ...SHARED_NAMES, crossing: t('hitTip.theirs.crossing'), own: t('hitTip.theirs.own'), still: t('hitTip.theirs.still') };
+
+function chanceTip(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim, names: CauseNames): ChanceTip {
+  const steps = chanceSteps(world, shooter, mw, target, aim);
+  const shown = steps.map((s) => Math.round(s.chance * 100));
+  const rows = steps.slice(1).map((s, i) => ({ name: names[s.cause], delta: shown[i + 1] - shown[i] }));
+  return { base: shown[0], rows: rows.filter((r) => r.delta !== 0) };
 }
 
-function detailLine(o: HitOdds): string {
-  const extra = ([[o.causes.range, 'range'], [o.causes.crossing, 'crossing'], [o.causes.own, 'own speed'], [o.causes.recoil, 'recoil'], [o.causes.skill, 'perception'], [o.causes.weather, 'weather'], [o.causes.smoke, 'smoke'], [o.causes.still, 'still target']] as const)
-    .filter(([r]) => deg(r) !== '0.0')
-    .map(([r, name]) => ` ${r < 0 ? '−' : '+'}${deg(r)}° ${name}`)
-    .join('');
-  return `${Math.round(o.chance * 100)}% land on aim, ${Math.round(o.distance)} m, shows ${o.width.toFixed(1)} m wide, scatter ${deg(o.causes.weapon)}° weapon${extra}`;
-}
-
-const MAIN_SHARE = 0.25;
-const MAX_REASONS = 2;
-
-function reasonLine(o: HitOdds, aim: Aim): string {
-  const c = o.causes;
-  const covered = aim !== 'body' && Math.round(o.damageChance * 100) < Math.round(o.chance * 100);
-  const reasons: string[] = ([[c.range, 'far'], [c.crossing, 'target crossing fast'], [c.own, 'you are moving'], [c.recoil, 'gun kick'], [c.weather, 'bad weather'], [c.weapon, 'loose gun']] as const)
-    .filter(([r]) => r / o.spread >= MAIN_SHARE)
-    .sort((a, b) => b[0] - a[0])
-    .slice(0, covered ? MAX_REASONS - 1 : MAX_REASONS)
-    .map(([, name]) => name);
-  reasons.unshift(...leadReasons(c, covered));
-  return reasons.length > 0 ? reasons.join(', ') : 'clear shot';
-}
-
-function leadReasons(c: HitOdds['causes'], covered: boolean): string[] {
-  const lead: [boolean, string][] = [[deg(c.still) !== '0.0', 'target is parked: easy'], [c.smoke > 0, 'smoke'], [covered, 'parts in the way']];
-  return lead.filter(([on]) => on).map(([, name]) => name);
-}
-
-function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim, name: string): HitRow {
+function row(world: World, shooter: Vehicle, mw: MountedWeapon, target: Vehicle, aim: Aim, key: number | null, names: CauseNames): HitRow {
+  const gun = { key, name: partName(mw.def.id), ammo: ammoText(mw) };
   const block = fireBlock(world, shooter, mw, target);
-  const label = `${name} ${ammoText(mw)}`;
-  if (block !== null) return { label, odds: null, text: blockText(mw, block), cause: null, detail: null };
+  if (block !== null) return { ...gun, odds: null, text: blockText(mw, block), tip: null };
   const odds = hitOdds(world, shooter, mw, target, aim);
-  return { label, odds, text: `${Math.round(odds.damageChance * 100)}%`, cause: reasonLine(odds, aim), detail: detailLine(odds) };
+  return { ...gun, odds, text: t('hit.chance', { pct: Math.round(odds.damageChance * 100) }), tip: chanceTip(world, shooter, mw, target, aim, names) };
 }
 
 function aimAt(shooter: Vehicle, mw: MountedWeapon, target: Vehicle): Aim {
@@ -63,13 +51,44 @@ export function hitCardRows(world: World, hoveredId: string): HitCardData | null
   if (hoveredId === me.id) return null;
   const it = world.vehicles.find((v) => v.id === hoveredId);
   if (!it) throw new Error(`No vehicle ${hoveredId} to hover`);
-  const left = shutDownTurnsLeft(world, it);
   return {
-    name: it.name,
-    shutDown: left > 0 ? `Shut down: ${left} ${left === 1 ? 'turn' : 'turns'} left` : null,
-    mine: vehicleStats(world, me).weapons.map((mw, i) => row(world, me, mw, it, aimAt(me, mw, it), `[${i + 1}] ${mw.def.name}`)),
-    theirs: vehicleStats(world, it).weapons.map((mw) => row(world, it, mw, me, aimAt(it, mw, me), mw.def.name)),
+    name: vehicleTitle(world, it),
+    mine: vehicleStats(world, me).weapons.map((mw, i) => row(world, me, mw, it, aimAt(me, mw, it), i + 1, MY_NAMES)),
+    theirs: vehicleStats(world, it).weapons.map((mw) => row(world, it, mw, me, aimAt(it, mw, me), null, THEIR_NAMES)),
   };
+}
+
+const HIGH_CHANCE = 50;
+
+function signed(delta: number): Msg {
+  return t(delta > 0 ? 'hit.deltaUp' : 'hit.deltaDown', { n: Math.abs(delta) });
+}
+
+function tipOf(tip: ChanceTip): HTMLElement {
+  return el('span', { class: 'tooltip hc-tip', role: 'tooltip' },
+    el('span', { class: 'base' }, t('hitTip.base')),
+    el('span', { class: 'v base' }, t('hit.chance', { pct: tip.base })),
+    ...tip.rows.flatMap((r) => [el('span', {}, r.name), el('span', { class: `v ${r.delta > 0 ? 'up' : 'down'}` }, signed(r.delta))]),
+  );
+}
+
+function chanceOf(r: HitRow, theirs: boolean): HTMLElement {
+  if (!r.odds || !r.tip) return el('span', { class: 'hc-pct blocked', title: r.text }, r.text);
+  const percent = Math.round(r.odds.damageChance * 100);
+  const tone = percent === 0 ? 'zero' : percent >= HIGH_CHANCE ? 'high' : '';
+  return el('span', { class: `hc-pct ${theirs ? 'theirs' : 'mine'} ${tone}`.trim(), tabindex: 0 }, r.text, tipOf(r.tip));
+}
+
+function gunRow(r: HitRow, theirs: boolean): HTMLElement {
+  const name = el('span', { class: 'hc-gun', title: t('hit.label', { name: r.name, ammo: r.ammo }) }, ...(r.key === null ? [] : [el('span', { class: 'hc-key' }, num(r.key, 'int'))]), r.name);
+  return el('div', { class: `hc-row${r.odds ? '' : ' blocked'}` }, name, chanceOf(r, theirs));
+}
+
+function well(title: Msg, rows: HitRow[], theirs: boolean): HTMLElement {
+  return el('div', { class: `hc-well${theirs ? ' theirs' : ''}` },
+    el('div', { class: 'hc-cap' }, title),
+    ...(rows.length === 0 ? [el('div', { class: 'hc-none' }, DASH)] : rows.map((r) => gunRow(r, theirs))),
+  );
 }
 
 export class HitCard {
@@ -86,15 +105,7 @@ export class HitCard {
       this.root.replaceChildren();
       return this.hide();
     }
-    const section = (title: string, rows: HitRow[]) => [
-      el('div', { class: 'hc-head' }, title),
-      ...(rows.length === 0 ? [el('div', { class: 'dim' }, 'No weapons')] : rows.flatMap((r) => [
-        el('div', { class: 'hc-row', ...(r.detail ? { title: r.detail } : {}) }, el('span', {}, r.label), el('span', { class: r.odds ? 'hc-chance' : 'dim' }, r.text)),
-        ...(r.cause ? [el('div', { class: 'hc-cause dim', title: r.detail ?? '' }, r.cause)] : []),
-      ])),
-    ];
-    const shutDown = card.shutDown ? [el('div', { class: 'hc-cause' }, card.shutDown)] : [];
-    this.root.replaceChildren(...shutDown, ...section('You → it', card.mine), ...section('It → you', card.theirs));
+    this.root.replaceChildren(well(t('hit.wellYou'), card.mine, false), well(t('hit.wellThem'), card.theirs, true));
   }
 
   hide(): void {
