@@ -102,6 +102,6 @@ describe('readEnvFiles', () => {
     const tracked = Object.keys(readEnvFiles('settings.env', files('', '')[1]));
     expect(tracked.filter((key) => SECRET.test(key))).toEqual([]);
     const filled = Object.fromEntries(Object.keys(settings).map((key) => [key, settings[key] || (key === 'FACTORY_GPU' ? 'on' : '1')]));
-    expect(() => loadConfig(filled)).not.toThrow();
+    expect(loadConfig(filled).maxJobsPerCard).toBe(30);
   });
 });
