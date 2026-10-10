@@ -124,6 +124,7 @@
   width: var(--dock-width);
   box-sizing: border-box;
   overflow: hidden;
+  container-type: size;
   font-size: var(--text-dense);
   z-index: var(--z-hud);
 }
@@ -198,6 +199,7 @@
   flex-direction: column;
   gap: var(--space-2);
   min-height: 0;
+  overflow-y: auto;
 }
 .hc-well {
   padding: var(--space-2) var(--space-3);
@@ -306,6 +308,31 @@
 }
 .hc-tip .down {
   color: var(--danger-ink);
+}
+@container (aspect-ratio <= 7/10) and (height >= 300px) {
+  #ui .info-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  #ui .info-draw {
+    flex: 0 1 auto;
+  }
+  #ui .info-column {
+    flex: 1 0 var(--info-lists-height);
+  }
+  #ui .hitcard {
+    flex-direction: row;
+  }
+  #ui .hc-well {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  #ui .hc-tip {
+    top: auto;
+    right: 0;
+    bottom: calc(100% + var(--hud-gap));
+  }
 }
 /* One row per part: icon, name, HP and a condition bar under the name. */
 .info-part {
