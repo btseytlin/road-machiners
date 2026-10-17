@@ -63,12 +63,25 @@ describe('download', () => {
     expect(d.waits).toEqual([500, 1000, 2000, 4000, 4000]);
   });
 
-  it('throws at once on a 404 with a plain error naming the url and status', async () => {
-    const d = setup(status(404));
+  it('tries again after a 404 and returns the bytes once the file appears', async () => {
+    const d = setup(status(404), status(404), ok());
+    expect((await download(URL, d)).byteLength).toBe(3);
+    expect(d.fetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('throws the plain HTTP error naming the url and status when every try got a 404', async () => {
+    const d = setup(...Array.from({ length: 6 }, () => status(404)));
     const err = await download(URL, d).catch((e) => e);
     expect(err).not.toBeInstanceOf(DownloadFailed);
     expect(err.message).toContain(URL);
     expect(err.message).toContain('404');
+    expect(d.fetch).toHaveBeenCalledTimes(6);
+  });
+
+  it.each([400, 403])('throws at once on a %i', async (code) => {
+    const d = setup(status(code));
+    const err = await download(URL, d).catch((e) => e);
+    expect(err.message).toContain(String(code));
     expect(d.fetch).toHaveBeenCalledTimes(1);
   });
 

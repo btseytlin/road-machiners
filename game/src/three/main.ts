@@ -25,7 +25,7 @@ import { chooseSaveFate, chooseStart, saveErrorText, showCarryReport } from '../
 import { mountPerfPanel } from '../ui/perf-panel';
 import { SoundSettings } from '../ui/sound';
 import { RadioPanel, RadioStation } from '../ui/radio';
-import { bootStep, installCrashScreen, keepRunningOnErrors, onEveryError, onReport, reportError } from './crash';
+import { bootStep, installCrashScreen, keepRunningOnErrors, onEveryError, noteError, onReport, reportError } from './crash';
 import { ErrorReporter, gameContext } from './error-report';
 import { Game } from './game';
 import { clearGame, loadWorld, newMapFor, SAVE_KEY, SaveError, savedRunId, storedSave, writeSave } from './save';
@@ -34,7 +34,7 @@ import { RunLog } from './run-log';
 import { allSlots, jumpToQuest, newestSlot, questJumpOf, requestBoot, takeBootRequest, type BootRequest, type QuestJump, type SlotId } from './save-slots';
 import { GAME_GL, openWebGL } from './webgl';
 import { rescueSave } from './save-rescue';
-import { loadModels } from './render/models';
+import { loadModels, type ModelFailure } from './render/models';
 import { groundTexture } from './render/terrain';
 import { defaultSetup, modeKit } from '../sim/settings';
 
@@ -151,6 +151,11 @@ function whenVisible(run: () => void): void {
     document.addEventListener('visibilitychange', onChange);
   }
 }
+function reportStandIns(failures: ModelFailure[]): void {
+  for (const { name, error } of failures) {
+    noteError(new Error(`Model ${name} failed to load and stays a stand-in box: ${error instanceof Error ? error.message : String(error)}`));
+  }
+}
 async function recoverSounds(loaded: LoadedBank): Promise<void> {
   const recovered = await recoverBank(mixer.ctx, loaded, SOUNDS, soundOptions);
   for (const failure of loaded.failures) console.warn(`Sound ${failure.file} failed to decode as ${failure.kind} and ${recovered.has(failure.file) ? 'decoded later' : 'stays a stand-in'}`, failure.errors);
@@ -166,7 +171,7 @@ bootStep('loading physics, models and sounds');
 const soundOptions: BankOptions = { expectedBytes: SFX_BYTES, support: formatSupport(), progress: boot.count('sounds') };
 const loading = Promise.all([
   boot.track('physics', initPhysics()),
-  boot.track('models', loadModels(undefined, boot.count('models'))),
+  boot.track('models', loadModels(undefined, boot.count('models')).then(reportStandIns)),
   boot.track('sounds', loadBank(mixer.ctx, SOUNDS, soundOptions)),
 ]);
 bootStep('loading the map');

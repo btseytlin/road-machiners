@@ -1,17 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { Mesh, type MeshLambertMaterial } from 'three';
-import { loadModels, model, MODEL_GLOW, socket } from './models';
+import { publicHashes } from '../../public-files';
+import { loadModels, model, MODEL_GLOW, NAMES, socket } from './models';
 
 const FILES = import.meta.glob<string>('/public/models/*.glb', { query: '?inline', import: 'default', eager: true });
 const progress: [number, number][] = [];
-await loadModels(
-  async (name) => {
-    const url = FILES[`/public/models/${name}.glb`];
-    if (!url) throw new Error(`Missing model file for ${name}`);
-    return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0)).buffer;
-  },
-  (done, total) => progress.push([done, total]),
-);
+async function readFile(name: string): Promise<ArrayBuffer> {
+  const url = FILES[`/public/models/${name}.glb`];
+  if (!url) throw new Error(`Missing model file for ${name}`);
+  return Uint8Array.from(atob(url.slice(url.indexOf(',') + 1)), (c) => c.charCodeAt(0)).buffer;
+}
+await loadModels(readFile, (done, total) => progress.push([done, total]));
 
 describe('loadModels progress', () => {
   it('reports 0 first, then one more file each time, ending at the total', () => {
@@ -57,8 +56,33 @@ describe('nose_rise sockets', () => {
 });
 
 describe('loadModels failure', () => {
-  it('rejects with the error of a read that rejects', async () => {
+  it('rejects with the error of a read that rejects for a model without a stand-in', async () => {
     const failure = new Error('read failed');
     await expect(loadModels(async () => { throw failure; })).rejects.toBe(failure);
+  });
+
+  it('builds a stand-in box for a prop whose file is missing and reports it', async () => {
+    const missing = new Error('HTTP 404');
+    const failures = await loadModels(async (name) => {
+      if (name === 'hull_chunk') throw missing;
+      return readFile(name);
+    });
+    expect(failures).toEqual([{ name: 'hull_chunk', error: missing }]);
+    const meshes: Mesh[] = [];
+    model('hull_chunk').traverse((o) => o instanceof Mesh && meshes.push(o));
+    expect(meshes).toHaveLength(1);
+    await loadModels(readFile);
+  });
+
+  it('reports no failures when every file loads', async () => {
+    expect(await loadModels(readFile)).toEqual([]);
+  });
+});
+
+describe('model files', () => {
+  it('has a file in public/models and a public hash for every model the game asks for', () => {
+    const hashes = publicHashes('public');
+    const gaps = NAMES.filter((name) => !FILES[`/public/models/${name}.glb`] || !hashes[`models/${name}.glb`]);
+    expect(gaps).toEqual([]);
   });
 });

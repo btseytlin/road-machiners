@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DownloadFailed } from '../download';
 import { WebGLUnavailable } from './webgl';
-import { crashText, downloadFailedText, isForeignError, screenFor, type CrashContext, type ErrorFacts } from './crash';
+import { crashText, downloadFailedText, isForeignError, noteError, onReport, screenFor, type CrashContext, type ErrorFacts } from './crash';
 
 const PAGE = 'https://roam-game.online';
 const muted: ErrorFacts = { error: null, message: 'Script error.', filename: '', lineno: 0, colno: 0 };
@@ -87,5 +87,16 @@ describe('download failure screen', () => {
     expect(screenFor(new WebGLUnavailable('no context'))).toBe('webgl');
     expect(screenFor(new Error('File models/a.glb failed to load: HTTP 404'))).toBe('crash');
     expect(screenFor('text')).toBe('crash');
+  });
+});
+
+describe('noteError', () => {
+  it('sends the error to the report sinks and shows no crash screen', () => {
+    const sink = vi.fn();
+    onReport(sink);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const err = new Error('stand-in');
+    noteError(err);
+    expect(sink).toHaveBeenCalledWith(err);
   });
 });

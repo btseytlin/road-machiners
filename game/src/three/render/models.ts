@@ -4,10 +4,11 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { download } from '../../download';
 import { publicUrl } from '../../public-url';
+import SHAPES from '../../data/prop-shapes.json';
 import { PAL } from '../../render/palette';
 import { WEAPON_POOLS } from '../../render/partLooks';
 
-const NAMES = [
+export const NAMES = [
   'base_scout',
   'base_van',
   'base_longbed',
@@ -248,22 +249,56 @@ const SOCKET_PREFIX = 'socket_';
 const loaded = new Map<ModelName, THREE.Object3D>();
 const sockets = new Map<ModelName, Map<string, THREE.Vector3>>();
 
+type Box = { x0: number; x1: number; y0: number; y1: number; z0: number; z1: number };
+type Shape = { boxes: Box[] };
+
+export type ModelFailure = { name: ModelName; error: unknown };
+
+function standInShape(name: ModelName): Shape | undefined {
+  return (SHAPES as Record<string, Shape>)[name];
+}
+
+function standIn(name: ModelName, shape: Shape): THREE.Object3D {
+  const bounds = new THREE.Box3();
+  for (const b of shape.boxes) {
+    bounds.expandByPoint(new THREE.Vector3(b.x0, b.z0, -b.y1));
+    bounds.expandByPoint(new THREE.Vector3(b.x1, b.z1, -b.y0));
+  }
+  const size = bounds.getSize(new THREE.Vector3());
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), new THREE.MeshStandardMaterial({ color: PAL.rock.side }));
+  mesh.position.copy(bounds.getCenter(new THREE.Vector3()));
+  const root = new THREE.Group();
+  root.name = name;
+  root.add(mesh);
+  return toLambert(root);
+}
+
 export async function loadModels(
   read: (name: ModelName) => Promise<ArrayBuffer> = fetchModel,
   progress?: (done: number, total: number) => void,
-): Promise<void> {
+): Promise<ModelFailure[]> {
   const loader = new GLTFLoader();
+  const failures: ModelFailure[] = [];
   let done = 0;
   progress?.(0, NAMES.length);
   await Promise.all(
     NAMES.map(async (name) => {
-      const gltf = await loader.parseAsync(await read(name), '');
-      sockets.set(name, takeSockets(name, gltf.scene));
-      loaded.set(name, toLambert(gltf.scene));
+      try {
+        const gltf = await loader.parseAsync(await read(name), '');
+        sockets.set(name, takeSockets(name, gltf.scene));
+        loaded.set(name, toLambert(gltf.scene));
+      } catch (error) {
+        const shape = standInShape(name);
+        if (!shape) throw error;
+        sockets.set(name, new Map());
+        loaded.set(name, standIn(name, shape));
+        failures.push({ name, error });
+      }
       progress?.(++done, NAMES.length);
     }),
   );
   checkWeaponSockets();
+  return failures;
 }
 
 export function socket(name: ModelName, socketName: string): THREE.Vector3 {

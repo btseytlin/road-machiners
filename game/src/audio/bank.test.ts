@@ -62,8 +62,9 @@ describe('loadBank', () => {
 
   it('gives a failed file the buffer of a decoded sibling', async () => {
     vi.stubGlobal('fetch', async (url: string) => reply({ ok: !url.includes('hit-2.'), status: 404 }));
+    vi.useFakeTimers();
     const calls: number[] = [];
-    const { bank, failures } = await loadBank(ctx, PAIR, options({ progress: (done) => calls.push(done) }));
+    const { bank, failures } = await afterRetries(loadBank(ctx, PAIR, options({ progress: (done) => calls.push(done) })));
     expect(bank.get('hit-2.ogg')).toBe(real);
     expect(failures.map((f) => f.file)).toEqual(['hit-2.ogg']);
     expect(Math.max(...calls)).toBe(2);
@@ -125,7 +126,8 @@ describe('loadBank', () => {
 
   it('treats a 404 like a decode failure', async () => {
     vi.stubGlobal('fetch', async () => reply({ ok: false, status: 404 }));
-    const { bank, failures, unreachable } = await loadBank(ctx, SOUNDS, options());
+    vi.useFakeTimers();
+    const { bank, failures, unreachable } = await afterRetries(loadBank(ctx, SOUNDS, options()));
     expect(failures).toHaveLength(2);
     expect(unreachable).toEqual([]);
     expect(bank.size).toBe(2);
@@ -152,10 +154,16 @@ describe('loadBank', () => {
   });
 });
 
+async function afterRetries<T>(run: Promise<T>): Promise<T> {
+  await vi.advanceTimersByTimeAsync(DOWNLOAD.waitMs.reduce((a, b) => a + b) * 4);
+  return run;
+}
+
 describe('failure classes', () => {
   const kindOf = async (fetchStub: unknown, context = rejecting, support = SUPPORT) => {
     vi.stubGlobal('fetch', fetchStub);
-    const { failures } = await loadBank(context, { a: SOUNDS.a }, options({ support }));
+    vi.useFakeTimers();
+    const { failures } = await afterRetries(loadBank(context, { a: SOUNDS.a }, options({ support })));
     return failures[0];
   };
 
@@ -399,7 +407,8 @@ describe('loadBank with a browser that refuses Ogg Opus', () => {
 
   it('counts a 404 of the twin as a failure', async () => {
     vi.stubGlobal('fetch', async (url: string) => (url.endsWith('.m4a') ? reply({ ok: false, status: 404 }) : served(url)));
-    const { failures, unreachable } = await loadBank(refusing('.ogg'), { a: SOUNDS.a }, options());
+    vi.useFakeTimers();
+    const { failures, unreachable } = await afterRetries(loadBank(refusing('.ogg'), { a: SOUNDS.a }, options()));
     expect(failures).toHaveLength(1);
     expect(unreachable).toEqual([]);
   });

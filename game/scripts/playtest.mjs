@@ -156,7 +156,7 @@ for (let i = 0; i < turns; i++) {
   await page.waitForFunction((turn) => {
     const g = window.__ROAM__;
     return g.state.turn === turn && !g.travel.isPlaying(g.anim);
-  }, i + 2, { timeout: TURN_LIMIT_MS, polling: 50 }).catch(() => { throw new Error(`Turn ${i + 1} did not finish playing within ${TURN_LIMIT_MS} ms`); });
+  }, i + 2, { timeout: TURN_LIMIT_MS, polling: 50 }).catch((cause) => { throw new Error(`Turn ${i + 1} did not finish playing within ${TURN_LIMIT_MS} ms`, { cause }); });
 }
 await page.screenshot({ path: '.playtest/end.png' });
 

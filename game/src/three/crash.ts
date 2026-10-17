@@ -79,6 +79,11 @@ export function onReport(sink: (err: unknown) => void): void {
   sinks.push(sink);
 }
 
+export function noteError(err: unknown): void {
+  console.warn(err);
+  for (const sink of sinks) sink(err);
+}
+
 export function reportError(err: unknown): void {
   onError(err);
 }
